@@ -40,3 +40,6 @@ pnpm-debug.log*
 
 
 /docs
+/.opencode
+
+Agents.md
