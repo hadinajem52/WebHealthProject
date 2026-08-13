@@ -1,8 +1,63 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+@{
+    ViewData.SetTitle("Dashboard");
+    ViewData.SetSubtitle("Placeholder page confirming the Phase 1 application shell.");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Dashboard"));
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+@section PageActions {
+    <a class="button button--secondary" href="/health/ready">
+        <span>Check readiness</span>
+        @await Html.PartialAsync("_Icon", "arrow-right")
+    </a>
+}
+
+<div class="stack">
+    <div class="card-grid">
+        <section class="card">
+            <h2 class="card__title">Shell</h2>
+            <p class="card__subtitle">Reusable layout delivered in Phase 1.</p>
+            <div class="card__body">
+                <dl class="data-list">
+                    <dt>Layout</dt>
+                    <dd>Shared layout, sidebar, header, breadcrumbs and footer.</dd>
+                    <dt>Messages</dt>
+                    <dd>Flash messages and a validation summary rendered above page content.</dd>
+                    <dt>States</dt>
+                    <dd>Accessible error and empty-state components.</dd>
+                </dl>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 class="card__title">Accessibility</h2>
+            <p class="card__subtitle">Behavior verified for every page using this shell.</p>
+            <div class="card__body">
+                <dl class="data-list">
+                    <dt>Landmarks</dt>
+                    <dd>Skip link, navigation, banner, main and content-information landmarks.</dd>
+                    <dt>Keyboard</dt>
+                    <dd>Visible focus, drawer focus containment and Escape to close.</dd>
+                    <dt>Motion</dt>
+                    <dd>Transitions are removed when reduced motion is requested.</dd>
+                </dl>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2 class="card__title">Foundation</h2>
+            <p class="card__subtitle">Runtime endpoints available in this build.</p>
+            <div class="card__body">
+                <dl class="data-list">
+                    <dt>Liveness</dt>
+                    <dd><a href="/health/live">/health/live</a></dd>
+                    <dt>Readiness</dt>
+                    <dd><a href="/health/ready">/health/ready</a></dd>
+                </dl>
+            </div>
+        </section>
+    </div>
+
+    @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+        "No monitored endpoints yet",
+        "Clients, websites, environments and endpoints are added in Phase 2. Dashboard summaries, health tables and charts follow in later phases."))
 </div>

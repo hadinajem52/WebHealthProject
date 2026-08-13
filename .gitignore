@@ -28,7 +28,7 @@ secrets.json
 # OS-generated files
 .DS_Store
 Thumbs.db
-
+/.vscode
 # Frontend dependencies and generated assets
 node_modules/
 dist/
@@ -39,6 +39,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+/.playwright-mcp
 
 /.opencode
 

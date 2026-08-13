@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Web.Models;
 
@@ -6,11 +7,6 @@ namespace WebHealth.Web.Controllers;
 public class HomeController : Controller
 {
     public IActionResult Index()
-    {
-        return View();
-    }
-
-    public IActionResult Privacy()
     {
         return View();
     }
@@ -30,6 +26,15 @@ public class HomeController : Controller
         }
 
         Response.StatusCode = code;
-        return View("Error", ErrorViewModel.Create(code, HttpContext.TraceIdentifier));
+        return View("Error", ErrorViewModel.Create(code, HttpContext.TraceIdentifier, GetRetryUrl()));
+    }
+
+    // Only the re-executed original path is offered as a retry target, and only
+    // when it is a local URL.
+    private string? GetRetryUrl()
+    {
+        var originalPath = HttpContext.Features.Get<IStatusCodeReExecuteFeature>()?.OriginalPath;
+
+        return Url.IsLocalUrl(originalPath) ? originalPath : null;
     }
 }

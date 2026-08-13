@@ -1,0 +1,117 @@
+/*
+ * Application-owned design tokens.
+ *
+ * Source of truth: the Purity UI Dashboard Figma baseline recorded in
+ * docs/phase-0/UI_Direction.md. Values marked "accessible override" replace a
+ * Figma value that does not meet the WCAG 2.1 AA contrast requirement in
+ * docs/phase-0/UI_Direction.md section 6. See docs/phase-1/Application_Shell.md.
+ */
+
+:root {
+    /* Palette taken from the Figma variable definitions. */
+    --color-white: #ffffff;
+    --color-gray-100: #f8f9fa;
+    --color-gray-200: #e2e8f0;
+    --color-gray-300: #cbd5e0;
+    --color-gray-400: #a0aec0;
+    --color-gray-500: #718096;
+    --color-gray-600: #4a5568;
+    --color-gray-700: #2d3748;
+
+    --color-teal-300: #4fd1c5;
+    --color-teal-600: #2c7a7b;
+    --color-purple-blue-500: #4318ff;
+
+    --color-green-400: #48bb78;
+    --color-green-700: #276749;
+    --color-orange-300: #f6ad55;
+    --color-orange-600: #c05621;
+    --color-red-500: #e53e3e;
+    --color-red-600: #c53030;
+    --color-blue-400: #4299e1;
+    --color-blue-600: #2b6cb0;
+
+    /* Surfaces. */
+    --surface-page: var(--color-gray-100);
+    --surface-raised: var(--color-white);
+    --surface-sunken: var(--color-gray-100);
+    --surface-accent: var(--color-teal-600);
+    --border-subtle: var(--color-gray-200);
+    --border-strong: var(--color-gray-300);
+
+    /* Text. Accessible override: Figma uses Gray-400 (2.26:1) for secondary
+       text; Gray-600 (7.5:1) is used instead and Gray-400 is limited to
+       decorative rules and separators. */
+    --text-primary: var(--color-gray-700);
+    --text-secondary: var(--color-gray-600);
+    --text-on-accent: var(--color-white);
+    --text-link: var(--color-purple-blue-500);
+
+    /* Status. Accessible override: the Figma status hues are used for icons and
+       fills; the -text variants are darkened so status text reaches 4.5:1. */
+    --status-success: var(--color-green-400);
+    --status-success-text: var(--color-green-700);
+    --status-success-surface: #f0fff4;
+    --status-warning: var(--color-orange-300);
+    --status-warning-text: var(--color-orange-600);
+    --status-warning-surface: #fffaf0;
+    --status-danger: var(--color-red-500);
+    --status-danger-text: var(--color-red-600);
+    --status-danger-surface: #fff5f5;
+    --status-info: var(--color-blue-400);
+    --status-info-text: var(--color-blue-600);
+    --status-info-surface: #ebf8ff;
+
+    /* Radii, taken from the Figma card (15px) and tile (12px) geometry. */
+    --radius-card: 15px;
+    --radius-tile: 12px;
+    --radius-pill: 999px;
+
+    /* Elevation, taken from the Figma card shadow. */
+    --shadow-card: 0 3.5px 5.5px 0 rgba(0, 0, 0, 0.02);
+    --shadow-raised: 0 4px 12px 0 rgba(45, 55, 72, 0.12);
+
+    /* Spacing scale. */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+
+    /* Typography. The Figma file uses Helvetica; no web font is downloaded.
+       Accessible override: the Figma 12-14px baseline is raised to a 16px root
+       so the interface stays legible at 200% zoom. */
+    --font-sans: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.5rem;
+    --line-height-tight: 1.4;
+    --line-height-base: 1.5;
+
+    /* Shell geometry, taken from the Figma sidebar column width. */
+    --sidebar-width: 16.5rem;
+    --content-max-width: 90rem;
+
+    /* Focus. Kept identical for every interactive element. */
+    --focus-ring-color: var(--color-purple-blue-500);
+    --focus-ring-width: 3px;
+    --focus-ring-offset: 2px;
+
+    /* Motion. Overridden to zero under prefers-reduced-motion. */
+    --motion-fast: 120ms;
+    --motion-base: 200ms;
+    --motion-easing: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --motion-fast: 0ms;
+        --motion-base: 0ms;
+    }
+}

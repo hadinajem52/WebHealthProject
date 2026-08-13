@@ -1,0 +1,36 @@
+@{
+    var modelState = ViewContext.ViewData.ModelState;
+    var messages = modelState
+        .SelectMany(entry => entry.Value?.Errors ?? [])
+        .Select(error => error.ErrorMessage)
+        .Where(message => !string.IsNullOrWhiteSpace(message))
+        .ToList();
+}
+@*
+    Only messages the application supplied are rendered. Model-binding
+    exceptions carry no safe message and are replaced with a generic statement.
+*@
+@if (modelState.ErrorCount > 0)
+{
+    <div class="validation-summary" role="alert" tabindex="-1" data-shell-validation-summary>
+        <h2 class="validation-summary__title">
+            @await Html.PartialAsync("_Icon", "error")
+            <span>The request could not be completed</span>
+        </h2>
+        @if (messages.Count > 0)
+        {
+            <ul>
+                @foreach (var message in messages)
+                {
+                    <li>@message</li>
+                }
+            </ul>
+        }
+        else
+        {
+            <ul>
+                <li>Review the highlighted fields and try again.</li>
+            </ul>
+        }
+    </div>
+}

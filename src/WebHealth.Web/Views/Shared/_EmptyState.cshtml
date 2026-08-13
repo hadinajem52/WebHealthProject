@@ -1,0 +1,13 @@
+@model EmptyStateViewModel
+<div class="empty-state">
+    <span class="empty-state__icon">@await Html.PartialAsync("_Icon", Model.IconKey)</span>
+    <h2 class="empty-state__title">@Model.Title</h2>
+    <p class="empty-state__description">@Model.Description</p>
+    @if (Model.ActionText is not null && Model.ActionUrl is not null)
+    {
+        <a class="button button--secondary empty-state__action" href="@Model.ActionUrl">
+            <span>@Model.ActionText</span>
+            @await Html.PartialAsync("_Icon", "arrow-right")
+        </a>
+    }
+</div>

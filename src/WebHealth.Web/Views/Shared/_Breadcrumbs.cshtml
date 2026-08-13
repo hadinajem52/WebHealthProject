@@ -1,0 +1,25 @@
+@{
+    var breadcrumbs = ViewData.GetBreadcrumbs();
+}
+@if (breadcrumbs.Count > 0)
+{
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs__list">
+            @for (var index = 0; index < breadcrumbs.Count; index++)
+            {
+                var item = breadcrumbs[index];
+                var isLast = index == breadcrumbs.Count - 1;
+                <li class="breadcrumbs__item" aria-current="@(isLast ? "page" : null)">
+                    @if (!isLast && item.Url is not null)
+                    {
+                        <a href="@item.Url">@item.Text</a>
+                    }
+                    else
+                    {
+                        @item.Text
+                    }
+                </li>
+            }
+        </ol>
+    </nav>
+}

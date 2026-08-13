@@ -1,14 +1,31 @@
 @model ErrorViewModel
 @{
-    ViewData["Title"] = Model.Title;
+    ViewData.SetTitle(Model.Title);
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Dashboard", Url.Action("Index", "Home")),
+        new BreadcrumbItem(Model.Title));
 }
 
-<section aria-labelledby="error-title">
-    <h1 id="error-title">@Model.Title</h1>
-    <p>@Model.Message</p>
-    <p>
-        <strong>Correlation reference:</strong>
-        <code>@Model.CorrelationId</code>
+<section class="error-state">
+    <p class="error-state__status">
+        @await Html.PartialAsync("_Icon", "error")
+        <span>Error @Model.StatusCode</span>
     </p>
-    <a asp-controller="Home" asp-action="Index">Return to the home page</a>
+    <p class="error-state__message">@Model.Message</p>
+
+    <dl class="data-list error-state__reference">
+        <dt>Correlation reference</dt>
+        <dd><code>@Model.CorrelationId</code></dd>
+    </dl>
+
+    <div class="error-state__actions">
+        @if (Model.RetryUrl is not null)
+        {
+            <a class="button button--primary" href="@Model.RetryUrl">Try again</a>
+        }
+        <a class="button button--secondary" asp-controller="Home" asp-action="Index">
+            <span>Return to the dashboard</span>
+            @await Html.PartialAsync("_Icon", "arrow-right")
+        </a>
+    </div>
 </section>

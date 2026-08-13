@@ -1,0 +1,365 @@
+/*
+ * Reusable shell components: cards, buttons, flash messages, validation
+ * summaries, empty states and error states. Status meaning is always carried by
+ * text and an icon, never by color alone.
+ */
+
+/* Cards ------------------------------------------------------------------ */
+
+.card {
+    padding: var(--space-5);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-raised);
+    box-shadow: var(--shadow-card);
+}
+
+.card__title {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    line-height: var(--line-height-tight);
+}
+
+.card__subtitle {
+    margin-top: var(--space-1);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.card__body {
+    margin-top: var(--space-4);
+}
+
+.card__body > * + * {
+    margin-top: var(--space-3);
+}
+
+.card-grid {
+    display: grid;
+    gap: var(--space-5);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
+.stack > * + * {
+    margin-top: var(--space-5);
+}
+
+.data-list {
+    display: grid;
+    margin: 0;
+    gap: var(--space-3);
+    grid-template-columns: minmax(8rem, auto) 1fr;
+}
+
+.data-list dt {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.data-list dd {
+    margin: 0;
+    font-size: var(--font-size-sm);
+}
+
+code,
+.code {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    overflow-wrap: anywhere;
+}
+
+/* Buttons and links ------------------------------------------------------ */
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-tile);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    gap: var(--space-2);
+    text-decoration: none;
+    transition: background-color var(--motion-fast) var(--motion-easing);
+}
+
+.button--primary {
+    background-color: var(--text-link);
+    color: var(--color-white);
+}
+
+.button--primary:hover {
+    background-color: #3611cc;
+}
+
+.button--secondary {
+    border-color: var(--border-strong);
+    background-color: var(--surface-raised);
+    color: var(--text-primary);
+}
+
+.button--secondary:hover {
+    background-color: var(--surface-sunken);
+}
+
+.button svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Status --------------------------------------------------------------- */
+
+.status {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    gap: var(--space-2);
+}
+
+.status svg {
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+.status[data-status="success"] {
+    border-color: var(--status-success);
+    background-color: var(--status-success-surface);
+    color: var(--status-success-text);
+}
+
+.status[data-status="warning"] {
+    border-color: var(--status-warning);
+    background-color: var(--status-warning-surface);
+    color: var(--status-warning-text);
+}
+
+.status[data-status="danger"] {
+    border-color: var(--status-danger);
+    background-color: var(--status-danger-surface);
+    color: var(--status-danger-text);
+}
+
+.status[data-status="info"] {
+    border-color: var(--status-info);
+    background-color: var(--status-info-surface);
+    color: var(--status-info-text);
+}
+
+/* Flash messages --------------------------------------------------------- */
+
+.flash-messages > * + * {
+    margin-top: var(--space-3);
+}
+
+.flash {
+    display: flex;
+    align-items: flex-start;
+    padding: var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-left-width: 4px;
+    border-radius: var(--radius-tile);
+    background-color: var(--surface-raised);
+    gap: var(--space-3);
+}
+
+.flash__icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+}
+
+.flash__icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.flash__label {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.flash__text {
+    margin-top: var(--space-1);
+    font-size: var(--font-size-sm);
+}
+
+.flash[data-level="success"] {
+    border-color: var(--status-success);
+    background-color: var(--status-success-surface);
+}
+
+.flash[data-level="success"] .flash__icon,
+.flash[data-level="success"] .flash__label {
+    color: var(--status-success-text);
+}
+
+.flash[data-level="information"] {
+    border-color: var(--status-info);
+    background-color: var(--status-info-surface);
+}
+
+.flash[data-level="information"] .flash__icon,
+.flash[data-level="information"] .flash__label {
+    color: var(--status-info-text);
+}
+
+.flash[data-level="warning"] {
+    border-color: var(--status-warning);
+    background-color: var(--status-warning-surface);
+}
+
+.flash[data-level="warning"] .flash__icon,
+.flash[data-level="warning"] .flash__label {
+    color: var(--status-warning-text);
+}
+
+.flash[data-level="error"] {
+    border-color: var(--status-danger);
+    background-color: var(--status-danger-surface);
+}
+
+.flash[data-level="error"] .flash__icon,
+.flash[data-level="error"] .flash__label {
+    color: var(--status-danger-text);
+}
+
+/* Validation summary ----------------------------------------------------- */
+
+.validation-summary {
+    padding: var(--space-4);
+    border: 1px solid var(--status-danger);
+    border-left-width: 4px;
+    border-radius: var(--radius-tile);
+    background-color: var(--status-danger-surface);
+}
+
+.validation-summary__title {
+    display: flex;
+    align-items: center;
+    color: var(--status-danger-text);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    gap: var(--space-2);
+}
+
+.validation-summary__title svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.validation-summary ul {
+    margin-top: var(--space-2);
+    padding-left: var(--space-6);
+    list-style: disc;
+}
+
+.validation-summary li {
+    font-size: var(--font-size-sm);
+}
+
+.validation-summary ul:empty,
+.validation-summary li:empty {
+    display: none;
+}
+
+/* Empty state ------------------------------------------------------------ */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-10) var(--space-5);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-raised);
+    gap: var(--space-2);
+    text-align: center;
+}
+
+.empty-state__icon {
+    display: grid;
+    width: 3rem;
+    height: 3rem;
+    border-radius: var(--radius-tile);
+    background-color: var(--surface-sunken);
+    color: var(--text-secondary);
+    place-items: center;
+}
+
+.empty-state__icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.empty-state__title {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+}
+
+.empty-state__description {
+    max-width: 42ch;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.empty-state__action {
+    margin-top: var(--space-2);
+}
+
+/* Error state ------------------------------------------------------------ */
+
+.error-state {
+    max-width: 42rem;
+    padding: var(--space-8) var(--space-6);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-raised);
+    box-shadow: var(--shadow-card);
+}
+
+.error-state__status {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    gap: var(--space-2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.error-state__status svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.error-state__title {
+    margin-top: var(--space-2);
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    line-height: var(--line-height-tight);
+}
+
+.error-state__message {
+    margin-top: var(--space-3);
+    color: var(--text-secondary);
+}
+
+.error-state__reference {
+    margin-top: var(--space-5);
+    padding: var(--space-4);
+    border-radius: var(--radius-tile);
+    background-color: var(--surface-sunken);
+}
+
+.error-state__actions {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: var(--space-5);
+    gap: var(--space-3);
+}

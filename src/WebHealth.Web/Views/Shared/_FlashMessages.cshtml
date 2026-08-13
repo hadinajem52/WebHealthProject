@@ -1,0 +1,21 @@
+@{
+    var flashMessages = TempData.ReadFlashMessages();
+}
+@if (flashMessages.Count > 0)
+{
+    <div class="flash-messages">
+        @foreach (var message in flashMessages)
+        {
+            var level = message.Level.ToString();
+            <div class="flash"
+                 data-level="@level.ToLowerInvariant()"
+                 role="@(message.Level == FlashLevel.Error ? "alert" : "status")">
+                <span class="flash__icon">@await Html.PartialAsync("_Icon", level.ToLowerInvariant())</span>
+                <div>
+                    <p class="flash__label">@level</p>
+                    <p class="flash__text">@message.Text</p>
+                </div>
+            </div>
+        }
+    </div>
+}

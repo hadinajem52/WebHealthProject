@@ -1,0 +1,63 @@
+@{
+    var currentController = ViewContext.RouteData.Values["controller"] as string;
+    var currentAction = ViewContext.RouteData.Values["action"] as string;
+    var groupIndex = 0;
+}
+<nav id="app-sidebar" class="app-sidebar" aria-label="Primary" data-shell-sidebar data-open="false">
+    <a class="app-brand" asp-controller="Home" asp-action="Index">
+        <span class="app-brand__mark">@await Html.PartialAsync("_Icon", "brand")</span>
+        <span>WebHealth</span>
+    </a>
+
+    @* Visible only while the narrow-viewport drawer is available. *@
+    <button type="button" class="app-sidebar__close" data-shell-close>
+        @await Html.PartialAsync("_Icon", "close")
+        <span>Close menu</span>
+    </button>
+
+    @foreach (var navSection in ShellNavigation.Sections)
+    {
+        groupIndex++;
+        var headingId = $"app-nav-group-{groupIndex}";
+        <div class="app-nav__group">
+            @if (navSection.Heading is not null)
+            {
+                <p class="app-nav__heading" id="@headingId">@navSection.Heading</p>
+            }
+            <ul class="app-nav__list" aria-labelledby="@(navSection.Heading is null ? null : headingId)">
+                @foreach (var item in navSection.Items)
+                {
+                    <li>
+                        @if (item.IsAvailable)
+                        {
+                            var isCurrent = item.IsCurrent(currentController, currentAction);
+                            <a class="app-nav__link @(isCurrent ? "is-current" : null)"
+                               asp-controller="@item.Controller"
+                               asp-action="@item.Action"
+                               aria-current="@(isCurrent ? "page" : null)">
+                                <span class="app-nav__icon">@await Html.PartialAsync("_Icon", item.IconKey)</span>
+                                <span class="app-nav__label">@item.Text</span>
+                            </a>
+                        }
+                        else
+                        {
+                            <span class="app-nav__link is-planned" aria-disabled="true">
+                                <span class="app-nav__icon">@await Html.PartialAsync("_Icon", item.IconKey)</span>
+                                <span class="app-nav__label">@item.Text</span>
+                                <span class="app-nav__badge">Planned</span>
+                            </span>
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="app-sidebar__support">
+        <p class="app-sidebar__support-title">Need help?</p>
+        <p class="app-sidebar__support-text">
+            The foundation exposes liveness and readiness endpoints for local checks.
+        </p>
+        <a class="app-sidebar__support-link" href="/health/ready">Check runtime health</a>
+    </div>
+</nav>
