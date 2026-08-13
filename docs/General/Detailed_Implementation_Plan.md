@@ -243,14 +243,14 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Add liveness and basic readiness endpoints. Evidence: dependency-free liveness and bounded PostgreSQL readiness with passing healthy/unconfigured-state tests.
 - [ ] Integrate the licensed, pinned Metronic Demo 34 assets, application overrides, shared layout, and accessible error pages.
 - [x] Create unit and integration test projects. Evidence: [`../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj`](../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj) and [`../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj`](../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj).
-- [ ] Establish build and test pipeline commands.
+- [x] Establish repeatable build and test commands. Evidence: [`../../scripts/run-tests.ps1`](../../scripts/run-tests.ps1), [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1), and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
 
 ### 8.3 Database and test foundation
 
 - [x] Add initial database context and migration conventions. Evidence: the context, default schema/history table, snake-case naming, UTC instant mapping, restrictive-delete convention, design-time factory, pinned EF tool, and `InitialFoundation` migration are documented in [`../phase-1/Database_Conventions.md`](../phase-1/Database_Conventions.md).
 - [x] Verify clean PostgreSQL database creation. Evidence: [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1) passed against isolated PostgreSQL 18 on 2026-08-13; exactly one migration and only the migration-history table existed.
-- [x] Configure `WebApplicationFactory` integration tests. Evidence: [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
-- [ ] Configure PostgreSQL Testcontainers tests.
+- [x] Configure a reusable `WebApplicationFactory` integration-test host. Evidence: [`../../tests/WebHealth.IntegrationTests/Support/WebHealthWebApplicationFactory.cs`](../../tests/WebHealth.IntegrationTests/Support/WebHealthWebApplicationFactory.cs) and [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
+- [x] Configure opt-in PostgreSQL Testcontainers tests. The intern accepted `GHSA-q939-rpr3-3284` on 2026-08-13 and the audit suppression is limited to that advisory in the integration-test project. Evidence: [`../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs`](../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs) and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
 - [x] Add startup, liveness, and readiness smoke tests. Evidence: five runtime integration tests passed on 2026-08-13.
 - [ ] Verify the solution builds and tests repeatably in the delivery pipeline.
 

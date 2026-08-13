@@ -1,21 +1,18 @@
 using System.Net;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using WebHealth.IntegrationTests.Support;
 using WebHealth.Web.Middleware;
 using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-public sealed class RuntimeFoundationTests(WebApplicationFactory<Program> factory)
-    : IClassFixture<WebApplicationFactory<Program>>
+public sealed class RuntimeFoundationTests(WebHealthWebApplicationFactory factory)
+    : IClassFixture<WebHealthWebApplicationFactory>
 {
     [Fact]
     public async Task Liveness_IsHealthyWithoutDatabaseConfiguration()
     {
-        using var client = CreateClient();
+        using var client = factory.CreateHttpsClient();
 
         var response = await client.GetAsync("/health/live");
 
@@ -26,7 +23,7 @@ public sealed class RuntimeFoundationTests(WebApplicationFactory<Program> factor
     [Fact]
     public async Task Readiness_IsUnhealthyWithoutDatabaseConfiguration()
     {
-        using var client = CreateClient();
+        using var client = factory.CreateHttpsClient();
 
         var response = await client.GetAsync("/health/ready");
 
@@ -37,7 +34,7 @@ public sealed class RuntimeFoundationTests(WebApplicationFactory<Program> factor
     [Fact]
     public async Task Responses_IncludeServerGeneratedCorrelationId()
     {
-        using var client = CreateClient();
+        using var client = factory.CreateHttpsClient();
 
         var response = await client.GetAsync("/health/live");
 
@@ -48,7 +45,7 @@ public sealed class RuntimeFoundationTests(WebApplicationFactory<Program> factor
     [Fact]
     public async Task ErrorPage_IsSafeAndContainsCorrelationReference()
     {
-        using var client = CreateClient();
+        using var client = factory.CreateHttpsClient();
 
         var response = await client.GetAsync("/Home/HttpStatusCode?code=404");
         var content = await response.Content.ReadAsStringAsync();
@@ -62,7 +59,7 @@ public sealed class RuntimeFoundationTests(WebApplicationFactory<Program> factor
     [Fact]
     public async Task UnhandledException_DoesNotExposeExceptionDetails()
     {
-        using var client = CreateClient(includeFailureController: true);
+        using var client = factory.CreateHttpsClient();
 
         var response = await client.GetAsync("/__tests/runtime-error");
         var content = await response.Content.ReadAsStringAsync();
@@ -72,29 +69,6 @@ public sealed class RuntimeFoundationTests(WebApplicationFactory<Program> factor
         Assert.DoesNotContain(nameof(InvalidOperationException), content);
     }
 
-    private HttpClient CreateClient(bool includeFailureController = false)
-    {
-        var application = factory.WithWebHostBuilder(builder =>
-        {
-            builder.ConfigureAppConfiguration((_, configuration) =>
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["ConnectionStrings:WebHealth"] = string.Empty
-                }));
-
-            if (includeFailureController)
-            {
-                builder.ConfigureServices(services =>
-                    services.AddControllersWithViews()
-                        .AddApplicationPart(typeof(RuntimeFailureController).Assembly));
-            }
-        });
-
-        return application.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            BaseAddress = new Uri("https://localhost")
-        });
-    }
 }
 
 [ApiController]

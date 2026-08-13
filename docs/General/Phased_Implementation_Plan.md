@@ -171,20 +171,20 @@ These requirements apply throughout the project:
 
 - [x] Add initial database context and migration conventions. Evidence: [`../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs`](../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs), [`../../src/WebHealth.Infrastructure/Persistence/DatabaseConventions.cs`](../../src/WebHealth.Infrastructure/Persistence/DatabaseConventions.cs), and [`../phase-1/Database_Conventions.md`](../phase-1/Database_Conventions.md).
 - [x] Verify clean PostgreSQL database creation. Evidence: [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1) applied the baseline migration to isolated PostgreSQL 18 on 2026-08-13.
-- [x] Configure `WebApplicationFactory` integration tests. Evidence: [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
-- [ ] Configure PostgreSQL Testcontainers tests.
+- [x] Configure a reusable `WebApplicationFactory` test host. Evidence: [`../../tests/WebHealth.IntegrationTests/Support/WebHealthWebApplicationFactory.cs`](../../tests/WebHealth.IntegrationTests/Support/WebHealthWebApplicationFactory.cs) and [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
+- [x] Configure opt-in PostgreSQL Testcontainers tests. The intern accepted `GHSA-q939-rpr3-3284` on 2026-08-13 and the audit suppression is limited to that advisory in the integration-test project. Evidence: [`../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs`](../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs) and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
 - [x] Add a smoke test for application startup and readiness. Evidence: five passing runtime tests in [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
-- [ ] Establish repeatable build and test commands.
+- [x] Establish repeatable build and test commands. Evidence: [`../../scripts/run-tests.ps1`](../../scripts/run-tests.ps1), [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1), and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
 - [ ] Add pipeline configuration using an available personal CI service.
 
 ### Phase 1 completion gate
 
-- [ ] Application builds and starts locally.
+- [x] Application builds and starts locally. Evidence: warning-free solution build and the shared `WebApplicationFactory` smoke tests on 2026-08-13.
 - [x] PostgreSQL connectivity and migrations work from a clean database. Evidence: the clean-database integration test passed and a repeated explicit update applied no migrations.
-- [ ] Liveness and readiness behave as documented.
-- [ ] Unit and integration test projects run successfully.
-- [ ] No secrets are committed.
-- [ ] Architecture references follow the recorded dependency direction.
+- [x] Liveness and readiness behave as documented. Evidence: runtime integration tests cover healthy liveness and unconfigured-database readiness.
+- [x] Unit and integration test projects run successfully. Evidence: [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
+- [x] No secrets are committed. Evidence: repository secret-pattern scan passed on 2026-08-13; local settings and `.spikes` remain ignored.
+- [x] Architecture references follow the recorded dependency direction. Evidence: project references and [`../../tests/WebHealth.UnitTests/ArchitectureBoundaryTests.cs`](../../tests/WebHealth.UnitTests/ArchitectureBoundaryTests.cs).
 
 ---
 

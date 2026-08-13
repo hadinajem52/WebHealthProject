@@ -39,6 +39,8 @@ Pinned and exercised on 2026-08-13: .NET SDK `10.0.400`, EF Core `10.0.11`, Npgs
 
 Phase 1 runtime additions reviewed on 2026-08-13: Serilog.AspNetCore `10.0.0`, Microsoft.Extensions.Diagnostics.HealthChecks `10.0.11`, and Microsoft.AspNetCore.Mvc.Testing `10.0.11`. Serilog.AspNetCore matches the application's .NET major version; the Microsoft packages match the pinned .NET 10 patch line. Central versions and per-project lock files record the resolved graph. Locked restore, a warning-free build, five runtime integration tests, and `dotnet list WebHealthProject.sln package --vulnerable --include-transitive` passed with no reported vulnerable packages. Package metadata records Apache-2.0 for Serilog.AspNetCore and MIT for the Microsoft packages.
 
+Phase 1 testing additions reviewed on 2026-08-13: FluentAssertions `7.2.2` was selected because version 7 remains fully open source. Testcontainers.PostgreSql `4.13.0` was added for Docker-capable environments. The intern explicitly accepted its transitive `SSH.NET` risk under `GHSA-q939-rpr3-3284`; `NuGetAuditSuppress` is scoped to that advisory in the integration-test project rather than disabling package auditing. The verified disposable native PostgreSQL 18 harness remains the Windows fallback. Evidence and commands are recorded in [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
+
 ## 4. Immediate Phase 0 spikes
 
 ### SP-01 — dependency and Hangfire/PostgreSQL compatibility

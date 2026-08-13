@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.IntegrationTests.Support;
 using Xunit;
 
 namespace WebHealth.IntegrationTests;
@@ -91,36 +91,7 @@ public sealed class DatabaseFoundationTests
     {
         var connectionString = Environment.GetEnvironmentVariable(TestConnectionEnvironmentVariable)!;
 
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
-        PostgreSqlDbContextOptions.Configure(options, connectionString);
-        await using var context = new ApplicationDbContext(options.Options);
-
-        await context.Database.MigrateAsync();
-
-        Assert.Empty(await context.Database.GetPendingMigrationsAsync());
-        Assert.Single(await context.Database.GetAppliedMigrationsAsync());
-        Assert.Empty(context.Model.GetEntityTypes());
-        Assert.Equal((true, 1L), await ReadFoundationState(connectionString));
-    }
-
-    private static async Task<(bool SchemaExists, long TableCount)> ReadFoundationState(
-        string connectionString)
-    {
-        const string sql = """
-            SELECT
-                to_regnamespace('web_health') IS NOT NULL,
-                count(*)
-            FROM information_schema.tables
-            WHERE table_schema = 'web_health'
-              AND table_type = 'BASE TABLE';
-            """;
-
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        Assert.True(await reader.ReadAsync());
-        return (reader.GetBoolean(0), reader.GetInt64(1));
+        await DatabaseFoundationAssertions.VerifyAsync(connectionString);
     }
 }
 
