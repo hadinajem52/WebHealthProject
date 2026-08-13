@@ -1,8 +1,7 @@
 # PostgreSQL Foundation Design
 
 **Owner:** Intern  
-**Status:** Revised Phase 0 design; owner re-approval pending; Phase 1 baseline migration conventions verified
-**Previous approval:** The 2026-08-13 approval is superseded by this revision
+**Status:** Approved
 
 This document defines the correctness-critical data foundation. Later feature schemas receive only short notes until their owning phase.
 
