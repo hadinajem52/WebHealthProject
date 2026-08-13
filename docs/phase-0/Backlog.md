@@ -30,7 +30,7 @@ Every implementation issue must include:
 | P0-04 | P0 | Database/domain design | All data-bearing rules, AC-01–14 | Reviewable entities, constraints, indexes, leases, retention |
 | P0-05 | P0 | Threat model and network policy | BR-Q01–Q07, W04/W05, H03/H06/H07/H10 | SSRF policy, safe transport, controlled tests |
 | P0-06 | P0 | Controlled tests and delivery gates | AC-01–15 and all BRs | Reproducible fixture and CI strategy |
-| P0-07 | P0 | Metronic UI direction | NFR-09, UI portions AC-01/10/11/13 | Licensed, pinned assets, wireframes, accessibility contract |
+| P0-07 | P0 | Purity UI Dashboard Figma UI direction | NFR-09, UI portions AC-01/10/11/13 | Figma baseline, implementation styles, wireframes, accessibility contract |
 | P0-08 | P0 | Immediate feasibility spikes | BR-S03/S05, I03, N03, Q01–Q04, C02/C03 | Dependency, safe HTTP, TLS, and PostgreSQL concurrency evidence |
 
 ## 3. Implementation work packages
@@ -40,7 +40,7 @@ These packages are ordered by dependency. They are not Ready until decomposed wi
 | ID | Phase | Priority | Package | Principal requirements | Acceptance evidence |
 |---|---:|---:|---|---|---|
 | WI-10 | 1 | P0 | Solution/runtime foundation | Enables all; NFR-03–08 | Build/start, health, PostgreSQL clean migration, test host/containers, no secrets |
-| WI-11 | 1 | P0 | Metronic MVC shell | NFR-02, NFR-09 | Licensed pinned assets, accessible layout/errors, responsive smoke tests |
+| WI-11 | 1 | P0 | Purity UI Dashboard MVC shell | NFR-02, NFR-09 | Figma-aligned application styles, accessible layout/errors, responsive smoke tests |
 | WI-20 | 2 | P0 | Identity, authorization, ownership, audit | BR-A01–A06, Q03/Q05/Q06, R04 | Direct-role tests, anti-forgery, disabled sessions, safe audit |
 | WI-21 | 2 | P0 | Registry and target authorization | BR-W01–W10, R07 | AC-01 plus PostgreSQL constraint/concurrency/soft-delete evidence |
 | WI-30 | 3 | P0 | Scheduling, logical checks, leases, durable work | BR-S01–S08 | AC-02, duplicate/restart/lease/catch-up evidence |

@@ -18,7 +18,7 @@ The Administrator, Operations, Developer/Support, and Viewer roles are applicati
 | [`Scope_and_Decisions.md`](Scope_and_Decisions.md) | Scope, sole ownership, core decisions, assumptions, and later-phase deferrals | Complete |
 | [`Database_Design.md`](Database_Design.md) | Core entities, normalization, PostgreSQL constraints, concurrency, leases, and idempotency | Revised; owner re-approval pending |
 | [`Security_and_Operations.md`](Security_and_Operations.md) | Threat model, SSRF/network policy, safe HTTP boundary, and personal-project operational notes | Complete |
-| [`UI_Direction.md`](UI_Direction.md) | Metronic direction, licensing/source/version decision, main journeys, and accessibility | Approved; implementation-ready |
+| [`UI_Direction.md`](UI_Direction.md) | Purity UI Dashboard Figma direction, main journeys, and accessibility | Approved; implementation-ready |
 | [`Backlog.md`](Backlog.md) | Prioritized implementation packages and completion criteria | Complete |
 | [`Traceability_Matrix.md`](Traceability_Matrix.md) | Requirements mapped to phases and test evidence | Complete |
 | [`Test_and_Delivery_Strategy.md`](Test_and_Delivery_Strategy.md) | Controlled targets, supported versions, local/CI tests, and immediate spikes | Complete |

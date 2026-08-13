@@ -31,7 +31,7 @@ The migration drift check requires a syntactically valid design-time connection 
 
 `.github/workflows/delivery.yml` runs for pull requests, pushes to `main`, and manual dispatches. It uses the SDK pinned by `global.json`, restores locked packages, runs the delivery gate in Release, and enables the PostgreSQL Testcontainers case on the Docker-capable GitHub-hosted Linux runner. A separate Gitleaks job scans the complete Git history for committed secrets.
 
-The workflow has read-only repository permissions, bounded timeouts, and concurrency cancellation. It does not receive application, database, SMTP, Metronic, or deployment secrets.
+The workflow has read-only repository permissions, bounded timeouts, and concurrency cancellation. It does not receive application, database, SMTP, Figma, or deployment secrets.
 
 ## Repository conventions
 

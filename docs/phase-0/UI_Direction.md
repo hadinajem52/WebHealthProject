@@ -1,31 +1,26 @@
-# UI Direction — Metronic 8 Demo 34
+# UI Direction — Purity UI Dashboard Figma
 
-**Decision:** Use Metronic 8 Demo 34 as the application-shell and visual baseline for the server-rendered ASP.NET Core MVC application.  
+**Decision:** Use the provided Purity UI Dashboard Figma file as the application-shell and visual baseline for the server-rendered ASP.NET Core MVC application.
 **Decision source:** Project direction received 2026-08-13.  
-**Implementation status:** Fully licensed, source-verified, and exact-version recorded; no Metronic blocker remains.
+**Implementation status:** Figma baseline verified and implementation-ready; no vendor-template blocker remains.
 **Approval:** Approved by the intern/project owner on 2026-08-13
 
 ## 1. Superseded direction
 
-This decision supersedes references to an unavailable Figma design and to a custom-vanilla-CSS-only UI. It is compatible with the business specification's recommended Bootstrap/Metronic baseline.
+This decision supersedes the prior vendor-template direction and the custom-vanilla-CSS-only UI direction. It uses the provided Figma design as the visual reference while retaining semantic HTML, responsive behavior, accessibility, server-side authorization, anti-forgery, output encoding, performance, and safe error handling.
 
 It does not supersede semantic HTML, responsive behavior, NFR-09 accessibility, server-side authorization, anti-forgery, output encoding, performance, or safe error handling.
 
-## 2. License, source, version, and asset gate
+## 2. Figma design reference and implementation gate
 
-The public preview at <https://preview.keenthemes.com/metronic8/demo34/> is a visual reference only. It currently presents the legacy Bootstrap Demo 34 and links to a v8.3.3 changelog, but only the acquired licensed artifact can define the implementation version.
+The authoritative visual reference is the provided [Purity UI Dashboard Figma file](https://www.figma.com/design/cjTsi6qaX3bH0l3a4vF7Jm/Purity-UI-Dashboard---Chakra-UI-Dashboard--Community-?node-id=0-1&p=f&m=dev). MCP verification confirmed the file contains dashboard, sign-in, sign-up, sidebar, analytics-card, table, and account-page layouts.
 
 Before assets enter the repository:
 
-- [x] Confirm the intern owns a Metronic license that covers this personal application, source repository, and any demo deployment.
-- [x] Record license provenance and redistribution restrictions without committing license keys or purchase credentials.
-- [x] Obtain the official source package or supported ASP.NET Core starter kit.
-- [x] Verify that the package contains or supports Bootstrap Demo 34.
-- [x] Pin the exact package and record its integrity hash/provenance.
-- [x] Inventory Bootstrap, KeenThemes components, icons, fonts, charts, and plugins with exact versions.
-- [x] Review third-party notices, maintenance status, and security advisories.
-- [x] Decide where proprietary source/generated assets may be stored; do not publish them if the license forbids it.
-- [x] Define the controlled update and reproducible bundle-build process.
+- [x] Verify the provided Figma file and record its file key and node reference.
+- [x] Record the dashboard, authentication, navigation, table, and account-page reference layouts.
+- [x] Define the application-owned implementation approach for semantic HTML, styles, components, and accessibility behavior.
+- [x] Keep Figma as the design reference; do not treat exported or generated assets as a substitute for application-owned code and accessibility requirements.
 
 Do not scrape, hotlink, or copy assets from the public preview.
 
@@ -33,12 +28,11 @@ Do not scrape, hotlink, or copy assets from the public preview.
 
 - Razor views and thin MVC controllers remain the presentation model.
 - Keep MVC Tag Helpers, model binding, server validation, anti-forgery tokens, and server-side authorization.
-- Host licensed assets locally with cache-busting fingerprints.
-- Do not patch licensed vendor source. Permit reproducible, documented application bundles generated from the pinned source package; put small application overrides after vendor styles.
+- Keep application-owned styles and components reproducible and version-controlled.
+- Use Figma-derived tokens and layout intent without copying inaccessible or unnecessary implementation artifacts.
 - Add shared layouts/partials for the app shell, authentication, navigation, breadcrumbs, page toolbar, flash messages, validation, statuses, filters, tables, pagination, and empty states.
 - Use JavaScript as progressive enhancement for menus, drawers, dialogs, tabs, and charts. Core navigation and forms must still have server behavior.
-- Do not ship the scaffold Bootstrap bundle beside another Bootstrap version from Metronic.
-- Retain Chart.js unless the licensed package creates a concrete reason to change it.
+- Retain Chart.js for dashboard/report visualizations where appropriate.
 
 ## 4. Information architecture
 

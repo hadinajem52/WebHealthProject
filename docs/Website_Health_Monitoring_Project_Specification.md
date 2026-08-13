@@ -122,7 +122,7 @@ Development and support teams often discover website failures, expiring certific
 | Persistence          | Entity Framework Core with SQL Server                             |
 | Authentication       | ASP.NET Core Identity                                             |
 | Background execution | Hangfire or a hosted Worker Service                               |
-| UI                   | Bootstrap or the company's Metronic template; Chart.js for charts |
+| UI                   | Purity UI Dashboard Figma baseline; Chart.js for charts |
 | Logging              | Microsoft.Extensions.Logging with structured sink                 |
 | Testing              | xUnit, FluentAssertions and an integration-test host              |
 

@@ -107,7 +107,7 @@ These requirements apply throughout the project:
 
 ### UI and delivery planning
 
-- [x] Adopt Metronic 8 Demo 34 as the UI baseline and define license, source-package, version, and asset-handling gates. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
+- [x] Adopt the provided Purity UI Dashboard Figma file as the UI baseline and record its design-system reference. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
 - [x] Prepare responsive textual wireframes for primary journeys. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
 - [x] Define accessibility requirements and interaction states. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
 - [x] Convert the specification into prioritized work packages and define the issue template. Evidence: [`../phase-0/Backlog.md`](../phase-0/Backlog.md).
@@ -131,7 +131,7 @@ These requirements apply throughout the project:
 - [x] Scope, sole ownership, and foundation decisions are recorded. Evidence: [`../phase-0/Scope_and_Decisions.md`](../phase-0/Scope_and_Decisions.md).
 - [x] Database foundation is reviewable. Evidence: [`../phase-0/Database_Design.md`](../phase-0/Database_Design.md).
 - [x] Threat model and network policy are reviewable; immediate proof passed. Evidence: [`../phase-0/Test_and_Delivery_Strategy.md`](../phase-0/Test_and_Delivery_Strategy.md), SP-02/SP-03.
-- [x] UI direction and license/source/version confirmation are complete. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
+- [x] UI direction and Figma baseline confirmation are complete. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
 - [x] Backlog work packages contain requirement IDs and planned acceptance evidence. Evidence: [`../phase-0/Backlog.md`](../phase-0/Backlog.md) and [`../phase-0/Traceability_Matrix.md`](../phase-0/Traceability_Matrix.md).
 - [x] Immediate dependency, safe-HTTP, and PostgreSQL concurrency spikes pass or produce a concrete foundation-safe action. Evidence: SP-01 through SP-04 in [`../phase-0/Test_and_Delivery_Strategy.md`](../phase-0/Test_and_Delivery_Strategy.md).
 - [x] Personal-project constraints and deferred production operations are documented.
@@ -164,7 +164,7 @@ These requirements apply throughout the project:
 - [x] Configure Serilog and correlation identifiers. Evidence: [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs) and [`../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs`](../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs).
 - [x] Add global exception handling with safe user-facing errors. Evidence: [`../../src/WebHealth.Web/Controllers/HomeController.cs`](../../src/WebHealth.Web/Controllers/HomeController.cs) and [`../../src/WebHealth.Web/Views/Shared/Error.cshtml`](../../src/WebHealth.Web/Views/Shared/Error.cshtml).
 - [x] Add liveness and initial readiness checks. Evidence: `/health/live` and `/health/ready` in [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs), with PostgreSQL readiness in [`../../src/WebHealth.Infrastructure/Diagnostics/PostgreSqlReadinessCheck.cs`](../../src/WebHealth.Infrastructure/Diagnostics/PostgreSqlReadinessCheck.cs).
-- [ ] Integrate the licensed, pinned Metronic Demo 34 assets and application-owned override structure.
+- [ ] Implement the Purity UI Dashboard Figma baseline with application-owned styles and accessible overrides.
 - [ ] Add the shared layout, navigation shell, and accessible error pages.
 
 ### Database and tests
@@ -226,7 +226,7 @@ These requirements apply throughout the project:
 - [ ] Record create, update, delete, permission, and enable/disable events.
 - [ ] Store actor, timestamp, action, entity, and safe before/after values.
 - [ ] Implement an authorized audit search view.
-- [ ] Build registry pages using the Metronic shell, reusable Razor components, and application-owned overrides.
+- [ ] Build registry pages using the Purity UI Dashboard shell, reusable Razor components, and application-owned overrides.
 - [ ] Support keyboard navigation, visible focus, labels, validation summaries, and responsive layouts.
 - [ ] Ensure status and validation do not rely only on color.
 
@@ -447,7 +447,7 @@ These requirements apply throughout the project:
 
 ### UI, database, and verification
 
-- [ ] Implement Metronic-based responsive dashboard and reports.
+- [ ] Implement Purity UI Dashboard-based responsive dashboard and reports.
 - [ ] Verify keyboard navigation, focus, labels, contrast, and non-color status indicators.
 - [ ] Add certificate history and reporting indexes.
 - [ ] Add daily aggregates if required for long report windows.

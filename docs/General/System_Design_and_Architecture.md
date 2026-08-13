@@ -29,7 +29,7 @@ The architecture must support:
 |---|---|
 | Architecture style | Modular monolith with explicit internal boundaries. |
 | Runtime | .NET 10 and ASP.NET Core 10 MVC. |
-| UI | Server-rendered MVC views using licensed Metronic 8 Bootstrap assets with Demo 34 as the shell, semantic HTML, and Chart.js. |
+| UI | Server-rendered MVC views using the Purity UI Dashboard Figma baseline as the shell, semantic HTML, and Chart.js. |
 | Identity | ASP.NET Core Identity with role- and policy-based authorization. |
 | Persistence | Entity Framework Core with Npgsql and PostgreSQL. |
 | Background work | Hangfire with PostgreSQL storage; no second scheduler or message broker. |
@@ -489,7 +489,7 @@ flowchart LR
 - Trends use eligible logical-check samples.
 - P50 and P95 use successful eligible HTTP samples; failures are reported separately.
 - Long-window reports use daily aggregates after raw data expires.
-- Metronic vendor assets remain pinned and unmodified; application-owned overrides provide shared tokens, responsive behavior, visible focus states, and reduced-motion support.
+- Purity UI Dashboard design references are implemented through application-owned tokens and styles that provide responsive behavior, visible focus states, and reduced-motion support.
 - Health and severity indicators use text or icons in addition to color.
 
 ## 16. Observability and Operations

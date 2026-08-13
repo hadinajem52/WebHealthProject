@@ -46,7 +46,7 @@ flowchart TB
 | HTTP communication | `IHttpClientFactory` | Managed HTTP clients, timeouts, handlers, and connection reuse. |
 | Email transport | Personal Gmail SMTP (`smtp.gmail.com`) behind an application-owned interface | Sends MVP incident, escalation, recovery, SSL, and summary emails without coupling business logic to Gmail. |
 | Logging | Serilog | Structured application and worker logs. |
-| UI | Licensed Metronic 8 Bootstrap assets using Demo 34 as the application-shell baseline | Responsive ASP.NET Core MVC dashboard with locally hosted, pinned assets and accessible application-specific views. |
+| UI | Purity UI Dashboard Figma baseline with application-owned implementation assets | Responsive ASP.NET Core MVC dashboard with accessible application-specific views. |
 | Charts | Chart.js | Uptime, response-time, incident, and health visualizations. |
 | API style | REST where needed | Manual checks, chart data, incident actions, diagnostics, and integrations. |
 | Object mapping | Manual mapping | Explicit entity, DTO, and view-model projections. |
@@ -243,9 +243,9 @@ ASP.NET Core health checks will expose liveness and readiness information for:
 
 ## 9. User Interface
 
-### Metronic 8 Demo 34 and semantic HTML
+### Purity UI Dashboard Figma and semantic HTML
 
-Use the licensed Metronic 8 Bootstrap package with Demo 34 as the visual and application-shell baseline. The public preview is reference only: do not scrape, hotlink, or copy preview assets. Implementation requires a license held by the intern, the official source package, a pinned version, and recorded third-party notices.
+Use the provided [Purity UI Dashboard Figma file](https://www.figma.com/design/cjTsi6qaX3bH0l3a4vF7Jm/Purity-UI-Dashboard---Chakra-UI-Dashboard--Community-?node-id=0-1&p=f&m=dev) as the visual and application-shell baseline. Treat Figma as a design reference and implement the required views with application-owned semantic HTML, CSS, and accessible components.
 
 ASP.NET Core MVC and Razor remain the rendering model. Preserve semantic HTML, Tag Helpers, server validation, anti-forgery tokens, and server-side authorization. Keep application overrides separate from unmodified vendor assets and include only the plugins used by implemented pages.
 
@@ -256,7 +256,7 @@ The interface must support:
 - Clear form labels.
 - Accessible contrast.
 - Status indicators that do not rely only on color.
-- Consistent typography, spacing, colors, breakpoints, and interaction states derived from the licensed Metronic package and application accessibility requirements.
+- Consistent typography, spacing, colors, breakpoints, and interaction states derived from the Purity UI Dashboard Figma design and application accessibility requirements.
 - Visible focus states and reduced-motion support.
 
 ### Chart.js
@@ -400,7 +400,7 @@ The selected stack is:
 - `IHttpClientFactory` and custom safe redirect/network validation.
 - Personal Gmail SMTP (`smtp.gmail.com`) behind an application-owned email transport interface for the initial MVP.
 - Serilog and ASP.NET Core health checks.
-- Licensed Metronic 8 Bootstrap assets using Demo 34 as the MVC shell, with semantic HTML, application-owned accessibility overrides, and Chart.js.
+- Purity UI Dashboard Figma baseline implemented as the MVC shell, with semantic HTML, application-owned accessibility styles, and Chart.js.
 - REST endpoints only where needed.
 - Manual object mapping.
 - xUnit and FluentAssertions.

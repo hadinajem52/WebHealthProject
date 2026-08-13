@@ -10,7 +10,7 @@ Authoritative references:
 - [`Technology_Stack.md`](Technology_Stack.md)
 - [`System_Design_and_Architecture.md`](System_Design_and_Architecture.md)
 
-The plan assumes a modular monolith using ASP.NET Core 10 MVC, Entity Framework Core with Npgsql and PostgreSQL, Hangfire with PostgreSQL storage, ASP.NET Core Identity, a safe `IHttpClientFactory`-based monitoring transport, personal Gmail SMTP for the initial low-volume MVP, Serilog, licensed Metronic 8 Bootstrap assets using Demo 34 as the UI baseline, and Chart.js.
+The plan assumes a modular monolith using ASP.NET Core 10 MVC, Entity Framework Core with Npgsql and PostgreSQL, Hangfire with PostgreSQL storage, ASP.NET Core Identity, a safe `IHttpClientFactory`-based monitoring transport, personal Gmail SMTP for the initial low-volume MVP, Serilog, the Purity UI Dashboard Figma baseline, and Chart.js.
 
 The intern is the sole project owner, implementer, reviewer, and operator. Optional mentor or peer feedback is advisory and not a delivery dependency. Plan approximately **14–20 working weeks** for the full scope and re-estimate after the immediate Phase 0 spikes and every phase gate. Production observation applies only if a real deployment is later pursued.
 
@@ -185,7 +185,7 @@ Phase evidence must be durable and linked from the applicable checklist item. As
 
 ### 7.4 UI and testing design
 
-- [x] Adopt Metronic 8 Demo 34 as the UI baseline and define the license, source-package, version, asset, and customization gates. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
+- [x] Adopt the Purity UI Dashboard Figma file as the UI baseline and record the design-system reference and customization approach. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
 - [x] Produce responsive textual wireframes for dashboard, registry, endpoint details, incidents, reports, login, and error states. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
 - [x] Include keyboard flow, visible focus, labels, contrast, and non-color status cues. Evidence: [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md).
 - [x] Define unit and integration test boundaries. Evidence: [`../phase-0/Test_and_Delivery_Strategy.md`](../phase-0/Test_and_Delivery_Strategy.md).
@@ -241,7 +241,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Configure Serilog with correlation identifiers and secret-safe defaults. Evidence: [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs), [`../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs`](../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs), and safe logging notes in [`../phase-1/Runtime_Foundation.md`](../phase-1/Runtime_Foundation.md).
 - [x] Configure global exception handling with safe user-facing errors. Evidence: safe 403/404/409/500 handling and a passing response-content integration test.
 - [x] Add liveness and basic readiness endpoints. Evidence: dependency-free liveness and bounded PostgreSQL readiness with passing healthy/unconfigured-state tests.
-- [ ] Integrate the licensed, pinned Metronic Demo 34 assets, application overrides, shared layout, and accessible error pages.
+- [ ] Implement the Purity UI Dashboard baseline, application styles, shared layout, and accessible error pages.
 - [x] Create unit and integration test projects. Evidence: [`../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj`](../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj) and [`../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj`](../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj).
 - [x] Establish repeatable build and test commands. Evidence: [`../../scripts/run-tests.ps1`](../../scripts/run-tests.ps1), [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1), and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
 
@@ -520,7 +520,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Export UTF-8 CSV with stable columns and ISO-8601 timestamps.
 - [ ] Show selected filters and as-of time.
 - [ ] Use projections, bounded date ranges, pagination, and measured indexes.
-- [ ] Apply the pinned Metronic Demo 34 shell with reusable Razor partials and application-owned accessibility overrides.
+- [ ] Apply the Purity UI Dashboard shell with reusable Razor partials and application-owned accessibility styles.
 - [ ] Support mobile layouts, keyboard navigation, labels, focus, contrast, and non-color status cues.
 
 ### 12.3 Performance rules

@@ -11,7 +11,7 @@ Untrusted inputs include browser requests, configured URLs, DNS answers, redirec
 Protect:
 
 - Accounts, sessions, roles, and assignments.
-- Database/SMTP credentials and Metronic licensed assets.
+- Database/SMTP credentials and Figma-derived application assets.
 - Registry, checks, incidents, notifications, and audit history.
 - The machine's outbound network access.
 - Availability of the monitor and websites being tested.

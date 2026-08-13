@@ -21,7 +21,7 @@ The intern makes and records scope, architecture, security, data, UI, and releas
 - Runtime: .NET 10/ASP.NET Core MVC; use supported GA versions before adding production dependencies.
 - Persistence: PostgreSQL through EF Core/Npgsql.
 - Background work: Hangfire with a compatible PostgreSQL provider, pending the immediate compatibility spike.
-- UI: licensed Metronic 8 Demo 34 Bootstrap shell; the public preview is visual reference only.
+- UI: Purity UI Dashboard Figma shell and design-system reference: <https://www.figma.com/design/cjTsi6qaX3bH0l3a4vF7Jm/Purity-UI-Dashboard---Chakra-UI-Dashboard--Community-?node-id=0-1&p=f&m=dev>.
 - Monitoring: one application-owned `IHttpClientFactory` transport with manual redirects and actual-connection enforcement.
 - Email: application-owned interface; recording fake for automated tests and personal Gmail only as an optional low-volume demo adapter.
 - Time: UTC persisted instants; IANA timezone identifiers for display/scheduling policy.
@@ -103,9 +103,7 @@ Production infrastructure decisions do not block Phase 1.
 |---|---|
 | 2026-08-13 | Defined the project as personal, intern-owned, and not enterprise-grade. Removed multi-stakeholder approval assumptions. |
 | 2026-08-13 | Kept correctness/security planning and moved production operations/later-phase proofs out of Phase 0. |
-| 2026-08-13 | Selected Metronic 8 Demo 34 subject to license/source/version verification. |
-| 2026-08-13 | Recorded that the Metronic assets are fully licensed for this personal application, source repository, and demo deployment; source-package and exact-version verification were pending at that time. |
-| 2026-08-13 | Confirmed the official Metronic source package, Bootstrap Demo 34 support, exact versions, provenance, notices, and reproducible bundle process; the Metronic blocker is resolved. |
+| 2026-08-13 | Replaced the prior vendor-template direction with the provided Purity UI Dashboard Figma baseline and recorded the design-system reference. |
 | 2026-08-13 | Executed SP-01 through SP-04 successfully, pinned supported dependencies, and recorded the reproducible commands, results, limitations, and resulting design decisions. |
 | 2026-08-13 | Confirmed no unresolved decision requires restructuring the Phase 1 solution and recorded Phase 0 as complete. |
 | 2026-08-13 | Reopened Phase 0 owner review after revising the database design for scoped access, one-off maintenance, measurement provenance, immutable effective configuration, incident recurrence, and stronger PostgreSQL invariants. |

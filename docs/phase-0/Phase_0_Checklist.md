@@ -10,7 +10,7 @@
 - [x] Personal-project boundary and sole ownership recorded in [`Scope_and_Decisions.md`](Scope_and_Decisions.md).
 - [x] Protected MVP and explicitly deferred scope recorded.
 - [x] Application role/assignment behavior defined independently from project ownership.
-- [x] PostgreSQL and Metronic deviations recorded.
+- [x] PostgreSQL and the Figma-based UI baseline deviations recorded.
 - [x] Production operations and later-phase design work explicitly deferred.
 
 ## Data and correctness
@@ -31,7 +31,7 @@
 
 ## UI and delivery
 
-- [x] Metronic direction and license/source/version gate documented in [`UI_Direction.md`](UI_Direction.md).
+- [x] Purity UI Dashboard Figma direction and implementation reference documented in [`UI_Direction.md`](UI_Direction.md).
 - [x] Main responsive journeys and accessibility requirements documented.
 - [x] Prioritized backlog recorded in [`Backlog.md`](Backlog.md).
 - [x] AC/BR/FR/NFR traceability recorded in [`Traceability_Matrix.md`](Traceability_Matrix.md).
@@ -47,7 +47,7 @@
 ## Exit gate
 
 - [x] Immediate feasibility checks pass or have a concrete Phase 1 action that does not invalidate the foundation.
-- [x] Metronic licensing, official source-package verification, exact-version pinning, and asset handling are complete.
+- [x] Purity UI Dashboard Figma baseline and implementation reference are confirmed.
 - [x] No unresolved decision requires restructuring the Phase 1 solution. Confirmed by the intern/project owner on 2026-08-13 after reviewing the completed foundation and feasibility evidence.
 - [ ] Intern reviews the revised [`Database_Design.md`](Database_Design.md), records approval or requested changes, and then restores Phase 0 complete status.
 
