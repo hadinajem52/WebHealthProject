@@ -86,6 +86,8 @@ Resulting decisions:
 - Use the current Hangfire PostgreSQL connection-factory API. Review provider compatibility before any future `2.x` upgrade.
 - Keep Testcontainers for Docker-capable CI. The isolated native cluster is the reproducible Windows fallback for Phase 0 evidence.
 
+Phase 1 reuses that native fallback through [`../../scripts/PostgresTestCluster.psm1`](../../scripts/PostgresTestCluster.psm1). On 2026-08-13, [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1) created a clean PostgreSQL 18 database, applied the empty `InitialFoundation` migration, verified the `web_health` schema and sole EF history table, confirmed no pending migrations, repeated the explicit update as a no-op, and stopped the cluster. All six Phase 0 feasibility spikes passed again after the shared helper was extracted.
+
 ## 5. Basic CI
 
 Use GitHub Actions or another available personal CI service. Minimum pull-request/main checks:

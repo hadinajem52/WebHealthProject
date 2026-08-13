@@ -247,8 +247,8 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 8.3 Database and test foundation
 
-- [ ] Add initial database context and migration conventions.
-- [ ] Verify clean PostgreSQL database creation.
+- [x] Add initial database context and migration conventions. Evidence: the context, default schema/history table, snake-case naming, UTC instant mapping, restrictive-delete convention, design-time factory, pinned EF tool, and `InitialFoundation` migration are documented in [`../phase-1/Database_Conventions.md`](../phase-1/Database_Conventions.md).
+- [x] Verify clean PostgreSQL database creation. Evidence: [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1) passed against isolated PostgreSQL 18 on 2026-08-13; exactly one migration and only the migration-history table existed.
 - [x] Configure `WebApplicationFactory` integration tests. Evidence: [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
 - [ ] Configure PostgreSQL Testcontainers tests.
 - [x] Add startup, liveness, and readiness smoke tests. Evidence: five runtime integration tests passed on 2026-08-13.

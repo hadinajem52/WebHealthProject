@@ -169,8 +169,8 @@ These requirements apply throughout the project:
 
 ### Database and tests
 
-- [ ] Add initial database context and migration conventions.
-- [ ] Verify clean PostgreSQL database creation.
+- [x] Add initial database context and migration conventions. Evidence: [`../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs`](../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs), [`../../src/WebHealth.Infrastructure/Persistence/DatabaseConventions.cs`](../../src/WebHealth.Infrastructure/Persistence/DatabaseConventions.cs), and [`../phase-1/Database_Conventions.md`](../phase-1/Database_Conventions.md).
+- [x] Verify clean PostgreSQL database creation. Evidence: [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1) applied the baseline migration to isolated PostgreSQL 18 on 2026-08-13.
 - [x] Configure `WebApplicationFactory` integration tests. Evidence: [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
 - [ ] Configure PostgreSQL Testcontainers tests.
 - [x] Add a smoke test for application startup and readiness. Evidence: five passing runtime tests in [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
@@ -180,7 +180,7 @@ These requirements apply throughout the project:
 ### Phase 1 completion gate
 
 - [ ] Application builds and starts locally.
-- [ ] PostgreSQL connectivity and migrations work from a clean database.
+- [x] PostgreSQL connectivity and migrations work from a clean database. Evidence: the clean-database integration test passed and a repeated explicit update applied no migrations.
 - [ ] Liveness and readiness behave as documented.
 - [ ] Unit and integration test projects run successfully.
 - [ ] No secrets are committed.

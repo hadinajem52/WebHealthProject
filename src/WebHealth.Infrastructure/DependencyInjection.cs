@@ -23,7 +23,7 @@ public static class DependencyInjection
                     $"ConnectionStrings:{DatabaseConnectionName} is not configured.");
             }
 
-            options.UseNpgsql(connectionString);
+            PostgreSqlDbContextOptions.Configure(options, connectionString);
         });
 
         services.AddHealthChecks()
