@@ -93,7 +93,7 @@ These roles must be implemented and tested even when the intern is the only real
 
 ## 8. Phase 0 closure
 
-The supported dependency versions are pinned, SP-01 through SP-04 pass, and the repeatable local PostgreSQL fallback is documented. On 2026-08-13, the intern/project owner confirmed that no unresolved decision requires restructuring the Phase 1 solution. No Phase 0 blocker remains.
+The supported dependency versions are pinned, SP-01 through SP-04 pass, and the repeatable local PostgreSQL fallback is documented. On 2026-08-13, the intern/project owner confirmed that no unresolved decision required restructuring the Phase 1 solution. A later database-design review added missing protected-MVP entities and invariants; owner re-approval of that revision is now the only open Phase 0 documentation gate.
 
 Production infrastructure decisions do not block Phase 1.
 
@@ -108,3 +108,4 @@ Production infrastructure decisions do not block Phase 1.
 | 2026-08-13 | Confirmed the official Metronic source package, Bootstrap Demo 34 support, exact versions, provenance, notices, and reproducible bundle process; the Metronic blocker is resolved. |
 | 2026-08-13 | Executed SP-01 through SP-04 successfully, pinned supported dependencies, and recorded the reproducible commands, results, limitations, and resulting design decisions. |
 | 2026-08-13 | Confirmed no unresolved decision requires restructuring the Phase 1 solution and recorded Phase 0 as complete. |
+| 2026-08-13 | Reopened Phase 0 owner review after revising the database design for scoped access, one-off maintenance, measurement provenance, immutable effective configuration, incident recurrence, and stronger PostgreSQL invariants. |

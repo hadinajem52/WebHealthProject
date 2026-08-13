@@ -1,8 +1,8 @@
 # Phase 0 Checklist
 
 **Owner:** Intern  
-**Status:** Complete  
-**Approval:** Approved by the intern/project owner on 2026-08-13  
+**Status:** Reopened for owner review after database-design revision
+**Previous approval:** The 2026-08-13 approval predates the revised database design
 **Project classification:** Personal internship/portfolio project; not enterprise-grade or production-certified
 
 ## Scope and foundation
@@ -49,6 +49,6 @@
 - [x] Immediate feasibility checks pass or have a concrete Phase 1 action that does not invalidate the foundation.
 - [x] Metronic licensing, official source-package verification, exact-version pinning, and asset handling are complete.
 - [x] No unresolved decision requires restructuring the Phase 1 solution. Confirmed by the intern/project owner on 2026-08-13 after reviewing the completed foundation and feasibility evidence.
-- [x] Intern records Phase 0 complete in the change log. Evidence: [`Scope_and_Decisions.md`](Scope_and_Decisions.md).
+- [ ] Intern reviews the revised [`Database_Design.md`](Database_Design.md), records approval or requested changes, and then restores Phase 0 complete status.
 
 Optional peer/mentor review is useful but not required to complete this personal-project phase.
