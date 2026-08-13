@@ -18,6 +18,7 @@ TestResults/
 coverage/
 *.coverage
 *.coveragexml
+.spikes/
 
 # Local development files and secrets
 *.local.json
@@ -39,7 +40,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 
-/docs
 /.opencode
 
 Agents.md
+/docs/explanations
