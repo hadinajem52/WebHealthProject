@@ -59,7 +59,7 @@ On 2026-08-13:
 - locked restore completed;
 - the solution built with zero warnings and zero errors;
 - the unit project executed two architecture-boundary cases for Domain and Application;
-- nine normal integration tests passed and the isolated PostgreSQL test was skipped as designed;
+- twenty-one normal integration tests passed and the isolated PostgreSQL test was skipped as designed; twelve of them are the application-shell cases added with the shell work item;
 - the Testcontainers test compiled and was skipped because Docker Desktop was not running;
 - the disposable PostgreSQL foundation test passed separately;
 - restore emitted no unsuppressed audit warnings; an explicit vulnerability listing continues to report the accepted `SSH.NET` advisory.

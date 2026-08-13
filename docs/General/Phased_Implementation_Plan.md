@@ -164,8 +164,8 @@ These requirements apply throughout the project:
 - [x] Configure Serilog and correlation identifiers. Evidence: [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs) and [`../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs`](../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs).
 - [x] Add global exception handling with safe user-facing errors. Evidence: [`../../src/WebHealth.Web/Controllers/HomeController.cs`](../../src/WebHealth.Web/Controllers/HomeController.cs) and [`../../src/WebHealth.Web/Views/Shared/Error.cshtml`](../../src/WebHealth.Web/Views/Shared/Error.cshtml).
 - [x] Add liveness and initial readiness checks. Evidence: `/health/live` and `/health/ready` in [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs), with PostgreSQL readiness in [`../../src/WebHealth.Infrastructure/Diagnostics/PostgreSqlReadinessCheck.cs`](../../src/WebHealth.Infrastructure/Diagnostics/PostgreSqlReadinessCheck.cs).
-- [ ] Implement the Purity UI Dashboard Figma baseline with application-owned styles and accessible overrides.
-- [ ] Add the shared layout, navigation shell, and accessible error pages.
+- [x] Implement the Purity UI Dashboard Figma baseline with application-owned styles and accessible overrides. Evidence: [`../../src/WebHealth.Web/wwwroot/css/tokens.css`](../../src/WebHealth.Web/wwwroot/css/tokens.css) and the recorded contrast overrides in [`../phase-1/Application_Shell.md`](../phase-1/Application_Shell.md).
+- [x] Add the shared layout, navigation shell, and accessible error pages. Evidence: [`../../src/WebHealth.Web/Views/Shared/`](../../src/WebHealth.Web/Views/Shared/), [`../../src/WebHealth.Web/Shell/`](../../src/WebHealth.Web/Shell/), and the twelve shell cases in [`../../tests/WebHealth.IntegrationTests/ApplicationShellTests.cs`](../../tests/WebHealth.IntegrationTests/ApplicationShellTests.cs).
 
 ### Database and tests
 
@@ -179,7 +179,7 @@ These requirements apply throughout the project:
 
 ### Phase 1 completion gate
 
-- [x] Application builds and starts locally. Evidence: warning-free solution build and the shared `WebApplicationFactory` smoke tests on 2026-08-13.
+- [x] Application builds and starts locally. Evidence: warning-free solution build, the shared `WebApplicationFactory` smoke tests, and the local delivery gate with 2 unit and 21 integration tests passing on 2026-08-13; the shell was also served and reviewed in a browser at 1440px and 414px.
 - [x] PostgreSQL connectivity and migrations work from a clean database. Evidence: the clean-database integration test passed and a repeated explicit update applied no migrations.
 - [x] Liveness and readiness behave as documented. Evidence: runtime integration tests cover healthy liveness and unconfigured-database readiness.
 - [x] Unit and integration test projects run successfully. Evidence: [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).

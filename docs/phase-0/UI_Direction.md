@@ -2,7 +2,7 @@
 
 **Decision:** Use the provided Purity UI Dashboard Figma file as the application-shell and visual baseline for the server-rendered ASP.NET Core MVC application.
 **Decision source:** Project direction received 2026-08-13.  
-**Implementation status:** Figma baseline verified and implementation-ready; no vendor-template blocker remains.
+**Implementation status:** Figma baseline verified and implemented for the reusable shell in Phase 1; see [`../phase-1/Application_Shell.md`](../phase-1/Application_Shell.md). No vendor-template blocker remains.
 **Approval:** Approved by the intern/project owner on 2026-08-13
 
 ## 1. Superseded direction
@@ -126,3 +126,4 @@ The navigation is a convenience, not an authorization boundary. Direct requests 
 
 - [x] UI baseline and superseded direction recorded.
 - [x] Primary responsive journeys and accessibility contract documented.
+- [x] Reusable shell, accessibility behavior, and error/empty states implemented in Phase 1. Evidence: [`../phase-1/Application_Shell.md`](../phase-1/Application_Shell.md). Journey-specific screens remain owned by Phases 2–5.

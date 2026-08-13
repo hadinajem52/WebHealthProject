@@ -13,17 +13,14 @@
     <link rel="stylesheet" href="~/css/tokens.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/shell.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/components.css" asp-append-version="true" />
-    @*
-        Loaded in the head so the progressive-enhancement marker is applied
-        before first paint. The script only reads and sets document state here;
-        every element it controls is wired up after the document is parsed.
-    *@
+
     <script src="~/js/shell.js" asp-append-version="true"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
 
     <div class="app-shell">
+    
         @await Html.PartialAsync("_Sidebar")
 
         <div class="app-column" data-shell-content>
