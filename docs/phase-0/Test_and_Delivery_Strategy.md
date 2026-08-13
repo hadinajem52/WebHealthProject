@@ -92,7 +92,9 @@ Phase 1 reuses that native fallback through [`../../scripts/PostgresTestCluster.
 
 ## 5. Basic CI
 
-Use GitHub Actions or another available personal CI service. Minimum pull-request/main checks:
+GitHub Actions is configured for pull requests, pushes to `main`, and manual runs through [`../../.github/workflows/delivery.yml`](../../.github/workflows/delivery.yml). The repeatable local equivalent is [`../../scripts/run-delivery-checks.ps1`](../../scripts/run-delivery-checks.ps1). Both enforce locked restore, formatting, warnings-as-errors Release build, migration drift, automated tests, the recorded vulnerability exception, and whitespace checks. CI additionally runs Testcontainers and Gitleaks on a Docker-capable hosted runner.
+
+Core commands include:
 
 ```powershell
 dotnet restore --locked-mode
@@ -100,7 +102,7 @@ dotnet build --no-restore
 dotnet test --no-build --logger "trx"
 ```
 
-Also run formatting/static checks selected by the project, secret scanning, and dependency vulnerability/license checks. PostgreSQL integration jobs require a Docker-capable runner. If CI is not yet configured, the same commands run locally and the limitation is recorded; CI remains required by AC-15 before project completion.
+The workflow definition is present, but a hosted run must complete before remote CI execution is claimed as evidence. AC-15 remains a project-wide criterion and is reconfirmed as later tests are added.
 
 ## 6. Later-phase tests
 

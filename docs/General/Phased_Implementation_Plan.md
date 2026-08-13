@@ -153,7 +153,7 @@ These requirements apply throughout the project:
 - [x] Configure project references according to architecture boundaries. Evidence: project references in [`../../src/`](../../src/) match the documented dependency direction.
 - [x] Configure central package/version management if adopted by the repository. Evidence: [`../../Directory.Packages.props`](../../Directory.Packages.props) and per-project lock files.
 - [x] Pin reviewed .NET 10-compatible dependency versions. Evidence: [`../../Directory.Packages.props`](../../Directory.Packages.props), locked restore, and the vulnerability review recorded in [`../phase-0/Test_and_Delivery_Strategy.md`](../phase-0/Test_and_Delivery_Strategy.md).
-- [ ] Add repository formatting and build conventions.
+- [x] Add repository formatting and build conventions. Evidence: [`../../.editorconfig`](../../.editorconfig), [`../../Directory.Build.props`](../../Directory.Build.props), and [`../phase-1/Delivery_Checks.md`](../phase-1/Delivery_Checks.md).
 
 ### Runtime foundation
 
@@ -175,7 +175,7 @@ These requirements apply throughout the project:
 - [x] Configure opt-in PostgreSQL Testcontainers tests. The intern accepted `GHSA-q939-rpr3-3284` on 2026-08-13 and the audit suppression is limited to that advisory in the integration-test project. Evidence: [`../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs`](../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs) and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
 - [x] Add a smoke test for application startup and readiness. Evidence: five passing runtime tests in [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
 - [x] Establish repeatable build and test commands. Evidence: [`../../scripts/run-tests.ps1`](../../scripts/run-tests.ps1), [`../../scripts/run-database-foundation-tests.ps1`](../../scripts/run-database-foundation-tests.ps1), and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
-- [ ] Add pipeline configuration using an available personal CI service.
+- [x] Add pipeline configuration using an available personal CI service. Evidence: [`../../.github/workflows/delivery.yml`](../../.github/workflows/delivery.yml) and [`../phase-1/Delivery_Checks.md`](../phase-1/Delivery_Checks.md); a remote run is still required before claiming CI execution evidence.
 
 ### Phase 1 completion gate
 

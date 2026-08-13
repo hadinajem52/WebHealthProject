@@ -252,7 +252,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Configure a reusable `WebApplicationFactory` integration-test host. Evidence: [`../../tests/WebHealth.IntegrationTests/Support/WebHealthWebApplicationFactory.cs`](../../tests/WebHealth.IntegrationTests/Support/WebHealthWebApplicationFactory.cs) and [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
 - [x] Configure opt-in PostgreSQL Testcontainers tests. The intern accepted `GHSA-q939-rpr3-3284` on 2026-08-13 and the audit suppression is limited to that advisory in the integration-test project. Evidence: [`../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs`](../../tests/WebHealth.IntegrationTests/PostgreSqlTestcontainerTests.cs) and [`../phase-1/Testing_Foundation.md`](../phase-1/Testing_Foundation.md).
 - [x] Add startup, liveness, and readiness smoke tests. Evidence: five runtime integration tests passed on 2026-08-13.
-- [ ] Verify the solution builds and tests repeatably in the delivery pipeline.
+- [x] Add repeatable local and GitHub Actions delivery checks. Evidence: [`../../scripts/run-delivery-checks.ps1`](../../scripts/run-delivery-checks.ps1), [`../../.github/workflows/delivery.yml`](../../.github/workflows/delivery.yml), and [`../phase-1/Delivery_Checks.md`](../phase-1/Delivery_Checks.md). A remote workflow run remains required before claiming hosted CI execution evidence.
 
 ### 8.4 Phase exit evidence
 

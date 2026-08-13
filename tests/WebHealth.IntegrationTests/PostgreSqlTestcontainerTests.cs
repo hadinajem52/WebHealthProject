@@ -9,11 +9,7 @@ public sealed class PostgreSqlTestcontainerTests
     [TestcontainersFact]
     public async Task FoundationMigration_AppliesToPostgreSqlContainer()
     {
-        await using var postgreSql = new PostgreSqlBuilder("postgres:18.0-bookworm")
-            .WithDatabase("webhealth_tests")
-            .WithUsername("webhealth")
-            .WithPassword("webhealth_tests_only")
-            .Build();
+        await using var postgreSql = new PostgreSqlBuilder("postgres:18.0-bookworm").Build();
 
         await postgreSql.StartAsync();
 

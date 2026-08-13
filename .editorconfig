@@ -1,0 +1,16 @@
+root = true
+
+[*]
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,cshtml}]
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,xml,csproj,props,targets}]
+indent_style = space
+indent_size = 2
+
+[*.cs]
+dotnet_diagnostic.IDE0055.severity = warning
