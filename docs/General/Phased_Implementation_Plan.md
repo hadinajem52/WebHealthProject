@@ -147,10 +147,10 @@ These requirements apply throughout the project:
 
 ### Solution setup
 
-- [ ] Create the .NET solution.
-- [ ] Create Web, Application, Domain, and Infrastructure projects.
-- [ ] Create unit and integration test projects.
-- [ ] Configure project references according to architecture boundaries.
+- [x] Create the .NET solution. Evidence: [`../../WebHealthProject.sln`](../../WebHealthProject.sln).
+- [x] Create Web, Application, Domain, and Infrastructure projects. Evidence: [`../../src/`](../../src/).
+- [x] Create unit and integration test projects. Evidence: [`../../tests/WebHealth.UnitTests/`](../../tests/WebHealth.UnitTests/) and [`../../tests/WebHealth.IntegrationTests/`](../../tests/WebHealth.IntegrationTests/).
+- [x] Configure project references according to architecture boundaries. Evidence: project references in [`../../src/`](../../src/) match the documented dependency direction.
 - [ ] Configure central package/version management if adopted by the repository.
 - [ ] Pin reviewed .NET 10-compatible dependency versions.
 - [ ] Add repository formatting and build conventions.

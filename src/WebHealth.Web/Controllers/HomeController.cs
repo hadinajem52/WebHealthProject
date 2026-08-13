@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using WebHealthProject.Models;
+using WebHealth.Web.Models;
 
-namespace WebHealthProject.Controllers;
+namespace WebHealth.Web.Controllers;
 
 public class HomeController : Controller
 {

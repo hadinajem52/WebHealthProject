@@ -232,9 +232,9 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 8.2 Solution and runtime foundation
 
-- [ ] Create the solution and planned projects.
+- [x] Create the solution and planned projects. Evidence: [`../../WebHealthProject.sln`](../../WebHealthProject.sln), [`../../src/`](../../src/), and the unit/integration projects under [`../../tests/`](../../tests/).
 - [ ] Add only selected, reviewed dependencies with pinned compatible versions.
-- [ ] Configure project references according to the recorded dependency direction.
+- [x] Configure project references according to the recorded dependency direction. Evidence: Domain has no project references; Application references Domain; Infrastructure references Application and Domain; Web references Application and Infrastructure.
 - [ ] Configure dependency injection and module registration.
 - [ ] Configure environment-specific settings and local secret handling.
 - [ ] Configure EF Core with Npgsql and PostgreSQL.
@@ -242,7 +242,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Configure global exception handling with safe user-facing errors.
 - [ ] Add liveness and basic readiness endpoints.
 - [ ] Integrate the licensed, pinned Metronic Demo 34 assets, application overrides, shared layout, and accessible error pages.
-- [ ] Create unit and integration test projects.
+- [x] Create unit and integration test projects. Evidence: [`../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj`](../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj) and [`../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj`](../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj).
 - [ ] Establish build and test pipeline commands.
 
 ### 8.3 Database and test foundation

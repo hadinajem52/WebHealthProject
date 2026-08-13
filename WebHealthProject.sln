@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebHealth.Web", "src\WebHealth.Web\WebHealth.Web.csproj", "{D7708D32-C18D-46EA-8123-B3C648549B7F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebHealth.Application", "src\WebHealth.Application\WebHealth.Application.csproj", "{2088135C-D2CC-4F05-9BF6-8254F2487195}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebHealth.Domain", "src\WebHealth.Domain\WebHealth.Domain.csproj", "{34328D3B-1D9E-47BE-8D02-85B10535ED5A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebHealth.Infrastructure", "src\WebHealth.Infrastructure\WebHealth.Infrastructure.csproj", "{D1357977-A9A4-4ED2-9243-F6D0FDF3199B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebHealth.UnitTests", "tests\WebHealth.UnitTests\WebHealth.UnitTests.csproj", "{4A023FA7-3D89-46F3-801F-69B8DB437F87}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebHealth.IntegrationTests", "tests\WebHealth.IntegrationTests\WebHealth.IntegrationTests.csproj", "{410A4F87-C57D-4666-A7D4-95E4014194E9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D7708D32-C18D-46EA-8123-B3C648549B7F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7708D32-C18D-46EA-8123-B3C648549B7F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7708D32-C18D-46EA-8123-B3C648549B7F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7708D32-C18D-46EA-8123-B3C648549B7F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2088135C-D2CC-4F05-9BF6-8254F2487195}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2088135C-D2CC-4F05-9BF6-8254F2487195}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2088135C-D2CC-4F05-9BF6-8254F2487195}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2088135C-D2CC-4F05-9BF6-8254F2487195}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34328D3B-1D9E-47BE-8D02-85B10535ED5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34328D3B-1D9E-47BE-8D02-85B10535ED5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34328D3B-1D9E-47BE-8D02-85B10535ED5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34328D3B-1D9E-47BE-8D02-85B10535ED5A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1357977-A9A4-4ED2-9243-F6D0FDF3199B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1357977-A9A4-4ED2-9243-F6D0FDF3199B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1357977-A9A4-4ED2-9243-F6D0FDF3199B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1357977-A9A4-4ED2-9243-F6D0FDF3199B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4A023FA7-3D89-46F3-801F-69B8DB437F87}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4A023FA7-3D89-46F3-801F-69B8DB437F87}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4A023FA7-3D89-46F3-801F-69B8DB437F87}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A023FA7-3D89-46F3-801F-69B8DB437F87}.Release|Any CPU.Build.0 = Release|Any CPU
+		{410A4F87-C57D-4666-A7D4-95E4014194E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{410A4F87-C57D-4666-A7D4-95E4014194E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{410A4F87-C57D-4666-A7D4-95E4014194E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{410A4F87-C57D-4666-A7D4-95E4014194E9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
