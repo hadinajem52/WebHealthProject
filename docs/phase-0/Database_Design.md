@@ -8,7 +8,7 @@ This document defines the correctness-critical data foundation. Later feature sc
 
 ## 1. Conventions
 
-- Application-generated UUID primary7 keys.
+- Application-generated UUID primary keys.
 - PostgreSQL `timestamptz` for UTC instants; IANA timezone identifiers stored separately.
 - Reporting windows use `[start, end)` boundaries.
 - Statuses use bounded text with `CHECK` constraints unless measurements justify another representation.

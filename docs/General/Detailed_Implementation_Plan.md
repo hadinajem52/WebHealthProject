@@ -233,14 +233,14 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 ### 8.2 Solution and runtime foundation
 
 - [x] Create the solution and planned projects. Evidence: [`../../WebHealthProject.sln`](../../WebHealthProject.sln), [`../../src/`](../../src/), and the unit/integration projects under [`../../tests/`](../../tests/).
-- [ ] Add only selected, reviewed dependencies with pinned compatible versions.
+- [x] Add only selected, reviewed dependencies with pinned compatible versions. Evidence: central versions and per-project lock files; restore, build, tests, and vulnerability review passed on 2026-08-13.
 - [x] Configure project references according to the recorded dependency direction. Evidence: Domain has no project references; Application references Domain; Infrastructure references Application and Domain; Web references Application and Infrastructure.
-- [ ] Configure dependency injection and module registration.
-- [ ] Configure environment-specific settings and local secret handling.
-- [ ] Configure EF Core with Npgsql and PostgreSQL.
-- [ ] Configure Serilog with correlation identifiers and secret-safe defaults.
-- [ ] Configure global exception handling with safe user-facing errors.
-- [ ] Add liveness and basic readiness endpoints.
+- [x] Configure dependency injection and module registration. Evidence: the Web composition root calls the focused Infrastructure registration in [`../../src/WebHealth.Infrastructure/DependencyInjection.cs`](../../src/WebHealth.Infrastructure/DependencyInjection.cs); empty modules have no speculative registrations.
+- [x] Configure environment-specific settings and local secret handling. Evidence: [`../phase-1/Runtime_Foundation.md`](../phase-1/Runtime_Foundation.md) and the Web settings/project files.
+- [x] Configure EF Core with Npgsql and PostgreSQL. Evidence: [`../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs`](../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs) and Infrastructure registration; startup never applies migrations.
+- [x] Configure Serilog with correlation identifiers and secret-safe defaults. Evidence: [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs), [`../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs`](../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs), and safe logging notes in [`../phase-1/Runtime_Foundation.md`](../phase-1/Runtime_Foundation.md).
+- [x] Configure global exception handling with safe user-facing errors. Evidence: safe 403/404/409/500 handling and a passing response-content integration test.
+- [x] Add liveness and basic readiness endpoints. Evidence: dependency-free liveness and bounded PostgreSQL readiness with passing healthy/unconfigured-state tests.
 - [ ] Integrate the licensed, pinned Metronic Demo 34 assets, application overrides, shared layout, and accessible error pages.
 - [x] Create unit and integration test projects. Evidence: [`../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj`](../../tests/WebHealth.UnitTests/WebHealth.UnitTests.csproj) and [`../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj`](../../tests/WebHealth.IntegrationTests/WebHealth.IntegrationTests.csproj).
 - [ ] Establish build and test pipeline commands.
@@ -249,9 +249,9 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 - [ ] Add initial database context and migration conventions.
 - [ ] Verify clean PostgreSQL database creation.
-- [ ] Configure `WebApplicationFactory` integration tests.
+- [x] Configure `WebApplicationFactory` integration tests. Evidence: [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
 - [ ] Configure PostgreSQL Testcontainers tests.
-- [ ] Add startup, liveness, and readiness smoke tests.
+- [x] Add startup, liveness, and readiness smoke tests. Evidence: five runtime integration tests passed on 2026-08-13.
 - [ ] Verify the solution builds and tests repeatably in the delivery pipeline.
 
 ### 8.4 Phase exit evidence

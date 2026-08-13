@@ -151,19 +151,19 @@ These requirements apply throughout the project:
 - [x] Create Web, Application, Domain, and Infrastructure projects. Evidence: [`../../src/`](../../src/).
 - [x] Create unit and integration test projects. Evidence: [`../../tests/WebHealth.UnitTests/`](../../tests/WebHealth.UnitTests/) and [`../../tests/WebHealth.IntegrationTests/`](../../tests/WebHealth.IntegrationTests/).
 - [x] Configure project references according to architecture boundaries. Evidence: project references in [`../../src/`](../../src/) match the documented dependency direction.
-- [ ] Configure central package/version management if adopted by the repository.
-- [ ] Pin reviewed .NET 10-compatible dependency versions.
+- [x] Configure central package/version management if adopted by the repository. Evidence: [`../../Directory.Packages.props`](../../Directory.Packages.props) and per-project lock files.
+- [x] Pin reviewed .NET 10-compatible dependency versions. Evidence: [`../../Directory.Packages.props`](../../Directory.Packages.props), locked restore, and the vulnerability review recorded in [`../phase-0/Test_and_Delivery_Strategy.md`](../phase-0/Test_and_Delivery_Strategy.md).
 - [ ] Add repository formatting and build conventions.
 
 ### Runtime foundation
 
-- [ ] Configure ASP.NET Core MVC.
-- [ ] Configure environment-specific settings.
-- [ ] Configure safe local secret handling.
-- [ ] Configure EF Core, Npgsql, and PostgreSQL.
-- [ ] Configure Serilog and correlation identifiers.
-- [ ] Add global exception handling with safe user-facing errors.
-- [ ] Add liveness and initial readiness checks.
+- [x] Configure ASP.NET Core MVC. Evidence: [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs).
+- [x] Configure environment-specific settings. Evidence: [`../../src/WebHealth.Web/appsettings.json`](../../src/WebHealth.Web/appsettings.json) and [`../../src/WebHealth.Web/appsettings.Development.json`](../../src/WebHealth.Web/appsettings.Development.json).
+- [x] Configure safe local secret handling. Evidence: the user-secrets identifier in [`../../src/WebHealth.Web/WebHealth.Web.csproj`](../../src/WebHealth.Web/WebHealth.Web.csproj) and setup instructions in [`../phase-1/Runtime_Foundation.md`](../phase-1/Runtime_Foundation.md).
+- [x] Configure EF Core, Npgsql, and PostgreSQL. Evidence: [`../../src/WebHealth.Infrastructure/DependencyInjection.cs`](../../src/WebHealth.Infrastructure/DependencyInjection.cs) and [`../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs`](../../src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs); schema migration remains explicit and belongs to the database-foundation work.
+- [x] Configure Serilog and correlation identifiers. Evidence: [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs) and [`../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs`](../../src/WebHealth.Web/Middleware/CorrelationIdMiddleware.cs).
+- [x] Add global exception handling with safe user-facing errors. Evidence: [`../../src/WebHealth.Web/Controllers/HomeController.cs`](../../src/WebHealth.Web/Controllers/HomeController.cs) and [`../../src/WebHealth.Web/Views/Shared/Error.cshtml`](../../src/WebHealth.Web/Views/Shared/Error.cshtml).
+- [x] Add liveness and initial readiness checks. Evidence: `/health/live` and `/health/ready` in [`../../src/WebHealth.Web/Program.cs`](../../src/WebHealth.Web/Program.cs), with PostgreSQL readiness in [`../../src/WebHealth.Infrastructure/Diagnostics/PostgreSqlReadinessCheck.cs`](../../src/WebHealth.Infrastructure/Diagnostics/PostgreSqlReadinessCheck.cs).
 - [ ] Integrate the licensed, pinned Metronic Demo 34 assets and application-owned override structure.
 - [ ] Add the shared layout, navigation shell, and accessible error pages.
 
@@ -171,9 +171,9 @@ These requirements apply throughout the project:
 
 - [ ] Add initial database context and migration conventions.
 - [ ] Verify clean PostgreSQL database creation.
-- [ ] Configure `WebApplicationFactory` integration tests.
+- [x] Configure `WebApplicationFactory` integration tests. Evidence: [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
 - [ ] Configure PostgreSQL Testcontainers tests.
-- [ ] Add a smoke test for application startup and readiness.
+- [x] Add a smoke test for application startup and readiness. Evidence: five passing runtime tests in [`../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs`](../../tests/WebHealth.IntegrationTests/RuntimeFoundationTests.cs).
 - [ ] Establish repeatable build and test commands.
 - [ ] Add pipeline configuration using an available personal CI service.
 

@@ -37,6 +37,8 @@ Before Phase 1 dependencies are finalized:
 
 Pinned and exercised on 2026-08-13: .NET SDK `10.0.400`, EF Core `10.0.11`, Npgsql/EF provider `10.0.3`, Hangfire Core `1.8.24`, Hangfire.PostgreSql `1.21.1`, and PostgreSQL `18`. Versions are centralized in [`../../Directory.Packages.props`](../../Directory.Packages.props), the SDK is pinned in [`../../global.json`](../../global.json), and [`../../tests/FeasibilitySpikes/packages.lock.json`](../../tests/FeasibilitySpikes/packages.lock.json) locks the resolved graph. The transitive `Newtonsoft.Json` version is pinned to `13.0.4` because the provider's lower dependency floor otherwise resolved to vulnerable `11.0.1`.
 
+Phase 1 runtime additions reviewed on 2026-08-13: Serilog.AspNetCore `10.0.0`, Microsoft.Extensions.Diagnostics.HealthChecks `10.0.11`, and Microsoft.AspNetCore.Mvc.Testing `10.0.11`. Serilog.AspNetCore matches the application's .NET major version; the Microsoft packages match the pinned .NET 10 patch line. Central versions and per-project lock files record the resolved graph. Locked restore, a warning-free build, five runtime integration tests, and `dotnet list WebHealthProject.sln package --vulnerable --include-transitive` passed with no reported vulnerable packages. Package metadata records Apache-2.0 for Serilog.AspNetCore and MIT for the Microsoft packages.
+
 ## 4. Immediate Phase 0 spikes
 
 ### SP-01 — dependency and Hangfire/PostgreSQL compatibility

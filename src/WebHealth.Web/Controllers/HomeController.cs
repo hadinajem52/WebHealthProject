@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Web.Models;
 
@@ -19,6 +18,18 @@ public class HomeController : Controller
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
-        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        return View(ErrorViewModel.Create(500, HttpContext.TraceIdentifier));
+    }
+
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult HttpStatusCode(int code)
+    {
+        if (code is < 400 or > 599)
+        {
+            return BadRequest();
+        }
+
+        Response.StatusCode = code;
+        return View("Error", ErrorViewModel.Create(code, HttpContext.TraceIdentifier));
     }
 }
