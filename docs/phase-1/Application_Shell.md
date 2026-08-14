@@ -27,6 +27,14 @@ Layout intent and tokens were taken from the file; markup, CSS, icons and intera
 
 The sidebar support-card artwork (`wwwroot/images/sidebar-support.png`, 218x170) is the one exported Figma asset in the repository. The project owner supplied it directly on 2026-08-13 for this purpose.
 
+### Typeface
+
+The design is set in Helvetica Neue. Five faces are served from `wwwroot/fonts` and declared in `tokens.css` with `font-display: swap`: Light (300), Roman (400), Italic (400), Medium (500) and Bold (700). The shell itself uses only 400 and 700; the others are declared so later screens get a real face instead of a synthesised one. `--font-sans` keeps `Helvetica, Arial, system-ui, sans-serif` behind it.
+
+The files must live under `wwwroot`. Linking them from `src/Fonts` with `<Content Link="wwwroot\fonts\..." />` copies them to the build output only, so `dotnet run` answers every font request with an empty 200: the endpoint resolves from the manifest but the file is absent from the project's physical `wwwroot`.
+
+**Licence risk.** Helvetica Neue is a commercial Monotype typeface and these files came from a free-download aggregator, so the repository most likely has no web-embedding licence for them. This is recorded for the Phase 7 licence review. Replacing them with a licensed copy, or with a metrically compatible open face such as Arimo or Inter, removes the risk without changing the layout.
+
 ### Exactly reproduced values
 
 At the project owner's direction on 2026-08-13, the sidebar (`2:164`) and the breadcrumb block (`2:263`) reproduce the Figma colors, font weights, type sizes and geometry literally rather than through the shell's own tokens:
@@ -58,7 +66,7 @@ Two details in the Figma file were not copied literally:
 | Gray-400 `#A0AEC0` | 2.26:1 | Gray-600 `#4A5568` | 7.5:1 | Secondary text, nav labels, breadcrumb links |
 | Teal-300 `#4FD1C5` with white content | 1.87:1 | Teal-600 `#2C7A7B` | 5.0:1 | Icon tiles and the support card |
 | Green-400 / Orange-300 / Red-500 status text | 2.4:1 – 4.1:1 | Green-700 / Orange-600 / Red-600 | 4.6:1 – 6.7:1 | Status and message text |
-| 12–14px type baseline | — | 16px root, 0.75–1.5rem scale | — | Body text and 200% zoom |
+| 12–14px type baseline | — | 16px root, 0.625–1.5rem scale | — | Body text and 200% zoom |
 
 These overrides apply to page content: card text, status messages, validation and error states.
 
@@ -118,7 +126,7 @@ Flash text, breadcrumb labels and validation messages are output-encoded by Razo
 
 Navigation is a convenience, not an authorization boundary. Role-dependent visibility arrives with ASP.NET Core Identity in Phase 2 and never replaces server-side authorization of the request itself.
 
-The Figma header also contains a search field, an account link and a notification control. These depend on the registry, identity and incident work in later phases and were intentionally not implemented; `@section PageActions` is the extension point for page-level actions.
+The Figma header's search field, account entry and notification control are rendered as operable placeholders: real focusable controls with 44px hit areas, but no behavior yet. Each states its status for assistive technology (for example "Notifications — available in Phase 4"), and the search field carries a description saying results arrive with the registry in Phase 2. They are enlarged from the 12px reference at the project owner's direction so they are legible and comfortably clickable. `@section PageActions` remains the extension point for page-level actions.
 
 ## Accessibility contract
 
