@@ -30,7 +30,7 @@
 - Passwords are passed directly to Identity, persisted only as hashes, cleared from returned view models, and never included in structured logs.
 - Administration logs contain only actor ID, target user ID, disabled state, supported role names, and whether a password reset occurred. Email addresses and password values are excluded.
 - Authenticated forbidden requests create durable `authorization.denied` audit events through one centralized authorization-result handler. The allow-list contains actor ID, UTC timestamp, action, request path without query string, method, outcome, and correlation ID.
-- Administration-change events, safe before/after values, and the audit query UI remain in the broader audit increment required by BR-A06 and AC-13.
+- The follow-on assignment/audit increment now records administration changes with safe before/after values and exposes the authorized audit query UI. See [`Assignment_and_Audit_Foundation.md`](Assignment_and_Audit_Foundation.md).
 
 ## Authorization policies
 
@@ -45,12 +45,12 @@ Developer/Support and Viewer deliberately fail closed for global operational dat
 
 ## Verification evidence
 
-- `dotnet test WebHealthProject.sln --configuration Release --no-restore`: 52 total integration tests, 50 passed and 2 PostgreSQL opt-in tests skipped; 2 unit tests passed.
-- `./scripts/run-database-foundation-tests.ps1`: disposable PostgreSQL 18 passed all three migrations, durable denial persistence, isolated role-only session invalidation, disable/password invalidation, role replacement, password hashing, and self-lockout protection. A repeated explicit migration update reported no pending migrations.
+- `./scripts/run-delivery-checks.ps1`: 6 unit tests and 54 active integration tests passed; the 2 PostgreSQL opt-in tests skipped in the general run as designed.
+- `./scripts/run-database-foundation-tests.ps1`: disposable PostgreSQL 18 passed all four migrations, durable audit persistence, isolated role-only session invalidation, disable/password invalidation, role replacement, password hashing, assignment constraints, and self-lockout protection. A repeated explicit migration update reported no pending migrations.
 - Direct-request tests cover every role plus a roleless principal for administration, diagnostics, global operations, and global reads. They also prove a forbidden request reaches the audit writer without persisting its query string.
 
 ## Known boundaries
 
 - Assignment-aware resource authorization cannot be completed until registry ownership and access-grant data exist.
-- Administration create/update audit records and the authorized audit search view remain in the append-only audit increment.
+- Registry-specific ownership, grants, and configuration audit events remain with registry CRUD.
 - Email change, self-service password change, and account recovery are not required by this baseline.

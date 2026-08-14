@@ -18,7 +18,11 @@ public sealed class AuditEvent
 
     public required string Outcome { get; set; }
 
-    public required string RequestMethod { get; set; }
+    public string? RequestMethod { get; set; }
 
-    public required string CorrelationId { get; set; }
+    public string? CorrelationId { get; set; }
+
+    public string? BeforeValues { get; set; }
+
+    public string? AfterValues { get; set; }
 }

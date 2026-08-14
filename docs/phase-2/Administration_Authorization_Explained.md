@@ -397,8 +397,9 @@ Passwords are not logged. The structured administration messages contain:
 
 The password value and email address are not included in those messages.
 
-These structured logs are operational signals. They are not yet the durable,
-append-only audit history planned for the later audit increment.
+These structured logs remain operational signals. The follow-on assignment and
+audit increment now also writes durable `user.created` and `user.updated`
+events with allow-listed before/after values in the same transaction.
 
 ## How the tests prove the baseline
 
@@ -417,9 +418,11 @@ The tests cover:
 | Administrator requesting administration | 200 OK |
 | Administrator or Operations using operation policy | 200 OK |
 | Developer/Support or Viewer using operation policy | 403 Forbidden |
-| Any of the four roles using view policy | 200 OK |
-| Administrator sees Users navigation | Link exists |
-| Viewer sees Users navigation | Link is absent |
+| Administrator or Operations using global read/audit policy | 200 OK |
+| Developer/Support or Viewer using global read/audit policy | 403 Forbidden |
+| Administrator sees Users and Teams navigation | Links exist |
+| Administrator or Operations sees Audit navigation | Link exists |
+| Viewer sees administration navigation | Links are absent |
 
 The test-only authentication handler accepts these headers:
 
@@ -453,11 +456,15 @@ flowchart TD
     B --> B5[Unsafe forms require antiforgery]
     B --> B6[Navigation reflects roles]
 
-    B6 --> C[Later Phase 2 increments]
-    C --> C1[Registry records]
-    C --> C2[Teams and assignments]
-    C --> C3[Assignment-aware authorization]
-    C --> C4[Durable append-only audit history]
+    B6 --> C[Task 2.3<br/>Assignment and audit foundation]
+    C --> C1[Teams and effective memberships]
+    C --> C2[Reusable owner subjects]
+    C --> C3[Durable append-only audit history]
+    C --> C4[Authorized audit search]
+    C4 --> D[Later registry increment]
+    D --> D1[Registry records and ownership]
+    D --> D2[Access grants]
+    D --> D3[Assignment-aware resource authorization]
 ```
 
 The result is a foundation, not the final permission system. It establishes the
@@ -467,12 +474,11 @@ global role boundaries needed before record-level assignments can be added.
 
 The following are intentionally not complete in this increment:
 
-1. **Assignment-aware authorization**: Developer/Support and Viewer are allowed
-   by the global view baseline, but record-level assignment checks belong to the
+1. **Assignment-aware authorization**: Developer/Support and Viewer fail closed
+   for global reads; record-level assignment checks belong to the
    registry/access-grant increment.
-2. **Durable denial audit**: authenticated forbidden requests currently produce
-   the access-denied behavior and test evidence, but a durable append-only audit
-   record for each denial belongs to the audit increment.
+2. **Registry audit events**: durable denial, administration, and assignment
+   events are implemented. Registry configuration events begin with registry CRUD.
 3. **Explicit API 401/403 behavior**: the current cookie flow is primarily an MVC
    browser flow. API endpoints will need an explicit challenge/forbidden handler
    so they do not receive HTML redirects.

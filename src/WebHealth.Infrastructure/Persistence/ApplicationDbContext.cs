@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Auditing;
+using WebHealth.Infrastructure.Assignments;
 
 namespace WebHealth.Infrastructure.Persistence;
 
@@ -9,6 +10,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     : IdentityDbContext<ApplicationUser, ApplicationRole, Guid>(options)
 {
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+
+    public DbSet<Team> Teams => Set<Team>();
+
+    public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
+
+    public DbSet<OwnerSubject> OwnerSubjects => Set<OwnerSubject>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

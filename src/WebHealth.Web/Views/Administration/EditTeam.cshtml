@@ -1,0 +1,22 @@
+@model TeamFormViewModel
+@{
+    ViewData.SetTitle("Edit team");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Administration"),
+        new BreadcrumbItem("Teams", Url.Action("Teams")),
+        new BreadcrumbItem("Edit team"));
+}
+
+<section class="card form-card">
+    <p class="card__eyebrow">Assignment group</p>
+    <h2 class="card__title">Edit @Model.Name</h2>
+    <p class="card__subtitle">Membership changes are effective-dated and audited.</p>
+
+    <form asp-action="EditTeam" method="post" class="form-stack">
+        <partial name="_TeamForm" model="Model" />
+        <div class="form-actions">
+            <button class="button button--primary" type="submit">Save assignment</button>
+            <a class="button button--secondary" asp-action="Teams">Cancel</a>
+        </div>
+    </form>
+</section>

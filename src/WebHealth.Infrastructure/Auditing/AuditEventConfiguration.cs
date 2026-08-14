@@ -14,8 +14,10 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
         builder.Property(auditEvent => auditEvent.EntityType).HasMaxLength(100).IsRequired();
         builder.Property(auditEvent => auditEvent.EntityIdentifier).HasMaxLength(2048).IsRequired();
         builder.Property(auditEvent => auditEvent.Outcome).HasMaxLength(50).IsRequired();
-        builder.Property(auditEvent => auditEvent.RequestMethod).HasMaxLength(16).IsRequired();
-        builder.Property(auditEvent => auditEvent.CorrelationId).HasMaxLength(128).IsRequired();
+        builder.Property(auditEvent => auditEvent.RequestMethod).HasMaxLength(16);
+        builder.Property(auditEvent => auditEvent.CorrelationId).HasMaxLength(128);
+        builder.Property(auditEvent => auditEvent.BeforeValues).HasColumnType("jsonb");
+        builder.Property(auditEvent => auditEvent.AfterValues).HasColumnType("jsonb");
         builder.HasOne<ApplicationUser>()
             .WithMany()
             .HasForeignKey(auditEvent => auditEvent.ActorUserId)
@@ -23,5 +25,11 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
         builder.HasIndex(auditEvent => auditEvent.OccurredAt);
         builder.HasIndex(auditEvent => new { auditEvent.ActorUserId, auditEvent.OccurredAt });
         builder.HasIndex(auditEvent => new { auditEvent.Action, auditEvent.OccurredAt });
+        builder.HasIndex(auditEvent => new
+        {
+            auditEvent.EntityType,
+            auditEvent.EntityIdentifier,
+            auditEvent.OccurredAt
+        });
     }
 }

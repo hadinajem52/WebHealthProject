@@ -8,6 +8,8 @@ using WebHealth.Infrastructure.Persistence;
 using WebHealth.Application.Administration;
 using WebHealth.Application.Auditing;
 using WebHealth.Infrastructure.Auditing;
+using WebHealth.Application.Assignments;
+using WebHealth.Infrastructure.Assignments;
 
 namespace WebHealth.Infrastructure;
 
@@ -52,6 +54,10 @@ public static class DependencyInjection
             configuration.GetSection(BootstrapAdminOptions.SectionName));
         services.AddScoped<AdminBootstrapper>();
         services.AddScoped<IUserAdministrationService, UserAdministrationService>();
+        services.AddScoped<ITeamAdministrationService, TeamAdministrationService>();
+        services.AddScoped<IAssignmentAccessEvaluator, AssignmentAccessEvaluator>();
+        services.AddScoped<IAuditTrailWriter, AuditTrailWriter>();
+        services.AddScoped<IAuditTrailReader, AuditTrailReader>();
         services.AddScoped<IAuthorizationDenialAuditWriter, AuthorizationDenialAuditWriter>();
 
         services.AddHealthChecks()

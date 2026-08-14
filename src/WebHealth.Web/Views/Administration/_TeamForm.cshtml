@@ -1,0 +1,48 @@
+@model TeamFormViewModel
+
+<input asp-for="TeamId" type="hidden" />
+<input asp-for="Version" type="hidden" />
+
+<div class="form-field">
+    <label asp-for="Name"></label>
+    <input asp-for="Name" autocomplete="off" />
+    <span class="form-field__hint">Whitespace and casing are normalized for uniqueness.</span>
+    <span asp-validation-for="Name"></span>
+</div>
+
+<fieldset class="form-field">
+    <legend>Current members</legend>
+    <p class="form-field__hint">Removing a member closes the membership period; history is preserved.</p>
+    <div class="choice-grid">
+        @foreach (var user in Model.AvailableUsers)
+        {
+            <label class="choice-card">
+                <input type="checkbox"
+                       name="MemberUserIds"
+                       value="@user.Id"
+                       checked="@Model.MemberUserIds.Contains(user.Id)" />
+                <span>
+                    @user.DisplayName
+                    <small>@user.Email@(user.IsDisabled ? " · Disabled" : null)</small>
+                </span>
+            </label>
+        }
+    </div>
+    <span asp-validation-for="MemberUserIds"></span>
+</fieldset>
+
+@if (Model.TeamId != Guid.Empty)
+{
+    <div class="panel">
+        <div class="panel__header">
+            <p class="panel__title">Team state</p>
+        </div>
+        <div class="panel__body">
+            <label class="switch-field switch-field--danger">
+                <input asp-for="IsDisabled" />
+                <span>Disable this team</span>
+            </label>
+            <p class="panel__hint">A disabled team confers no current assignment access.</p>
+        </div>
+    </div>
+}

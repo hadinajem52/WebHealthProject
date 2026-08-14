@@ -213,7 +213,7 @@ These requirements apply throughout the project:
 - [ ] Implement Website management.
 - [ ] Implement Environment management.
 - [ ] Implement Endpoint management.
-- [ ] Implement owners, teams, tags, and inherited ownership.
+- [ ] Implement owners, teams, tags, and inherited ownership. The effective-dated team and reusable owner-subject foundation is complete; registry ownership, inheritance, tags, and grants remain. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
 - [ ] Enforce normalized uniqueness rules.
 - [ ] Enforce absolute HTTP/HTTPS URLs without embedded credentials.
 - [ ] Enforce production HTTPS or administrator exception reason.
@@ -225,23 +225,23 @@ These requirements apply throughout the project:
 ### Audit and UI
 
 - [x] Persist authenticated forbidden direct requests through the centralized authorization-result handler. Evidence: [`../../src/WebHealth.Web/Authorization/AuditingAuthorizationMiddlewareResultHandler.cs`](../../src/WebHealth.Web/Authorization/AuditingAuthorizationMiddlewareResultHandler.cs) and the native PostgreSQL audit assertion.
-- [ ] Record create, update, delete, permission, and enable/disable events.
-- [ ] Store actor, timestamp, action, entity, and safe before/after values.
-- [ ] Implement an authorized audit search view.
+- [ ] Record create, update, delete, permission, and enable/disable events. User/role and team/membership create/update/disable events are complete; registry and later incident events remain.
+- [x] Store actor, timestamp, action, entity, and safe before/after values for current administration and assignment changes. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
+- [x] Implement an authorized audit search view. Evidence: [`../../src/WebHealth.Web/Controllers/AuditController.cs`](../../src/WebHealth.Web/Controllers/AuditController.cs).
 - [ ] Build registry pages using the Purity UI Dashboard shell, reusable Razor components, and application-owned overrides.
 - [ ] Support keyboard navigation, visible focus, labels, validation summaries, and responsive layouts.
 - [ ] Ensure status and validation do not rely only on color.
 
 ### Database and verification
 
-- [ ] Complete Identity, registry, ownership, tags, policies, and audit migrations. Identity and authorization-denial audit migrations are complete; registry and full audit remain.
+- [ ] Complete Identity, registry, ownership, tags, policies, and audit migrations. Identity, teams, owner subjects, and append-only audit are complete; registry, grants, tags, and policy/default data remain.
 - [ ] Add required foreign keys and uniqueness constraints.
 - [ ] Add concurrency tokens and operational indexes.
 - [x] Verify direct requests for every role against the current role-policy baseline. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs); resource-assignment combinations remain with registry.
 - [x] Verify anti-forgery rejection. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs`](../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs).
 - [x] Verify disabled-account sign-in rejection and existing-session invalidation. Evidence: the real Identity/PostgreSQL verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
 - [ ] Verify database constraints independently of UI validation.
-- [ ] Verify stale updates fail safely.
+- [x] Verify stale assignment updates fail safely and leave the scoped context reusable. Registry concurrency verification remains with registry CRUD.
 - [ ] Verify output encoding and secret-safe logs.
 
 ### Phase 2 completion gate

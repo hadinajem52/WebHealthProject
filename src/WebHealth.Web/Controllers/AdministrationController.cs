@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Administration;
 using WebHealth.Application.Authorization;
+using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
@@ -10,7 +11,9 @@ using WebHealth.Web.Shell;
 namespace WebHealth.Web.Controllers;
 
 [Authorize(Policy = AuthorizationPolicies.Administration)]
-public sealed class AdministrationController(IUserAdministrationService userAdministration) : Controller
+public sealed class AdministrationController(
+    IUserAdministrationService userAdministration,
+    ITeamAdministrationService teamAdministration) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Users(CancellationToken cancellationToken)
@@ -108,6 +111,93 @@ public sealed class AdministrationController(IUserAdministrationService userAdmi
         return RedirectToAction(nameof(Users));
     }
 
+    [HttpGet]
+    public async Task<IActionResult> Teams(CancellationToken cancellationToken)
+    {
+        return View(new TeamListViewModel
+        {
+            Teams = await teamAdministration.ListTeamsAsync(cancellationToken)
+        });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> CreateTeam(CancellationToken cancellationToken)
+    {
+        return View(await BuildTeamFormAsync(new TeamFormViewModel(), cancellationToken));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> CreateTeam(
+        TeamFormViewModel model,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(await BuildTeamFormAsync(model, cancellationToken));
+        }
+
+        var result = await teamAdministration.CreateTeamAsync(
+            new CreateManagedTeam(model.Name, model.MemberUserIds),
+            GetActorUserId(),
+            cancellationToken);
+        if (!result.Succeeded)
+        {
+            AddErrors(result.Errors);
+            return View(await BuildTeamFormAsync(model, cancellationToken));
+        }
+
+        TempData.AddFlashMessage(FlashLevel.Success, "Team created successfully.");
+        return RedirectToAction(nameof(Teams));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> EditTeam(Guid id, CancellationToken cancellationToken)
+    {
+        var team = await teamAdministration.FindTeamAsync(id, cancellationToken);
+        if (team is null)
+        {
+            return NotFound();
+        }
+
+        return View(await BuildTeamFormAsync(new TeamFormViewModel
+        {
+            TeamId = team.Id,
+            Name = team.Name,
+            IsDisabled = team.IsDisabled,
+            Version = team.Version,
+            MemberUserIds = team.Members.Select(member => member.UserId).ToList()
+        }, cancellationToken));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> EditTeam(
+        TeamFormViewModel model,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(await BuildTeamFormAsync(model, cancellationToken));
+        }
+
+        var result = await teamAdministration.UpdateTeamAsync(
+            new UpdateManagedTeam(
+                model.TeamId,
+                model.Name,
+                model.IsDisabled,
+                model.Version,
+                model.MemberUserIds),
+            GetActorUserId(),
+            cancellationToken);
+        if (!result.Succeeded)
+        {
+            AddErrors(result.Errors);
+            return View(await BuildTeamFormAsync(model, cancellationToken));
+        }
+
+        TempData.AddFlashMessage(FlashLevel.Success, "Team assignment updated successfully.");
+        return RedirectToAction(nameof(Teams));
+    }
+
     private Guid GetActorUserId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -140,5 +230,15 @@ public sealed class AdministrationController(IUserAdministrationService userAdmi
     {
         var user = await userAdministration.FindUserAsync(model.UserId, cancellationToken);
         model.Email = user?.Email ?? string.Empty;
+    }
+
+    private async Task<TeamFormViewModel> BuildTeamFormAsync(
+        TeamFormViewModel model,
+        CancellationToken cancellationToken)
+    {
+        model.AvailableUsers = (await userAdministration.ListUsersAsync(cancellationToken))
+            .Where(user => !user.IsDisabled || model.MemberUserIds.Contains(user.Id))
+            .ToArray();
+        return model;
     }
 }

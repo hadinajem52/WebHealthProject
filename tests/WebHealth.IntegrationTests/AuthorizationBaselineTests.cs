@@ -75,6 +75,20 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
     }
 
     [Theory]
+    [InlineData(ApplicationRoles.Administrator, HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.Operations, HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.DeveloperSupport, HttpStatusCode.Forbidden)]
+    [InlineData(ApplicationRoles.Viewer, HttpStatusCode.Forbidden)]
+    public async Task AuditHistory_UsesPrivilegedReadPolicy(string role, HttpStatusCode expected)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync("/test/authorization/audit-history");
+
+        response.StatusCode.Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(ApplicationRoles.Administrator, HttpStatusCode.ServiceUnavailable)]
     [InlineData(ApplicationRoles.Operations, HttpStatusCode.ServiceUnavailable)]
     [InlineData(ApplicationRoles.DeveloperSupport, HttpStatusCode.Forbidden)]
@@ -126,6 +140,10 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
         var viewerHtml = await viewer.GetStringAsync("/");
 
         administratorHtml.Should().Contain("href=\"/Administration/Users\"");
+        administratorHtml.Should().Contain("href=\"/Administration/Teams\"");
+        administratorHtml.Should().Contain("href=\"/Audit\"");
         viewerHtml.Should().NotContain("href=\"/Administration/Users\"");
+        viewerHtml.Should().NotContain("href=\"/Administration/Teams\"");
+        viewerHtml.Should().NotContain("href=\"/Audit\"");
     }
 }

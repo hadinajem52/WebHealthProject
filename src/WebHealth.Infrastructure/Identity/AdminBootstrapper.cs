@@ -1,12 +1,16 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using WebHealth.Infrastructure.Assignments;
+using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Identity;
 
 public sealed class AdminBootstrapper(
     RoleManager<ApplicationRole> roleManager,
     UserManager<ApplicationUser> userManager,
+    ApplicationDbContext dbContext,
     IOptions<BootstrapAdminOptions> options,
     ILogger<AdminBootstrapper> logger)
 {
@@ -65,6 +69,20 @@ public sealed class AdminBootstrapper(
             await EnsureSucceededAsync(
                 userManager.AddToRoleAsync(user, ApplicationRoles.Administrator));
             logger.LogInformation("Granted Administrator to bootstrap user {UserId}.", user.Id);
+        }
+
+        if (!await dbContext.OwnerSubjects.AnyAsync(
+                subject => subject.UserId == user.Id,
+                cancellationToken))
+        {
+            dbContext.OwnerSubjects.Add(new OwnerSubject
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedByUserId = user.Id
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
     }
 

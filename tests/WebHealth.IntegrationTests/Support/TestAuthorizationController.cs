@@ -23,4 +23,8 @@ public sealed class TestAuthorizationController : ControllerBase
     [HttpGet("read-all")]
     [Authorize(Policy = AuthorizationPolicies.ReadAllOperationalData)]
     public IActionResult ReadAll() => Ok();
+
+    [HttpGet("audit-history")]
+    [Authorize(Policy = AuthorizationPolicies.ViewAuditHistory)]
+    public IActionResult AuditHistory() => Ok();
 }

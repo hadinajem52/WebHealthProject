@@ -1,0 +1,158 @@
+@model AuditIndexViewModel
+@{
+    ViewData.SetTitle("Audit history");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Administration"), new BreadcrumbItem("Audit"));
+    var firstVisible = Model.Result.TotalCount == 0
+        ? 0
+        : ((Model.Result.Page - 1) * Model.Result.PageSize) + 1;
+    var lastVisible = Math.Min(Model.Result.Page * Model.Result.PageSize, Model.Result.TotalCount);
+    var hasPrevious = Model.Result.Page > 1;
+    var hasNext = lastVisible < Model.Result.TotalCount;
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Audit history</h2>
+                <p class="card__subtitle">Append-only security, administration, and assignment evidence.</p>
+            </div>
+            <span class="tag">@Model.Result.TotalCount event@(Model.Result.TotalCount == 1 ? null : "s")</span>
+        </div>
+
+        <form method="get" class="filter-grid">
+            <div class="form-field">
+                <label asp-for="FromDate">From (UTC)</label>
+                <input asp-for="FromDate" type="date" />
+            </div>
+            <div class="form-field">
+                <label asp-for="ToDate">To (UTC)</label>
+                <input asp-for="ToDate" type="date" />
+            </div>
+            <div class="form-field">
+                <label asp-for="ActorUserId">Actor</label>
+                <select asp-for="ActorUserId">
+                    <option value="">All actors</option>
+                    @foreach (var actor in Model.Actors)
+                    {
+                        <option value="@actor.UserId">@actor.DisplayName · @actor.Email</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Action"></label>
+                <input asp-for="Action" placeholder="team.updated" />
+            </div>
+            <div class="form-field">
+                <label asp-for="Entity"></label>
+                <input asp-for="Entity" placeholder="type or identifier" />
+            </div>
+            <div class="filter-grid__actions">
+                <button class="button button--primary" type="submit">Apply filters</button>
+                <a class="button button--secondary" asp-action="Index">Clear</a>
+            </div>
+        </form>
+    </section>
+
+    <section class="card">
+        @if (Model.Result.Events.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No audit events found",
+                "Adjust the filters or perform an audited administration action.",
+                "audit"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table audit-table">
+                    <caption class="visually-hidden">Filtered append-only audit events</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Time / actor</th>
+                            <th scope="col">Action</th>
+                            <th scope="col">Entity</th>
+                            <th scope="col">Safe changes</th>
+                            <th scope="col">Outcome</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var auditEvent in Model.Result.Events)
+                        {
+                            <tr>
+                                <td data-label="Time / actor">
+                                    <span class="data-table__primary">@auditEvent.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</span>
+                                    <span class="data-table__secondary">@auditEvent.ActorDisplayName</span>
+                                </td>
+                                <td data-label="Action"><code>@auditEvent.Action</code></td>
+                                <td data-label="Entity">
+                                    <span class="data-table__primary">@auditEvent.EntityType</span>
+                                    <span class="data-table__secondary code">@auditEvent.EntityIdentifier</span>
+                                </td>
+                                <td data-label="Safe changes">
+                                    @if (auditEvent.BeforeValues.Count == 0 && auditEvent.AfterValues.Count == 0)
+                                    {
+                                        <span class="data-table__secondary">No value snapshot</span>
+                                    }
+                                    else
+                                    {
+                                        <details class="audit-changes">
+                                            <summary>View values</summary>
+                                            @if (auditEvent.BeforeValues.Count > 0)
+                                            {
+                                                <p><strong>Before</strong></p>
+                                                <dl>
+                                                    @foreach (var value in auditEvent.BeforeValues)
+                                                    {
+                                                        <div><dt>@value.Key</dt><dd>@value.Value</dd></div>
+                                                    }
+                                                </dl>
+                                            }
+                                            @if (auditEvent.AfterValues.Count > 0)
+                                            {
+                                                <p><strong>After</strong></p>
+                                                <dl>
+                                                    @foreach (var value in auditEvent.AfterValues)
+                                                    {
+                                                        <div><dt>@value.Key</dt><dd>@value.Value</dd></div>
+                                                    }
+                                                </dl>
+                                            }
+                                        </details>
+                                    }
+                                </td>
+                                <td data-label="Outcome"><span class="tag">@auditEvent.Outcome</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="pagination" aria-label="Audit results pages">
+                <span>Showing @firstVisible–@lastVisible of @Model.Result.TotalCount</span>
+                <span class="pagination__actions">
+                    @if (hasPrevious)
+                    {
+                        <a class="button button--secondary"
+                           asp-route-fromDate="@Model.FromDate"
+                           asp-route-toDate="@Model.ToDate"
+                           asp-route-actorUserId="@Model.ActorUserId"
+                           asp-route-action="@Model.Action"
+                           asp-route-entity="@Model.Entity"
+                           asp-route-page="@(Model.Result.Page - 1)">Previous</a>
+                    }
+                    @if (hasNext)
+                    {
+                        <a class="button button--secondary"
+                           asp-route-fromDate="@Model.FromDate"
+                           asp-route-toDate="@Model.ToDate"
+                           asp-route-actorUserId="@Model.ActorUserId"
+                           asp-route-action="@Model.Action"
+                           asp-route-entity="@Model.Entity"
+                           asp-route-page="@(Model.Result.Page + 1)">Next</a>
+                    }
+                </span>
+            </nav>
+        }
+    </section>
+</div>

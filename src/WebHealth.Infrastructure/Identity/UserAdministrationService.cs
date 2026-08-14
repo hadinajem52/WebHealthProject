@@ -3,13 +3,16 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WebHealth.Application.Administration;
+using WebHealth.Application.Auditing;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Infrastructure.Assignments;
 
 namespace WebHealth.Infrastructure.Identity;
 
 public sealed class UserAdministrationService(
     ApplicationDbContext dbContext,
     UserManager<ApplicationUser> userManager,
+    IAuditTrailWriter auditTrail,
     ILogger<UserAdministrationService> logger) : IUserAdministrationService
 {
     private static readonly HashSet<string> SupportedRoles =
@@ -74,6 +77,17 @@ public sealed class UserAdministrationService(
             return IdentityFailure(roleResult);
         }
 
+        dbContext.OwnerSubjects.Add(new OwnerSubject
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            CreatedAt = now,
+            CreatedByUserId = actorUserId
+        });
+        await auditTrail.RecordUserCreatedAsync(
+            new AuditWriteContext(actorUserId, now),
+            ToAuditSnapshot(user, roles, passwordReset: false),
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         logger.LogInformation(
             "Administrator {ActorUserId} created user {TargetUserId} with roles {Roles}",
@@ -105,6 +119,7 @@ public sealed class UserAdministrationService(
         }
 
         var currentRoles = await userManager.GetRolesAsync(user);
+        var beforeValues = ToAuditSnapshot(user, currentRoles, passwordReset: false);
         var removesAdministrator = currentRoles.Contains(ApplicationRoles.Administrator, StringComparer.Ordinal)
             && !roles.Contains(ApplicationRoles.Administrator, StringComparer.Ordinal);
 
@@ -166,6 +181,11 @@ public sealed class UserAdministrationService(
             }
         }
 
+        await auditTrail.RecordUserUpdatedAsync(
+            new AuditWriteContext(actorUserId, DateTimeOffset.UtcNow),
+            beforeValues,
+            ToAuditSnapshot(user, roles, !string.IsNullOrWhiteSpace(command.NewPassword)),
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         logger.LogInformation(
             "Administrator {ActorUserId} updated user {TargetUserId}; disabled is {IsDisabled}; roles are {Roles}; password reset is {PasswordReset}",
@@ -225,4 +245,15 @@ public sealed class UserAdministrationService(
 
     private static UserAdministrationResult IdentityFailure(IdentityResult result) =>
         UserAdministrationResult.Failure(result.Errors.Select(error => error.Description));
+
+    private static UserAuditSnapshot ToAuditSnapshot(
+        ApplicationUser user,
+        IEnumerable<string> roles,
+        bool passwordReset) => new(
+            user.Id,
+            user.DisplayName,
+            user.Email ?? string.Empty,
+            user.IsDisabled,
+            roles.OrderBy(role => role, StringComparer.Ordinal).ToArray(),
+            passwordReset);
 }

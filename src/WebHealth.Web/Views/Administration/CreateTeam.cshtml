@@ -1,0 +1,22 @@
+@model TeamFormViewModel
+@{
+    ViewData.SetTitle("Add team");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Administration"),
+        new BreadcrumbItem("Teams", Url.Action("Teams")),
+        new BreadcrumbItem("Add team"));
+}
+
+<section class="card form-card">
+    <p class="card__eyebrow">New assignment group</p>
+    <h2 class="card__title">Create team</h2>
+    <p class="card__subtitle">Membership becomes effective when the team is saved.</p>
+
+    <form asp-action="CreateTeam" method="post" class="form-stack">
+        <partial name="_TeamForm" model="Model" />
+        <div class="form-actions">
+            <button class="button button--primary" type="submit">Create team</button>
+            <a class="button button--secondary" asp-action="Teams">Cancel</a>
+        </div>
+    </form>
+</section>

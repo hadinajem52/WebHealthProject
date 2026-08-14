@@ -297,12 +297,12 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Trim and deduplicate tags.
 - [ ] Implement soft deletion for configuration with history.
 - [ ] Add optimistic concurrency to editable configuration.
-- [ ] Record append-only audit events with safe before/after values.
+- [x] Record append-only audit events with safe before/after values for administration, assignment, and authorization denials. Registry configuration events follow registry CRUD. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
 - [ ] Output-encode labels and notes.
 
 ### 9.4 Database and migration
 
-- [ ] Add Identity, registry, ownership, tag, policy/default, and audit schemas.
+- [ ] Add Identity, registry, ownership, tag, policy/default, and audit schemas. Identity, teams, owner subjects, and audit are complete; registry, grants, tags, and policy/default data remain.
 - [ ] Add required relationships and prevent cascading deletion of future history.
 - [ ] Add normalized fields or a documented equivalent normalization strategy.
 - [ ] Add database uniqueness constraints matching business rules.
@@ -319,9 +319,9 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Verify anti-forgery rejection.
 - [x] Verify disabled users and role-only stale principals lose access without deleting historical identity references. Evidence: native PostgreSQL assertions in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
 - [ ] Verify PostgreSQL constraints reject duplicates independently of UI validation.
-- [ ] Verify stale configuration updates are rejected.
+- [ ] Verify stale configuration updates are rejected. Stale team assignment edits are verified; registry configuration remains.
 - [ ] Verify soft deletion preserves reportable identity and relationships.
-- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Forbidden-denial persistence is verified; administration and registry changes remain.
+- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Denial, administration, and assignment events are verified; registry and later incident events remain.
 - [ ] Inspect logs and repository for secrets and sensitive values.
 
 ### 9.6 Phase exit evidence

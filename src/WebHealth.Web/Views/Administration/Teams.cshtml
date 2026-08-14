@@ -1,0 +1,79 @@
+@model TeamListViewModel
+@{
+    ViewData.SetTitle("Teams");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Administration"), new BreadcrumbItem("Teams"));
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Assignment teams</h2>
+            <p class="card__subtitle">
+                Group users once, then assign the team to registry records in the next increment.
+            </p>
+        </div>
+        <a class="button button--primary" asp-action="CreateTeam">Add team</a>
+    </div>
+
+    @if (Model.Teams.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "No teams found",
+            "Create a team to establish reusable ownership and support assignments.",
+            "users",
+            "Add team",
+            Url.Action("CreateTeam")))
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">Assignment teams and current members</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Team</th>
+                        <th scope="col">Current members</th>
+                        <th scope="col">Status</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var team in Model.Teams)
+                    {
+                        <tr>
+                            <td data-label="Team">
+                                <span class="data-table__primary">@team.Name</span>
+                                <span class="data-table__secondary">Version @team.Version</span>
+                            </td>
+                            <td data-label="Current members">
+                                @if (team.Members.Count == 0)
+                                {
+                                    <span class="data-table__secondary">No members</span>
+                                }
+                                else
+                                {
+                                    <div class="tag-list">
+                                        @foreach (var member in team.Members)
+                                        {
+                                            <span class="tag" title="@member.Email">@member.DisplayName</span>
+                                        }
+                                    </div>
+                                }
+                            </td>
+                            <td data-label="Status">
+                                <span class="badge" data-status="@(team.IsDisabled ? "danger" : "success")">
+                                    @(team.IsDisabled ? "Disabled" : "Enabled")
+                                </span>
+                            </td>
+                            <td class="data-table__action">
+                                <a asp-action="EditTeam" asp-route-id="@team.Id">
+                                    Edit<span class="visually-hidden"> @team.Name</span>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

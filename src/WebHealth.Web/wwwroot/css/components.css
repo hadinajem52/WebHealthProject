@@ -189,7 +189,7 @@ code,
 
 /* The reference primary action is the dark button on the billing screen. */
 .button--primary {
-    background-color: var(--color-gray-700);
+    background-color: #2c7a7b;
     color: var(--color-white);
 }
 
@@ -268,6 +268,7 @@ code,
     border-radius: var(--radius-tile);
     background-color: var(--surface-raised);
     gap: var(--space-3);
+    margin-bottom: 13px;
 }
 
 .flash__icon {
@@ -575,7 +576,7 @@ code,
 }
 
 .badge[data-status="success"] {
-    background-color: var(--status-success-text);
+    background-color: var(--status-success);
 }
 
 .badge[data-status="danger"] {
@@ -662,7 +663,8 @@ code,
     font-weight: 700;
 }
 
-.form-field input:not([type="checkbox"]) {
+.form-field input:not([type="checkbox"]),
+.form-field select {
     width: 100%;
     padding: 0.75rem var(--space-3);
     border: 1px solid var(--border-strong);
@@ -670,6 +672,73 @@ code,
     background: var(--surface-raised);
     color: var(--text-primary);
     font: inherit;
+}
+
+.filter-grid {
+    display: grid;
+    align-items: end;
+    margin-top: var(--space-5);
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+}
+
+.filter-grid__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.table-scroll--flush {
+    margin-top: 0;
+}
+
+.audit-table {
+    min-width: 62rem;
+}
+
+.audit-changes summary {
+    color: var(--color-teal-700);
+    cursor: pointer;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+}
+
+.audit-changes p {
+    margin-top: var(--space-2);
+    font-size: var(--font-size-xs);
+}
+
+.audit-changes dl div {
+    display: grid;
+    gap: var(--space-2);
+    grid-template-columns: minmax(5rem, auto) 1fr;
+}
+
+.audit-changes dt,
+.audit-changes dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--font-size-xs);
+}
+
+.audit-changes dt {
+    color: var(--text-secondary);
+}
+
+.pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: var(--space-5);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    gap: var(--space-3);
+}
+
+.pagination__actions {
+    display: flex;
+    gap: var(--space-2);
 }
 
 .form-field__hint,
