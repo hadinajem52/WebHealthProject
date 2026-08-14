@@ -1,0 +1,53 @@
+@model RegistryListViewModel
+@{
+    ViewData.SetTitle("Clients");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Clients"));
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Client registry</h2>
+            <p class="card__subtitle">Only clients within your role and assignment scope are shown.</p>
+        </div>
+        <div class="form-actions">
+            <a class="button button--secondary" asp-action="Websites">View websites</a>
+            @if (Model.CanManage)
+            {
+                <a class="button button--secondary" asp-action="Archived">Archived</a>
+                <a class="button button--primary" asp-action="CreateClient">Add client</a>
+            }
+        </div>
+    </div>
+
+    @if (Model.Clients.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "No clients found",
+            "No client records are available within your current access scope.",
+            "registry",
+            Model.CanManage ? "Add client" : null,
+            Model.CanManage ? Url.Action("CreateClient") : null))
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">Clients in the accessible registry scope</caption>
+                <thead><tr><th>Client</th><th>Owner</th><th>Websites</th><th>Status</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>
+                @foreach (var client in Model.Clients)
+                {
+                    <tr>
+                        <td data-label="Client"><span class="data-table__primary">@client.Name</span><span class="data-table__secondary">Version @client.Version</span></td>
+                        <td data-label="Owner">@client.OwnerName</td>
+                        <td data-label="Websites">@client.VisibleWebsiteCount</td>
+                        <td data-label="Status"><span class="badge" data-status="@(client.IsDeleted ? "danger" : client.IsActive ? "success" : "warning")">@(client.IsDeleted ? "Deleted" : client.IsActive ? "Active" : "Disabled")</span></td>
+                        <td class="data-table__action"><a asp-action="Client" asp-route-id="@client.Id">Details<span class="visually-hidden"> for @client.Name</span></a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

@@ -1,0 +1,43 @@
+@model ClientDetailsViewModel
+@{
+    ViewData.SetTitle(Model.Client.Name);
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Clients", Url.Action("Clients")), new BreadcrumbItem(Model.Client.Name));
+}
+<section class="card">
+    <div class="page-intro">
+        <div><h2 class="card__title">@Model.Client.Name</h2><p class="card__subtitle">Owned by @Model.Client.OwnerName · Version @Model.Client.Version</p></div>
+        @if (Model.CanManage && !Model.Client.IsDeleted)
+        {
+            <div class="form-actions"><a class="button button--secondary" asp-action="CreateWebsite" asp-route-clientId="@Model.Client.Id">Add website</a><a class="button button--primary" asp-action="EditClient" asp-route-id="@Model.Client.Id">Edit client</a></div>
+        }
+    </div>
+    <dl class="registry-facts">
+        <div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Client.IsDeleted ? "danger" : Model.Client.IsActive ? "success" : "warning")">@(Model.Client.IsDeleted ? "Deleted" : Model.Client.IsActive ? "Active" : "Disabled")</span></dd></div>
+        <div><dt>Owner</dt><dd>@Model.Client.OwnerName</dd></div>
+        <div><dt>Notes</dt><dd>@(Model.Client.Notes ?? "No notes")</dd></div>
+    </dl>
+    @if (Model.CanManage)
+    {
+        <div class="registry-lifecycle">
+            @if (Model.Client.IsDeleted)
+            {
+                <form asp-action="RestoreClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--primary" type="submit">Restore client</button></form>
+            }
+            else
+            {
+                @if (Model.Client.IsActive){<form asp-action="DisableClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--secondary" type="submit">Disable client</button></form>}
+                <form asp-action="DeleteClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--danger" type="submit">Delete client</button></form>
+            }
+        </div>
+    }
+</section>
+<section class="card">
+    <div class="page-intro"><div><h2 class="card__title">Websites</h2><p class="card__subtitle">Only child websites within your access scope are included.</p></div></div>
+    @if (Model.Client.Websites.Count == 0){<p class="card__subtitle">No accessible websites.</p>}
+    else
+    {
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Website</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody>
+        @foreach (var website in Model.Client.Websites){<tr><td><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span></td><td>@website.OwnerName</td><td><span class="badge" data-status="@(website.IsDeleted ? "danger" : website.IsEnabled ? "success" : "warning")">@(website.IsDeleted ? "Deleted" : website.IsEnabled ? "Enabled" : "Disabled")</span></td><td class="data-table__action"><a asp-action="Website" asp-route-id="@website.Id">Details</a></td></tr>}
+        </tbody></table></div>
+    }
+</section>

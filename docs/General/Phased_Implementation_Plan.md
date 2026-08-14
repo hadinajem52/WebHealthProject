@@ -202,45 +202,45 @@ These requirements apply throughout the project:
 - [x] Configure password, lockout, and security-stamp policies. Evidence: [`../../src/WebHealth.Infrastructure/DependencyInjection.cs`](../../src/WebHealth.Infrastructure/DependencyInjection.cs).
 - [x] Implement admin-only user and supported-role assignment management. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
 - [x] Implement account disabling and session invalidation. Evidence: transactional security-stamp verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
-- [ ] Complete role and assignment-aware authorization policies. The global role-policy baseline is implemented; registry ownership and access grants remain.
+- [ ] Complete role and assignment-aware authorization policies. Client/Website ownership and access-grant queries are complete; Environment/Endpoint resource authorization remains.
 - [x] Protect every current and future operational endpoint server-side through the fallback policy; liveness and safe login/error endpoints explicitly opt out.
 - [x] Add anti-forgery protection to state-changing MVC actions.
 - [x] Restrict detailed readiness to Administrator and Operations through the diagnostics policy. Evidence: the complete role and roleless matrix in [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs).
 
 ### Registry management
 
-- [ ] Implement Client management.
-- [ ] Implement Website management.
+- [x] Implement Client management. Evidence: [`../phase-2/Client_and_Website_Vertical_Slice.md`](../phase-2/Client_and_Website_Vertical_Slice.md).
+- [x] Implement Website management. Evidence: [`../phase-2/Client_and_Website_Vertical_Slice.md`](../phase-2/Client_and_Website_Vertical_Slice.md).
 - [ ] Implement Environment management.
 - [ ] Implement Endpoint management.
 - [ ] Implement owners, teams, tags, and inherited ownership. The effective-dated team and reusable owner-subject foundation is complete; registry ownership, inheritance, tags, and grants remain. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
-- [ ] Enforce normalized uniqueness rules.
+- [ ] Enforce normalized uniqueness rules. Client and Website rules are complete; Environment/Endpoint/tag rules remain.
 - [ ] Enforce absolute HTTP/HTTPS URLs without embedded credentials.
 - [ ] Enforce production HTTPS or administrator exception reason.
-- [ ] Require an environment before enabling monitoring.
-- [ ] Implement enabled/disabled behavior.
-- [ ] Implement soft deletion for records with history.
-- [ ] Implement optimistic concurrency for edits.
+- [x] Require an environment before enabling a website, enforced by service validation and deferred PostgreSQL triggers.
+- [ ] Implement enabled/disabled behavior. Client and Website behavior is complete; Environment and Endpoint remain.
+- [ ] Implement soft deletion for records with history. Client and Website behavior is complete; Environment and Endpoint remain.
+- [ ] Implement optimistic concurrency for edits. Client and Website behavior is complete; Environment and Endpoint remain.
 
 ### Audit and UI
 
 - [x] Persist authenticated forbidden direct requests through the centralized authorization-result handler. Evidence: [`../../src/WebHealth.Web/Authorization/AuditingAuthorizationMiddlewareResultHandler.cs`](../../src/WebHealth.Web/Authorization/AuditingAuthorizationMiddlewareResultHandler.cs) and the native PostgreSQL audit assertion.
-- [ ] Record create, update, delete, permission, and enable/disable events. User/role and team/membership create/update/disable events are complete; registry and later incident events remain.
+- [ ] Record create, update, delete, permission, and enable/disable events. User/role, team/membership, Client, and Website events are complete; later registry and incident events remain.
 - [x] Store actor, timestamp, action, entity, and safe before/after values for current administration and assignment changes. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
 - [x] Implement an authorized audit search view. Evidence: [`../../src/WebHealth.Web/Controllers/AuditController.cs`](../../src/WebHealth.Web/Controllers/AuditController.cs).
-- [ ] Build registry pages using the Purity UI Dashboard shell, reusable Razor components, and application-owned overrides.
+- [ ] Build registry pages using the Purity UI Dashboard shell, reusable Razor components, and application-owned overrides. Client and Website pages are complete; Environment and Endpoint pages remain.
 - [ ] Support keyboard navigation, visible focus, labels, validation summaries, and responsive layouts.
 - [ ] Ensure status and validation do not rely only on color.
 
 ### Database and verification
 
 - [ ] Complete Identity, registry, ownership, tags, policies, and audit migrations. Identity, teams, owner subjects, and append-only audit are complete; registry, grants, tags, and policy/default data remain.
-- [ ] Add required foreign keys and uniqueness constraints.
-- [ ] Add concurrency tokens and operational indexes.
+- [ ] Add required foreign keys and uniqueness constraints. Client, Website, Environment foundation, and access-grant constraints are complete; Endpoint/tag/policy constraints remain.
+- [ ] Add concurrency tokens and operational indexes. Client, Website, and Environment foundation are complete; later registry entities remain.
 - [x] Verify direct requests for every role against the current role-policy baseline. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs); resource-assignment combinations remain with registry.
 - [x] Verify anti-forgery rejection. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs`](../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs).
 - [x] Verify disabled-account sign-in rejection and existing-session invalidation. Evidence: the real Identity/PostgreSQL verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
-- [ ] Verify database constraints independently of UI validation.
+- [ ] Verify database constraints independently of UI validation. Client/Website uniqueness and website-environment enablement are verified; later registry constraints remain.
 - [x] Verify stale assignment updates fail safely and leave the scoped context reusable. Registry concurrency verification remains with registry CRUD.
 - [ ] Verify output encoding and secret-safe logs.
 

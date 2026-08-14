@@ -15,13 +15,19 @@ public sealed class AuditContractTests
             nameof(IAuditTrailWriter.RecordUserCreatedAsync),
             nameof(IAuditTrailWriter.RecordUserUpdatedAsync),
             nameof(IAuditTrailWriter.RecordTeamCreatedAsync),
-            nameof(IAuditTrailWriter.RecordTeamUpdatedAsync));
+            nameof(IAuditTrailWriter.RecordTeamUpdatedAsync),
+            nameof(IAuditTrailWriter.RecordClientMutationAsync),
+            nameof(IAuditTrailWriter.RecordWebsiteMutationAsync));
         methods.SelectMany(method => method.GetParameters())
             .Select(parameter => parameter.ParameterType)
             .Should().OnlyContain(type =>
                 type == typeof(AuditWriteContext)
                 || type == typeof(UserAuditSnapshot)
                 || type == typeof(TeamAuditSnapshot)
+                || type == typeof(ClientAuditAction)
+                || type == typeof(ClientAuditSnapshot)
+                || type == typeof(WebsiteAuditAction)
+                || type == typeof(WebsiteAuditSnapshot)
                 || type == typeof(CancellationToken));
         typeof(UserAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
@@ -37,5 +43,24 @@ public sealed class AuditContractTests
                 nameof(TeamAuditSnapshot.Name),
                 nameof(TeamAuditSnapshot.IsDisabled),
                 nameof(TeamAuditSnapshot.MemberUserIds));
+        typeof(ClientAuditSnapshot).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(ClientAuditSnapshot.ClientId),
+                nameof(ClientAuditSnapshot.Name),
+                nameof(ClientAuditSnapshot.OwnerSubjectId),
+                nameof(ClientAuditSnapshot.IsActive),
+                nameof(ClientAuditSnapshot.IsDeleted),
+                nameof(ClientAuditSnapshot.NotesChanged),
+                nameof(ClientAuditSnapshot.Version));
+        typeof(WebsiteAuditSnapshot).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(WebsiteAuditSnapshot.WebsiteId),
+                nameof(WebsiteAuditSnapshot.ClientId),
+                nameof(WebsiteAuditSnapshot.Name),
+                nameof(WebsiteAuditSnapshot.OwnerSubjectId),
+                nameof(WebsiteAuditSnapshot.TechnologyCms),
+                nameof(WebsiteAuditSnapshot.IsEnabled),
+                nameof(WebsiteAuditSnapshot.IsDeleted),
+                nameof(WebsiteAuditSnapshot.Version));
     }
 }

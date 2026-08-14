@@ -1,0 +1,13 @@
+@model ClientFormViewModel
+@{
+    ViewData.SetTitle("Add client");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Clients", Url.Action("Clients")), new BreadcrumbItem("Add client"));
+}
+<section class="card form-card">
+    <h2 class="card__title">Add client</h2>
+    <p class="card__subtitle">Create an owned client record. Name uniqueness is enforced by PostgreSQL.</p>
+    <form asp-action="CreateClient" method="post" class="form-stack">
+        <partial name="_ClientForm" model="Model" />
+        <div class="form-actions"><button class="button button--primary" type="submit">Create client</button><a class="button button--secondary" asp-action="Clients">Cancel</a></div>
+    </form>
+</section>

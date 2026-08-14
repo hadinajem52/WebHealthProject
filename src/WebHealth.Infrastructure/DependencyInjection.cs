@@ -10,6 +10,8 @@ using WebHealth.Application.Auditing;
 using WebHealth.Infrastructure.Auditing;
 using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Assignments;
+using WebHealth.Application.Registry;
+using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure;
 
@@ -49,6 +51,7 @@ public static class DependencyInjection
             })
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddSignInManager<ApplicationUserSignInManager>()
+            .AddClaimsPrincipalFactory<ApplicationUserClaimsPrincipalFactory>()
             .AddDefaultTokenProviders();
         services.Configure<BootstrapAdminOptions>(
             configuration.GetSection(BootstrapAdminOptions.SectionName));
@@ -59,6 +62,11 @@ public static class DependencyInjection
         services.AddScoped<IAuditTrailWriter, AuditTrailWriter>();
         services.AddScoped<IAuditTrailReader, AuditTrailReader>();
         services.AddScoped<IAuthorizationDenialAuditWriter, AuthorizationDenialAuditWriter>();
+        services.AddScoped<RegistryVisibility>();
+        services.AddScoped<RegistryMutationSupport>();
+        services.AddScoped<IRegistryReader, RegistryReader>();
+        services.AddScoped<IClientRegistryService, ClientRegistryService>();
+        services.AddScoped<IWebsiteRegistryService, WebsiteRegistryService>();
 
         services.AddHealthChecks()
             .AddCheck<PostgreSqlReadinessCheck>("postgresql", tags: ["ready"]);

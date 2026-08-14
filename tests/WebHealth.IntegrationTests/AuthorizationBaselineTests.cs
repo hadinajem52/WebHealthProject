@@ -89,6 +89,34 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
     }
 
     [Theory]
+    [InlineData(ApplicationRoles.Administrator)]
+    [InlineData(ApplicationRoles.Operations)]
+    [InlineData(ApplicationRoles.DeveloperSupport)]
+    [InlineData(ApplicationRoles.Viewer)]
+    public async Task RegistryRead_AllowsEveryApplicationPersona(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync("/test/authorization/registry-read");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Theory]
+    [InlineData(ApplicationRoles.Administrator, HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.Operations, HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.DeveloperSupport, HttpStatusCode.Forbidden)]
+    [InlineData(ApplicationRoles.Viewer, HttpStatusCode.Forbidden)]
+    public async Task RegistryManage_UsesPrivilegedRoles(string role, HttpStatusCode expected)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync("/test/authorization/registry-manage");
+
+        response.StatusCode.Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(ApplicationRoles.Administrator, HttpStatusCode.ServiceUnavailable)]
     [InlineData(ApplicationRoles.Operations, HttpStatusCode.ServiceUnavailable)]
     [InlineData(ApplicationRoles.DeveloperSupport, HttpStatusCode.Forbidden)]
@@ -142,6 +170,8 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
         administratorHtml.Should().Contain("href=\"/Administration/Users\"");
         administratorHtml.Should().Contain("href=\"/Administration/Teams\"");
         administratorHtml.Should().Contain("href=\"/Audit\"");
+        administratorHtml.Should().Contain("href=\"/Registry/Clients\"");
+        viewerHtml.Should().Contain("href=\"/Registry/Clients\"");
         viewerHtml.Should().NotContain("href=\"/Administration/Users\"");
         viewerHtml.Should().NotContain("href=\"/Administration/Teams\"");
         viewerHtml.Should().NotContain("href=\"/Audit\"");

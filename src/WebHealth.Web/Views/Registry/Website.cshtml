@@ -1,0 +1,31 @@
+@model WebsiteDetailsViewModel
+@{
+    ViewData.SetTitle(Model.Website.Name);
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Websites", Url.Action("Websites")), new BreadcrumbItem(Model.Website.Name));
+}
+<section class="card">
+    <div class="page-intro">
+        <div><h2 class="card__title">@Model.Website.Name</h2><p class="card__subtitle">@Model.Website.ClientName · Version @Model.Website.Version</p></div>
+        @if (Model.CanManage && !Model.Website.IsDeleted){<a class="button button--primary" asp-action="EditWebsite" asp-route-id="@Model.Website.Id">Edit website</a>}
+    </div>
+    <dl class="registry-facts">
+        <div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Website.IsDeleted ? "danger" : Model.Website.IsEnabled ? "success" : "warning")">@(Model.Website.IsDeleted ? "Deleted" : Model.Website.IsEnabled ? "Enabled" : "Disabled")</span></dd></div>
+        <div><dt>Owner</dt><dd>@Model.Website.OwnerName</dd></div>
+        <div><dt>Technology / CMS</dt><dd>@(Model.Website.TechnologyCms ?? "Not set")</dd></div>
+        <div><dt>Active environments</dt><dd>@Model.Website.ActiveEnvironmentCount</dd></div>
+    </dl>
+    @if (Model.CanManage)
+    {
+        <div class="registry-lifecycle">
+            @if (Model.Website.IsDeleted)
+            {
+                <form asp-action="RestoreWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--primary" type="submit">Restore website</button></form>
+            }
+            else
+            {
+                @if (Model.Website.IsEnabled){<form asp-action="DisableWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--secondary" type="submit">Disable website</button></form>}
+                <form asp-action="DeleteWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--danger" type="submit">Delete website</button></form>
+            }
+        </div>
+    }
+</section>

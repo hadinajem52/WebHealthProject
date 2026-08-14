@@ -1,0 +1,14 @@
+@model ClientFormViewModel
+@{
+    ViewData.SetTitle("Edit client");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Clients", Url.Action("Clients")), new BreadcrumbItem("Edit client"));
+}
+<section class="card form-card">
+    <h2 class="card__title">Edit client</h2>
+    <p class="card__subtitle">The original version is checked before this update is accepted.</p>
+    <form asp-action="EditClient" method="post" class="form-stack">
+        <input asp-for="ClientId" type="hidden" /><input asp-for="Version" type="hidden" />
+        <partial name="_ClientForm" model="Model" />
+        <div class="form-actions"><button class="button button--primary" type="submit">Save client</button><a class="button button--secondary" asp-action="Client" asp-route-id="@Model.ClientId">Cancel</a></div>
+    </form>
+</section>

@@ -1,0 +1,31 @@
+@model ClientFormViewModel
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<div class="form-field">
+    <label asp-for="Name"></label>
+    <input asp-for="Name" autocomplete="organization" />
+    <span class="form-field__hint">Leading/trailing whitespace and casing are normalized for uniqueness.</span>
+    <span asp-validation-for="Name"></span>
+</div>
+<div class="form-field">
+    <label asp-for="OwnerSubjectId"></label>
+    <select asp-for="OwnerSubjectId">
+        <option value="">Select an owner</option>
+        @foreach (var owner in Model.Owners)
+        {
+            <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+        }
+    </select>
+    <span asp-validation-for="OwnerSubjectId"></span>
+</div>
+<div class="form-field">
+    <label asp-for="Notes"></label>
+    <textarea asp-for="Notes" rows="5"></textarea>
+    <span asp-validation-for="Notes"></span>
+</div>
+@if (Model.ClientId != Guid.Empty)
+{
+    <label class="switch-field">
+        <input asp-for="IsActive" type="checkbox" />
+        <span>Client active</span>
+    </label>
+}

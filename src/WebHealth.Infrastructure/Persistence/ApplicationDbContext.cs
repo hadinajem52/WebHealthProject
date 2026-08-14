@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Auditing;
 using WebHealth.Infrastructure.Assignments;
+using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Persistence;
 
@@ -16,6 +17,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
 
     public DbSet<OwnerSubject> OwnerSubjects => Set<OwnerSubject>();
+
+    public DbSet<Client> Clients => Set<Client>();
+
+    public DbSet<Website> Websites => Set<Website>();
+
+    public DbSet<WebsiteEnvironment> Environments => Set<WebsiteEnvironment>();
+
+    public DbSet<AccessGrant> AccessGrants => Set<AccessGrant>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

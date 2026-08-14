@@ -34,6 +34,52 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
         CancellationToken cancellationToken = default) =>
         RecordAsync(context, "team.updated", "team", after.TeamId, before, after, cancellationToken);
 
+    public Task RecordClientMutationAsync(
+        AuditWriteContext context,
+        ClientAuditAction action,
+        ClientAuditSnapshot? before,
+        ClientAuditSnapshot after,
+        CancellationToken cancellationToken = default) =>
+        RecordAsync(
+            context,
+            action switch
+            {
+                ClientAuditAction.Created => "client.created",
+                ClientAuditAction.Updated => "client.updated",
+                ClientAuditAction.Disabled => "client.disabled",
+                ClientAuditAction.Deleted => "client.deleted",
+                ClientAuditAction.Restored => "client.restored",
+                _ => throw new ArgumentOutOfRangeException(nameof(action))
+            },
+            "client",
+            after.ClientId,
+            before,
+            after,
+            cancellationToken);
+
+    public Task RecordWebsiteMutationAsync(
+        AuditWriteContext context,
+        WebsiteAuditAction action,
+        WebsiteAuditSnapshot? before,
+        WebsiteAuditSnapshot after,
+        CancellationToken cancellationToken = default) =>
+        RecordAsync(
+            context,
+            action switch
+            {
+                WebsiteAuditAction.Created => "website.created",
+                WebsiteAuditAction.Updated => "website.updated",
+                WebsiteAuditAction.Disabled => "website.disabled",
+                WebsiteAuditAction.Deleted => "website.deleted",
+                WebsiteAuditAction.Restored => "website.restored",
+                _ => throw new ArgumentOutOfRangeException(nameof(action))
+            },
+            "website",
+            after.WebsiteId,
+            before,
+            after,
+            cancellationToken);
+
     private async Task RecordAsync<TSnapshot>(
         AuditWriteContext context,
         string action,

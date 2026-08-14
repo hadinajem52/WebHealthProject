@@ -1,0 +1,54 @@
+@model RegistryListViewModel
+@{
+    ViewData.SetTitle("Websites");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Websites"));
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Website registry</h2>
+            <p class="card__subtitle">Assignment and grant scope is applied before records are returned.</p>
+        </div>
+        <div class="form-actions">
+            <a class="button button--secondary" asp-action="Clients">View clients</a>
+            @if (Model.CanManage)
+            {
+                <a class="button button--secondary" asp-action="Archived">Archived</a>
+                <a class="button button--primary" asp-action="CreateWebsite">Add website</a>
+            }
+        </div>
+    </div>
+
+    @if (Model.Websites.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "No websites found",
+            "No website records are available within your current access scope.",
+            "registry",
+            Model.CanManage ? "Add website" : null,
+            Model.CanManage ? Url.Action("CreateWebsite") : null))
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">Websites in the accessible registry scope</caption>
+                <thead><tr><th>Website</th><th>Client</th><th>Owner</th><th>Environments</th><th>Status</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+                <tbody>
+                @foreach (var website in Model.Websites)
+                {
+                    <tr>
+                        <td data-label="Website"><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span></td>
+                        <td data-label="Client">@website.ClientName</td>
+                        <td data-label="Owner">@website.OwnerName</td>
+                        <td data-label="Environments">@website.ActiveEnvironmentCount active</td>
+                        <td data-label="Status"><span class="badge" data-status="@(website.IsDeleted ? "danger" : website.IsEnabled ? "success" : "warning")">@(website.IsDeleted ? "Deleted" : website.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                        <td class="data-table__action"><a asp-action="Website" asp-route-id="@website.Id">Details<span class="visually-hidden"> for @website.Name</span></a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

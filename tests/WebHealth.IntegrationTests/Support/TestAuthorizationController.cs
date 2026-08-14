@@ -27,4 +27,12 @@ public sealed class TestAuthorizationController : ControllerBase
     [HttpGet("audit-history")]
     [Authorize(Policy = AuthorizationPolicies.ViewAuditHistory)]
     public IActionResult AuditHistory() => Ok();
+
+    [HttpGet("registry-read")]
+    [Authorize(Policy = AuthorizationPolicies.ReadRegistry)]
+    public IActionResult RegistryRead() => Ok();
+
+    [HttpGet("registry-manage")]
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry)]
+    public IActionResult RegistryManage() => Ok();
 }

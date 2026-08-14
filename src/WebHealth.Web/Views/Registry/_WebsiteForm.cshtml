@@ -1,0 +1,27 @@
+@model WebsiteFormViewModel
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+@if (Model.WebsiteId == Guid.Empty)
+{
+    <div class="form-field">
+        <label asp-for="ClientId"></label>
+        <select asp-for="ClientId"><option value="">Select a client</option>@foreach (var client in Model.Clients.Where(client => !client.IsDeleted && client.IsActive)){<option value="@client.Id">@client.Name</option>}</select>
+        <span asp-validation-for="ClientId"></span>
+    </div>
+}
+else
+{
+    <input asp-for="ClientId" type="hidden" />
+}
+<div class="form-field">
+    <label asp-for="Name"></label><input asp-for="Name" />
+    <span class="form-field__hint">The normalized name must be unique among active records for this client.</span>
+    <span asp-validation-for="Name"></span>
+</div>
+<div class="form-field">
+    <label asp-for="OwnerSubjectId"></label>
+    <select asp-for="OwnerSubjectId"><option value="">Select an owner</option>@foreach (var owner in Model.Owners){<option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>}</select>
+    <span asp-validation-for="OwnerSubjectId"></span>
+</div>
+<div class="form-field"><label asp-for="TechnologyCms"></label><input asp-for="TechnologyCms" placeholder="For example, WordPress" /><span asp-validation-for="TechnologyCms"></span></div>
+<label class="switch-field"><input asp-for="IsEnabled" type="checkbox" /><span>Website enabled</span></label>
+<p class="form-field__hint">An active environment must exist before the website can be enabled.</p>

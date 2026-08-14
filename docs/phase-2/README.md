@@ -7,5 +7,6 @@ This folder records implementation evidence for Phase 2. The phase remains open 
 | Authentication and protected shell | Complete | [`../phase-1/Authentication_and_Protected_Shell.md`](../phase-1/Authentication_and_Protected_Shell.md) |
 | Administration and authorization baseline | Complete | [Evidence](Administration_and_Authorization_Baseline.md) · [Explanation](Administration_Authorization_Explained.md) |
 | Assignment and audit foundation | Complete | [Evidence](Assignment_and_Audit_Foundation.md) · [Explanation](Assignment_and_Audit_Explained.md) |
-| Registry and assignment authorization | Not started | Phase 2 plan; consumes owner subjects and effective team membership |
-| Append-only audit | Complete for administration, assignment, and denials | [Evidence](Assignment_and_Audit_Foundation.md); registry events follow registry CRUD |
+| Client and Website vertical slice | Complete | [Evidence](Client_and_Website_Vertical_Slice.md) · [Explanation](Client_Website_Vertical_Slice_Explained.md) |
+| Environment and Endpoint vertical slice | Not started | Phase 2 plan; environment persistence exists only to enforce website enablement |
+| Append-only audit | Complete for administration, assignment, denials, clients, and websites | [Foundation](Assignment_and_Audit_Foundation.md) · [Registry evidence](Client_and_Website_Vertical_Slice.md) |

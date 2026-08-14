@@ -303,10 +303,10 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 ### 9.4 Database and migration
 
 - [ ] Add Identity, registry, ownership, tag, policy/default, and audit schemas. Identity, teams, owner subjects, and audit are complete; registry, grants, tags, and policy/default data remain.
-- [ ] Add required relationships and prevent cascading deletion of future history.
-- [ ] Add normalized fields or a documented equivalent normalization strategy.
-- [ ] Add database uniqueness constraints matching business rules.
-- [ ] Add concurrency tokens.
+- [ ] Add required relationships and prevent cascading deletion of future history. Client, Website, Environment foundation, and access grants use restrictive relationships; later registry remains.
+- [ ] Add normalized fields or a documented equivalent normalization strategy. Client, Website, and Environment foundation are complete; later registry remains.
+- [ ] Add database uniqueness constraints matching business rules. Client and Website rules are complete; later registry remains.
+- [ ] Add concurrency tokens. Client, Website, and Environment foundation are complete; later registry remains.
 - [ ] Index normalized names, active registry lists, ownership filters, and audit searches.
 - [x] Seed role definitions through a controlled, idempotent bootstrap-admin mechanism; no password or role row is embedded in a migration.
 - [x] Validate clean database creation and migration repeatability for the current foundation, Identity, and authorization-denial audit migrations against PostgreSQL 18.
@@ -318,10 +318,10 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Verify current browser unauthenticated behavior and login redirects; API-specific 401/403 behavior remains due when API endpoints exist.
 - [x] Verify anti-forgery rejection.
 - [x] Verify disabled users and role-only stale principals lose access without deleting historical identity references. Evidence: native PostgreSQL assertions in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
-- [ ] Verify PostgreSQL constraints reject duplicates independently of UI validation.
-- [ ] Verify stale configuration updates are rejected. Stale team assignment edits are verified; registry configuration remains.
-- [ ] Verify soft deletion preserves reportable identity and relationships.
-- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Denial, administration, and assignment events are verified; registry and later incident events remain.
+- [ ] Verify PostgreSQL constraints reject duplicates independently of UI validation. Client and Website duplicate rules and website enablement are verified; later registry remains.
+- [ ] Verify stale configuration updates are rejected. Team assignment and Client/Website edits are verified; later registry configuration remains.
+- [ ] Verify soft deletion preserves reportable identity and relationships. Client and Website lifecycle behavior is verified; later registry remains.
+- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Denial, administration, assignment, Client, and Website events are verified; later registry and incident events remain.
 - [ ] Inspect logs and repository for secrets and sensitive values.
 
 ### 9.6 Phase exit evidence

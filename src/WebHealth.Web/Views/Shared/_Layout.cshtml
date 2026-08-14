@@ -64,7 +64,7 @@
                         <form asp-controller="Account" asp-action="Logout" method="post" class="app-header__account-form">
                             <button type="submit" class="app-header__account">
                                 @await Html.PartialAsync("_Icon", "person")
-                                <span>@User.Identity?.Name</span>
+                                <span>@User.GetDisplayName()</span>
                                 <span class="visually-hidden">&mdash; sign out</span>
                             </button>
                         </form>

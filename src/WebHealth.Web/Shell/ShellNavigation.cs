@@ -13,7 +13,12 @@ public static class ShellNavigation
         new(null,
         [
             new NavigationItem("Dashboard", "dashboard", "Home", "Index"),
-            new NavigationItem("Registry", "registry"),
+            new NavigationItem(
+                "Registry",
+                "registry",
+                "Registry",
+                "Clients",
+                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
             new NavigationItem("Incidents", "incidents"),
             new NavigationItem("Reports", "reports")
         ]),

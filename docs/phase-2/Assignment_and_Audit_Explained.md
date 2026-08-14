@@ -112,7 +112,8 @@ src/WebHealth.Application/
 │   ├── ITeamAdministrationService.cs
 │   └── IAssignmentAccessEvaluator.cs
 ├── Auditing/
-│   ├── IAuditTrailService.cs
+│   ├── IAuditTrailWriter.cs
+│   ├── IAuditTrailReader.cs
 │   └── IAuthorizationDenialAuditWriter.cs
 └── Authorization/
     └── AuthorizationPolicies.cs
@@ -132,7 +133,8 @@ src/WebHealth.Infrastructure/
 │   └── AssignmentModelConfiguration.cs
 ├── Auditing/
 │   ├── AuditEvent.cs
-│   ├── AuditTrailService.cs
+│   ├── AuditTrailWriter.cs
+│   ├── AuditTrailReader.cs
 │   ├── AuditEventConfiguration.cs
 │   └── AuthorizationDenialAuditWriter.cs
 └── Persistence/Migrations/
@@ -329,16 +331,18 @@ team.updated
 authorization.denied
 ```
 
-### Explicit audit writer
+### Explicit, typed audit writer
 
-Application code calls `IAuditTrailService.RecordAsync` with an `AuditChange`.
-The service is the single place that creates the `AuditEvent` entity and saves it.
+Application code calls mutation-specific operations on `IAuditTrailWriter` with
+typed, allow-listed snapshots. The writer owns action names and permitted fields;
+it cannot accept an arbitrary object or dictionary. `IAuditTrailReader` is a
+separate query contract for audit search.
 
 ```mermaid
 sequenceDiagram
     participant Admin as Administrator action
     participant Service as Application service
-    participant Audit as IAuditTrailService
+    participant Audit as IAuditTrailWriter
     participant DB as PostgreSQL
 
     Admin->>Service: Create or update user/team

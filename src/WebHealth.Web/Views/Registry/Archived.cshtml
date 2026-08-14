@@ -1,0 +1,57 @@
+@model RegistryArchiveViewModel
+@{
+    ViewData.SetTitle("Archived registry");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Archived"));
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Archived registry</h2>
+            <p class="card__subtitle">Soft-deleted records remain available for restoration and historical reporting.</p>
+        </div>
+        <a class="button button--secondary" asp-action="Clients">Active registry</a>
+    </div>
+
+    <h3 class="card__title">Clients</h3>
+    @if (Model.Clients.Count == 0)
+    {
+        <p class="card__subtitle">No archived clients.</p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Client</th><th>Owner</th><th>Deleted status</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var client in Model.Clients)
+                {
+                    <tr><td><span class="data-table__primary">@client.Name</span><span class="data-table__secondary">Version @client.Version</span></td><td>@client.OwnerName</td><td><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action"><a asp-action="Client" asp-route-id="@client.Id">Review</a></td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="card">
+    <h3 class="card__title">Websites</h3>
+    @if (Model.Websites.Count == 0)
+    {
+        <p class="card__subtitle">No archived websites.</p>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead><tr><th>Website</th><th>Client</th><th>Owner</th><th>Deleted status</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var website in Model.Websites)
+                {
+                    <tr><td><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">Version @website.Version</span></td><td>@website.ClientName</td><td>@website.OwnerName</td><td><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action"><a asp-action="Website" asp-route-id="@website.Id">Review</a></td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
