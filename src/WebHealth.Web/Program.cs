@@ -7,6 +7,9 @@ using Serilog;
 using WebHealth.Infrastructure;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Middleware;
+using WebHealth.Application.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
+using WebHealth.Web.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,7 +26,18 @@ builder.Services
     .AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live", "ready"]);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddScoped<IAuthorizationMiddlewareResultHandler, AuditingAuthorizationMiddlewareResultHandler>();
 builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(AuthorizationPolicies.Administration, policy =>
+        policy.RequireRole(ApplicationRoles.Administrator))
+    .AddPolicy(AuthorizationPolicies.Diagnostics, policy =>
+        policy.RequireRole(ApplicationRoles.Administrator, ApplicationRoles.Operations))
+    .AddPolicy(AuthorizationPolicies.OperateMonitoring, policy =>
+        policy.RequireRole(ApplicationRoles.Administrator, ApplicationRoles.Operations))
+    .AddPolicy(AuthorizationPolicies.ReadAllOperationalData, policy =>
+        policy.RequireRole(
+            ApplicationRoles.Administrator,
+            ApplicationRoles.Operations))
     .SetFallbackPolicy(new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .Build());
@@ -83,7 +97,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready")
-});
+}).RequireAuthorization(AuthorizationPolicies.Diagnostics);
 app.MapControllerRoute(
         name: "default",
         pattern: "{controller=Home}/{action=Index}/{id?}")

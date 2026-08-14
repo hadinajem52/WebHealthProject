@@ -187,13 +187,14 @@ code,
     transition: background-color var(--motion-fast) var(--motion-easing);
 }
 
+/* The reference primary action is the dark button on the billing screen. */
 .button--primary {
-    background-color: var(--text-link);
+    background-color: var(--color-gray-700);
     color: var(--color-white);
 }
 
 .button--primary:hover {
-    background-color: #3611cc;
+    background-color: #1f2733;
 }
 
 .button--secondary {
@@ -264,7 +265,6 @@ code,
     align-items: flex-start;
     padding: var(--space-4);
     border: 1px solid var(--border-strong);
-    border-left-width: 4px;
     border-radius: var(--radius-tile);
     background-color: var(--surface-raised);
     gap: var(--space-3);
@@ -336,7 +336,6 @@ code,
 .validation-summary {
     padding: var(--space-4);
     border: 1px solid var(--status-danger);
-    border-left-width: 4px;
     border-radius: var(--radius-tile);
     background-color: var(--status-danger-surface);
 }
@@ -464,4 +463,369 @@ code,
     flex-wrap: wrap;
     margin-top: var(--space-5);
     gap: var(--space-3);
+}
+
+/* Administration tables and forms --------------------------------------- */
+
+.page-intro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+}
+
+/*
+ * Table follows the Authors and Projects tables (Figma nodes 29:127 and
+ * 29:1020): 10px uppercase column headings, a rule under the heading row and
+ * between rows, a 40px rounded avatar tile, and a two-line identity cell.
+ */
+
+.table-scroll {
+    margin-top: var(--space-5);
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm); /* 14px */
+}
+
+.data-table th,
+.data-table td {
+    padding: 0.6875rem var(--space-3); /* 11px, giving the 62px row pitch */
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.data-table th {
+    padding-bottom: var(--space-2);
+    color: var(--color-gray-400);
+    font-size: 0.625rem; /* 10px */
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    line-height: var(--line-height-base);
+    text-transform: uppercase;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.data-table__identity {
+    display: flex;
+    align-items: center;
+    gap: 0.9375rem; /* 15px */
+}
+
+.data-table__avatar {
+    display: grid;
+    width: 2.5rem; /* 40px */
+    height: 2.5rem;
+    flex: 0 0 auto;
+    border-radius: var(--radius-tile);
+    background-color: var(--color-teal-300);
+
+    /* Gray-700 on Teal-300 reaches 6.4:1; the reference uses a photograph. */
+    color: var(--color-gray-700);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    place-items: center;
+}
+
+.data-table__primary {
+    display: block;
+    color: var(--text-primary);
+}
+
+.data-table__secondary {
+    display: block;
+    color: var(--color-gray-500);
+}
+
+.data-table__action {
+    text-align: right !important;
+}
+
+.data-table__action a {
+    color: var(--color-gray-500);
+    font-size: var(--font-size-xs); /* 12px */
+    font-weight: 700;
+}
+
+/*
+ * Solid status pill from the table rows. The reference fills are Green-400 and
+ * Gray-300 with white text (2.4:1 and 1.6:1); the fills below keep the same
+ * shape and white label while reaching AA.
+ */
+.badge {
+    display: inline-flex;
+    min-width: 4.0625rem; /* 65px */
+    height: 1.5625rem; /* 25px */
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--space-2);
+    border-radius: 8px;
+    background-color: var(--color-gray-600);
+    color: var(--color-white);
+    font-size: var(--font-size-sm); /* 14px */
+    line-height: var(--line-height-base);
+}
+
+.badge[data-status="success"] {
+    background-color: var(--status-success-text);
+}
+
+.badge[data-status="danger"] {
+    background-color: var(--status-danger-text);
+}
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.tag {
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-pill);
+    background: var(--surface-sunken);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+}
+
+/*
+ * Sunken panel from the Billing Information card: a grouped block inside a
+ * card, used to separate the sections of a long form.
+ */
+
+.panel-list {
+    display: flex;
+    margin-top: var(--space-5);
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.panel {
+    padding: var(--space-5);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-sunken);
+}
+
+.panel__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.panel__title {
+    font-size: var(--font-size-sm); /* 14px */
+    font-weight: 700;
+}
+
+.panel__hint {
+    color: var(--color-gray-500);
+    font-size: var(--font-size-xs); /* 12px */
+}
+
+.panel__body {
+    margin-top: var(--space-4);
+}
+
+.form-card {
+    max-width: 48rem;
+}
+
+.form-stack {
+    display: flex;
+    margin-top: var(--space-6);
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.form-field {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.form-field label,
+.form-field legend {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.form-field input:not([type="checkbox"]) {
+    width: 100%;
+    padding: 0.75rem var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-tile);
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.form-field__hint,
+.choice-card small {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+}
+
+.field-validation-error {
+    color: var(--status-danger-text);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+}
+
+.choice-grid {
+    display: grid;
+    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.choice-card {
+    display: flex;
+    align-items: flex-start;
+    padding: var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-tile);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    gap: var(--space-3);
+}
+
+.choice-card {
+    background: var(--surface-raised);
+}
+
+.choice-card:has(input:checked) {
+    border-color: var(--color-teal-300);
+    background: var(--surface-accent-soft);
+}
+
+.choice-card input {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    accent-color: var(--color-teal-600);
+}
+
+.choice-card--warning:has(input:checked) {
+    border-color: var(--status-danger);
+    background: var(--status-danger-surface);
+}
+
+.choice-card small {
+    display: block;
+    margin-top: var(--space-1);
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+}
+
+.form-actions--spaced {
+    margin-top: var(--space-5);
+}
+
+.panel__body .switch-field + .panel__hint {
+    margin-top: var(--space-2);
+}
+
+/*
+ * Switch, shared with the sign-in screen (Figma node 88:499). The 13.5px knob
+ * is centred in the 36x18 track and travels the remaining 18px when on.
+ */
+
+.switch-field {
+    display: flex;
+    align-items: center;
+    color: var(--text-primary);
+    font-size: var(--font-size-xs); /* 12px */
+    font-weight: 700;
+    gap: 0.625rem; /* 10px */
+    line-height: var(--line-height-base);
+}
+
+.switch-field input {
+    position: relative;
+    width: 2.25rem; /* 36px */
+    height: 1.125rem; /* 18px */
+    flex: 0 0 auto;
+    appearance: none;
+    border-radius: var(--radius-pill);
+    background-color: var(--color-gray-300);
+    cursor: pointer;
+    transition: background-color var(--motion-fast) var(--motion-easing);
+}
+
+.switch-field input::after {
+    position: absolute;
+    top: 50%;
+    left: 2.25px;
+    width: 13.5px;
+    height: 13.5px;
+    border-radius: 50%;
+    background-color: var(--color-white);
+    content: "";
+    transform: translateY(-50%);
+    transition: transform var(--motion-fast) var(--motion-easing);
+}
+
+.switch-field input:checked {
+    background-color: var(--color-teal-300);
+}
+
+.switch-field input:checked::after {
+    transform: translate(18px, -50%);
+}
+
+.switch-field--danger input:checked {
+    background-color: var(--status-danger);
+}
+
+@media (max-width: 42em) {
+    .data-table thead {
+        display: none;
+    }
+
+    .data-table,
+    .data-table tbody,
+    .data-table tr,
+    .data-table td {
+        display: block;
+    }
+
+    .data-table tr {
+        padding: var(--space-3) 0;
+        border-bottom: 1px solid var(--divider-line);
+    }
+
+    .data-table td {
+        padding: var(--space-2) 0;
+        border: 0;
+    }
+
+    .data-table td::before {
+        display: block;
+        margin-bottom: var(--space-1);
+        color: var(--text-secondary);
+        content: attr(data-label);
+        font-size: var(--font-size-xs);
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .data-table__action {
+        text-align: left !important;
+    }
 }

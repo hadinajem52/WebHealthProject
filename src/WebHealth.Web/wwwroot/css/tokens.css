@@ -89,6 +89,7 @@
     --surface-raised: var(--color-white);
     --surface-sunken: var(--color-gray-100);
     --surface-accent: var(--color-teal-600);
+    --surface-accent-soft: #e6fffa;
     --border-subtle: var(--color-gray-200);
     --border-strong: var(--color-gray-300);
 
@@ -183,7 +184,7 @@
     --sidebar-divider: var(--divider-line);
 
     /* Focus. Kept identical for every interactive element. */
-    --focus-ring-color: var(--color-purple-blue-500);
+    --focus-ring-color: var(--color-teal-300);
     --focus-ring-width: 3px;
     --focus-ring-offset: 2px;
 

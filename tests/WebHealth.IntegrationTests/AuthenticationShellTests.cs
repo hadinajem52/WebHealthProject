@@ -27,7 +27,7 @@ public sealed class AuthenticationShellTests(WebHealthWebApplicationFactory fact
         var content = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("class=\"auth-card\"", content, StringComparison.Ordinal);
+        Assert.Contains("class=\"auth-form-panel\"", content, StringComparison.Ordinal);
         Assert.Contains("autocomplete=\"username\"", content, StringComparison.Ordinal);
         Assert.DoesNotContain("aria-label=\"Primary\"", content, StringComparison.Ordinal);
     }

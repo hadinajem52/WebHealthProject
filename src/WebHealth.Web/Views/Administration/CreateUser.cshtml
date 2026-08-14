@@ -1,0 +1,54 @@
+@using WebHealth.Infrastructure.Identity
+@model CreateUserViewModel
+@{
+    ViewData.SetTitle("Add user");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Administration"),
+        new BreadcrumbItem("Users", Url.Action("Users")),
+        new BreadcrumbItem("Add user"));
+}
+
+<section class="card form-card">
+    <p class="card__eyebrow">New account</p>
+    <h2 class="card__title">Create application user</h2>
+    <p class="card__subtitle">The initial password is accepted once and is never displayed or logged.</p>
+
+    <form asp-action="CreateUser" method="post" class="form-stack">
+        <div class="form-field">
+            <label asp-for="DisplayName"></label>
+            <input asp-for="DisplayName" autocomplete="name" />
+            <span asp-validation-for="DisplayName"></span>
+        </div>
+        <div class="form-field">
+            <label asp-for="Email"></label>
+            <input asp-for="Email" autocomplete="email" />
+            <span asp-validation-for="Email"></span>
+        </div>
+        <div class="form-field">
+            <label asp-for="Password"></label>
+            <input asp-for="Password" autocomplete="new-password" />
+            <span class="form-field__hint">At least 12 characters with upper, lower, number, symbol, and four unique characters.</span>
+            <span asp-validation-for="Password"></span>
+        </div>
+
+        <fieldset class="form-field">
+            <legend>Roles</legend>
+            <p class="form-field__hint">Select at least one application persona.</p>
+            <div class="choice-grid">
+                @foreach (var role in ApplicationRoles.All)
+                {
+                    <label class="choice-card">
+                        <input type="checkbox" name="Roles" value="@role.Name" checked="@Model.Roles.Contains(role.Name)" />
+                        <span>@role.Name</span>
+                    </label>
+                }
+            </div>
+            <span asp-validation-for="Roles"></span>
+        </fieldset>
+
+        <div class="form-actions">
+            <button class="button button--primary" type="submit">Create user</button>
+            <a class="button button--secondary" asp-action="Users">Cancel</a>
+        </div>
+    </form>
+</section>

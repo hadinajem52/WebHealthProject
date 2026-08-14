@@ -5,6 +5,9 @@ using Microsoft.Extensions.DependencyInjection;
 using WebHealth.Infrastructure.Diagnostics;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Application.Administration;
+using WebHealth.Application.Auditing;
+using WebHealth.Infrastructure.Auditing;
 
 namespace WebHealth.Infrastructure;
 
@@ -48,6 +51,8 @@ public static class DependencyInjection
         services.Configure<BootstrapAdminOptions>(
             configuration.GetSection(BootstrapAdminOptions.SectionName));
         services.AddScoped<AdminBootstrapper>();
+        services.AddScoped<IUserAdministrationService, UserAdministrationService>();
+        services.AddScoped<IAuthorizationDenialAuditWriter, AuthorizationDenialAuditWriter>();
 
         services.AddHealthChecks()
             .AddCheck<PostgreSqlReadinessCheck>("postgresql", tags: ["ready"]);

@@ -277,12 +277,12 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 - [x] Configure ASP.NET Core Identity. Evidence: [`../phase-1/Authentication_and_Protected_Shell.md`](../phase-1/Authentication_and_Protected_Shell.md).
 - [x] Create Administrator, Operations, Developer/Support, and Viewer role definitions with stable IDs and explicit bootstrap verification.
-- [ ] Implement admin-only user and role management.
-- [ ] Implement account disabling and security-stamp session invalidation.
-- [ ] Implement role and assignment policies on the server.
+- [x] Implement admin-only user and supported-role assignment management. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
+- [x] Implement account disabling and security-stamp session invalidation. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
+- [ ] Complete role and assignment policies on the server. Global role policies are implemented; assignment-aware resource checks remain with registry ownership and access grants.
 - [x] Protect operational controllers and actions by default through a fallback authorization policy.
 - [x] Require anti-forgery protection for state-changing browser requests.
-- [ ] Restrict detailed diagnostics and Hangfire administration.
+- [ ] Restrict Hangfire administration when it is added. Detailed readiness already requires the Administrator/Operations diagnostics policy.
 
 ### 9.3 Registry and audit
 
@@ -309,19 +309,19 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Add concurrency tokens.
 - [ ] Index normalized names, active registry lists, ownership filters, and audit searches.
 - [x] Seed role definitions through a controlled, idempotent bootstrap-admin mechanism; no password or role row is embedded in a migration.
-- [x] Validate clean database creation and migration repeatability for the current foundation and Identity migrations against PostgreSQL 18.
+- [x] Validate clean database creation and migration repeatability for the current foundation, Identity, and authorization-denial audit migrations against PostgreSQL 18.
 
 ### 9.5 Verification gate
 
 - [ ] Unit-test URL and name normalization boundaries.
-- [ ] Integration-test every role using direct requests.
+- [x] Integration-test every role using direct requests for the current global policies. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs); assignment combinations remain with registry.
 - [x] Verify current browser unauthenticated behavior and login redirects; API-specific 401/403 behavior remains due when API endpoints exist.
 - [x] Verify anti-forgery rejection.
-- [ ] Verify disabled users lose access without deleting historical identity references.
+- [x] Verify disabled users and role-only stale principals lose access without deleting historical identity references. Evidence: native PostgreSQL assertions in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
 - [ ] Verify PostgreSQL constraints reject duplicates independently of UI validation.
 - [ ] Verify stale configuration updates are rejected.
 - [ ] Verify soft deletion preserves reportable identity and relationships.
-- [ ] Verify audit events contain actor, timestamp, action, entity, and safe values.
+- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Forbidden-denial persistence is verified; administration and registry changes remain.
 - [ ] Inspect logs and repository for secrets and sensitive values.
 
 ### 9.6 Phase exit evidence

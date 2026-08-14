@@ -1,0 +1,93 @@
+@using WebHealth.Infrastructure.Identity
+@model EditUserViewModel
+@{
+    ViewData.SetTitle("Edit user access");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Administration"),
+        new BreadcrumbItem("Users", Url.Action("Users")),
+        new BreadcrumbItem("Edit access"));
+}
+
+<section class="card form-card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Edit user access</h2>
+            <p class="card__subtitle">@Model.Email</p>
+        </div>
+    </div>
+
+    <form asp-action="EditUser" method="post">
+        <input asp-for="UserId" type="hidden" />
+
+        <div class="panel-list">
+            <div class="panel">
+                <div class="panel__header">
+                    <p class="panel__title">Identity</p>
+                </div>
+                <div class="panel__body">
+                    <div class="form-field">
+                        <label asp-for="DisplayName"></label>
+                        <input asp-for="DisplayName" autocomplete="name" />
+                        <span asp-validation-for="DisplayName"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel__header">
+                    <p class="panel__title">Password</p>
+                    <p class="panel__hint">Leave blank to keep the current password.</p>
+                </div>
+                <div class="panel__body">
+                    <div class="form-field">
+                        <label asp-for="NewPassword"></label>
+                        <input asp-for="NewPassword" autocomplete="new-password" />
+                        <span class="form-field__hint">A reset invalidates existing sessions.</span>
+                        <span asp-validation-for="NewPassword"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <fieldset class="form-field">
+                    <div class="panel__header">
+                        <legend class="panel__title">Roles</legend>
+                        <p class="panel__hint">Select at least one application persona.</p>
+                    </div>
+                    <div class="panel__body">
+                        <div class="choice-grid">
+                            @foreach (var role in ApplicationRoles.All)
+                            {
+                                <label class="choice-card">
+                                    <input type="checkbox" name="Roles" value="@role.Name" checked="@Model.Roles.Contains(role.Name)" />
+                                    <span>@role.Name</span>
+                                </label>
+                            }
+                        </div>
+                        <span asp-validation-for="Roles"></span>
+                    </div>
+                </fieldset>
+            </div>
+
+            <div class="panel">
+                <div class="panel__header">
+                    <p class="panel__title">Account state</p>
+                </div>
+                <div class="panel__body">
+                    <label class="switch-field switch-field--danger">
+                        <input asp-for="IsDisabled" />
+                        <span>Disable this account</span>
+                    </label>
+                    <p class="panel__hint">
+                        The user cannot sign in and existing sessions are rejected after validation.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-actions form-actions--spaced">
+            <button class="button button--primary" type="submit">Save access</button>
+            <a class="button button--secondary" asp-action="Users">Cancel</a>
+        </div>
+    </form>
+</section>

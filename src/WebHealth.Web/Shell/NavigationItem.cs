@@ -12,10 +12,14 @@ public sealed record NavigationItem(
     string Text,
     string IconKey,
     string? Controller = null,
-    string? Action = null)
+    string? Action = null,
+    string? RequiredRole = null)
 {
     /// <summary>Gets a value indicating whether the destination exists in the current build.</summary>
     public bool IsAvailable => Controller is not null && Action is not null;
+
+    public bool IsVisible(System.Security.Claims.ClaimsPrincipal user) =>
+        RequiredRole is null || user.IsInRole(RequiredRole);
 
     /// <summary>Determines whether this entry is the active route.</summary>
     public bool IsCurrent(string? controller, string? action)

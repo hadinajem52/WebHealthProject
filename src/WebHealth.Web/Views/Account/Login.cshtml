@@ -4,40 +4,44 @@
     ViewData.SetTitle("Sign in");
 }
 
-<section class="auth-card" aria-labelledby="sign-in-title">
-    <div class="auth-card__brand">
-        <span class="auth-card__mark">@await Html.PartialAsync("_Icon", "brand")</span>
-        <span>WebHealth</span>
+<section class="auth-form-panel" aria-labelledby="sign-in-title">
+    <div class="auth-heading">
+        <h1 id="sign-in-title">Welcome Back</h1>
+        <p>Enter your email and password to sign in</p>
     </div>
-
-    <div class="auth-card__heading">
-        <p class="card__eyebrow">Protected workspace</p>
-        <h1 id="sign-in-title">Welcome back</h1>
-        <p>Sign in to manage websites, checks, and incidents.</p>
-    </div>
-
-    @await Html.PartialAsync("_ValidationSummary")
 
     <form asp-action="Login" method="post" class="auth-form">
         <input name="ReturnUrl" type="hidden" value="@Model.ReturnUrl" />
 
+        @await Html.PartialAsync("_ValidationSummary")
+
         <div class="form-field">
-            <label asp-for="Email"></label>
-            <input asp-for="Email" autocomplete="username" inputmode="email" autofocus />
-            <span asp-validation-for="Email"></span>
+            <label asp-for="Email">Email</label>
+            <input asp-for="Email"
+                   placeholder="Your email address"
+                   autocomplete="username"
+                   inputmode="email"
+                   autofocus />
+            <span class="form-field__error" asp-validation-for="Email"></span>
         </div>
 
         <div class="form-field">
-            <label asp-for="Password"></label>
-            <input asp-for="Password" autocomplete="current-password" />
-            <span asp-validation-for="Password"></span>
+            <label asp-for="Password">Password</label>
+            <input asp-for="Password"
+                   placeholder="Your password"
+                   autocomplete="current-password" />
+            <span class="form-field__error" asp-validation-for="Password"></span>
         </div>
 
-        <label class="check-field">
+        <label class="switch-field">
             <input asp-for="RememberMe" />
             <span>@Html.DisplayNameFor(model => model.RememberMe)</span>
         </label>
 
-        <button type="submit" class="button button--primary auth-form__submit">Sign in</button>
+        <button type="submit" class="auth-form__submit">Sign in</button>
     </form>
+
+    @* The product creates accounts through administration, so no self sign-up
+       destination exists to link to. *@
+    <p class="auth-note">Need an account? <strong>Ask an administrator</strong></p>
 </section>

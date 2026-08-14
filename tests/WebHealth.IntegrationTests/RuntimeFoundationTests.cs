@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using WebHealth.IntegrationTests.Support;
 using WebHealth.Web.Middleware;
 using Xunit;
+using WebHealth.Infrastructure.Identity;
 
 namespace WebHealth.IntegrationTests;
 
@@ -23,7 +24,7 @@ public sealed class RuntimeFoundationTests(WebHealthWebApplicationFactory factor
     [Fact]
     public async Task Readiness_IsUnhealthyWithoutDatabaseConfiguration()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Operations);
 
         var response = await client.GetAsync("/health/ready");
 

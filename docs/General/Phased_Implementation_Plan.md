@@ -200,11 +200,12 @@ These requirements apply throughout the project:
 - [x] Add Administrator, Operations, Developer/Support, and Viewer roles. Evidence: stable definitions and bootstrap verification recorded in [`../phase-1/Authentication_and_Protected_Shell.md`](../phase-1/Authentication_and_Protected_Shell.md).
 - [x] Implement sign-in and sign-out. Evidence: [`../../src/WebHealth.Web/Controllers/AccountController.cs`](../../src/WebHealth.Web/Controllers/AccountController.cs) and authentication-shell integration tests.
 - [x] Configure password, lockout, and security-stamp policies. Evidence: [`../../src/WebHealth.Infrastructure/DependencyInjection.cs`](../../src/WebHealth.Infrastructure/DependencyInjection.cs).
-- [ ] Implement admin-only user and role management.
-- [ ] Implement account disabling and session invalidation.
-- [ ] Implement role and assignment-aware authorization policies.
+- [x] Implement admin-only user and supported-role assignment management. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
+- [x] Implement account disabling and session invalidation. Evidence: transactional security-stamp verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
+- [ ] Complete role and assignment-aware authorization policies. The global role-policy baseline is implemented; registry ownership and access grants remain.
 - [x] Protect every current and future operational endpoint server-side through the fallback policy; liveness and safe login/error endpoints explicitly opt out.
 - [x] Add anti-forgery protection to state-changing MVC actions.
+- [x] Restrict detailed readiness to Administrator and Operations through the diagnostics policy. Evidence: the complete role and roleless matrix in [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs).
 
 ### Registry management
 
@@ -223,6 +224,7 @@ These requirements apply throughout the project:
 
 ### Audit and UI
 
+- [x] Persist authenticated forbidden direct requests through the centralized authorization-result handler. Evidence: [`../../src/WebHealth.Web/Authorization/AuditingAuthorizationMiddlewareResultHandler.cs`](../../src/WebHealth.Web/Authorization/AuditingAuthorizationMiddlewareResultHandler.cs) and the native PostgreSQL audit assertion.
 - [ ] Record create, update, delete, permission, and enable/disable events.
 - [ ] Store actor, timestamp, action, entity, and safe before/after values.
 - [ ] Implement an authorized audit search view.
@@ -232,12 +234,12 @@ These requirements apply throughout the project:
 
 ### Database and verification
 
-- [ ] Add Identity, registry, ownership, tags, policies, and audit migration.
+- [ ] Complete Identity, registry, ownership, tags, policies, and audit migrations. Identity and authorization-denial audit migrations are complete; registry and full audit remain.
 - [ ] Add required foreign keys and uniqueness constraints.
 - [ ] Add concurrency tokens and operational indexes.
-- [ ] Verify direct requests for every role.
+- [x] Verify direct requests for every role against the current role-policy baseline. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs); resource-assignment combinations remain with registry.
 - [x] Verify anti-forgery rejection. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs`](../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs).
-- [x] Verify disabled-account sign-in rejection. Evidence: the real Identity/PostgreSQL verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs); existing-session invalidation remains with user management.
+- [x] Verify disabled-account sign-in rejection and existing-session invalidation. Evidence: the real Identity/PostgreSQL verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
 - [ ] Verify database constraints independently of UI validation.
 - [ ] Verify stale updates fail safely.
 - [ ] Verify output encoding and secret-safe logs.

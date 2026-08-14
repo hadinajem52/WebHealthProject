@@ -15,6 +15,7 @@ internal sealed class TestAuthenticationHandler(
 {
     public const string SchemeName = "IntegrationTest";
     public const string HeaderName = "X-WebHealth-Test-User";
+    public const string RolesHeaderName = "X-WebHealth-Test-Roles";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -24,9 +25,19 @@ internal sealed class TestAuthenticationHandler(
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, Guid.Empty.ToString()), new Claim(ClaimTypes.Name, name!)],
-            SchemeName);
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, Guid.Empty.ToString()),
+            new(ClaimTypes.Name, name!)
+        };
+        if (Request.Headers.TryGetValue(RolesHeaderName, out var roleValues))
+        {
+            claims.AddRange(roleValues
+                .SelectMany(value => value?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [])
+                .Select(role => new Claim(ClaimTypes.Role, role.Trim())));
+        }
+
+        var identity = new ClaimsIdentity(claims, SchemeName);
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }

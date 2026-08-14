@@ -16,9 +16,25 @@
 </head>
 <body class="auth-page">
     <a class="skip-link" href="#main-content">Skip to main content</a>
-    <main id="main-content" class="auth-shell" tabindex="-1">
-        @RenderBody()
-    </main>
+
+    <div class="auth-shell">
+        <main id="main-content" class="auth-main" tabindex="-1">
+            @RenderBody()
+        </main>
+
+        @* Decorative panel: the identity it carries is repeated in the form. *@
+        <div class="auth-visual">
+            <span class="auth-visual__brand">
+                @await Html.PartialAsync("_Icon", "brand")
+                <span>WebHealth</span>
+            </span>
+        </div>
+    </div>
+
+    <footer class="auth-footer">
+        <p>Website Health Monitoring &mdash; internal monitoring workspace.</p>
+    </footer>
+
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

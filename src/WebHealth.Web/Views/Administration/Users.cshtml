@@ -1,0 +1,88 @@
+@model UserListViewModel
+@{
+    ViewData.SetTitle("Users");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Administration"), new BreadcrumbItem("Users"));
+
+    static string Initials(string displayName)
+    {
+        var parts = displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..1].ToUpperInvariant(),
+            _ => string.Concat(parts[0][..1], parts[^1][..1]).ToUpperInvariant()
+        };
+    }
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Users Table</h2>
+            <p class="card__subtitle">
+                @Model.Users.Count account@(Model.Users.Count == 1 ? null : "s") with application access.
+            </p>
+        </div>
+        <a class="button button--primary" asp-action="CreateUser">Add user</a>
+    </div>
+
+    @if (Model.Users.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "No users found",
+            "Create the first managed account to assign application access.",
+            "users",
+            "Add user",
+            Url.Action("CreateUser")))
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">Managed application users and their roles</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">User</th>
+                        <th scope="col">Roles</th>
+                        <th scope="col">Status</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in Model.Users)
+                    {
+                        <tr>
+                            <td data-label="User">
+                                <span class="data-table__identity">
+                                    <span class="data-table__avatar" aria-hidden="true">@Initials(user.DisplayName)</span>
+                                    <span>
+                                        <span class="data-table__primary">@user.DisplayName</span>
+                                        <span class="data-table__secondary">@user.Email</span>
+                                    </span>
+                                </span>
+                            </td>
+                            <td data-label="Roles">
+                                <div class="tag-list">
+                                    @foreach (var role in user.Roles)
+                                    {
+                                        <span class="tag">@role</span>
+                                    }
+                                </div>
+                            </td>
+                            <td data-label="Status">
+                                <span class="badge" data-status="@(user.IsDisabled ? "danger" : "success")">
+                                    @(user.IsDisabled ? "Disabled" : "Enabled")
+                                </span>
+                            </td>
+                            <td class="data-table__action">
+                                <a asp-action="EditUser" asp-route-id="@user.Id">
+                                    Edit<span class="visually-hidden"> access for @user.DisplayName</span>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

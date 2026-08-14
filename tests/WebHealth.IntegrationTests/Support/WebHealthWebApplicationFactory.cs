@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using WebHealth.Application.Auditing;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -19,6 +21,10 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
 
         builder.ConfigureServices(services =>
         {
+            services.RemoveAll<IAuthorizationDenialAuditWriter>();
+            services.AddSingleton<RecordingAuthorizationDenialAuditWriter>();
+            services.AddSingleton<IAuthorizationDenialAuditWriter>(services =>
+                services.GetRequiredService<RecordingAuthorizationDenialAuditWriter>());
             services.AddAuthentication(options =>
                 {
                     options.DefaultAuthenticateScheme = TestAuthenticationHandler.SchemeName;
@@ -32,13 +38,17 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
         });
     }
 
-    public HttpClient CreateHttpsClient()
+    public HttpClient CreateHttpsClient(params string[] roles)
     {
         var client = CreateClient(new WebApplicationFactoryClientOptions
         {
             BaseAddress = new Uri("https://localhost")
         });
         client.DefaultRequestHeaders.Add(TestAuthenticationHandler.HeaderName, "Test User");
+        if (roles.Length > 0)
+        {
+            client.DefaultRequestHeaders.Add(TestAuthenticationHandler.RolesHeaderName, string.Join(',', roles));
+        }
         return client;
     }
 

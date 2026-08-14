@@ -19,6 +19,11 @@
 
     @foreach (var navSection in ShellNavigation.Sections)
     {
+        var visibleItems = navSection.Items.Where(item => item.IsVisible(User)).ToArray();
+        if (visibleItems.Length == 0)
+        {
+            continue;
+        }
         groupIndex++;
         var headingId = $"app-nav-group-{groupIndex}";
         <div class="app-nav__group">
@@ -27,7 +32,7 @@
                 <p class="app-nav__heading" id="@headingId">@navSection.Heading</p>
             }
             <ul class="app-nav__list" aria-labelledby="@(navSection.Heading is null ? null : headingId)">
-                @foreach (var item in navSection.Items)
+                @foreach (var item in visibleItems)
                 {
                     <li>
                         @if (item.IsAvailable)
