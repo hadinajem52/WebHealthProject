@@ -21,7 +21,10 @@ The visual baseline is the Purity UI Dashboard Figma file adopted in [`../phase-
 | Sidebar | `2:164` | Brand row, nav item geometry, section label, support card |
 | Sidebar separator | `47:276` | Divider gradient and position |
 | Breadcrumb (header) | `2:263`, `2:268` | Breadcrumb trail and page title |
+| Header menu | `4:287` | Search field, account entry, utility icons |
 | Today's Money (card) | `4:1` | Card radius, padding, shadow, icon tile |
+| Feature card | `4:289` | Eyebrow, heading, supporting text, action link, side panel |
+| Profile Information | `68:448` | Heading, description, divider, label/value rows |
 
 Layout intent and tokens were taken from the file; markup, CSS, icons and interaction behavior are application-owned. The Purity navigation taxonomy (Tables, Billing, RTL, Profile, Sign In, Sign Up) was replaced by the information architecture in `UI_Direction.md` section 4, and the Creative Tim brand mark was replaced by an application-owned glyph in the same 22px box and Gray-700 color.
 
@@ -29,11 +32,30 @@ The sidebar support-card artwork (`wwwroot/images/sidebar-support.png`, 218x170)
 
 ### Typeface
 
-The design is set in Helvetica Neue. Five faces are served from `wwwroot/fonts` and declared in `tokens.css` with `font-display: swap`: Light (300), Roman (400), Italic (400), Medium (500) and Bold (700). The shell itself uses only 400 and 700; the others are declared so later screens get a real face instead of a synthesised one. `--font-sans` keeps `Helvetica, Arial, system-ui, sans-serif` behind it.
+The design was reset to Figtree, so the shell follows. Figtree is published under the SIL Open Font License 1.1, which removes the licence risk carried by the Helvetica Neue files this replaced.
 
-The files must live under `wwwroot`. Linking them from `src/Fonts` with `<Content Link="wwwroot\fonts\..." />` copies them to the build output only, so `dotnet run` answers every font request with an empty 200: the endpoint resolves from the manifest but the file is absent from the project's physical `wwwroot`.
+Four self-hosted `woff2` subsets are declared in `tokens.css` with `font-display: swap`: upright and italic, each in the `latin` and `latin-ext` ranges. All four are variable fonts covering weights 300-900, so no weight is ever synthesised, and the unicode ranges match the Google Fonts subsetting, so a browser downloads the `latin-ext` files only when a page actually contains those characters. The four files total 61 KB. `--font-sans` keeps `system-ui, -apple-system, "Segoe UI", Arial, sans-serif` behind Figtree.
 
-**Licence risk.** Helvetica Neue is a commercial Monotype typeface and these files came from a free-download aggregator, so the repository most likely has no web-embedding licence for them. This is recorded for the Phase 7 licence review. Replacing them with a licensed copy, or with a metrically compatible open face such as Arimo or Inter, removes the risk without changing the layout.
+The files are self-hosted rather than requested from `fonts.googleapis.com`: the application makes no third-party request, works offline, and needs no external host in the Content Security Policy defined by later hardening work.
+
+They must live under `wwwroot`. Linking them from elsewhere with `<Content Link="wwwroot\fonts\..." />` copies them to the build output only, so `dotnet run` answers every font request with an empty 200: the endpoint resolves from the manifest, but the file is absent from the project's physical `wwwroot`.
+
+### Card anatomy
+
+Figma nodes 4:289 and 68:448 define the card content structure:
+
+| Part | Class | Value |
+|---|---|---|
+| Card | `.card` | White, 15px radius, `0 3.5px 5.5px rgba(0,0,0,.02)`, 21px padding |
+| Eyebrow | `.card__eyebrow` | 12px bold, 3px above the heading |
+| Heading | `.card__title` | 18px bold, line-height 1.4 |
+| Supporting text | `.card__subtitle` | 14px regular, line-height 1.4 |
+| Divider | `.card__divider` | The `--divider-line` gradient shared with the sidebar separator |
+| Label/value rows | `.data-list` + `.data-list__row` | 12px bold label, 12px regular value, on one line per row, 36px pitch |
+| Text action | `.card__action` | 12px bold with a 12px trailing arrow |
+| Feature card | `.card--feature` | Text column beside a decorative panel, stacking below 62em |
+
+Each row is its own flex line, so a value follows its own label rather than aligning to a shared column, as in the reference. The colon after each label is added in CSS, so the markup carries only the label text. Text colors keep the AA-safe tokens rather than the reference Gray-400, which reaches only 2.3:1 on white.
 
 ### Exactly reproduced values
 

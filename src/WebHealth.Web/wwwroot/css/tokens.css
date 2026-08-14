@@ -120,6 +120,16 @@
     --radius-tile: 12px;
     --radius-pill: 999px;
 
+    /* Separator stroke, taken from Figma node 47:276: the gradient runs to 99%
+       of the width rather than fading symmetrically. Shared by the sidebar and
+       the card divider. */
+    --divider-line: linear-gradient(
+        90deg,
+        rgba(224, 225, 226, 0) 0%,
+        rgb(224, 225, 226) 49.52%,
+        rgba(224, 225, 226, 0.15625) 99.04%
+    );
+
     /* Elevation, taken from the Figma card shadow. */
     --shadow-card: 0 3.5px 5.5px 0 rgba(0, 0, 0, 0.02);
     --shadow-raised: 0 4px 12px 0 rgba(45, 55, 72, 0.12);
@@ -170,13 +180,7 @@
     --sidebar-icon-active-surface: var(--color-teal-300);
     --sidebar-support-surface: var(--color-teal-300);
     --sidebar-support-text: var(--color-white);
-    /* Figma node 47:276: a 233.25x1 stroke whose gradient runs to x=231. */
-    --sidebar-divider: linear-gradient(
-        90deg,
-        rgba(224, 225, 226, 0) 0%,
-        rgb(224, 225, 226) 49.52%,
-        rgba(224, 225, 226, 0.15625) 99.04%
-    );
+    --sidebar-divider: var(--divider-line);
 
     /* Focus. Kept identical for every interactive element. */
     --focus-ring-color: var(--color-purple-blue-500);

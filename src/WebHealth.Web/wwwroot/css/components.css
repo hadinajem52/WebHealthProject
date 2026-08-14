@@ -6,23 +6,50 @@
 
 /* Cards ------------------------------------------------------------------ */
 
+/*
+ * Card anatomy follows Figma nodes 4:289 and 68:448: an optional eyebrow, an
+ * 18px bold heading, supporting text, an optional divider, and inline
+ * label/value rows on a 36px pitch. Text colors keep the AA-safe tokens rather
+ * than the reference Gray-400, which does not reach 4.5:1 on white.
+ */
+
 .card {
-    padding: var(--space-5);
+    padding: 1.3125rem; /* 21px */
     border-radius: var(--radius-card);
     background-color: var(--surface-raised);
     box-shadow: var(--shadow-card);
 }
 
+.card__eyebrow {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs); /* 12px */
+    font-weight: 700;
+    line-height: var(--line-height-base);
+}
+
+.card__eyebrow + .card__title {
+    margin-top: 0.1875rem; /* 3px */
+}
+
 .card__title {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-lg); /* 18px */
     font-weight: 700;
     line-height: var(--line-height-tight);
 }
 
 .card__subtitle {
-    margin-top: var(--space-1);
+    margin-top: 0.375rem;
     color: var(--text-secondary);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-sm); /* 14px */
+    font-weight: 400;
+    line-height: var(--line-height-tight);
+}
+
+.card__divider {
+    height: 1px;
+    margin: var(--space-5) 0;
+    border: 0;
+    background: var(--divider-line);
 }
 
 .card__body {
@@ -31,6 +58,63 @@
 
 .card__body > * + * {
     margin-top: var(--space-3);
+}
+
+.card__action {
+    display: inline-flex;
+    align-items: center;
+    margin-top: var(--space-4);
+    color: var(--text-primary);
+    font-size: var(--font-size-xs); /* 12px */
+    font-weight: 700;
+    gap: var(--space-1); /* 4px */
+    text-decoration: none;
+}
+
+.card__action:hover {
+    text-decoration: underline;
+}
+
+.card__action svg {
+    width: 0.75rem; /* 12px */
+    height: 0.75rem;
+}
+
+/* Feature card: text column beside a decorative panel (node 4:289). */
+
+.card--feature {
+    display: grid;
+    align-items: center;
+    gap: var(--space-5);
+    grid-template-columns: 1fr;
+}
+
+.card--feature__text {
+    display: flex;
+    max-width: 26rem;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.card--feature__panel {
+    display: grid;
+    min-height: 10rem;
+    border-radius: var(--radius-tile);
+    background: url("../images/sidebar-support.png") center / cover no-repeat,
+        var(--color-teal-300);
+    color: var(--color-white);
+    place-items: center;
+}
+
+.card--feature__panel svg {
+    width: 3rem;
+    height: 3rem;
+}
+
+@media (min-width: 62em) {
+    .card--feature {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 22.5rem);
+    }
 }
 
 .card-grid {
@@ -43,22 +127,40 @@
     margin-top: var(--space-5);
 }
 
+/*
+ * Each row is its own line, so a value follows its own label instead of being
+ * aligned to a shared column (node 68:448).
+ */
 .data-list {
-    display: grid;
+    display: flex;
     margin: 0;
-    gap: var(--space-3);
-    grid-template-columns: minmax(8rem, auto) 1fr;
+    flex-direction: column;
+    gap: 1.125rem; /* 18px, giving the 36px row pitch */
+}
+
+.data-list__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
 }
 
 .data-list dt {
     color: var(--text-secondary);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-xs); /* 12px */
     font-weight: 700;
+    line-height: var(--line-height-base);
+}
+
+.data-list dt::after {
+    content: ":";
 }
 
 .data-list dd {
     margin: 0;
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    line-height: var(--line-height-base);
 }
 
 code,

@@ -4,48 +4,83 @@
 }
 
 <div class="stack">
+    <section class="card card--feature">
+        <div class="card--feature__text">
+            <p class="card__eyebrow">Built in Phase 1</p>
+            <h2 class="card__title">Application shell</h2>
+            <p class="card__subtitle">
+                From tokens, cards and navigation to error and empty states, the reusable
+                shell is in place and every later page is built on it.
+            </p>
+            <a class="card__action" href="/health/ready">
+                <span>Check readiness</span>
+                @await Html.PartialAsync("_Icon", "arrow-right")
+            </a>
+        </div>
+        <div class="card--feature__panel">
+            @await Html.PartialAsync("_Icon", "brand")
+        </div>
+    </section>
+
     <div class="card-grid">
         <section class="card">
             <h2 class="card__title">Shell</h2>
             <p class="card__subtitle">Reusable layout delivered in Phase 1.</p>
-            <div class="card__body">
-                <dl class="data-list">
+            <hr class="card__divider" />
+            <dl class="data-list">
+                <div class="data-list__row">
                     <dt>Layout</dt>
-                    <dd>Shared layout, sidebar, header, breadcrumbs and footer.</dd>
+                    <dd>Sidebar, header, breadcrumbs and footer</dd>
+                </div>
+                <div class="data-list__row">
                     <dt>Messages</dt>
-                    <dd>Flash messages and a validation summary rendered above page content.</dd>
+                    <dd>Flash messages and a validation summary</dd>
+                </div>
+                <div class="data-list__row">
                     <dt>States</dt>
-                    <dd>Accessible error and empty-state components.</dd>
-                </dl>
-            </div>
+                    <dd>Accessible error and empty states</dd>
+                </div>
+            </dl>
         </section>
 
         <section class="card">
             <h2 class="card__title">Accessibility</h2>
             <p class="card__subtitle">Behavior verified for every page using this shell.</p>
-            <div class="card__body">
-                <dl class="data-list">
+            <hr class="card__divider" />
+            <dl class="data-list">
+                <div class="data-list__row">
                     <dt>Landmarks</dt>
-                    <dd>Skip link, navigation, banner, main and content-information landmarks.</dd>
+                    <dd>Skip link, navigation, banner and main</dd>
+                </div>
+                <div class="data-list__row">
                     <dt>Keyboard</dt>
-                    <dd>Visible focus, drawer focus containment and Escape to close.</dd>
+                    <dd>Visible focus and drawer focus containment</dd>
+                </div>
+                <div class="data-list__row">
                     <dt>Motion</dt>
-                    <dd>Transitions are removed when reduced motion is requested.</dd>
-                </dl>
-            </div>
+                    <dd>Transitions removed when reduced motion is set</dd>
+                </div>
+            </dl>
         </section>
 
         <section class="card">
             <h2 class="card__title">Foundation</h2>
             <p class="card__subtitle">Runtime endpoints available in this build.</p>
-            <div class="card__body">
-                <dl class="data-list">
+            <hr class="card__divider" />
+            <dl class="data-list">
+                <div class="data-list__row">
                     <dt>Liveness</dt>
                     <dd><a href="/health/live">/health/live</a></dd>
+                </div>
+                <div class="data-list__row">
                     <dt>Readiness</dt>
                     <dd><a href="/health/ready">/health/ready</a></dd>
-                </dl>
-            </div>
+                </div>
+                <div class="data-list__row">
+                    <dt>Database</dt>
+                    <dd>PostgreSQL, migrated explicitly</dd>
+                </div>
+            </dl>
         </section>
     </div>
 
