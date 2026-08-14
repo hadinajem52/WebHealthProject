@@ -67,7 +67,8 @@ public sealed class AuditContractTests
                 nameof(WebsiteAuditSnapshot.TechnologyCms),
                 nameof(WebsiteAuditSnapshot.IsEnabled),
                 nameof(WebsiteAuditSnapshot.IsDeleted),
-                nameof(WebsiteAuditSnapshot.Version));
+                nameof(WebsiteAuditSnapshot.Version),
+                nameof(WebsiteAuditSnapshot.Tags));
         typeof(EnvironmentAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
                 nameof(EnvironmentAuditSnapshot.EnvironmentId),

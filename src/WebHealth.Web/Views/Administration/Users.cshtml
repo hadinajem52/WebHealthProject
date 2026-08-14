@@ -77,7 +77,7 @@
                                     @(user.IsDisabled ? "Disabled" : "Enabled")
                                 </span>
                             </td>
-                            <td class="data-table__action">
+                            <td class="data-table__action" data-label="Actions">
                                 <a asp-action="EditUser" asp-route-id="@user.Id">
                                     Edit<span class="visually-hidden"> access for @user.DisplayName</span>
                                 </a>

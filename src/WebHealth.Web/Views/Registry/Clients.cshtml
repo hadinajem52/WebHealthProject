@@ -46,7 +46,7 @@
                         <td data-label="Owner">@client.OwnerName</td>
                         <td data-label="Websites">@client.VisibleWebsiteCount</td>
                         <td data-label="Status"><span class="badge" data-status="@(client.IsDeleted ? "danger" : client.IsActive ? "success" : "warning")">@(client.IsDeleted ? "Deleted" : client.IsActive ? "Active" : "Disabled")</span></td>
-                        <td class="data-table__action"><a asp-action="Client" asp-route-id="@client.Id">Details<span class="visually-hidden"> for @client.Name</span></a></td>
+                        <td class="data-table__action" data-label="Actions"><a asp-action="Client" asp-route-id="@client.Id">Details<span class="visually-hidden"> for @client.Name</span></a></td>
                     </tr>
                 }
                 </tbody>

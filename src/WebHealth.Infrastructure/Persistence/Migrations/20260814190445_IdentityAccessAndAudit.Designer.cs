@@ -12,8 +12,8 @@ using WebHealth.Infrastructure.Persistence;
 namespace WebHealth.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260814100602_AssignmentAndAuditFoundation")]
-    partial class AssignmentAndAuditFoundation
+    [Migration("20260814190445_IdentityAccessAndAudit")]
+    partial class IdentityAccessAndAudit
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

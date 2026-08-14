@@ -104,7 +104,8 @@ public sealed record WebsiteAuditSnapshot(
     string? TechnologyCms,
     bool IsEnabled,
     bool IsDeleted,
-    long Version);
+    long Version,
+    IReadOnlyList<string> Tags);
 
 public enum EnvironmentAuditAction
 {

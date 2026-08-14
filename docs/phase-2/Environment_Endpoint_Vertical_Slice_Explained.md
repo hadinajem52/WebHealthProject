@@ -425,8 +425,7 @@ than overwriting the newer state.
 The explicit migrations are:
 
 ```text
-20260814115913_EnvironmentEndpointVerticalSlice
-20260814123343_HardenTargetAuthorization
+RegistryFoundation
 ```
 
 It adds or completes persistence for:

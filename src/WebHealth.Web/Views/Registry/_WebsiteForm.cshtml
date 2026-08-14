@@ -23,5 +23,11 @@ else
     <span asp-validation-for="OwnerSubjectId"></span>
 </div>
 <div class="form-field"><label asp-for="TechnologyCms"></label><input asp-for="TechnologyCms" placeholder="For example, WordPress" /><span asp-validation-for="TechnologyCms"></span></div>
+<div class="form-field">
+    <label asp-for="Tags"></label>
+    <input asp-for="Tags" placeholder="WordPress, Europe, Support team" />
+    <span class="form-field__hint">Comma-separated. Whitespace and casing are normalized, and duplicates are stored once.</span>
+    <span asp-validation-for="Tags"></span>
+</div>
 <label class="switch-field"><input asp-for="IsEnabled" type="checkbox" /><span>Website enabled</span></label>
 <p class="form-field__hint">An active environment must exist before the website can be enabled.</p>

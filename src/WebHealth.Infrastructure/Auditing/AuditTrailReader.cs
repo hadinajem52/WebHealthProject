@@ -62,6 +62,20 @@ public sealed class AuditTrailReader(ApplicationDbContext dbContext) : IAuditTra
             .Select(user => new AuditActor(user.Id, user.DisplayName, user.Email ?? string.Empty))
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<string>> ListActionsAsync(CancellationToken cancellationToken = default) =>
+        await dbContext.AuditEvents.AsNoTracking()
+            .Select(auditEvent => auditEvent.Action)
+            .Distinct()
+            .OrderBy(action => action)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<string>> ListEntityTypesAsync(CancellationToken cancellationToken = default) =>
+        await dbContext.AuditEvents.AsNoTracking()
+            .Select(auditEvent => auditEvent.EntityType)
+            .Distinct()
+            .OrderBy(entityType => entityType)
+            .ToListAsync(cancellationToken);
+
     private static IQueryable<AuditEvent> ApplyFilters(
         IQueryable<AuditEvent> events,
         AuditSearchQuery query)

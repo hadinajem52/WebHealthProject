@@ -138,7 +138,7 @@ src/WebHealth.Infrastructure/
 │   ├── AuditEventConfiguration.cs
 │   └── AuthorizationDenialAuditWriter.cs
 └── Persistence/Migrations/
-    └── 20260814100602_AssignmentAndAuditFoundation.cs
+    └── *_IdentityAccessAndAudit.cs
 ```
 
 ### Web implementation
@@ -463,7 +463,7 @@ The development database now includes the assignment and audit foundation
 migration:
 
 ```text
-20260814100602_AssignmentAndAuditFoundation
+IdentityAccessAndAudit
 ```
 
 It adds or changes:

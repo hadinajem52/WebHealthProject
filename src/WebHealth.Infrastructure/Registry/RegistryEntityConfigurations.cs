@@ -73,6 +73,37 @@ internal sealed class WebsiteConfiguration : IEntityTypeConfiguration<Website>
     }
 }
 
+internal sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
+{
+    public void Configure(EntityTypeBuilder<Tag> builder)
+    {
+        builder.ToTable("tag");
+        builder.Property(tag => tag.Name).HasMaxLength(100).IsRequired();
+        builder.Property(tag => tag.NormalizedName).HasMaxLength(100).IsRequired();
+        builder.Property(tag => tag.NormalizationVersion).HasDefaultValue(NameNormalizer.Version);
+        builder.Property(tag => tag.Version).IsConcurrencyToken();
+        builder.HasIndex(tag => new { tag.NormalizedName, tag.NormalizationVersion }).IsUnique();
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(tag => tag.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class WebsiteTagConfiguration : IEntityTypeConfiguration<WebsiteTag>
+{
+    public void Configure(EntityTypeBuilder<WebsiteTag> builder)
+    {
+        builder.ToTable("website_tag");
+        builder.HasKey(websiteTag => new { websiteTag.WebsiteId, websiteTag.TagId });
+        builder.HasOne(websiteTag => websiteTag.Website).WithMany(website => website.WebsiteTags)
+            .HasForeignKey(websiteTag => websiteTag.WebsiteId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(websiteTag => websiteTag.Tag).WithMany(tag => tag.WebsiteTags)
+            .HasForeignKey(websiteTag => websiteTag.TagId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(websiteTag => websiteTag.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(websiteTag => websiteTag.TagId);
+    }
+}
+
 internal sealed class WebsiteEnvironmentConfiguration : IEntityTypeConfiguration<WebsiteEnvironment>
 {
     public void Configure(EntityTypeBuilder<WebsiteEnvironment> builder)

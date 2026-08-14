@@ -41,11 +41,23 @@
             </div>
             <div class="form-field">
                 <label asp-for="Action"></label>
-                <input asp-for="Action" placeholder="team.updated" />
+                <select asp-for="Action">
+                    <option value="">All actions</option>
+                    @foreach (var action in Model.Actions)
+                    {
+                        <option value="@action">@action.Replace('.', ' ')</option>
+                    }
+                </select>
             </div>
             <div class="form-field">
                 <label asp-for="Entity"></label>
-                <input asp-for="Entity" placeholder="type or identifier" />
+                <input asp-for="Entity" list="audit-entity-types" placeholder="type or identifier" />
+                <datalist id="audit-entity-types">
+                    @foreach (var entityType in Model.EntityTypes)
+                    {
+                        <option value="@entityType"></option>
+                    }
+                </datalist>
             </div>
             <div class="filter-grid__actions">
                 <button class="button button--primary" type="submit">
@@ -90,7 +102,10 @@
                                     <span class="data-table__primary">@auditEvent.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</span>
                                     <span class="data-table__secondary">@auditEvent.ActorDisplayName</span>
                                 </td>
-                                <td data-label="Action"><code>@auditEvent.Action</code></td>
+                                <td data-label="Action">
+                                    <span class="data-table__primary audit-action">@auditEvent.Action.Replace('.', ' ')</span>
+                                    <code class="data-table__secondary">@auditEvent.Action</code>
+                                </td>
                                 <td data-label="Entity">
                                     <span class="data-table__primary">@auditEvent.EntityType</span>
                                     <span class="data-table__secondary code">@auditEvent.EntityIdentifier</span>

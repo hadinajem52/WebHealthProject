@@ -68,7 +68,7 @@
                                     @(team.IsDisabled ? "Disabled" : "Enabled")
                                 </span>
                             </td>
-                            <td class="data-table__action">
+                            <td class="data-table__action" data-label="Actions">
                                 <a asp-action="EditTeam" asp-route-id="@team.Id">
                                     Edit<span class="visually-hidden"> @team.Name</span>
                                 </a>

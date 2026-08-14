@@ -25,7 +25,7 @@
 
 ## Data impact
 
-Migration `20260814110940_ClientWebsiteVerticalSlice` adds `client`, `website`, the minimal `environment` foundation needed for the enabling invariant, and scoped `access_grant`. Endpoint scope is intentionally deferred until the endpoint table exists.
+The consolidated `RegistryFoundation` migration adds `client`, `website`, `environment`, and scoped `access_grant` with their final Phase 2 relationships and constraints.
 
 The migration is explicit; the web application does not migrate its schema at startup.
 

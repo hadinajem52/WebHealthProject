@@ -25,7 +25,8 @@ internal sealed class WebsiteRegistryService(
         }
 
         var name = RegistryMutationSupport.TrimName(command.Name);
-        var errors = ValidateFields(name, command.TechnologyCms);
+        var tags = TagNormalizer.Normalize(command.Tags);
+        var errors = ValidateFields(name, command.TechnologyCms, tags);
         if (command.IsEnabled)
         {
             errors.Add("Add an active environment before enabling the website.");
@@ -65,6 +66,7 @@ internal sealed class WebsiteRegistryService(
             Version = 1
         };
         dbContext.Websites.Add(website);
+        await ReplaceTagsAsync(website, tags, access.UserId, now, cancellationToken);
 
         try
         {
@@ -95,14 +97,18 @@ internal sealed class WebsiteRegistryService(
         }
 
         var name = RegistryMutationSupport.TrimName(command.Name);
-        var errors = ValidateFields(name, command.TechnologyCms);
+        var tags = TagNormalizer.Normalize(command.Tags);
+        var errors = ValidateFields(name, command.TechnologyCms, tags);
         if (errors.Count > 0)
         {
             return Validation(errors);
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var website = await dbContext.Websites.SingleOrDefaultAsync(
+        var website = await dbContext.Websites
+            .Include(candidate => candidate.WebsiteTags)
+            .ThenInclude(websiteTag => websiteTag.Tag)
+            .SingleOrDefaultAsync(
             candidate => candidate.Id == command.WebsiteId,
             cancellationToken);
         if (website is null)
@@ -137,6 +143,7 @@ internal sealed class WebsiteRegistryService(
         website.OwnerSubjectId = command.OwnerSubjectId;
         website.TechnologyCms = NormalizeTechnology(command.TechnologyCms);
         website.IsEnabled = command.IsEnabled;
+        await ReplaceTagsAsync(website, tags, access.UserId, now, cancellationToken);
         Touch(website, access.UserId, now);
 
         try
@@ -191,7 +198,10 @@ internal sealed class WebsiteRegistryService(
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var website = await dbContext.Websites.SingleOrDefaultAsync(
+        var website = await dbContext.Websites
+            .Include(candidate => candidate.WebsiteTags)
+            .ThenInclude(websiteTag => websiteTag.Tag)
+            .SingleOrDefaultAsync(
             candidate => candidate.Id == command.EntityId,
             cancellationToken);
         if (website is null)
@@ -264,12 +274,25 @@ internal sealed class WebsiteRegistryService(
         return environments.Count > 0;
     }
 
-    private static List<string> ValidateFields(string name, string? technologyCms)
+    private static List<string> ValidateFields(
+        string name,
+        string? technologyCms,
+        IReadOnlyList<NormalizedTag> tags)
     {
         var errors = RegistryMutationSupport.ValidateName(name);
         if (technologyCms?.Trim().Length > 200)
         {
             errors.Add("Technology/CMS cannot exceed 200 characters.");
+        }
+
+        if (tags.Count > TagNormalizer.MaximumTagsPerWebsite)
+        {
+            errors.Add($"A website can have at most {TagNormalizer.MaximumTagsPerWebsite} tags.");
+        }
+
+        if (tags.Any(tag => tag.Name.Length > TagNormalizer.MaximumTagLength))
+        {
+            errors.Add($"Each tag must be {TagNormalizer.MaximumTagLength} characters or fewer.");
         }
 
         return errors;
@@ -325,7 +348,74 @@ internal sealed class WebsiteRegistryService(
         website.TechnologyCms,
         website.IsEnabled,
         website.DeletedAt is not null,
-        website.Version);
+        website.Version,
+        website.WebsiteTags.Select(websiteTag => websiteTag.Tag.Name)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray());
+
+    private async Task ReplaceTagsAsync(
+        Website website,
+        IReadOnlyList<NormalizedTag> requestedTags,
+        Guid actorUserId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var normalizedNames = requestedTags.Select(tag => tag.NormalizedName).ToArray();
+        var tagsByName = await dbContext.Tags
+            .Where(tag => normalizedNames.Contains(tag.NormalizedName)
+                && tag.NormalizationVersion == NameNormalizer.Version)
+            .ToDictionaryAsync(tag => tag.NormalizedName, StringComparer.Ordinal, cancellationToken);
+
+        foreach (var requestedTag in requestedTags)
+        {
+            if (!tagsByName.ContainsKey(requestedTag.NormalizedName))
+            {
+                await InsertTagIfMissingAsync(requestedTag, actorUserId, now, cancellationToken);
+            }
+        }
+
+        tagsByName = await dbContext.Tags
+            .Where(tag => normalizedNames.Contains(tag.NormalizedName)
+                && tag.NormalizationVersion == NameNormalizer.Version)
+            .ToDictionaryAsync(tag => tag.NormalizedName, StringComparer.Ordinal, cancellationToken);
+
+        foreach (var requestedTag in requestedTags)
+        {
+            var tag = tagsByName[requestedTag.NormalizedName];
+            var existing = website.WebsiteTags.SingleOrDefault(websiteTag => websiteTag.TagId == tag.Id);
+            if (existing is null)
+            {
+                website.WebsiteTags.Add(new WebsiteTag
+                {
+                    WebsiteId = website.Id,
+                    TagId = tag.Id,
+                    Tag = tag,
+                    CreatedAt = now,
+                    CreatedByUserId = actorUserId
+                });
+            }
+        }
+
+        var requestedIds = tagsByName.Values.Select(tag => tag.Id).ToHashSet();
+        foreach (var websiteTag in website.WebsiteTags.Where(item => !requestedIds.Contains(item.TagId)).ToArray())
+        {
+            website.WebsiteTags.Remove(websiteTag);
+            dbContext.WebsiteTags.Remove(websiteTag);
+        }
+    }
+
+    private Task<int> InsertTagIfMissingAsync(
+        NormalizedTag tag,
+        Guid actorUserId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO web_health.tag
+                (id, name, normalized_name, normalization_version, created_at, created_by_user_id, version)
+            VALUES
+                ({Guid.NewGuid()}, {tag.Name}, {tag.NormalizedName}, {NameNormalizer.Version}, {now}, {actorUserId}, 1)
+            ON CONFLICT (normalized_name, normalization_version) DO NOTHING
+            """, cancellationToken);
 
     private static string? NormalizeTechnology(string? technologyCms)
     {

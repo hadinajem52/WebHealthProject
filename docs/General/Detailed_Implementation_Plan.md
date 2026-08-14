@@ -286,7 +286,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 9.3 Registry and audit
 
-- [ ] Implement clients, websites, environments, endpoints, tags, and ownership. Registry targets and ownership are complete; tags remain.
+- [x] Implement clients, websites, environments, endpoints, tags, and ownership. Evidence: [`../phase-2/Tags_Lifecycle_and_Audit_UI.md`](../phase-2/Tags_Lifecycle_and_Audit_UI.md).
 - [x] Enforce trimmed, case-insensitive client uniqueness.
 - [x] Enforce website-name uniqueness within a client.
 - [x] Require an environment before monitoring can be enabled.
@@ -294,11 +294,11 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Require HTTPS for production unless an administrator records an exception reason.
 - [x] Enforce normalized URL uniqueness per environment and monitor type.
 - [x] Implement website owner inheritance and endpoint override.
-- [ ] Trim and deduplicate tags.
+- [x] Trim and deduplicate tags through the shared normalizer and PostgreSQL unique index.
 - [x] Implement soft deletion for current registry configuration with history.
 - [x] Add optimistic concurrency to current editable registry configuration.
 - [x] Record append-only audit events with safe before/after values for administration, assignment, and authorization denials. Registry configuration events follow registry CRUD. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
-- [ ] Output-encode labels and notes.
+- [x] Output-encode labels, notes, tags, and safe audit values through Razor rendering.
 
 ### 9.4 Database and migration
 

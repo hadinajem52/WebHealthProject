@@ -29,7 +29,7 @@ Registry targets and explicit Viewer access grants are not part of this incremen
 
 ## Data and migration
 
-`AssignmentAndAuditFoundation` adds:
+`IdentityAccessAndAudit` adds:
 
 - `team` with normalized identity, audit actors/timestamps, disabled state, and `version` optimistic concurrency;
 - `team_member` with effective `[from, until)` membership history;

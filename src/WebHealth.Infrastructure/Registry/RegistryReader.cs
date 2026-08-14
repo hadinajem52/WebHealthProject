@@ -97,6 +97,7 @@ internal sealed class RegistryReader(
         var ownerIds = websites.Select(website => website.OwnerSubjectId)
             .Append(client.OwnerSubjectId);
         var ownerNames = await LoadOwnerNamesAsync(ownerIds, cancellationToken);
+        var tags = await LoadWebsiteTagsAsync(websites.Select(website => website.Id), cancellationToken);
         return new ClientDetails(
             client.Id,
             client.Name,
@@ -106,13 +107,38 @@ internal sealed class RegistryReader(
             client.IsActive,
             client.IsDeleted,
             client.Version,
-            ToWebsiteItems(websites, ownerNames));
+            ToWebsiteItems(websites, ownerNames, tags));
     }
 
     public async Task<IReadOnlyList<WebsiteListItem>> ListWebsitesAsync(
         RegistryAccessContext access,
+        Guid? tagId = null,
         CancellationToken cancellationToken = default) =>
-        await ListWebsitesAsync(access, isDeleted: false, cancellationToken);
+        await ListWebsitesAsync(access, isDeleted: false, tagId, cancellationToken);
+
+    public async Task<IReadOnlyList<RegistryTagOption>> ListTagsAsync(
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var visibleWebsiteIds = await visibility.ApplyWebsiteScope(
+                dbContext.Websites.AsNoTracking(), access, DateTimeOffset.UtcNow)
+            .Where(website => website.DeletedAt == null)
+            .Select(website => website.Id)
+            .ToArrayAsync(cancellationToken);
+        if (visibleWebsiteIds.Length == 0)
+        {
+            return [];
+        }
+
+        var tagRows = await dbContext.WebsiteTags.AsNoTracking()
+            .Where(websiteTag => visibleWebsiteIds.Contains(websiteTag.WebsiteId))
+            .Select(websiteTag => new { websiteTag.TagId, websiteTag.Tag.Name })
+            .ToListAsync(cancellationToken);
+        return tagRows.GroupBy(row => new { row.TagId, row.Name })
+            .Select(group => new RegistryTagOption(group.Key.TagId, group.Key.Name, group.Count()))
+            .OrderBy(tag => tag.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
     public async Task<IReadOnlyList<WebsiteListItem>> ListDeletedWebsitesAsync(
         RegistryAccessContext access,
@@ -123,25 +149,33 @@ internal sealed class RegistryReader(
             return [];
         }
 
-        return await ListWebsitesAsync(access, isDeleted: true, cancellationToken);
+        return await ListWebsitesAsync(access, isDeleted: true, null, cancellationToken);
     }
 
     private async Task<IReadOnlyList<WebsiteListItem>> ListWebsitesAsync(
         RegistryAccessContext access,
         bool isDeleted,
+        Guid? tagId,
         CancellationToken cancellationToken)
     {
-        var websites = await LoadWebsiteRowsAsync(
-            visibility.ApplyWebsiteScope(
+        var query = visibility.ApplyWebsiteScope(
                 dbContext.Websites.AsNoTracking(),
                 access,
                 DateTimeOffset.UtcNow)
-                .Where(website => (website.DeletedAt != null) == isDeleted),
+            .Where(website => (website.DeletedAt != null) == isDeleted);
+        if (tagId is { } selectedTagId)
+        {
+            query = query.Where(website => website.WebsiteTags.Any(websiteTag => websiteTag.TagId == selectedTagId));
+        }
+
+        var websites = await LoadWebsiteRowsAsync(
+            query,
             cancellationToken);
         var ownerNames = await LoadOwnerNamesAsync(
             websites.Select(website => website.OwnerSubjectId),
             cancellationToken);
-        return ToWebsiteItems(websites, ownerNames);
+        var tags = await LoadWebsiteTagsAsync(websites.Select(website => website.Id), cancellationToken);
+        return ToWebsiteItems(websites, ownerNames, tags);
     }
 
     public async Task<WebsiteDetails?> FindWebsiteAsync(
@@ -165,6 +199,7 @@ internal sealed class RegistryReader(
         }
 
         var ownerNames = await LoadOwnerNamesAsync([website.OwnerSubjectId], cancellationToken);
+        var tags = await LoadWebsiteTagsAsync([website.Id], cancellationToken);
         return new WebsiteDetails(
             website.Id,
             website.ClientId,
@@ -176,7 +211,8 @@ internal sealed class RegistryReader(
             website.IsEnabled,
             website.IsDeleted,
             website.Version,
-            website.ActiveEnvironmentCount);
+            website.ActiveEnvironmentCount,
+            tags.GetValueOrDefault(website.Id, []));
     }
 
     public async Task<IReadOnlyList<RegistryOwnerOption>> ListOwnersAsync(
@@ -242,7 +278,8 @@ internal sealed class RegistryReader(
 
     private static IReadOnlyList<WebsiteListItem> ToWebsiteItems(
         IEnumerable<WebsiteRow> websites,
-        IReadOnlyDictionary<Guid, string> ownerNames) =>
+        IReadOnlyDictionary<Guid, string> ownerNames,
+        IReadOnlyDictionary<Guid, IReadOnlyList<string>>? tags = null) =>
         websites.Select(website => new WebsiteListItem(
             website.Id,
             website.ClientId,
@@ -253,7 +290,24 @@ internal sealed class RegistryReader(
             website.IsEnabled,
             website.IsDeleted,
             website.Version,
-            website.ActiveEnvironmentCount)).ToArray();
+            website.ActiveEnvironmentCount,
+            tags?.GetValueOrDefault(website.Id, []) ?? [])).ToArray();
+
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> LoadWebsiteTagsAsync(
+        IEnumerable<Guid> websiteIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = websiteIds.Distinct().ToArray();
+        var rows = await dbContext.WebsiteTags.AsNoTracking()
+            .Where(websiteTag => ids.Contains(websiteTag.WebsiteId))
+            .OrderBy(websiteTag => websiteTag.Tag.Name)
+            .Select(websiteTag => new { websiteTag.WebsiteId, websiteTag.Tag.Name })
+            .ToListAsync(cancellationToken);
+        return rows.GroupBy(row => row.WebsiteId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(row => row.Name).ToArray());
+    }
 
     private static Task<List<WebsiteRow>> LoadWebsiteRowsAsync(
         IQueryable<Website> websites,

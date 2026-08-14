@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.IntegrationTests.Support;
 using WebHealth.Web.Shell;
+using WebHealth.Web.Models;
+using WebHealth.Application.Registry;
 using Xunit;
 
 namespace WebHealth.IntegrationTests;
@@ -113,6 +115,17 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     }
 
     [Fact]
+    public async Task RegistryLabelsTagsAndNotes_AreHtmlEncoded()
+    {
+        using var client = factory.CreateHttpsClient();
+
+        var content = await client.GetStringAsync("/__tests/shell/encoded-registry");
+
+        Assert.DoesNotContain(ShellProbeController.UntrustedMarkup, content, StringComparison.Ordinal);
+        Assert.Contains("&lt;script&gt;alert", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ErrorPage_UsesTheSharedShellAndTheErrorStateComponent()
     {
         using var client = factory.CreateHttpsClient();
@@ -166,6 +179,7 @@ public sealed class ShellProbeController : Controller
 {
     public const string FlashText = "Shell flash probe message.";
     public const string ValidationText = "Shell validation probe message.";
+    public const string UntrustedMarkup = "<script>alert('encoded')</script>";
 
     [HttpGet("flash")]
     public IActionResult Flash()
@@ -179,6 +193,36 @@ public sealed class ShellProbeController : Controller
     {
         ModelState.AddModelError("Probe", ValidationText);
         return View("~/Views/Home/Index.cshtml");
+    }
+
+    [HttpGet("encoded-registry")]
+    public IActionResult EncodedRegistry()
+    {
+        var website = new WebsiteListItem(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Client",
+            UntrustedMarkup,
+            "Owner",
+            null,
+            false,
+            false,
+            1,
+            0,
+            [UntrustedMarkup]);
+        var client = new ClientDetails(
+            Guid.NewGuid(),
+            "Client",
+            Guid.NewGuid(),
+            "Owner",
+            UntrustedMarkup,
+            true,
+            false,
+            1,
+            [website]);
+        return View(
+            "~/Views/Registry/Client.cshtml",
+            new ClientDetailsViewModel(client, false));
     }
 
     [HttpGet("unavailable")]

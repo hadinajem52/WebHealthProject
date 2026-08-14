@@ -29,7 +29,9 @@ internal static class DatabaseFoundationAssertions
         "endpoint",
         "endpoint_monitor",
         "policy_profile",
+        "tag",
         "website",
+        "website_tag",
         "app_role",
         "app_role_claim",
         "app_user",
@@ -52,8 +54,8 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(7);
-        context.Model.GetEntityTypes().Should().HaveCount(19);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(3);
+        context.Model.GetEntityTypes().Should().HaveCount(21);
 
         var state = await ReadFoundationState(connectionString);
         state.SchemaExists.Should().BeTrue();
@@ -63,6 +65,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyIdentityBootstrapAsync(connectionString);
         await VerifyClientWebsiteRegistryAsync(connectionString);
         await VerifyEnvironmentEndpointRegistryAsync(connectionString);
+        await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
 
     private static async Task VerifyEnvironmentEndpointRegistryAsync(string connectionString)
@@ -87,7 +90,8 @@ internal static class DatabaseFoundationAssertions
             .Select(owner => owner.Id).SingleAsync();
         var administratorOwnerId = await database.OwnerSubjects.Where(owner => owner.UserId == administrator.Id)
             .Select(owner => owner.Id).SingleAsync();
-        var website = await database.Websites.SingleAsync(candidate => candidate.Client.Name == "Second Client");
+        var website = await database.Websites.SingleAsync(candidate =>
+            candidate.Client.Name == "Second Client" && candidate.Name == "Portal");
         var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
         var operationsAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Operations]);
 
@@ -306,13 +310,28 @@ internal static class DatabaseFoundationAssertions
             && !(payload.BeforeValues ?? string.Empty).Contains("Updated integration fixture", StringComparison.Ordinal)
             && !(payload.AfterValues ?? string.Empty).Contains("Updated integration fixture", StringComparison.Ordinal));
 
+    }
+
+    private static async Task VerifyPhaseOneUpgradeAndRepeatabilityAsync(
+        ApplicationDbContext database,
+        string connectionString)
+    {
         database.ChangeTracker.Clear();
-        await database.Database.MigrateAsync("20260814115913_EnvironmentEndpointVerticalSlice");
+        await database.Database.MigrateAsync("InitialFoundation");
+        (await database.Database.GetAppliedMigrationsAsync()).Should().ContainSingle();
+        var baseline = await ReadFoundationState(connectionString);
+        baseline.Tables.Should().Equal(DatabaseConventions.MigrationsHistoryTable);
+
         await database.Database.MigrateAsync();
-        var upgradedEndpoint = await database.Endpoints.AsNoTracking().SingleAsync(candidate => candidate.Id == endpointId);
-        upgradedEndpoint.NormalizedHost.Should().Be("example.test");
-        upgradedEndpoint.EffectivePort.Should().Be(443);
+        var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
+        applied.Should().HaveCount(3);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
+        var upgraded = await ReadFoundationState(connectionString);
+        upgraded.Tables.Should().BeEquivalentTo(
+            ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
+
+        await database.Database.MigrateAsync();
+        (await database.Database.GetAppliedMigrationsAsync()).Should().Equal(applied);
     }
 
     private static async Task VerifyEnvironmentTypeConstraintAsync(string connectionString, Guid environmentId)
@@ -560,15 +579,16 @@ internal static class DatabaseFoundationAssertions
         staleClientUpdate.Status.Should().Be(RegistryMutationStatus.ConcurrencyConflict);
 
         var firstWebsite = await websites.CreateAsync(
-            new CreateWebsite(firstClientId, "  Portal  ", developerOwnerId, " ASP.NET ", false),
+            new CreateWebsite(firstClientId, "  Portal  ", developerOwnerId, " ASP.NET ", false,
+                ["  Europe ", "ASP.NET", "europe"]),
             administratorAccess);
         firstWebsite.Succeeded.Should().BeTrue();
         var firstWebsiteId = firstWebsite.EntityId ?? throw new InvalidOperationException("Website id was not returned.");
         (await websites.CreateAsync(
-            new CreateWebsite(firstClientId, "portal", developerOwnerId, null, false),
+            new CreateWebsite(firstClientId, "portal", developerOwnerId, null, false, []),
             administratorAccess)).Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         (await websites.CreateAsync(
-            new CreateWebsite(secondClientId, "Portal", administratorOwnerId, null, false),
+            new CreateWebsite(secondClientId, "Portal", administratorOwnerId, null, false, []),
             administratorAccess)).Succeeded.Should().BeTrue();
 
         var persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
@@ -579,7 +599,8 @@ internal static class DatabaseFoundationAssertions
                 persistedWebsite.OwnerSubjectId,
                 persistedWebsite.TechnologyCms,
                 true,
-                persistedWebsite.Version),
+                persistedWebsite.Version,
+                ["ASP.NET", "Europe"]),
             administratorAccess);
         enableWithoutEnvironment.Status.Should().Be(RegistryMutationStatus.ValidationFailed);
 
@@ -612,7 +633,8 @@ internal static class DatabaseFoundationAssertions
                 persistedWebsite.OwnerSubjectId,
                 persistedWebsite.TechnologyCms,
                 true,
-                persistedWebsite.Version),
+                persistedWebsite.Version,
+                ["ASP.NET", "Europe"]),
             administratorAccess)).Succeeded.Should().BeTrue();
 
         database.AccessGrants.Add(new AccessGrant
@@ -631,9 +653,54 @@ internal static class DatabaseFoundationAssertions
             developer.Id,
             [ApplicationRoles.DeveloperSupport]));
         developerClients.Select(client => client.Id).Should().Equal(firstClientId);
+        database.ChangeTracker.Clear();
+        persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
+        (await websites.UpdateAsync(
+            new UpdateWebsite(
+                persistedWebsite.Id,
+                persistedWebsite.Name,
+                persistedWebsite.OwnerSubjectId,
+                persistedWebsite.TechnologyCms,
+                persistedWebsite.IsEnabled,
+                persistedWebsite.Version,
+                ["ASP.NET", "Europe"]),
+            new RegistryAccessContext(developer.Id, [ApplicationRoles.DeveloperSupport])))
+            .Status.Should().Be(RegistryMutationStatus.Forbidden);
         var viewerWebsites = await reader.ListWebsitesAsync(new(viewer.Id, [ApplicationRoles.Viewer]));
         viewerWebsites.Should().Contain(website => website.Id == firstWebsiteId);
         viewerWebsites.Should().NotContain(website => website.ClientId == secondClientId);
+        viewerWebsites.Single(website => website.Id == firstWebsiteId).Tags.Should().Equal("ASP.NET", "Europe");
+        var europeTag = await database.Tags.SingleAsync(tag => tag.NormalizedName == "EUROPE");
+        (await database.Tags.CountAsync()).Should().Be(2, "repeated tag input is normalized and stored once");
+        (await reader.ListWebsitesAsync(
+            new(viewer.Id, [ApplicationRoles.Viewer]), europeTag.Id))
+            .Should().ContainSingle(website => website.Id == firstWebsiteId);
+        (await reader.ListTagsAsync(new(viewer.Id, [ApplicationRoles.Viewer])))
+            .Should().ContainSingle(tag => tag.Id == europeTag.Id && tag.WebsiteCount == 1);
+        await VerifyTagUniquenessConstraintAsync(connectionString, europeTag.Id);
+
+        var websiteAudit = await database.AuditEvents.AsNoTracking()
+            .Where(auditEvent => auditEvent.EntityIdentifier == firstWebsiteId.ToString())
+            .OrderByDescending(auditEvent => auditEvent.OccurredAt)
+            .FirstAsync();
+        websiteAudit.AfterValues.Should().Contain("ASP.NET").And.Contain("Europe");
+
+        var startConcurrentTagWrites = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var concurrentCreates = new[]
+        {
+            CreateWebsiteWithSharedTagAsync(
+                connectionString, firstClientId, "Concurrent Alpha", developerOwnerId,
+                administratorAccess, startConcurrentTagWrites.Task),
+            CreateWebsiteWithSharedTagAsync(
+                connectionString, secondClientId, "Concurrent Beta", administratorOwnerId,
+                administratorAccess, startConcurrentTagWrites.Task)
+        };
+        startConcurrentTagWrites.SetResult();
+        var concurrentResults = await Task.WhenAll(concurrentCreates);
+        concurrentResults.Should().OnlyContain(result => result.Succeeded);
+        var concurrentTag = await database.Tags.SingleAsync(tag => tag.NormalizedName == "CONCURRENT");
+        (await database.WebsiteTags.CountAsync(websiteTag => websiteTag.TagId == concurrentTag.Id))
+            .Should().Be(2);
 
         database.ChangeTracker.Clear();
         persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
@@ -648,6 +715,24 @@ internal static class DatabaseFoundationAssertions
             .Should().ContainSingle(website => website.Id == firstWebsiteId);
         (await reader.ListDeletedWebsitesAsync(new(developer.Id, [ApplicationRoles.DeveloperSupport])))
             .Should().BeEmpty();
+        persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
+        var replacementWebsite = await websites.CreateAsync(
+            new CreateWebsite(
+                firstClientId,
+                persistedWebsite.Name,
+                persistedWebsite.OwnerSubjectId,
+                null,
+                false,
+                []),
+            administratorAccess);
+        replacementWebsite.Succeeded.Should().BeTrue();
+        (await websites.RestoreAsync(new(persistedWebsite.Id, persistedWebsite.Version), administratorAccess))
+            .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
+        var replacementWebsiteEntity = await database.Websites.SingleAsync(website =>
+            website.Id == replacementWebsite.EntityId);
+        (await websites.DeleteAsync(
+            new(replacementWebsiteEntity.Id, replacementWebsiteEntity.Version), administratorAccess))
+            .Succeeded.Should().BeTrue();
         persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
         var restored = await websites.RestoreAsync(new(persistedWebsite.Id, persistedWebsite.Version), administratorAccess);
         restored.Succeeded.Should().BeTrue();
@@ -699,6 +784,18 @@ internal static class DatabaseFoundationAssertions
         (await reader.ListDeletedClientsAsync(new(viewer.Id, [ApplicationRoles.Viewer])))
             .Should().BeEmpty();
         persistedClient = await database.Clients.SingleAsync(client => client.Id == firstClientId);
+        var replacementClient = await clients.CreateAsync(
+            new CreateClient(persistedClient.Name, persistedClient.OwnerSubjectId, null),
+            administratorAccess);
+        replacementClient.Succeeded.Should().BeTrue();
+        (await clients.RestoreAsync(new(persistedClient.Id, persistedClient.Version), administratorAccess))
+            .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
+        var replacementClientEntity = await database.Clients.SingleAsync(client =>
+            client.Id == replacementClient.EntityId);
+        (await clients.DeleteAsync(
+            new(replacementClientEntity.Id, replacementClientEntity.Version), administratorAccess))
+            .Succeeded.Should().BeTrue();
+        persistedClient = await database.Clients.SingleAsync(client => client.Id == firstClientId);
         (await clients.RestoreAsync(new(persistedClient.Id, persistedClient.Version), administratorAccess))
             .Succeeded.Should().BeTrue();
 
@@ -730,6 +827,47 @@ internal static class DatabaseFoundationAssertions
         var exception = await Assert.ThrowsAsync<PostgresException>(() => transaction.CommitAsync());
         exception.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
         exception.ConstraintName.Should().Be("ck_website_enabled_requires_active_environment");
+    }
+
+    private static async Task<RegistryMutationResult> CreateWebsiteWithSharedTagAsync(
+        string connectionString,
+        Guid clientId,
+        string websiteName,
+        Guid ownerSubjectId,
+        RegistryAccessContext access,
+        Task start)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection()
+            .AddLogging()
+            .AddInfrastructure(configuration)
+            .BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var websiteService = scope.ServiceProvider.GetRequiredService<IWebsiteRegistryService>();
+        await start;
+        return await websiteService.CreateAsync(
+            new CreateWebsite(clientId, websiteName, ownerSubjectId, null, false, ["Concurrent"]),
+            access);
+    }
+
+    private static async Task VerifyTagUniquenessConstraintAsync(string connectionString, Guid tagId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO web_health.tag
+                (id, name, normalized_name, normalization_version, created_at, created_by_user_id, version)
+            SELECT gen_random_uuid(), name, normalized_name, normalization_version, now(), created_by_user_id, 1
+            FROM web_health.tag
+            WHERE id = @tag_id;
+            """;
+        command.Parameters.AddWithValue("tag_id", tagId);
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("ix_tag_normalized_name_normalization_version");
     }
 
     private static async Task VerifyIdentityBootstrapAsync(string connectionString)

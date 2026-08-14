@@ -95,7 +95,12 @@ public sealed class RegistryConcurrencyResponseTests
 
         public Task<IReadOnlyList<WebsiteListItem>> ListWebsitesAsync(
             RegistryAccessContext access,
+            Guid? tagId = null,
             CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<WebsiteListItem>>([]);
+
+        public Task<IReadOnlyList<RegistryTagOption>> ListTagsAsync(
+            RegistryAccessContext access,
+            CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<RegistryTagOption>>([]);
 
         public Task<IReadOnlyList<WebsiteListItem>> ListDeletedWebsitesAsync(
             RegistryAccessContext access,

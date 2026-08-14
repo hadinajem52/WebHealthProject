@@ -7,6 +7,10 @@ public interface IAuditTrailReader
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AuditActor>> ListActorsAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> ListActionsAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<string>> ListEntityTypesAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed record AuditSearchQuery(

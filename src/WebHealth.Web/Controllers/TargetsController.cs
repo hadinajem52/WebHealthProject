@@ -217,7 +217,7 @@ public sealed class TargetsController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteEnvironment(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, environmentService.DeleteAsync, nameof(Archived), "Environment deleted.", cancellationToken);
+        ChangeStateAsync(id, version, environmentService.DeleteAsync, nameof(Archived), "Environment archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEnvironment(Guid id, long version, CancellationToken cancellationToken) =>
@@ -229,7 +229,7 @@ public sealed class TargetsController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, endpointService.DeleteAsync, nameof(Archived), "Endpoint deleted.", cancellationToken);
+        ChangeStateAsync(id, version, endpointService.DeleteAsync, nameof(Archived), "Endpoint archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEndpoint(Guid id, long version, CancellationToken cancellationToken) =>

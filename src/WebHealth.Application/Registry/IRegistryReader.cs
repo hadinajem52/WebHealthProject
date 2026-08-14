@@ -17,6 +17,11 @@ public interface IRegistryReader
 
     Task<IReadOnlyList<WebsiteListItem>> ListWebsitesAsync(
         RegistryAccessContext access,
+        Guid? tagId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<RegistryTagOption>> ListTagsAsync(
+        RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<WebsiteListItem>> ListDeletedWebsitesAsync(

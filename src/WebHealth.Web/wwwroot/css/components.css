@@ -850,6 +850,35 @@ code,
     margin: 0;
 }
 
+.registry-lifecycle__summary {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    gap: var(--space-1);
+}
+
+.registry-lifecycle__summary strong {
+    color: var(--text-primary);
+}
+
+.registry-tag-filter {
+    max-width: 34rem;
+}
+
+.tag-list--compact {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: var(--space-2);
+    gap: var(--space-1);
+}
+
+.tag-list--compact .tag {
+    padding: 0.15rem 0.5rem;
+    font-size: 0.6875rem;
+}
+
 .target-url {
     overflow-wrap: anywhere;
     font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
@@ -919,6 +948,10 @@ code,
     cursor: pointer;
     font-size: var(--font-size-xs);
     font-weight: 700;
+}
+
+.audit-action {
+    text-transform: capitalize;
 }
 
 .audit-changes p {
@@ -1082,7 +1115,16 @@ code,
 
 @media (max-width: 42em) {
     .data-table thead {
-        display: none;
+        position: absolute;
+        overflow: hidden;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        border: 0;
+        margin: -1px;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
     }
 
     .data-table,

@@ -1060,6 +1060,57 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Tag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<short>("NormalizationVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1)
+                        .HasColumnName("normalization_version");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("normalized_name");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tag");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_tag_created_by_user_id");
+
+                    b.HasIndex("NormalizedName", "NormalizationVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tag_normalized_name_normalization_version");
+
+                    b.ToTable("tag", "web_health");
+                });
+
             modelBuilder.Entity("WebHealth.Infrastructure.Registry.TargetAuthorizationEvidence", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1352,6 +1403,36 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_environment_type_matches_production", "(environment_type = 'Production') = is_production");
                         });
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.WebsiteTag", b =>
+                {
+                    b.Property<Guid>("WebsiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("website_id");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tag_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.HasKey("WebsiteId", "TagId")
+                        .HasName("pk_website_tag");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_website_tag_created_by_user_id");
+
+                    b.HasIndex("TagId")
+                        .HasDatabaseName("ix_website_tag_tag_id");
+
+                    b.ToTable("website_tag", "web_health");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
@@ -1649,6 +1730,16 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.Navigation("PolicyProfile");
                 });
 
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Tag", b =>
+                {
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tag_app_user_created_by_user_id");
+                });
+
             modelBuilder.Entity("WebHealth.Infrastructure.Registry.TargetAuthorizationEvidence", b =>
                 {
                     b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
@@ -1745,6 +1836,34 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.Navigation("Website");
                 });
 
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.WebsiteTag", b =>
+                {
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_website_tag_app_user_created_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.Tag", "Tag")
+                        .WithMany("WebsiteTags")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_website_tag_tag_tag_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.Website", "Website")
+                        .WithMany("WebsiteTags")
+                        .HasForeignKey("WebsiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_website_tag_website_website_id");
+
+                    b.Navigation("Tag");
+
+                    b.Navigation("Website");
+                });
+
             modelBuilder.Entity("WebHealth.Infrastructure.Assignments.Team", b =>
                 {
                     b.Navigation("Members");
@@ -1762,9 +1881,16 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.Navigation("TargetAuthorizations");
                 });
 
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Tag", b =>
+                {
+                    b.Navigation("WebsiteTags");
+                });
+
             modelBuilder.Entity("WebHealth.Infrastructure.Registry.Website", b =>
                 {
                     b.Navigation("Environments");
+
+                    b.Navigation("WebsiteTags");
                 });
 
             modelBuilder.Entity("WebHealth.Infrastructure.Registry.WebsiteEnvironment", b =>

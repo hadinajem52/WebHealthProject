@@ -35,7 +35,7 @@
             else
             {
                 @if (Model.Client.IsActive){<form asp-action="DisableClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--secondary" type="submit">Disable client</button></form>}
-                <form asp-action="DeleteClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--danger" type="submit">Delete client</button></form>
+                <form asp-action="DeleteClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--danger" type="submit">Archive client</button></form>
             }
         </div>
     }
@@ -45,8 +45,8 @@
     @if (Model.Client.Websites.Count == 0){<p class="card__subtitle">No accessible websites.</p>}
     else
     {
-        <div class="table-scroll"><table class="data-table"><thead><tr><th>Website</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody>
-        @foreach (var website in Model.Client.Websites){<tr><td><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span></td><td>@website.OwnerName</td><td><span class="badge" data-status="@(website.IsDeleted ? "danger" : website.IsEnabled ? "success" : "warning")">@(website.IsDeleted ? "Deleted" : website.IsEnabled ? "Enabled" : "Disabled")</span></td><td class="data-table__action"><a asp-action="Website" asp-route-id="@website.Id">Details</a></td></tr>}
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Website</th><th>Owner</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        @foreach (var website in Model.Client.Websites){<tr><td data-label="Website"><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span></td><td data-label="Owner">@website.OwnerName</td><td data-label="Status"><span class="badge" data-status="@(website.IsDeleted ? "danger" : website.IsEnabled ? "success" : "warning")">@(website.IsDeleted ? "Deleted" : website.IsEnabled ? "Enabled" : "Disabled")</span></td><td class="data-table__action" data-label="Actions"><a asp-action="Website" asp-route-id="@website.Id">Details</a></td></tr>}
         </tbody></table></div>
     }
 </section>

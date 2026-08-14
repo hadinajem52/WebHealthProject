@@ -20,8 +20,8 @@
     @if (Model.Environments.Count == 0){<p class="card__subtitle">No active environments are available.</p>}
     else
     {
-        <div class="table-scroll"><table class="data-table"><thead><tr><th>Environment</th><th>Type</th><th>Base URL</th><th>Endpoints</th><th>Status</th><th></th></tr></thead><tbody>
-        @foreach (var environment in Model.Environments){<tr><td><span class="data-table__primary">@environment.Name</span><span class="data-table__secondary">Version @environment.Version</span></td><td>@environment.EnvironmentType</td><td class="target-url">@(environment.BaseUrl ?? "Not set")</td><td>@environment.ActiveEndpointCount enabled</td><td><span class="badge" data-status="@(environment.IsActive ? "success" : "warning")">@(environment.IsActive ? "Active" : "Disabled")</span></td><td class="data-table__action"><a asp-action="Environment" asp-route-id="@environment.Id">Details</a></td></tr>}
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Environment</th><th>Type</th><th>Base URL</th><th>Endpoints</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        @foreach (var environment in Model.Environments){<tr><td data-label="Environment"><span class="data-table__primary">@environment.Name</span><span class="data-table__secondary">Version @environment.Version</span></td><td data-label="Type">@environment.EnvironmentType</td><td class="target-url" data-label="Base URL">@(environment.BaseUrl ?? "Not set")</td><td data-label="Endpoints">@environment.ActiveEndpointCount enabled</td><td data-label="Status"><span class="badge" data-status="@(environment.IsActive ? "success" : "warning")">@(environment.IsActive ? "Active" : "Disabled")</span></td><td class="data-table__action" data-label="Actions"><a asp-action="Environment" asp-route-id="@environment.Id">Details</a></td></tr>}
         </tbody></table></div>
     }
 </section>

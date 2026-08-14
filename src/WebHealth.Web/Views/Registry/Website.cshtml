@@ -22,10 +22,27 @@
         <div><dt>Owner</dt><dd>@Model.Website.OwnerName</dd></div>
         <div><dt>Technology / CMS</dt><dd>@(Model.Website.TechnologyCms ?? "Not set")</dd></div>
         <div><dt>Active environments</dt><dd>@Model.Website.ActiveEnvironmentCount</dd></div>
+        <div>
+            <dt>Tags</dt>
+            <dd>
+                @if (Model.Website.Tags.Count == 0)
+                {
+                    <span>None</span>
+                }
+                else
+                {
+                    <span class="tag-list tag-list--compact">@foreach (var tag in Model.Website.Tags){<span class="tag">@tag</span>}</span>
+                }
+            </dd>
+        </div>
     </dl>
     @if (Model.CanManage)
     {
         <div class="registry-lifecycle">
+            <div class="registry-lifecycle__summary">
+                <strong>Lifecycle controls</strong>
+                <span>@(Model.Website.IsDeleted ? "Restore returns this website in a disabled state." : "Archiving is a soft delete: history and audit evidence are retained.")</span>
+            </div>
             @if (Model.Website.IsDeleted)
             {
                 <form asp-action="RestoreWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--primary" type="submit">Restore website</button></form>
@@ -33,7 +50,7 @@
             else
             {
                 @if (Model.Website.IsEnabled){<form asp-action="DisableWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--secondary" type="submit">Disable website</button></form>}
-                <form asp-action="DeleteWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--danger" type="submit">Delete website</button></form>
+                <form asp-action="DeleteWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--danger" type="submit">Archive website</button></form>
             }
         </div>
     }

@@ -49,7 +49,7 @@ Every edit and lifecycle action uses the submitted original version. A conflict 
 
 ## Migration and verification
 
-Migration `20260814115913_EnvironmentEndpointVerticalSlice` adds Endpoint, Endpoint Monitor, Policy Profile, endpoint-scoped grants, constraints, indexes, a deterministic default profile, and deferred cross-table enforcement. Migration `20260814123343_HardenTargetAuthorization` adds host/port-scoped authorization evidence, backfills normalized host/port identity, and hardens Production HTTP transition checks.
+The consolidated `RegistryFoundation` migration adds Endpoint, Endpoint Monitor, Policy Profile, endpoint-scoped grants, host/port-scoped authorization evidence, constraints, indexes, and deferred cross-table enforcement in their final Phase 2 form.
 
 Verification covers:
 

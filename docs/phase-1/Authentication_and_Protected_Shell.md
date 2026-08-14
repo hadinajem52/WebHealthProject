@@ -22,7 +22,7 @@ with the explicit `--bootstrap-admin` command and secret configuration.
 | Identity setup | `src/WebHealth.Infrastructure/DependencyInjection.cs` | Registers Identity, EF stores, password rules, and lockout rules |
 | Database mapping | `src/WebHealth.Infrastructure/Identity/*Configuration.cs` | Maps Identity entities to application table names |
 | Database model | `src/WebHealth.Infrastructure/Persistence/ApplicationDbContext.cs` | Changes the context to an `IdentityDbContext` |
-| Migration | `src/WebHealth.Infrastructure/Persistence/Migrations/20260814070901_IdentityFoundation.cs` | Creates Identity tables in the `web_health` schema |
+| Migration | `src/WebHealth.Infrastructure/Persistence/Migrations/*_IdentityAccessAndAudit.cs` | Creates Identity, access-subject, team, and append-only audit tables in the `web_health` schema |
 | Bootstrap | `src/WebHealth.Infrastructure/Identity/AdminBootstrapper.cs` | Creates roles and the initial administrator when explicitly requested |
 | Login | `src/WebHealth.Web/Controllers/AccountController.cs` | Handles login and logout |
 | Login UI | `src/WebHealth.Web/Views/Account/Login.cshtml` | Displays the sign-in form |

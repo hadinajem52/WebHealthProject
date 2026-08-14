@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
+using WebHealth.Domain.Normalization;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
 
@@ -22,17 +23,21 @@ public sealed class RegistryController(
         return View(new RegistryListViewModel(
             await registryReader.ListClientsAsync(access, cancellationToken),
             [],
-            RegistryCanManage(access)));
+            RegistryCanManage(access),
+            [],
+            null));
     }
 
     [HttpGet]
-    public async Task<IActionResult> Websites(CancellationToken cancellationToken)
+    public async Task<IActionResult> Websites(Guid? tagId, CancellationToken cancellationToken)
     {
         var access = GetAccess();
         return View(new RegistryListViewModel(
             [],
-            await registryReader.ListWebsitesAsync(access, cancellationToken),
-            RegistryCanManage(access)));
+            await registryReader.ListWebsitesAsync(access, tagId, cancellationToken),
+            RegistryCanManage(access),
+            await registryReader.ListTagsAsync(access, cancellationToken),
+            tagId));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -147,7 +152,7 @@ public sealed class RegistryController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteClient(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeClientStateAsync(id, version, clientService.DeleteAsync, "Client deleted.", cancellationToken);
+        ChangeClientStateAsync(id, version, clientService.DeleteAsync, "Client archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreClient(Guid id, long version, CancellationToken cancellationToken) =>
@@ -175,7 +180,8 @@ public sealed class RegistryController(
                 model.Name,
                 model.OwnerSubjectId!.Value,
                 model.TechnologyCms,
-                model.IsEnabled),
+                model.IsEnabled,
+                TagNormalizer.Split(model.Tags)),
             GetAccess(),
             cancellationToken);
         if (!result.Succeeded)
@@ -204,6 +210,7 @@ public sealed class RegistryController(
             Name = website.Name,
             OwnerSubjectId = website.OwnerSubjectId,
             TechnologyCms = website.TechnologyCms,
+            Tags = string.Join(", ", website.Tags),
             IsEnabled = website.IsEnabled,
             Version = website.Version
         }, cancellationToken));
@@ -226,7 +233,8 @@ public sealed class RegistryController(
                 model.OwnerSubjectId!.Value,
                 model.TechnologyCms,
                 model.IsEnabled,
-                model.Version),
+                model.Version,
+                TagNormalizer.Split(model.Tags)),
             GetAccess(),
             cancellationToken);
         if (!result.Succeeded)
@@ -244,7 +252,7 @@ public sealed class RegistryController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteWebsite(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeWebsiteStateAsync(id, version, websiteService.DeleteAsync, "Website deleted.", cancellationToken);
+        ChangeWebsiteStateAsync(id, version, websiteService.DeleteAsync, "Website archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreWebsite(Guid id, long version, CancellationToken cancellationToken) =>

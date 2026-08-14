@@ -6,7 +6,9 @@ namespace WebHealth.Web.Models;
 public sealed record RegistryListViewModel(
     IReadOnlyList<ClientListItem> Clients,
     IReadOnlyList<WebsiteListItem> Websites,
-    bool CanManage);
+    bool CanManage,
+    IReadOnlyList<RegistryTagOption> Tags,
+    Guid? SelectedTagId);
 
 public sealed record ClientDetailsViewModel(ClientDetails Client, bool CanManage);
 
@@ -52,6 +54,9 @@ public sealed class WebsiteFormViewModel
 
     [StringLength(200), Display(Name = "Technology / CMS")]
     public string? TechnologyCms { get; set; }
+
+    [StringLength(2020), Display(Name = "Tags")]
+    public string? Tags { get; set; }
 
     [Display(Name = "Website enabled")]
     public bool IsEnabled { get; set; }

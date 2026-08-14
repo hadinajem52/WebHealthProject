@@ -35,7 +35,9 @@ public sealed class AuditController(IAuditTrailReader auditTrail) : Controller
             Result = ModelState.IsValid
                 ? await auditTrail.SearchAsync(query, cancellationToken)
                 : new AuditSearchResult([], 1, query.PageSize, 0),
-            Actors = await auditTrail.ListActorsAsync(cancellationToken)
+            Actors = await auditTrail.ListActorsAsync(cancellationToken),
+            Actions = await auditTrail.ListActionsAsync(cancellationToken),
+            EntityTypes = await auditTrail.ListEntityTypesAsync(cancellationToken)
         });
     }
 }

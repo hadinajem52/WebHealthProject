@@ -17,4 +17,8 @@ public sealed class AuditIndexViewModel
     public required AuditSearchResult Result { get; init; }
 
     public required IReadOnlyList<AuditActor> Actors { get; init; }
+
+    public required IReadOnlyList<string> Actions { get; init; }
+
+    public required IReadOnlyList<string> EntityTypes { get; init; }
 }

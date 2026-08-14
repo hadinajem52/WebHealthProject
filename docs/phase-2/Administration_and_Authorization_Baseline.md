@@ -25,7 +25,7 @@
 
 ## Data, security, and operational signals
 
-- The `AuthorizationDenialAudit` migration adds the append-only `audit_event` foundation, restrictive actor foreign key, and actor/time, action/time, and time indexes.
+- `IdentityAccessAndAudit` adds the append-only `audit_event` foundation, restrictive actor foreign key, and actor/time, action/time, and time indexes.
 - User creation, role changes, account state, password reset, and the security-stamp update share explicit database transactions. The last-administrator check runs in a serializable update transaction.
 - Passwords are passed directly to Identity, persisted only as hashes, cleared from returned view models, and never included in structured logs.
 - Administration logs contain only actor ID, target user ID, disabled state, supported role names, and whether a password reset occurred. Email addresses and password values are excluded.

@@ -11,7 +11,7 @@
 - Migrations remain in `WebHealth.Infrastructure` beside `ApplicationDbContext`.
 - Database creation and migration are explicit operations; application startup never applies migrations.
 
-The `InitialFoundation` migration intentionally contains no application tables. Phase 2 now adds the separate `IdentityFoundation` migration, which creates the seven Identity tables in `web_health`; keeping the migrations separate preserves the original foundation boundary and explicit upgrade path.
+The `InitialFoundation` migration intentionally contains no application tables and is the durable Phase 1 database baseline. Phase 2 adds two reviewable migrations: `IdentityAccessAndAudit` and `RegistryFoundation`.
 
 ## Entity configuration rules
 

@@ -213,8 +213,8 @@ These requirements apply throughout the project:
 - [x] Implement Website management. Evidence: [`../phase-2/Client_and_Website_Vertical_Slice.md`](../phase-2/Client_and_Website_Vertical_Slice.md).
 - [x] Implement Environment management. Evidence: [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md).
 - [x] Implement Endpoint management. Evidence: [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md).
-- [ ] Implement owners, teams, tags, and inherited ownership. Owners, effective-dated teams, Website inheritance, Endpoint overrides, and scoped grants are complete; tags remain. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md) and [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md).
-- [ ] Enforce normalized uniqueness rules. Client, Website, Environment, and Endpoint rules are complete; tags remain.
+- [x] Implement owners, teams, tags, and inherited ownership. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md), [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md), and [`../phase-2/Tags_Lifecycle_and_Audit_UI.md`](../phase-2/Tags_Lifecycle_and_Audit_UI.md).
+- [x] Enforce normalized uniqueness rules for Client, Website, Environment, Endpoint, and Tag records.
 - [x] Enforce absolute HTTP/HTTPS URLs without embedded credentials, fragments, relative values, or unsupported schemes.
 - [x] Enforce production HTTPS or Administrator-approved bounded exception reason.
 - [x] Require an environment before enabling a website, enforced by service validation and deferred PostgreSQL triggers.
@@ -234,13 +234,13 @@ These requirements apply throughout the project:
 
 ### Database and verification
 
-- [ ] Complete Identity, registry, ownership, tags, policies, and audit migrations. Current Identity, Client, Website, Environment, Endpoint, ownership, grants, monitor-policy foundation, and audit migrations are complete; tags remain.
-- [ ] Add required foreign keys and uniqueness constraints. Current Client, Website, Environment, Endpoint, grant, and policy-profile constraints are complete; tags remain.
-- [ ] Add concurrency tokens and operational indexes. Current Client, Website, Environment, and Endpoint records are complete; tags remain.
+- [x] Complete Phase 2 Identity, registry, ownership, tag, policy-foundation, and audit migrations.
+- [x] Add required Phase 2 foreign keys and uniqueness constraints.
+- [x] Add Phase 2 concurrency tokens and operational indexes.
 - [x] Verify direct requests for every role and current resource-assignment combinations. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs) and [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
 - [x] Verify anti-forgery rejection. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs`](../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs).
 - [x] Verify disabled-account sign-in rejection and existing-session invalidation. Evidence: the real Identity/PostgreSQL verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
-- [ ] Verify database constraints independently of UI validation. Current Client, Website, Environment, Endpoint, grant, and policy-profile constraints are verified; tags remain.
+- [x] Verify Phase 2 database constraints independently of UI validation, including normalized tag uniqueness.
 - [x] Verify stale assignment and current registry updates fail safely and retain the submitted original version.
 - [ ] Verify output encoding and secret-safe logs.
 

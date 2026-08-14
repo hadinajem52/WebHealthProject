@@ -517,7 +517,7 @@ website.restored
 The explicit migration is:
 
 ```text
-20260814110940_ClientWebsiteVerticalSlice
+RegistryFoundation
 ```
 
 It adds:

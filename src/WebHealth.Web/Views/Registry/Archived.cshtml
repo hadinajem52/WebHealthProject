@@ -8,7 +8,7 @@
     <div class="page-intro">
         <div>
             <h2 class="card__title">Archived registry</h2>
-            <p class="card__subtitle">Soft-deleted records remain available for restoration and historical reporting.</p>
+            <p class="card__subtitle">Soft-deleted records are excluded from active lists but remain available for restoration and audit history.</p>
         </div>
         <a class="button button--secondary" asp-action="Clients">Active registry</a>
     </div>
@@ -22,11 +22,11 @@
     {
         <div class="table-scroll">
             <table class="data-table">
-                <thead><tr><th>Client</th><th>Owner</th><th>Deleted status</th><th></th></tr></thead>
+                <thead><tr><th>Client</th><th>Owner</th><th>Deleted status</th><th>Actions</th></tr></thead>
                 <tbody>
                 @foreach (var client in Model.Clients)
                 {
-                    <tr><td><span class="data-table__primary">@client.Name</span><span class="data-table__secondary">Version @client.Version</span></td><td>@client.OwnerName</td><td><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action"><a asp-action="Client" asp-route-id="@client.Id">Review</a></td></tr>
+                    <tr><td data-label="Client"><span class="data-table__primary">@client.Name</span><span class="data-table__secondary">Version @client.Version</span></td><td data-label="Owner">@client.OwnerName</td><td data-label="Deleted status"><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action" data-label="Actions"><a asp-action="Client" asp-route-id="@client.Id">Review</a></td></tr>
                 }
                 </tbody>
             </table>
@@ -44,11 +44,11 @@
     {
         <div class="table-scroll">
             <table class="data-table">
-                <thead><tr><th>Website</th><th>Client</th><th>Owner</th><th>Deleted status</th><th></th></tr></thead>
+                <thead><tr><th>Website</th><th>Client</th><th>Owner</th><th>Deleted status</th><th>Actions</th></tr></thead>
                 <tbody>
                 @foreach (var website in Model.Websites)
                 {
-                    <tr><td><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">Version @website.Version</span></td><td>@website.ClientName</td><td>@website.OwnerName</td><td><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action"><a asp-action="Website" asp-route-id="@website.Id">Review</a></td></tr>
+                    <tr><td data-label="Website"><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">Version @website.Version</span></td><td data-label="Client">@website.ClientName</td><td data-label="Owner">@website.OwnerName</td><td data-label="Deleted status"><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action" data-label="Actions"><a asp-action="Website" asp-route-id="@website.Id">Review</a></td></tr>
                 }
                 </tbody>
             </table>

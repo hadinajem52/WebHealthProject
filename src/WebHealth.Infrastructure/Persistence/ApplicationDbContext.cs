@@ -22,6 +22,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<Website> Websites => Set<Website>();
 
+    public DbSet<Tag> Tags => Set<Tag>();
+
+    public DbSet<WebsiteTag> WebsiteTags => Set<WebsiteTag>();
+
     public DbSet<WebsiteEnvironment> Environments => Set<WebsiteEnvironment>();
 
     public DbSet<AccessGrant> AccessGrants => Set<AccessGrant>();

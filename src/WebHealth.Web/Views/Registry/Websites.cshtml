@@ -23,6 +23,29 @@
         </div>
     </div>
 
+    @if (Model.Tags.Count > 0)
+    {
+        <form method="get" class="filter-grid registry-tag-filter">
+            <div class="form-field">
+                <label for="tagId">Tag</label>
+                <select id="tagId" name="tagId">
+                    <option value="">All tags</option>
+                    @foreach (var tag in Model.Tags)
+                    {
+                        <option value="@tag.Id" selected="@(Model.SelectedTagId == tag.Id)">@tag.Name (@tag.WebsiteCount)</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-grid__actions">
+                <button class="button button--primary" type="submit">Filter</button>
+                @if (Model.SelectedTagId is not null)
+                {
+                    <a class="button button--secondary" asp-action="Websites">Clear</a>
+                }
+            </div>
+        </form>
+    }
+
     @if (Model.Websites.Count == 0)
     {
         @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
@@ -42,12 +65,24 @@
                 @foreach (var website in Model.Websites)
                 {
                     <tr>
-                        <td data-label="Website"><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span></td>
+                        <td data-label="Website">
+                            <span class="data-table__primary">@website.Name</span>
+                            <span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span>
+                            @if (website.Tags.Count > 0)
+                            {
+                                <span class="tag-list tag-list--compact">
+                                    @foreach (var tag in website.Tags)
+                                    {
+                                        <span class="tag">@tag</span>
+                                    }
+                                </span>
+                            }
+                        </td>
                         <td data-label="Client">@website.ClientName</td>
                         <td data-label="Owner">@website.OwnerName</td>
                         <td data-label="Environments">@website.ActiveEnvironmentCount active</td>
                         <td data-label="Status"><span class="badge" data-status="@(website.IsDeleted ? "danger" : website.IsEnabled ? "success" : "warning")">@(website.IsDeleted ? "Deleted" : website.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                        <td class="data-table__action"><a asp-action="Website" asp-route-id="@website.Id">Details<span class="visually-hidden"> for @website.Name</span></a></td>
+                        <td class="data-table__action" data-label="Actions"><a asp-action="Website" asp-route-id="@website.Id">Details<span class="visually-hidden"> for @website.Name</span></a></td>
                     </tr>
                 }
                 </tbody>

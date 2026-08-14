@@ -12,8 +12,8 @@ using WebHealth.Infrastructure.Persistence;
 namespace WebHealth.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260814110940_ClientWebsiteVerticalSlice")]
-    partial class ClientWebsiteVerticalSlice
+    [Migration("20260814190510_RegistryFoundation")]
+    partial class RegistryFoundation
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -569,6 +569,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("effective_from");
 
+                    b.Property<Guid?>("EndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("endpoint_id");
+
                     b.Property<Guid?>("EnvironmentId")
                         .HasColumnType("uuid")
                         .HasColumnName("environment_id");
@@ -607,6 +611,9 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedByUserId")
                         .HasDatabaseName("ix_access_grant_created_by_user_id");
 
+                    b.HasIndex("EndpointId")
+                        .HasDatabaseName("ix_access_grant_endpoint_id");
+
                     b.HasIndex("EnvironmentId")
                         .HasDatabaseName("ix_access_grant_environment_id");
 
@@ -619,6 +626,9 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "ClientId", "EffectiveFrom")
                         .HasDatabaseName("ix_access_grant_user_id_client_id_effective_from");
 
+                    b.HasIndex("UserId", "EndpointId", "EffectiveFrom")
+                        .HasDatabaseName("ix_access_grant_user_id_endpoint_id_effective_from");
+
                     b.HasIndex("UserId", "EnvironmentId", "EffectiveFrom")
                         .HasDatabaseName("ix_access_grant_user_id_environment_id_effective_from");
 
@@ -629,7 +639,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_access_grant_access_level", "access_level IN ('Read', 'Manage')");
 
-                            t.HasCheckConstraint("ck_access_grant_exactly_one_scope", "(client_id IS NOT NULL)::int + (website_id IS NOT NULL)::int + (environment_id IS NOT NULL)::int = 1");
+                            t.HasCheckConstraint("ck_access_grant_exactly_one_scope", "(client_id IS NOT NULL)::int + (website_id IS NOT NULL)::int + (environment_id IS NOT NULL)::int + (endpoint_id IS NOT NULL)::int = 1");
 
                             t.HasCheckConstraint("ck_access_grant_expiry", "expires_at IS NULL OR expires_at > effective_from");
                         });
@@ -726,6 +736,476 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_client_deleted_at_is_active_name");
 
                     b.ToTable("client", "web_health");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Endpoint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by_user_id");
+
+                    b.Property<string>("DisplayUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("display_url");
+
+                    b.Property<int>("EffectivePort")
+                        .HasColumnType("integer")
+                        .HasColumnName("effective_port");
+
+                    b.Property<Guid>("EnvironmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("environment_id");
+
+                    b.Property<DateTimeOffset?>("HttpExceptionApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("http_exception_approved_at");
+
+                    b.Property<Guid?>("HttpExceptionApprovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("http_exception_approved_by_user_id");
+
+                    b.Property<string>("HttpExceptionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("http_exception_reason");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<short>("NormalizationVersion")
+                        .HasColumnType("smallint")
+                        .HasColumnName("normalization_version");
+
+                    b.Property<string>("NormalizedHost")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("normalized_host");
+
+                    b.Property<string>("NormalizedUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("normalized_url");
+
+                    b.Property<byte[]>("NormalizedUrlHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("normalized_url_hash");
+
+                    b.Property<Guid?>("OwnerSubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_subject_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_endpoint");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_endpoint_created_by_user_id");
+
+                    b.HasIndex("DeletedByUserId")
+                        .HasDatabaseName("ix_endpoint_deleted_by_user_id");
+
+                    b.HasIndex("HttpExceptionApprovedByUserId")
+                        .HasDatabaseName("ix_endpoint_http_exception_approved_by_user_id");
+
+                    b.HasIndex("OwnerSubjectId")
+                        .HasDatabaseName("ix_endpoint_owner_subject_id");
+
+                    b.HasIndex("UpdatedByUserId")
+                        .HasDatabaseName("ix_endpoint_updated_by_user_id");
+
+                    b.HasIndex("EnvironmentId", "DeletedAt", "IsEnabled")
+                        .HasDatabaseName("ix_endpoint_environment_id_deleted_at_is_enabled");
+
+                    b.HasIndex("EnvironmentId", "NormalizedUrlHash", "NormalizationVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ux_endpoint_environment_url_hash_version_active")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("endpoint", "web_health", t =>
+                        {
+                            t.HasCheckConstraint("ck_endpoint_effective_port", "effective_port BETWEEN 1 AND 65535");
+
+                            t.HasCheckConstraint("ck_endpoint_http_exception_complete", "(http_exception_reason IS NULL AND http_exception_approved_by_user_id IS NULL AND http_exception_approved_at IS NULL) OR (http_exception_reason IS NOT NULL AND http_exception_approved_by_user_id IS NOT NULL AND http_exception_approved_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_endpoint_normalized_host", "length(normalized_host) > 0");
+
+                            t.HasCheckConstraint("ck_endpoint_normalized_scheme", "normalized_url LIKE 'http://%' OR normalized_url LIKE 'https://%'");
+
+                            t.HasCheckConstraint("ck_endpoint_url_hash_length", "octet_length(normalized_url_hash) = 32");
+                        });
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.EndpointMonitor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BoundedOverrides")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("bounded_overrides");
+
+                    b.Property<string>("ConfigurationFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("configuration_fingerprint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<int?>("CriticalThresholdMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("critical_threshold_ms");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by_user_id");
+
+                    b.Property<Guid>("EndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("endpoint_id");
+
+                    b.Property<int>("FailureConfirmationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("failure_confirmation_count");
+
+                    b.Property<int>("IntervalSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("interval_seconds");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("MonitorType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("monitor_type");
+
+                    b.Property<DateTimeOffset?>("NextDueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_due_at");
+
+                    b.Property<Guid>("PolicyProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("policy_profile_id");
+
+                    b.Property<int>("RecoveryConfirmationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("recovery_confirmation_count");
+
+                    b.Property<DateTimeOffset?>("ScheduleAnchor")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("schedule_anchor");
+
+                    b.Property<int>("TimeoutSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("timeout_seconds");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.Property<int?>("WarningThresholdMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("warning_threshold_ms");
+
+                    b.HasKey("Id")
+                        .HasName("pk_endpoint_monitor");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_endpoint_monitor_created_by_user_id");
+
+                    b.HasIndex("DeletedByUserId")
+                        .HasDatabaseName("ix_endpoint_monitor_deleted_by_user_id");
+
+                    b.HasIndex("PolicyProfileId")
+                        .HasDatabaseName("ix_endpoint_monitor_policy_profile_id");
+
+                    b.HasIndex("UpdatedByUserId")
+                        .HasDatabaseName("ix_endpoint_monitor_updated_by_user_id");
+
+                    b.HasIndex("EndpointId", "MonitorType")
+                        .IsUnique()
+                        .HasDatabaseName("ix_endpoint_monitor_endpoint_id_monitor_type")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("endpoint_monitor", "web_health", t =>
+                        {
+                            t.HasCheckConstraint("ck_endpoint_monitor_positive_confirmation", "failure_confirmation_count > 0 AND recovery_confirmation_count > 0");
+
+                            t.HasCheckConstraint("ck_endpoint_monitor_positive_interval", "interval_seconds > 0");
+
+                            t.HasCheckConstraint("ck_endpoint_monitor_positive_timeout", "timeout_seconds > 0");
+
+                            t.HasCheckConstraint("ck_endpoint_monitor_threshold_order", "warning_threshold_ms IS NULL OR critical_threshold_ms IS NULL OR warning_threshold_ms < critical_threshold_ms");
+                        });
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.PolicyProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BoundedSettings")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("bounded_settings");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_system");
+
+                    b.Property<string>("MonitorType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("monitor_type");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_policy_profile");
+
+                    b.HasIndex("Name", "MonitorType")
+                        .IsUnique()
+                        .HasDatabaseName("ix_policy_profile_name_monitor_type")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("policy_profile", "web_health");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("fd3c8021-ff54-4f31-a3ad-2010b7b193dd"),
+                            BoundedSettings = "{}",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 8, 14, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsSystem = true,
+                            MonitorType = "HttpAvailability",
+                            Name = "Default HTTP availability",
+                            Version = 1L
+                        });
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Tag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<short>("NormalizationVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1)
+                        .HasColumnName("normalization_version");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("normalized_name");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tag");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_tag_created_by_user_id");
+
+                    b.HasIndex("NormalizedName", "NormalizationVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tag_normalized_name_normalization_version");
+
+                    b.ToTable("tag", "web_health");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.TargetAuthorizationEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AuthorizationKind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("authorization_kind");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateTimeOffset>("EffectiveFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("effective_from");
+
+                    b.Property<Guid>("EndpointId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("endpoint_id");
+
+                    b.Property<string>("EvidenceReference")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("evidence_reference");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("NormalizedHost")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("normalized_host");
+
+                    b.Property<int>("Port")
+                        .HasColumnType("integer")
+                        .HasColumnName("port");
+
+                    b.Property<string>("RevocationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("revocation_reason");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<Guid?>("RevokedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revoked_by_user_id");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_target_authorization");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_target_authorization_created_by_user_id");
+
+                    b.HasIndex("RevokedByUserId")
+                        .HasDatabaseName("ix_target_authorization_revoked_by_user_id");
+
+                    b.HasIndex("EndpointId", "EffectiveFrom", "ExpiresAt")
+                        .HasDatabaseName("ix_target_authorization_endpoint_id_effective_from_expires_at");
+
+                    b.HasIndex("EndpointId", "NormalizedHost", "Port")
+                        .IsUnique()
+                        .HasDatabaseName("ix_target_authorization_endpoint_id_normalized_host_port")
+                        .HasFilter("revoked_at IS NULL");
+
+                    b.ToTable("target_authorization", "web_health", t =>
+                        {
+                            t.HasCheckConstraint("ck_target_authorization_expiry", "expires_at IS NULL OR expires_at > effective_from");
+
+                            t.HasCheckConstraint("ck_target_authorization_kind", "authorization_kind IN ('Owned', 'ExplicitPermission')");
+
+                            t.HasCheckConstraint("ck_target_authorization_port", "port BETWEEN 1 AND 65535");
+                        });
                 });
 
             modelBuilder.Entity("WebHealth.Infrastructure.Registry.Website", b =>
@@ -928,6 +1408,36 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.WebsiteTag", b =>
+                {
+                    b.Property<Guid>("WebsiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("website_id");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tag_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.HasKey("WebsiteId", "TagId")
+                        .HasName("pk_website_tag");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_website_tag_created_by_user_id");
+
+                    b.HasIndex("TagId")
+                        .HasDatabaseName("ix_website_tag_tag_id");
+
+                    b.ToTable("website_tag", "web_health");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("WebHealth.Infrastructure.Identity.ApplicationRole", null)
@@ -1076,6 +1586,12 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_access_grant_app_user_created_by_user_id");
 
+                    b.HasOne("WebHealth.Infrastructure.Registry.Endpoint", null)
+                        .WithMany()
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_access_grant_endpoint_endpoint_id");
+
                     b.HasOne("WebHealth.Infrastructure.Registry.WebsiteEnvironment", null)
                         .WithMany()
                         .HasForeignKey("EnvironmentId")
@@ -1130,6 +1646,126 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_client_app_user_updated_by_user_id");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Endpoint", b =>
+                {
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_endpoint_app_user_created_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_endpoint_app_user_deleted_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.WebsiteEnvironment", "Environment")
+                        .WithMany("Endpoints")
+                        .HasForeignKey("EnvironmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_endpoint_environment_environment_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("HttpExceptionApprovedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_endpoint_app_user_http_exception_approved_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Assignments.OwnerSubject", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerSubjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_endpoint_owner_subject_owner_subject_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_endpoint_app_user_updated_by_user_id");
+
+                    b.Navigation("Environment");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.EndpointMonitor", b =>
+                {
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_endpoint_monitor_app_user_created_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("DeletedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_endpoint_monitor_app_user_deleted_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.Endpoint", "Endpoint")
+                        .WithMany("Monitors")
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_endpoint_monitor_endpoint_endpoint_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.PolicyProfile", "PolicyProfile")
+                        .WithMany()
+                        .HasForeignKey("PolicyProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_endpoint_monitor_policy_profile_policy_profile_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_endpoint_monitor_app_user_updated_by_user_id");
+
+                    b.Navigation("Endpoint");
+
+                    b.Navigation("PolicyProfile");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Tag", b =>
+                {
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_tag_app_user_created_by_user_id");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.TargetAuthorizationEvidence", b =>
+                {
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_target_authorization_app_user_created_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.Endpoint", "Endpoint")
+                        .WithMany("TargetAuthorizations")
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_target_authorization_endpoint_endpoint_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RevokedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_target_authorization_app_user_revoked_by_user_id");
+
+                    b.Navigation("Endpoint");
                 });
 
             modelBuilder.Entity("WebHealth.Infrastructure.Registry.Website", b =>
@@ -1203,6 +1839,34 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.Navigation("Website");
                 });
 
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.WebsiteTag", b =>
+                {
+                    b.HasOne("WebHealth.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_website_tag_app_user_created_by_user_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.Tag", "Tag")
+                        .WithMany("WebsiteTags")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_website_tag_tag_tag_id");
+
+                    b.HasOne("WebHealth.Infrastructure.Registry.Website", "Website")
+                        .WithMany("WebsiteTags")
+                        .HasForeignKey("WebsiteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_website_tag_website_website_id");
+
+                    b.Navigation("Tag");
+
+                    b.Navigation("Website");
+                });
+
             modelBuilder.Entity("WebHealth.Infrastructure.Assignments.Team", b =>
                 {
                     b.Navigation("Members");
@@ -1213,9 +1877,28 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.Navigation("Websites");
                 });
 
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Endpoint", b =>
+                {
+                    b.Navigation("Monitors");
+
+                    b.Navigation("TargetAuthorizations");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.Tag", b =>
+                {
+                    b.Navigation("WebsiteTags");
+                });
+
             modelBuilder.Entity("WebHealth.Infrastructure.Registry.Website", b =>
                 {
                     b.Navigation("Environments");
+
+                    b.Navigation("WebsiteTags");
+                });
+
+            modelBuilder.Entity("WebHealth.Infrastructure.Registry.WebsiteEnvironment", b =>
+                {
+                    b.Navigation("Endpoints");
                 });
 #pragma warning restore 612, 618
         }

@@ -32,7 +32,8 @@ public sealed record WebsiteListItem(
     bool IsEnabled,
     bool IsDeleted,
     long Version,
-    int ActiveEnvironmentCount);
+    int ActiveEnvironmentCount,
+    IReadOnlyList<string> Tags);
 
 public sealed record WebsiteDetails(
     Guid Id,
@@ -45,7 +46,10 @@ public sealed record WebsiteDetails(
     bool IsEnabled,
     bool IsDeleted,
     long Version,
-    int ActiveEnvironmentCount);
+    int ActiveEnvironmentCount,
+    IReadOnlyList<string> Tags);
+
+public sealed record RegistryTagOption(Guid Id, string Name, int WebsiteCount);
 
 public sealed record RegistryOwnerOption(Guid OwnerSubjectId, string DisplayName, string OwnerType);
 
@@ -64,7 +68,8 @@ public sealed record CreateWebsite(
     string Name,
     Guid OwnerSubjectId,
     string? TechnologyCms,
-    bool IsEnabled);
+    bool IsEnabled,
+    IReadOnlyList<string> Tags);
 
 public sealed record UpdateWebsite(
     Guid WebsiteId,
@@ -72,7 +77,8 @@ public sealed record UpdateWebsite(
     Guid OwnerSubjectId,
     string? TechnologyCms,
     bool IsEnabled,
-    long Version);
+    long Version,
+    IReadOnlyList<string> Tags);
 
 public sealed record RegistryVersionCommand(Guid EntityId, long Version);
 

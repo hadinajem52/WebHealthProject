@@ -38,6 +38,29 @@ public sealed class Website
     public long Version { get; set; }
     public Client Client { get; set; } = null!;
     public ICollection<WebsiteEnvironment> Environments { get; } = [];
+    public ICollection<WebsiteTag> WebsiteTags { get; } = [];
+}
+
+public sealed class Tag
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; }
+    public required string NormalizedName { get; set; }
+    public short NormalizationVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public long Version { get; set; }
+    public ICollection<WebsiteTag> WebsiteTags { get; } = [];
+}
+
+public sealed class WebsiteTag
+{
+    public Guid WebsiteId { get; set; }
+    public Guid TagId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public Website Website { get; set; } = null!;
+    public Tag Tag { get; set; } = null!;
 }
 
 public sealed class WebsiteEnvironment
