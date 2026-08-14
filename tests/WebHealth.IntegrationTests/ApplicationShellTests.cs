@@ -63,6 +63,17 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     }
 
     [Fact]
+    public async Task SidebarSupportArtwork_IsServed()
+    {
+        using var client = factory.CreateHttpsClient();
+
+        using var response = await client.GetAsync("/images/sidebar-support.png");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("image/png", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task FlashMessage_IsShownOnceAfterARedirect()
     {
         using var client = factory.CreateHttpsClient();

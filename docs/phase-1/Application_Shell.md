@@ -18,11 +18,36 @@ The visual baseline is the Purity UI Dashboard Figma file adopted in [`../phase-
 | Reference | Node | Used for |
 |---|---|---|
 | Dashboard Screen | `2:31` | Page frame, content background, card grid |
-| Sidebar | `2:164` | Brand row, divider, nav item geometry, section label, support card |
-| Breadcrumb (header) | `2:263` | Breadcrumb trail, page title, header action area |
+| Sidebar | `2:164` | Brand row, nav item geometry, section label, support card |
+| Sidebar separator | `47:276` | Divider gradient and position |
+| Breadcrumb (header) | `2:263`, `2:268` | Breadcrumb trail and page title |
 | Today's Money (card) | `4:1` | Card radius, padding, shadow, icon tile |
 
-Layout intent and tokens were taken from the file; markup, CSS, icons and interaction behavior are application-owned. No Figma asset, brand mark or vendor implementation artifact was copied into the repository, and the Purity navigation taxonomy (Tables, Billing, RTL, Profile, Sign In, Sign Up) was replaced by the information architecture in `UI_Direction.md` section 4.
+Layout intent and tokens were taken from the file; markup, CSS, icons and interaction behavior are application-owned. The Purity navigation taxonomy (Tables, Billing, RTL, Profile, Sign In, Sign Up) was replaced by the information architecture in `UI_Direction.md` section 4, and the Creative Tim brand mark was replaced by an application-owned glyph in the same 22px box and Gray-700 color.
+
+The sidebar support-card artwork (`wwwroot/images/sidebar-support.png`, 218x170) is the one exported Figma asset in the repository. The project owner supplied it directly on 2026-08-13 for this purpose.
+
+### Exactly reproduced values
+
+At the project owner's direction on 2026-08-13, the sidebar (`2:164`) and the breadcrumb block (`2:263`) reproduce the Figma colors, font weights, type sizes and geometry literally rather than through the shell's own tokens:
+
+| Element | Value |
+|---|---|
+| Sidebar and page background | Gray-100 `#F8F9FA` |
+| Nav item card / icon tiles | White, 15px and 12px radius, `0 3.5px 5.5px rgba(0,0,0,.02)` |
+| Icon glyphs | Teal-300 `#4FD1C5`; white on the active Teal-300 tile |
+| Nav labels | 12px bold, Gray-400 `#A0AEC0`; Gray-700 `#2D3748` when current |
+| Section heading, brand | 12px / 14px bold, Gray-700 |
+| Support card | Teal-300, white 14px bold title, white 12px regular body, white 10px bold button |
+| Item geometry | 219.5x54 card, 30px tile at 16px inset, label at 12px gap, 54px pitch |
+| Separator | 233.25x1 at x=24.5, gradient `#E0E1E2` 0 -> 1 -> 0.15625 alpha |
+| Breadcrumb | 12px regular, Gray-400 ancestors, Gray-700 current page and separator |
+| Page title | 14px bold Gray-700, 5.5px below the breadcrumb |
+
+Two details in the Figma file were not copied literally:
+
+- The `Pages` breadcrumb span carries a 6px font size in the file, but the Figma render draws it at the same size as the current page. The measured render (12px) was reproduced instead.
+- The sidebar frame starts 18px from the page edge and runs to the end of the column, so the shell applies that inset as left padding only.
 
 ## Tokens and accessible overrides
 
@@ -35,7 +60,16 @@ Layout intent and tokens were taken from the file; markup, CSS, icons and intera
 | Green-400 / Orange-300 / Red-500 status text | 2.4:1 – 4.1:1 | Green-700 / Orange-600 / Red-600 | 4.6:1 – 6.7:1 | Status and message text |
 | 12–14px type baseline | — | 16px root, 0.75–1.5rem scale | — | Body text and 200% zoom |
 
-Gray-400 is retained for decorative separators only. Teal-300 is retained as a decorative fill that never carries text.
+These overrides apply to page content: card text, status messages, validation and error states.
+
+**Recorded deviation.** They are deliberately *not* applied to the sidebar and breadcrumb, which reproduce the Figma exactly at the project owner's direction on 2026-08-13. Two values there fall below the WCAG 2.1 AA floor required by `UI_Direction.md` section 6:
+
+| Element | Colors | Contrast | AA requirement |
+|---|---|---|---|
+| Inactive nav labels, breadcrumb ancestors | Gray-400 on Gray-100 | 2.2:1 | 4.5:1 |
+| Support-card title, body and icon | White on Teal-300 | 1.9:1 | 4.5:1 (text), 3:1 (icons) |
+
+Every affected element still carries a non-color cue: the current page is marked with `aria-current`, planned entries carry a text badge, and the support card repeats its action as a labelled link. Re-evaluate this deviation at the Phase 7 accessibility review.
 
 ## Structure
 
@@ -110,9 +144,12 @@ Automated coverage lives in [`../../tests/WebHealth.IntegrationTests/Application
 - a flash message survives one redirect and is shown exactly once;
 - the validation summary renders model errors above the page content;
 - the empty state renders its text;
+- the sidebar support artwork is served as `image/png`;
 - error pages use the shell and the error-state component, the dependency-unavailable state offers a local retry target, and no other error state does.
 
 Manual verification on 2026-08-13 in Chromium at 1440px and 414px confirmed the rendered shell against the Figma reference, the drawer's dialog semantics and background `inert` state, focus return on Escape, and that the layout does not scroll horizontally at 414px.
+
+Measured against the Figma coordinates, the rendered sidebar reproduces the brand mark at x=42, the separator at x=24.5 (233.5px wide), the active item at x=31.5 (219.5x54), its icon tile at x=47.5 (30x30), the label at x=89.5, and the support card at x=35 (218x169.6). The breadcrumb trail and the brand lockup both start at y=44, so they sit on one line.
 
 ## Known limitations
 

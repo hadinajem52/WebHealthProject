@@ -1,14 +1,6 @@
 @{
     ViewData.SetTitle("Dashboard");
-    ViewData.SetSubtitle("Placeholder page confirming the Phase 1 application shell.");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Dashboard"));
-}
-
-@section PageActions {
-    <a class="button button--secondary" href="/health/ready">
-        <span>Check readiness</span>
-        @await Html.PartialAsync("_Icon", "arrow-right")
-    </a>
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Pages"), new BreadcrumbItem("Dashboard"));
 }
 
 <div class="stack">

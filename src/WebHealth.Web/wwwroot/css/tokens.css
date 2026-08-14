@@ -95,8 +95,35 @@
     --line-height-base: 1.5;
 
     /* Shell geometry, taken from the Figma sidebar column width. */
-    --sidebar-width: 16.5rem;
+    --sidebar-width: 16.53125rem; /* 264.5px: 18px page margin + the 246.5px frame */
+    --sidebar-inset: 1.125rem; /* 18px page margin of the Figma sidebar frame */
+    --sidebar-inset-top: 2.75rem; /* 44px */
     --content-max-width: 90rem;
+
+    /*
+     * Sidebar palette. Reproduces Figma node 2:164 exactly at the project
+     * owner's direction on 2026-08-13, so the accessible overrides above are
+     * deliberately not applied here. Gray-400 labels reach 2.2:1 and white
+     * support-card text reaches 1.9:1, both below the WCAG 2.1 AA floor
+     * recorded in docs/phase-0/UI_Direction.md section 6. The deviation is
+     * recorded in docs/phase-1/Application_Shell.md.
+     */
+    --sidebar-surface: var(--color-gray-100);
+    --sidebar-item-surface: var(--color-white);
+    --sidebar-label: var(--color-gray-400);
+    --sidebar-label-active: var(--color-gray-700);
+    --sidebar-icon: var(--color-teal-300);
+    --sidebar-icon-active: var(--color-white);
+    --sidebar-icon-active-surface: var(--color-teal-300);
+    --sidebar-support-surface: var(--color-teal-300);
+    --sidebar-support-text: var(--color-white);
+    /* Figma node 47:276: a 233.25x1 stroke whose gradient runs to x=231. */
+    --sidebar-divider: linear-gradient(
+        90deg,
+        rgba(224, 225, 226, 0) 0%,
+        rgb(224, 225, 226) 49.52%,
+        rgba(224, 225, 226, 0.15625) 99.04%
+    );
 
     /* Focus. Kept identical for every interactive element. */
     --focus-ring-color: var(--color-purple-blue-500);

@@ -1,6 +1,5 @@
 @{
     var pageTitle = ViewData.GetTitle();
-    var pageSubtitle = ViewData.GetSubtitle();
     var documentTitle = string.IsNullOrWhiteSpace(pageTitle) ? "WebHealth" : $"{pageTitle} - WebHealth";
 }
 <!DOCTYPE html>
@@ -38,18 +37,51 @@
                     <div class="app-header__titles">
                         @await Html.PartialAsync("_Breadcrumbs")
                         <h1 class="app-title">@(pageTitle ?? "WebHealth")</h1>
-                        @if (!string.IsNullOrWhiteSpace(pageSubtitle))
-                        {
-                            <p class="app-subtitle">@pageSubtitle</p>
-                        }
                     </div>
 
-                    @if (IsSectionDefined("PageActions"))
-                    {
-                        <div class="app-header__actions">
-                            @await RenderSectionAsync("PageActions", required: false)
+                    @*
+                        Operable placeholders for the identity, registry and
+                        incident work in Phases 2-4. They are focusable controls
+                        with real hit areas, but they carry no behavior yet, so
+                        each one states its status for assistive technology.
+                    *@
+                    <div class="app-header__utility">
+                        <div class="app-search">
+                            <label class="app-search__icon" for="app-search">
+                                @await Html.PartialAsync("_Icon", "search")
+                                <span class="visually-hidden">Search</span>
+                            </label>
+                            <input class="app-search__input"
+                                   id="app-search"
+                                   type="search"
+                                   placeholder="Type here..."
+                                   aria-describedby="app-search-hint" />
+                            <span class="visually-hidden" id="app-search-hint">
+                                Search returns results once the registry is available in Phase 2.
+                            </span>
                         </div>
-                    }
+
+                        <button type="button" class="app-header__account">
+                            @await Html.PartialAsync("_Icon", "person")
+                            <span>Sign In</span>
+                            <span class="visually-hidden">&mdash; available in Phase 2</span>
+                        </button>
+
+                        <button type="button" class="app-header__icon">
+                            @await Html.PartialAsync("_Icon", "settings")
+                            <span class="visually-hidden">Settings &mdash; available in Phase 2</span>
+                        </button>
+
+                        <button type="button" class="app-header__icon">
+                            @await Html.PartialAsync("_Icon", "bell")
+                            <span class="visually-hidden">Notifications &mdash; available in Phase 4</span>
+                        </button>
+
+                        @if (IsSectionDefined("PageActions"))
+                        {
+                            @await RenderSectionAsync("PageActions", required: false)
+                        }
+                    </div>
                 </div>
             </header>
 

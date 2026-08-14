@@ -118,94 +118,111 @@ svg {
     flex-direction: column;
 }
 
-/* Sidebar ---------------------------------------------------------------- */
+/*
+ * Sidebar ----------------------------------------------------------------
+ *
+ * Colors, font weights, type sizes and geometry reproduce Figma node 2:164
+ * exactly. Offsets are expressed relative to the sidebar padding box, which is
+ * aligned with the Figma sidebar frame.
+ */
 
+/*
+ * The Figma sidebar frame is inset 18px from the page edge and runs to the end
+ * of the column, so only the left padding is applied. Every child offset below
+ * is then the Figma frame-relative value.
+ */
 .app-sidebar {
     display: flex;
     flex-direction: column;
-    padding: var(--space-6) var(--space-4);
-    border-bottom: 1px solid var(--border-subtle);
-    background-color: var(--surface-raised);
-    gap: var(--space-6);
+    padding: var(--sidebar-inset-top) 0 var(--space-6) var(--sidebar-inset);
+    background-color: var(--sidebar-surface);
 }
 
 .app-brand {
     display: flex;
     align-items: center;
-    color: var(--text-primary);
-    font-size: var(--font-size-sm);
+    margin-left: 1.5rem; /* 24px */
+    color: var(--sidebar-label-active);
+    font-size: var(--font-size-sm); /* 14px */
     font-weight: 700;
-    gap: var(--space-3);
-    letter-spacing: 0.04em;
+    gap: 0.75rem; /* 12px */
+    line-height: var(--line-height-base);
     text-decoration: none;
     text-transform: uppercase;
 }
 
 .app-brand__mark {
     display: grid;
-    width: 2rem;
-    height: 2rem;
+    width: 1.375rem; /* 22px */
+    height: 1.375rem;
     flex: 0 0 auto;
-    border-radius: var(--radius-tile);
-    background-color: var(--surface-accent);
-    color: var(--text-on-accent);
+    color: var(--sidebar-label-active);
     place-items: center;
 }
 
 .app-brand__mark svg {
-    width: 1.125rem;
-    height: 1.125rem;
+    width: 1.375rem;
+    height: 1.375rem;
 }
 
-.app-nav__group + .app-nav__group {
-    margin-top: var(--space-5);
+.app-sidebar__divider {
+    height: 1px;
+    margin: 1.71875rem 0.40625rem 1.40625rem; /* 27.5px, 6.5px, 22.5px */
+    border: 0;
+    background: var(--sidebar-divider);
+}
+
+.app-nav__group {
+    padding: 0 0.84375rem; /* 13.5px, giving the 219.5px item width */
 }
 
 .app-nav__heading {
-    margin-bottom: var(--space-2);
-    padding: 0 var(--space-3);
-    color: var(--text-secondary);
-    font-size: var(--font-size-xs);
+    display: flex;
+    height: 2.625rem; /* 42px */
+    align-items: center;
+    padding-left: 1rem; /* 16px, aligned with the icon tiles */
+    color: var(--sidebar-label-active);
+    font-size: var(--font-size-xs); /* 12px */
     font-weight: 700;
-    letter-spacing: 0.08em;
+    line-height: var(--line-height-base);
     text-transform: uppercase;
 }
 
 .app-nav__list {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
 }
 
 .app-nav__link {
     display: flex;
+    height: 3.375rem; /* 54px */
     align-items: center;
-    padding: var(--space-2) var(--space-3);
+    padding: 0 1rem; /* 16px */
     border-radius: var(--radius-card);
-    color: var(--text-secondary);
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    gap: var(--space-3);
+    color: var(--sidebar-label);
+    font-size: var(--font-size-xs); /* 12px */
+    font-weight: 700;
+    gap: 0.75rem; /* 12px */
+    line-height: var(--line-height-base);
     text-decoration: none;
-    transition: background-color var(--motion-fast) var(--motion-easing);
+    transition: color var(--motion-fast) var(--motion-easing);
 }
 
 .app-nav__icon {
     display: grid;
-    width: 2rem;
-    height: 2rem;
+    width: 1.875rem; /* 30px */
+    height: 1.875rem;
     flex: 0 0 auto;
-    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-tile);
-    background-color: var(--surface-raised);
+    background-color: var(--sidebar-item-surface);
     box-shadow: var(--shadow-card);
-    color: var(--text-secondary);
+    color: var(--sidebar-icon);
     place-items: center;
 }
 
 .app-nav__icon svg {
-    width: 1rem;
-    height: 1rem;
+    width: 0.9375rem; /* 15px */
+    height: 0.9375rem;
 }
 
 .app-nav__label {
@@ -213,66 +230,92 @@ svg {
 }
 
 a.app-nav__link:hover {
-    background-color: var(--surface-sunken);
-    color: var(--text-primary);
+    color: var(--sidebar-label-active);
 }
 
 .app-nav__link.is-current {
-    background-color: var(--surface-raised);
-    box-shadow: var(--shadow-raised);
-    color: var(--text-primary);
-    font-weight: 700;
+    background-color: var(--sidebar-item-surface);
+    box-shadow: var(--shadow-card);
+    color: var(--sidebar-label-active);
 }
 
 .app-nav__link.is-current .app-nav__icon {
-    border-color: var(--surface-accent);
-    background-color: var(--surface-accent);
-    color: var(--text-on-accent);
+    background-color: var(--sidebar-icon-active-surface);
+    box-shadow: none;
+    color: var(--sidebar-icon-active);
 }
 
 .app-nav__link.is-planned {
-    color: var(--text-secondary);
     cursor: default;
 }
 
 .app-nav__badge {
     margin-left: auto;
     padding: 0 var(--space-2);
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--sidebar-label);
     border-radius: var(--radius-pill);
-    color: var(--text-secondary);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
+    color: var(--sidebar-label);
+    font-size: 0.625rem; /* 10px */
+    font-weight: 700;
 }
 
 .app-sidebar__support {
-    margin-top: auto;
-    padding: var(--space-4);
+    width: 13.625rem; /* 218px */
+    max-width: 100%;
+    margin: auto 0 0 1.0625rem; /* 17px */
+    padding: 1rem; /* 16px */
     border-radius: var(--radius-card);
-    background-color: var(--surface-accent);
-    color: var(--text-on-accent);
+
+    /* The decorative background is the exported Figma artwork; the color below
+       it keeps the card correct if the image cannot be loaded. */
+    background: url("../images/sidebar-support.png") center / cover no-repeat,
+        var(--sidebar-support-surface);
+    color: var(--sidebar-support-text);
+}
+
+.app-sidebar__support-icon {
+    display: grid;
+    width: 2.1875rem; /* 35px */
+    height: 2.1875rem;
+    border-radius: var(--radius-tile);
+    background-color: var(--sidebar-item-surface);
+    color: var(--sidebar-icon);
+    place-items: center;
+}
+
+.app-sidebar__support-icon svg {
+    width: 1.5rem; /* 24px */
+    height: 1.5rem;
 }
 
 .app-sidebar__support-title {
-    font-size: var(--font-size-sm);
+    margin-top: 1.34375rem; /* 21.5px */
+    font-size: var(--font-size-sm); /* 14px */
     font-weight: 700;
+    line-height: var(--line-height-tight);
 }
 
 .app-sidebar__support-text {
-    margin-top: var(--space-1);
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-xs); /* 12px */
+    font-weight: 400;
+    line-height: var(--line-height-base);
 }
 
 .app-sidebar__support-link {
-    display: inline-block;
-    margin-top: var(--space-3);
-    padding: var(--space-2) var(--space-3);
+    display: flex;
+    height: 2.1875rem; /* 35px */
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.53125rem; /* 8.5px */
     border-radius: var(--radius-tile);
-    background-color: var(--surface-raised);
-    color: var(--text-primary);
-    font-size: var(--font-size-xs);
+    background-color: var(--sidebar-item-surface);
+    color: var(--sidebar-label-active);
+    font-size: 0.625rem; /* 10px */
     font-weight: 700;
+    line-height: var(--line-height-base);
+    text-align: center;
     text-decoration: none;
+    text-transform: uppercase;
 }
 
 .app-sidebar__support-link:hover {
@@ -281,8 +324,15 @@ a.app-nav__link:hover {
 
 /* Header ----------------------------------------------------------------- */
 
+/*
+ * Header ------------------------------------------------------------------
+ *
+ * Figma nodes 2:263 and 4:287. On the 1920px reference frame the utility row
+ * starts at y=22.4 and the breadcrumb trail at y=31.5, so the trail is offset
+ * inside the header rather than the header being moved.
+ */
 .app-header {
-    padding: var(--space-5) var(--space-5) 0;
+    padding: 1.4rem var(--space-5) 0; /* 22.4px */
 }
 
 .app-header__bar {
@@ -290,6 +340,108 @@ a.app-nav__link:hover {
     flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--space-4);
+}
+
+.app-header__utility {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.app-search {
+    display: flex;
+    width: 24.4rem;
+    max-width: 100%;
+    height: 2.75rem; /* 44px, enlarged from the 39.5px reference */
+    align-items: center;
+    overflow: hidden;
+    border: 0.5px solid var(--color-gray-200);
+    border-radius: var(--radius-card);
+    background-color: var(--color-white);
+}
+
+.app-search:focus-within {
+    border-color: var(--focus-ring-color);
+}
+
+.app-search__icon {
+    display: grid;
+    width: 2.34375rem; /* 37.5px */
+    height: 100%;
+    flex: 0 0 auto;
+    color: var(--color-gray-700);
+    cursor: text;
+    place-items: center;
+}
+
+.app-search__icon svg {
+    width: 1.125rem; /* enlarged from the 15px reference for legibility */
+    height: 1.125rem;
+}
+
+.app-search__input {
+    min-width: 0;
+    height: 100%;
+    flex: 1;
+    padding: 0 var(--space-3) 0 0;
+    border: 0;
+    background: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-base);
+}
+
+.app-search__input::placeholder {
+    color: var(--color-gray-400);
+    opacity: 1;
+}
+
+/*
+ * The reference design draws these at 12px with no hit area. They are enlarged
+ * to a 36px target with a 16px glyph so they are legible and comfortably
+ * clickable, which the project owner requested on 2026-08-13.
+ */
+.app-header__account,
+.app-header__icon {
+    display: flex;
+    height: 2.75rem; /* 44px */
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--radius-tile);
+    background: none;
+    color: var(--color-gray-500);
+    cursor: pointer;
+    font: inherit;
+    transition: background-color var(--motion-fast) var(--motion-easing);
+}
+
+.app-header__account:hover,
+.app-header__icon:hover {
+    background-color: var(--color-white);
+    box-shadow: var(--shadow-card);
+    color: var(--text-primary);
+}
+
+.app-header__account {
+    margin-left: 0.625rem; /* keeps the reference gap after the search field */
+    padding: 0 var(--space-3);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    gap: 0.5rem;
+}
+
+.app-header__icon {
+    width: 2.75rem;
+    flex: 0 0 auto;
+}
+
+.app-header__account svg,
+.app-header__icon svg {
+    width: 1.25rem; /* 20px */
+    height: 1.25rem;
 }
 
 .app-header__toggle {
@@ -318,63 +470,56 @@ a.app-nav__link:hover {
 .app-header__titles {
     min-width: 0;
     flex: 1 1 100%;
+    padding-top: 0.56875rem; /* 9.1px, placing the trail at y=31.5 */
 }
 
-.app-header__actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-}
-
+/* Figma node 2:267: 14px bold, 5.5px below the breadcrumb trail. */
 .app-title {
-    margin-top: var(--space-1);
-    font-size: var(--font-size-xl);
+    margin-top: 0.34375rem;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
     font-weight: 700;
     line-height: var(--line-height-tight);
 }
 
-.app-subtitle {
-    margin-top: var(--space-1);
-    color: var(--text-secondary);
-    font-size: var(--font-size-sm);
-}
-
 /* Breadcrumbs ------------------------------------------------------------ */
 
+/*
+ * Figma node 2:255: 12px regular, ancestors in Gray-400 and the current page in
+ * Gray-700. The separator belongs to the current page, so it inherits the
+ * following item's color rather than being drawn in the ancestor color.
+ */
 .breadcrumbs__list {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     font-size: var(--font-size-xs);
-    gap: var(--space-1);
+    font-weight: 400;
+    line-height: var(--line-height-base);
 }
 
 .breadcrumbs__item {
     display: flex;
     align-items: center;
-    color: var(--text-secondary);
-    gap: var(--space-1);
+    color: var(--color-gray-400);
 }
 
 .breadcrumbs__item + .breadcrumbs__item::before {
-    color: var(--color-gray-400);
     content: "/";
+    margin: 0 0.4rem;
 }
 
 .breadcrumbs__item a {
-    color: var(--text-secondary);
+    color: inherit;
     text-decoration: none;
 }
 
 .breadcrumbs__item a:hover {
-    color: var(--text-primary);
     text-decoration: underline;
 }
 
 .breadcrumbs__item[aria-current="page"] {
     color: var(--text-primary);
-    font-weight: 700;
 }
 
 /* Content and footer ----------------------------------------------------- */
@@ -467,8 +612,6 @@ html:not(.js) .app-header__toggle {
         width: var(--sidebar-width);
         max-width: 85vw;
         overflow-y: auto;
-        border-right: 1px solid var(--border-subtle);
-        border-bottom: 0;
         box-shadow: var(--shadow-raised);
         transform: translateX(-100%);
         transition: transform var(--motion-base) var(--motion-easing);
@@ -493,13 +636,15 @@ html:not(.js) .app-header__toggle {
     .app-sidebar {
         width: var(--sidebar-width);
         flex: 0 0 var(--sidebar-width);
-        padding: var(--space-6);
-        border-right: 1px solid var(--border-subtle);
-        border-bottom: 0;
     }
 
+    /*
+     * Figma page coordinates: the breadcrumb trail starts at x=314.5 with the
+     * 264.5px sidebar to its left, and the last utility icon ends 47.5px from
+     * the page edge.
+     */
     .app-header {
-        padding: var(--space-8) var(--space-8) 0;
+        padding: 1.4rem 2.96875rem 0 3.125rem; /* 22.4px 47.5px 0 50px */
     }
 
     .app-header__bar {
@@ -508,6 +653,10 @@ html:not(.js) .app-header__toggle {
 
     .app-header__titles {
         flex: 1 1 auto;
+    }
+
+    .app-header__utility {
+        flex-wrap: nowrap;
     }
 
     .app-content {

@@ -15,6 +15,8 @@
         <span>Close menu</span>
     </button>
 
+    <hr class="app-sidebar__divider" />
+
     @foreach (var navSection in ShellNavigation.Sections)
     {
         groupIndex++;
@@ -54,10 +56,9 @@
     }
 
     <div class="app-sidebar__support">
+        <span class="app-sidebar__support-icon">@await Html.PartialAsync("_Icon", "help")</span>
         <p class="app-sidebar__support-title">Need help?</p>
-        <p class="app-sidebar__support-text">
-            The foundation exposes liveness and readiness endpoints for local checks.
-        </p>
+        <p class="app-sidebar__support-text">Check our health endpoints.</p>
         <a class="app-sidebar__support-link" href="/health/ready">Check runtime health</a>
     </div>
 </nav>
