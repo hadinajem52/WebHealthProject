@@ -90,6 +90,8 @@ public sealed class AuditContractTests
                 nameof(EndpointAuditSnapshot.IsEnabled),
                 nameof(EndpointAuditSnapshot.HasHttpException),
                 nameof(EndpointAuditSnapshot.HttpExceptionChanged),
+                nameof(EndpointAuditSnapshot.HasTargetAuthorization),
+                nameof(EndpointAuditSnapshot.TargetAuthorizationChanged),
                 nameof(EndpointAuditSnapshot.IsDeleted),
                 nameof(EndpointAuditSnapshot.Version));
     }

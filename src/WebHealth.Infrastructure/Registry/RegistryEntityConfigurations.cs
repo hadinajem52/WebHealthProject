@@ -157,6 +157,8 @@ internal sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
         builder.ToTable("endpoint", table =>
         {
             table.HasCheckConstraint("ck_endpoint_url_hash_length", "octet_length(normalized_url_hash) = 32");
+            table.HasCheckConstraint("ck_endpoint_normalized_host", "length(normalized_host) > 0");
+            table.HasCheckConstraint("ck_endpoint_effective_port", "effective_port BETWEEN 1 AND 65535");
             table.HasCheckConstraint(
                 "ck_endpoint_http_exception_complete",
                 "(http_exception_reason IS NULL AND http_exception_approved_by_user_id IS NULL AND http_exception_approved_at IS NULL) OR "
@@ -168,6 +170,7 @@ internal sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
         builder.Property(endpoint => endpoint.DisplayUrl).HasMaxLength(2048).IsRequired();
         builder.Property(endpoint => endpoint.NormalizedUrl).HasMaxLength(2048).IsRequired();
         builder.Property(endpoint => endpoint.NormalizedUrlHash).HasColumnType("bytea").IsRequired();
+        builder.Property(endpoint => endpoint.NormalizedHost).HasMaxLength(253).IsRequired();
         builder.Property(endpoint => endpoint.HttpExceptionReason).HasMaxLength(500);
         builder.Property(endpoint => endpoint.Version).IsConcurrencyToken();
         builder.HasIndex(endpoint => new
@@ -189,6 +192,37 @@ internal sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
         builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(endpoint => endpoint.UpdatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(endpoint => endpoint.DeletedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class TargetAuthorizationEvidenceConfiguration : IEntityTypeConfiguration<TargetAuthorizationEvidence>
+{
+    public void Configure(EntityTypeBuilder<TargetAuthorizationEvidence> builder)
+    {
+        builder.ToTable("target_authorization", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_target_authorization_kind",
+                "authorization_kind IN ('Owned', 'ExplicitPermission')");
+            table.HasCheckConstraint("ck_target_authorization_port", "port BETWEEN 1 AND 65535");
+            table.HasCheckConstraint(
+                "ck_target_authorization_expiry",
+                "expires_at IS NULL OR expires_at > effective_from");
+        });
+        builder.Property(evidence => evidence.AuthorizationKind).HasMaxLength(30).IsRequired();
+        builder.Property(evidence => evidence.EvidenceReference).HasMaxLength(500).IsRequired();
+        builder.Property(evidence => evidence.NormalizedHost).HasMaxLength(253).IsRequired();
+        builder.Property(evidence => evidence.RevocationReason).HasMaxLength(500);
+        builder.Property(evidence => evidence.Version).IsConcurrencyToken();
+        builder.HasIndex(evidence => new { evidence.EndpointId, evidence.NormalizedHost, evidence.Port })
+            .IsUnique().HasFilter("revoked_at IS NULL");
+        builder.HasIndex(evidence => new { evidence.EndpointId, evidence.EffectiveFrom, evidence.ExpiresAt });
+        builder.HasOne(evidence => evidence.Endpoint).WithMany(endpoint => endpoint.TargetAuthorizations)
+            .HasForeignKey(evidence => evidence.EndpointId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(evidence => evidence.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(evidence => evidence.RevokedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -40,6 +40,7 @@ internal static class DatabaseFoundationAssertions
         ,"owner_subject"
         ,"team"
         ,"team_member"
+        ,"target_authorization"
     ];
 
     public static async Task VerifyAsync(string connectionString)
@@ -51,8 +52,8 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(6);
-        context.Model.GetEntityTypes().Should().HaveCount(18);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(7);
+        context.Model.GetEntityTypes().Should().HaveCount(19);
 
         var state = await ReadFoundationState(connectionString);
         state.SchemaExists.Should().BeTrue();
@@ -77,11 +78,14 @@ internal static class DatabaseFoundationAssertions
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
         var targetReader = scope.ServiceProvider.GetRequiredService<ITargetRegistryReader>();
         var targetAuthorization = scope.ServiceProvider.GetRequiredService<ITargetAuthorizationService>();
+        var monitoringEligibility = scope.ServiceProvider.GetRequiredService<IMonitoringEligibilityService>();
 
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
         var viewer = await database.Users.SingleAsync(user => user.Email == "registry-viewer@example.test");
         var developerOwnerId = await database.OwnerSubjects.Where(owner => owner.UserId == developer.Id)
+            .Select(owner => owner.Id).SingleAsync();
+        var administratorOwnerId = await database.OwnerSubjects.Where(owner => owner.UserId == administrator.Id)
             .Select(owner => owner.Id).SingleAsync();
         var website = await database.Websites.SingleAsync(candidate => candidate.Client.Name == "Second Client");
         var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
@@ -99,14 +103,19 @@ internal static class DatabaseFoundationAssertions
         staging.Name.Should().Be("Staging");
         staging.BaseUrl.Should().Be("https://example.test/base");
         staging.IsProduction.Should().BeFalse();
+        website = await database.Websites.SingleAsync(candidate => candidate.Id == website.Id);
+        website.IsEnabled = true;
+        await database.SaveChangesAsync();
 
         var endpointResult = await endpointService.CreateAsync(
-            new(stagingId, " HTTPS://EXAMPLE.test:443/a/../Health?q=%41 ", developerOwnerId, true, null),
+            new(stagingId, " HTTPS://EXAMPLE.test:443/a/../Health?q=%41 ", developerOwnerId, true, null,
+                TargetAuthorizationKinds.Owned, "Integration fixture owned by the project.", null),
             administratorAccess);
         endpointResult.Succeeded.Should().BeTrue();
         var endpointId = endpointResult.EntityId ?? throw new InvalidOperationException("Endpoint id was not returned.");
         (await endpointService.CreateAsync(
-            new(stagingId, "https://example.test/Health?q=A", null, true, null), administratorAccess))
+            new(stagingId, "https://example.test/Health?q=A", null, true, null,
+                TargetAuthorizationKinds.Owned, "Integration fixture owned by the project.", null), administratorAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         var endpoint = await database.Endpoints.Include(candidate => candidate.Monitors)
             .SingleAsync(candidate => candidate.Id == endpointId);
@@ -117,10 +126,18 @@ internal static class DatabaseFoundationAssertions
         monitor.MonitorType.Should().Be("HttpAvailability");
         monitor.ScheduleAnchor.Should().BeNull();
         monitor.NextDueAt.Should().BeNull();
+        var authorizationEvidence = await database.TargetAuthorizations.SingleAsync(
+            evidence => evidence.EndpointId == endpointId && evidence.RevokedAt == null);
+        authorizationEvidence.AuthorizationKind.Should().Be(TargetAuthorizationKinds.Owned);
+        authorizationEvidence.NormalizedHost.Should().Be("example.test");
+        authorizationEvidence.Port.Should().Be(443);
 
         (await endpointService.CreateAsync(
-            new(stagingId, "/relative", null, true, null), administratorAccess))
+            new(stagingId, "/relative", null, true, null, null, null, null), administratorAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
+        (await endpointService.CreateAsync(
+            new(stagingId, "https://no-evidence.example.test/", null, true, null, null, null, null),
+            administratorAccess)).Status.Should().Be(RegistryMutationStatus.ValidationFailed);
 
         var productionResult = await environmentService.CreateAsync(
             new(website.Id, "Production", EnvironmentTypes.Production, "https://example.test", true),
@@ -128,15 +145,19 @@ internal static class DatabaseFoundationAssertions
         productionResult.Succeeded.Should().BeTrue();
         var productionId = productionResult.EntityId ?? throw new InvalidOperationException("Production environment id was not returned.");
         (await endpointService.CreateAsync(
-            new(productionId, "http://legacy.example.test/", null, true, "Legacy appliance"), operationsAccess))
+            new(productionId, "http://legacy.example.test/", null, true, "Legacy appliance",
+                TargetAuthorizationKinds.ExplicitPermission, "Permission ticket TEST-1", null), operationsAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         var productionHttp = await endpointService.CreateAsync(
-            new(productionId, "http://legacy.example.test/", null, true, "Legacy appliance requires HTTP during migration."),
+            new(productionId, "http://legacy.example.test/", null, true,
+                "Legacy appliance requires HTTP during migration.", TargetAuthorizationKinds.ExplicitPermission,
+                "Permission ticket TEST-2", null),
             administratorAccess);
         productionHttp.Succeeded.Should().BeTrue();
 
         var stagingHttp = await endpointService.CreateAsync(
-            new(stagingId, "http://staging.example.test/", null, false, null), administratorAccess);
+            new(stagingId, "http://staging.example.test/", null, false, null, null, null, null),
+            administratorAccess);
         stagingHttp.Succeeded.Should().BeTrue();
         database.ChangeTracker.Clear();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
@@ -157,13 +178,67 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         (await targetReader.ListEndpointsAsync(stagingId, new(viewer.Id, [ApplicationRoles.Viewer])))
             .Should().ContainSingle(item => item.Id == endpointId);
+        var eligibilityState = await database.Endpoints.AsNoTracking()
+            .Where(candidate => candidate.Id == endpointId)
+            .Select(candidate => new
+            {
+                EndpointActive = candidate.DeletedAt == null && candidate.IsEnabled,
+                EnvironmentActive = candidate.Environment.DeletedAt == null && candidate.Environment.IsActive,
+                WebsiteActive = candidate.Environment.Website.DeletedAt == null && candidate.Environment.Website.IsEnabled,
+                MonitorActive = candidate.Monitors.Any(monitor => monitor.DeletedAt == null && monitor.IsEnabled),
+                EvidenceActive = candidate.TargetAuthorizations.Any(evidence =>
+                    evidence.RevokedAt == null
+                    && evidence.EffectiveFrom <= DateTimeOffset.UtcNow
+                    && (evidence.ExpiresAt == null || evidence.ExpiresAt > DateTimeOffset.UtcNow)
+                    && evidence.NormalizedHost == candidate.NormalizedHost
+                    && evidence.Port == candidate.EffectivePort)
+            }).SingleAsync();
+        eligibilityState.EndpointActive.Should().BeTrue();
+        eligibilityState.EnvironmentActive.Should().BeTrue();
+        eligibilityState.WebsiteActive.Should().BeTrue();
+        eligibilityState.MonitorActive.Should().BeTrue();
+        eligibilityState.EvidenceActive.Should().BeTrue();
+        (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeTrue();
+        (await targetReader.ListEndpointsAsync(
+            stagingId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
+            .Should().Contain(item => item.Id == endpointId);
         (await targetAuthorization.CanTestEndpointAsync(endpointId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
             .Should().BeTrue();
         (await targetAuthorization.CanTestEndpointAsync(endpointId, new(viewer.Id, [ApplicationRoles.Viewer])))
             .Should().BeFalse();
 
+        website = await database.Websites.SingleAsync(candidate => candidate.Id == website.Id);
+        website.IsEnabled = false;
+        website.Version++;
+        await database.SaveChangesAsync();
+        (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeFalse();
+        (await database.EndpointMonitors.Where(candidate => candidate.EndpointId == endpointId)
+            .Select(candidate => candidate.IsEnabled).SingleAsync()).Should().BeTrue();
+        website.IsEnabled = true;
+        website.Version++;
+        await database.SaveChangesAsync();
+        (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeTrue();
+
+        website = await database.Websites.SingleAsync(candidate => candidate.Id == website.Id);
+        website.OwnerSubjectId = developerOwnerId;
+        website.Version++;
+        await database.SaveChangesAsync();
+        var overriddenEndpoint = await endpointService.CreateAsync(
+            new(stagingId, "https://override.example.test/", administratorOwnerId, true, null,
+                TargetAuthorizationKinds.Owned, "Administrator-owned integration fixture.", null),
+            administratorAccess);
+        overriddenEndpoint.Succeeded.Should().BeTrue();
+        var overriddenEndpointId = overriddenEndpoint.EntityId!.Value;
+        (await targetReader.ListEndpointsAsync(stagingId,
+            new(developer.Id, [ApplicationRoles.DeveloperSupport])))
+            .Should().NotContain(item => item.Id == overriddenEndpointId);
+        (await targetAuthorization.CanTestEndpointAsync(
+            overriddenEndpointId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
+            .Should().BeFalse();
+
         var staleEndpoint = await endpointService.UpdateAsync(
-            new(endpointId, endpoint.DisplayUrl, endpoint.OwnerSubjectId, endpoint.IsEnabled, null, 0),
+            new(endpointId, endpoint.DisplayUrl, endpoint.OwnerSubjectId, endpoint.IsEnabled, null,
+                TargetAuthorizationKinds.Owned, "Integration fixture owned by the project.", null, 0),
             administratorAccess);
         staleEndpoint.Status.Should().Be(RegistryMutationStatus.ConcurrencyConflict);
 
@@ -174,13 +249,17 @@ internal static class DatabaseFoundationAssertions
 
         await VerifyEnvironmentTypeConstraintAsync(connectionString, stagingId);
         await VerifyProductionHttpConstraintAsync(connectionString, productionId, developer.Id, administrator.Id);
+        await VerifyProductionHttpTransitionsAsync(
+            connectionString, website.Id, productionId, developer.Id, administrator.Id);
         await VerifyMonitorPolicyConstraintAsync(connectionString, endpointId, administrator.Id);
 
         database.ChangeTracker.Clear();
         endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
-        (await endpointService.UpdateAsync(
-            new(endpoint.Id, "https://example.test/health-v2", endpoint.OwnerSubjectId, true, null, endpoint.Version),
-            administratorAccess)).Succeeded.Should().BeTrue();
+        var updateEndpoint = await endpointService.UpdateAsync(
+            new(endpoint.Id, "https://example.test/health-v2", endpoint.OwnerSubjectId, true, null,
+                TargetAuthorizationKinds.Owned, "Updated integration fixture ownership evidence.", null, endpoint.Version),
+            administratorAccess);
+        updateEndpoint.Succeeded.Should().BeTrue(string.Join(" ", updateEndpoint.Errors));
         endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
         (await endpointService.DisableAsync(new(endpoint.Id, endpoint.Version), administratorAccess)).Succeeded.Should().BeTrue();
         endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
@@ -197,6 +276,10 @@ internal static class DatabaseFoundationAssertions
             administratorAccess)).Succeeded.Should().BeTrue();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
         (await environmentService.DisableAsync(new(staging.Id, staging.Version), administratorAccess)).Succeeded.Should().BeTrue();
+        (await targetAuthorization.CanTestEndpointAsync(endpointId,
+            new(developer.Id, [ApplicationRoles.DeveloperSupport]))).Should().BeFalse();
+        (await database.EndpointMonitors.Where(candidate => candidate.EndpointId == endpointId)
+            .Select(candidate => candidate.IsEnabled).SingleAsync()).Should().BeTrue();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
         (await environmentService.DeleteAsync(new(staging.Id, staging.Version), administratorAccess)).Succeeded.Should().BeTrue();
         (await targetReader.ListDeletedEnvironmentsAsync(administratorAccess)).Should().Contain(item => item.Id == stagingId);
@@ -217,7 +300,19 @@ internal static class DatabaseFoundationAssertions
             !(payload.BeforeValues ?? string.Empty).Contains("?q=", StringComparison.Ordinal)
             && !(payload.AfterValues ?? string.Empty).Contains("?q=", StringComparison.Ordinal)
             && !(payload.BeforeValues ?? string.Empty).Contains("Legacy appliance", StringComparison.Ordinal)
-            && !(payload.AfterValues ?? string.Empty).Contains("Legacy appliance", StringComparison.Ordinal));
+            && !(payload.AfterValues ?? string.Empty).Contains("Legacy appliance", StringComparison.Ordinal)
+            && !(payload.BeforeValues ?? string.Empty).Contains("Integration fixture owned", StringComparison.Ordinal)
+            && !(payload.AfterValues ?? string.Empty).Contains("Integration fixture owned", StringComparison.Ordinal)
+            && !(payload.BeforeValues ?? string.Empty).Contains("Updated integration fixture", StringComparison.Ordinal)
+            && !(payload.AfterValues ?? string.Empty).Contains("Updated integration fixture", StringComparison.Ordinal));
+
+        database.ChangeTracker.Clear();
+        await database.Database.MigrateAsync("20260814115913_EnvironmentEndpointVerticalSlice");
+        await database.Database.MigrateAsync();
+        var upgradedEndpoint = await database.Endpoints.AsNoTracking().SingleAsync(candidate => candidate.Id == endpointId);
+        upgradedEndpoint.NormalizedHost.Should().Be("example.test");
+        upgradedEndpoint.EffectivePort.Should().Be(443);
+        (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
     }
 
     private static async Task VerifyEnvironmentTypeConstraintAsync(string connectionString, Guid environmentId)
@@ -241,10 +336,12 @@ internal static class DatabaseFoundationAssertions
         await using var transaction = await connection.BeginTransactionAsync();
         const string sql = """
             INSERT INTO web_health.endpoint
-                (id, environment_id, display_url, normalized_url, normalized_url_hash, normalization_version,
+                (id, environment_id, display_url, normalized_url, normalized_url_hash, normalized_host,
+                 effective_port, normalization_version,
                  is_enabled, http_exception_reason, http_exception_approved_by_user_id, http_exception_approved_at,
                  created_at, created_by_user_id, updated_at, updated_by_user_id, version)
-            VALUES (@id, @environment_id, 'http://unsafe.example.test/', 'http://unsafe.example.test/', @hash, 1,
+            VALUES (@id, @environment_id, 'http://unsafe.example.test/', 'http://unsafe.example.test/', @hash,
+                    'unsafe.example.test', 80, 1,
                     TRUE, 'Not approved by an administrator', @approver, now(), now(), @actor, now(), @actor, 1);
             """;
         await using var command = new NpgsqlCommand(sql, connection, transaction);
@@ -253,6 +350,107 @@ internal static class DatabaseFoundationAssertions
         command.Parameters.AddWithValue("hash", new byte[32]);
         command.Parameters.AddWithValue("approver", nonAdministratorId);
         command.Parameters.AddWithValue("actor", actorId);
+        await command.ExecuteNonQueryAsync();
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => transaction.CommitAsync());
+        exception.ConstraintName.Should().Be("ck_production_http_endpoint_admin_exception");
+    }
+
+    private static async Task VerifyProductionHttpTransitionsAsync(
+        string connectionString,
+        Guid websiteId,
+        Guid productionEnvironmentId,
+        Guid nonAdministratorId,
+        Guid actorId)
+    {
+        var nonProductionEnvironmentId = Guid.NewGuid();
+        var httpEndpointId = Guid.NewGuid();
+        var httpsEndpointId = Guid.NewGuid();
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            const string setupSql = """
+                INSERT INTO web_health.environment
+                    (id, website_id, name, normalized_name, normalization_version, environment_type,
+                     is_production, is_active, created_at, created_by_user_id, updated_at, updated_by_user_id, version)
+                VALUES (@environment_id, @website_id, 'Transition test', 'transition test', 1, 'Test',
+                        FALSE, TRUE, now(), @actor, now(), @actor, 1);
+
+                INSERT INTO web_health.endpoint
+                    (id, environment_id, display_url, normalized_url, normalized_url_hash, normalized_host,
+                     effective_port, normalization_version, is_enabled, http_exception_reason,
+                     http_exception_approved_by_user_id, http_exception_approved_at,
+                     created_at, created_by_user_id, updated_at, updated_by_user_id, version)
+                VALUES (@http_endpoint_id, @environment_id, 'http://transition.example.test/',
+                        'http://transition.example.test/', @http_hash, 'transition.example.test', 80, 1, TRUE,
+                        'Evidence recorded before Production', @approver, now(), now(), @actor, now(), @actor, 1);
+
+                INSERT INTO web_health.endpoint
+                    (id, environment_id, display_url, normalized_url, normalized_url_hash, normalized_host,
+                     effective_port, normalization_version, is_enabled, http_exception_reason,
+                     http_exception_approved_by_user_id, http_exception_approved_at,
+                     created_at, created_by_user_id, updated_at, updated_by_user_id, version)
+                VALUES (@https_endpoint_id, @production_environment_id, 'https://scheme-change.example.test/',
+                        'https://scheme-change.example.test/', @https_hash, 'scheme-change.example.test', 443, 1, TRUE,
+                        'Irrelevant evidence while HTTPS', @approver, now(), now(), @actor, now(), @actor, 1);
+                """;
+            await using var setup = new NpgsqlCommand(setupSql, connection);
+            setup.Parameters.AddWithValue("environment_id", nonProductionEnvironmentId);
+            setup.Parameters.AddWithValue("website_id", websiteId);
+            setup.Parameters.AddWithValue("http_endpoint_id", httpEndpointId);
+            setup.Parameters.AddWithValue("https_endpoint_id", httpsEndpointId);
+            setup.Parameters.AddWithValue("production_environment_id", productionEnvironmentId);
+            setup.Parameters.AddWithValue("http_hash", Enumerable.Repeat((byte)1, 32).ToArray());
+            setup.Parameters.AddWithValue("https_hash", Enumerable.Repeat((byte)2, 32).ToArray());
+            setup.Parameters.AddWithValue("approver", nonAdministratorId);
+            setup.Parameters.AddWithValue("actor", actorId);
+            await setup.ExecuteNonQueryAsync();
+        }
+
+        await AssertProductionTransitionRejectedAsync(
+            connectionString,
+            "UPDATE web_health.environment SET environment_type = 'Production', is_production = TRUE WHERE id = @id",
+            nonProductionEnvironmentId);
+        await AssertProductionTransitionRejectedAsync(
+            connectionString,
+            "UPDATE web_health.endpoint SET environment_id = @production_id WHERE id = @id",
+            httpEndpointId,
+            productionEnvironmentId);
+        await AssertProductionTransitionRejectedAsync(
+            connectionString,
+            """
+                UPDATE web_health.endpoint
+                SET display_url = 'http://scheme-change.example.test/',
+                    normalized_url = 'http://scheme-change.example.test/',
+                    normalized_url_hash = @hash,
+                    effective_port = 80
+                WHERE id = @id
+                """,
+            httpsEndpointId,
+            hash: Enumerable.Repeat((byte)3, 32).ToArray());
+    }
+
+    private static async Task AssertProductionTransitionRejectedAsync(
+        string connectionString,
+        string sql,
+        Guid endpointOrEnvironmentId,
+        Guid? productionEnvironmentId = null,
+        byte[]? hash = null)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("id", endpointOrEnvironmentId);
+        if (productionEnvironmentId is not null)
+        {
+            command.Parameters.AddWithValue("production_id", productionEnvironmentId.Value);
+        }
+
+        if (hash is not null)
+        {
+            command.Parameters.AddWithValue("hash", hash);
+        }
+
         await command.ExecuteNonQueryAsync();
         var exception = await Assert.ThrowsAsync<PostgresException>(() => transaction.CommitAsync());
         exception.ConstraintName.Should().Be("ck_production_http_endpoint_admin_exception");

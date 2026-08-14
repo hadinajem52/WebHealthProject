@@ -29,7 +29,9 @@ public static class EndpointUrlNormalizer
         return EndpointUrlNormalizationResult.Success(
             displayUrl,
             normalizedUrl,
-            SHA256.HashData(Encoding.UTF8.GetBytes(normalizedUrl)));
+            SHA256.HashData(Encoding.UTF8.GetBytes(normalizedUrl)),
+            uri.IdnHost.TrimEnd('.').ToLowerInvariant(),
+            uri.Port);
     }
 
     private static List<string> ValidateInput(string value)
@@ -129,13 +131,17 @@ public sealed record EndpointUrlNormalizationResult(
     string? DisplayUrl,
     string? NormalizedUrl,
     byte[]? NormalizedUrlHash,
-    IReadOnlyList<string> Errors)
+    IReadOnlyList<string> Errors,
+    string? NormalizedHost,
+    int? EffectivePort)
 {
     internal static EndpointUrlNormalizationResult Success(
         string displayUrl,
         string normalizedUrl,
-        byte[] hash) => new(true, displayUrl, normalizedUrl, hash, []);
+        byte[] hash,
+        string normalizedHost,
+        int effectivePort) => new(true, displayUrl, normalizedUrl, hash, [], normalizedHost, effectivePort);
 
     internal static EndpointUrlNormalizationResult Failure(
-        IReadOnlyList<string> errors) => new(false, null, null, null, errors);
+        IReadOnlyList<string> errors) => new(false, null, null, null, errors, null, null);
 }

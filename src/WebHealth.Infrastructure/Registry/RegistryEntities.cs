@@ -70,6 +70,8 @@ public sealed class Endpoint
     public required string DisplayUrl { get; set; }
     public required string NormalizedUrl { get; set; }
     public required byte[] NormalizedUrlHash { get; set; }
+    public required string NormalizedHost { get; set; }
+    public int EffectivePort { get; set; }
     public short NormalizationVersion { get; set; }
     public bool IsEnabled { get; set; }
     public string? HttpExceptionReason { get; set; }
@@ -84,6 +86,26 @@ public sealed class Endpoint
     public long Version { get; set; }
     public WebsiteEnvironment Environment { get; set; } = null!;
     public ICollection<EndpointMonitor> Monitors { get; } = [];
+    public ICollection<TargetAuthorizationEvidence> TargetAuthorizations { get; } = [];
+}
+
+public sealed class TargetAuthorizationEvidence
+{
+    public Guid Id { get; set; }
+    public Guid EndpointId { get; set; }
+    public required string AuthorizationKind { get; set; }
+    public required string EvidenceReference { get; set; }
+    public required string NormalizedHost { get; set; }
+    public int Port { get; set; }
+    public DateTimeOffset EffectiveFrom { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+    public Guid? RevokedByUserId { get; set; }
+    public string? RevocationReason { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public long Version { get; set; }
+    public Endpoint Endpoint { get; set; } = null!;
 }
 
 public sealed class PolicyProfile

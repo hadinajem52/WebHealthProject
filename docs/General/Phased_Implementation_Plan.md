@@ -202,7 +202,7 @@ These requirements apply throughout the project:
 - [x] Configure password, lockout, and security-stamp policies. Evidence: [`../../src/WebHealth.Infrastructure/DependencyInjection.cs`](../../src/WebHealth.Infrastructure/DependencyInjection.cs).
 - [x] Implement admin-only user and supported-role assignment management. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
 - [x] Implement account disabling and session invalidation. Evidence: transactional security-stamp verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
-- [x] Complete current registry role, assignment, grant, and target-testing authorization policies.
+- [x] Complete current registry role, effective-owner, grant, external-target-evidence, eligibility, and target-testing authorization policies.
 - [x] Protect every current and future operational endpoint server-side through the fallback policy; liveness and safe login/error endpoints explicitly opt out.
 - [x] Add anti-forgery protection to state-changing MVC actions.
 - [x] Restrict detailed readiness to Administrator and Operations through the diagnostics policy. Evidence: the complete role and roleless matrix in [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs).

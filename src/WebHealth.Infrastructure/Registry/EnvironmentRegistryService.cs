@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
 using WebHealth.Domain.Normalization;
+using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Registry;
@@ -107,7 +108,7 @@ internal sealed class EnvironmentRegistryService(
             return Validation("Disable the website before removing its final active environment.");
         }
 
-        if (input.IsProduction && HasUnapprovedHttpEndpoint(environment))
+        if (input.IsProduction && await HasUnapprovedHttpEndpointAsync(environment.Id, cancellationToken))
         {
             return Validation("Every HTTP endpoint requires an administrator-approved exception before this environment can become Production.");
         }
@@ -233,12 +234,19 @@ internal sealed class EnvironmentRegistryService(
             && candidate.IsActive, cancellationToken);
     }
 
-    private static bool HasUnapprovedHttpEndpoint(WebsiteEnvironment environment) =>
-        environment.Endpoints.Any(endpoint => endpoint.DeletedAt == null
-            && endpoint.NormalizedUrl.StartsWith("http://", StringComparison.Ordinal)
+    private Task<bool> HasUnapprovedHttpEndpointAsync(Guid environmentId, CancellationToken cancellationToken) =>
+        dbContext.Endpoints.AnyAsync(endpoint =>
+            endpoint.EnvironmentId == environmentId
+            && endpoint.DeletedAt == null
+            && endpoint.NormalizedUrl.StartsWith("http://")
             && (endpoint.HttpExceptionReason == null
                 || endpoint.HttpExceptionApprovedByUserId == null
-                || endpoint.HttpExceptionApprovedAt == null));
+                || endpoint.HttpExceptionApprovedAt == null
+                || !dbContext.UserRoles.Any(userRole =>
+                    userRole.UserId == endpoint.HttpExceptionApprovedByUserId
+                    && dbContext.Roles.Any(role =>
+                        role.Id == userRole.RoleId && role.Name == ApplicationRoles.Administrator))),
+            cancellationToken);
 
     private static EnvironmentInput NormalizeInput(string name, string environmentType, string? baseUrl)
     {
@@ -292,7 +300,6 @@ internal sealed class EnvironmentRegistryService(
         foreach (var monitor in environment.Endpoints.SelectMany(endpoint => endpoint.Monitors))
         {
             monitor.IntervalSeconds = interval;
-            monitor.IsEnabled = environment.IsActive && monitor.Endpoint.IsEnabled;
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 monitor.Endpoint.NormalizedUrl,
                 interval,
@@ -315,14 +322,6 @@ internal sealed class EnvironmentRegistryService(
         {
             environment.DeletedAt = null;
             environment.DeletedByUserId = null;
-        }
-
-        foreach (var monitor in environment.Endpoints.SelectMany(endpoint => endpoint.Monitors))
-        {
-            monitor.IsEnabled = false;
-            monitor.UpdatedAt = now;
-            monitor.UpdatedByUserId = actorId;
-            monitor.Version++;
         }
 
         Touch(environment, actorId, now);

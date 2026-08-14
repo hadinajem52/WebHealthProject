@@ -460,10 +460,116 @@ a.app-nav__link:hover {
 }
 
 .app-header__account-form {
+    margin: 0;
+}
+
+/* Account menu ----------------------------------------------------------- */
+
+.app-account {
     /* Never squeezed: the search field absorbs a tight header instead, so the
        signed-in name is not truncated. */
-    margin: 0;
+    position: relative;
     flex: 0 0 auto;
+}
+
+/*
+ * Without script the menu is part of the header, so signing out stays a plain
+ * form submission. The enhancement hides it until the account button opens it.
+ */
+.js .app-account__menu {
+    display: none;
+}
+
+.js .app-account[data-open="true"] .app-account__menu {
+    display: block;
+}
+
+.app-account__menu {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    width: 15rem;
+    padding: var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+}
+
+.app-account__identity {
+    display: flex;
+    padding: var(--space-2) var(--space-3) var(--space-3);
+    flex-direction: column;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-2);
+    gap: 0.125rem;
+}
+
+.app-account__name {
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    line-height: var(--line-height-tight);
+}
+
+.app-account__email {
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-base);
+    text-overflow: ellipsis;
+}
+
+.app-account__item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-tile);
+    background: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    gap: var(--space-3);
+    text-align: left;
+    transition: background-color var(--motion-fast) var(--motion-easing);
+}
+
+.app-account__item:hover {
+    background-color: var(--surface-sunken);
+}
+
+.app-account__item svg {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex: 0 0 auto;
+    color: var(--color-gray-500);
+}
+
+/* Kept focusable and announced as unavailable rather than removed, matching the
+   planned navigation entries. */
+.app-account__item.is-planned {
+    color: var(--text-secondary);
+    cursor: default;
+}
+
+.app-account__item.is-planned:hover {
+    background: none;
+}
+
+.app-account__badge {
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-pill);
+    margin-left: auto;
+    color: var(--text-secondary);
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.4rem;
 }
 
 .app-header__icon {

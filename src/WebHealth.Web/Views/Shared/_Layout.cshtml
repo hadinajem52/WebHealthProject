@@ -61,13 +61,42 @@
                             </span>
                         </div>
 
-                        <form asp-controller="Account" asp-action="Logout" method="post" class="app-header__account-form">
-                            <button type="submit" class="app-header__account">
+                        @*
+                            The menu is rendered open in the document, so signing
+                            out is reachable without script; the enhancement in
+                            shell.js collapses it to a button-triggered popup.
+                        *@
+                        <div class="app-account" data-shell-account data-open="false">
+                            <button type="button"
+                                    class="app-header__account"
+                                    data-shell-account-toggle
+                                    aria-controls="app-account-menu"
+                                    aria-expanded="false">
                                 @await Html.PartialAsync("_Icon", "person")
                                 <span>@User.GetDisplayName()</span>
-                                <span class="visually-hidden">&mdash; sign out</span>
+                                <span class="visually-hidden">&mdash; account menu</span>
                             </button>
-                        </form>
+
+                            <div class="app-account__menu" id="app-account-menu" data-shell-account-menu>
+                                <p class="app-account__identity">
+                                    <span class="app-account__name">@User.GetDisplayName()</span>
+                                    <span class="app-account__email">@User.Identity?.Name</span>
+                                </p>
+
+                                <button type="button" class="app-account__item is-planned" aria-disabled="true">
+                                    @await Html.PartialAsync("_Icon", "settings")
+                                    <span>Settings</span>
+                                    <span class="app-account__badge">Planned</span>
+                                </button>
+
+                                <form asp-controller="Account" asp-action="Logout" method="post" class="app-header__account-form">
+                                    <button type="submit" class="app-account__item">
+                                        @await Html.PartialAsync("_Icon", "sign-out")
+                                        <span>Sign out</span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
 
                         <button type="button" class="app-header__icon">
                             @await Html.PartialAsync("_Icon", "settings")

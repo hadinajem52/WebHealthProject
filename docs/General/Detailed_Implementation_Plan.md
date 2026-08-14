@@ -279,7 +279,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Create Administrator, Operations, Developer/Support, and Viewer role definitions with stable IDs and explicit bootstrap verification.
 - [x] Implement admin-only user and supported-role assignment management. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
 - [x] Implement account disabling and security-stamp session invalidation. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
-- [x] Complete current registry role, assignment, grant, and target-testing policies on the server. Evidence: [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md).
+- [x] Complete current registry role, effective-owner, grant, external-target-evidence, eligibility, and target-testing policies on the server. Evidence: [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md).
 - [x] Protect operational controllers and actions by default through a fallback authorization policy.
 - [x] Require anti-forgery protection for state-changing browser requests.
 - [ ] Restrict Hangfire administration when it is added. Detailed readiness already requires the Administrator/Operations diagnostics policy.

@@ -145,5 +145,7 @@ public sealed record EndpointAuditSnapshot(
     bool IsEnabled,
     bool HasHttpException,
     bool HttpExceptionChanged,
+    bool HasTargetAuthorization,
+    bool TargetAuthorizationChanged,
     bool IsDeleted,
     long Version);

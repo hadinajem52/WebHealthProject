@@ -149,7 +149,8 @@ public sealed class TargetsController(
         }
 
         var result = await endpointService.CreateAsync(
-            new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason),
+            new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
+                model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -175,6 +176,9 @@ public sealed class TargetsController(
             OwnerSubjectId = endpoint.OwnerSubjectId,
             IsEnabled = endpoint.IsEnabled,
             HttpExceptionReason = endpoint.HttpExceptionReason,
+            TargetAuthorizationKind = endpoint.TargetAuthorizationKind,
+            TargetAuthorizationEvidence = endpoint.TargetAuthorizationEvidence,
+            TargetAuthorizationExpiresAt = endpoint.TargetAuthorizationExpiresAt,
             Version = endpoint.Version
         }, cancellationToken));
     }
@@ -188,7 +192,9 @@ public sealed class TargetsController(
         }
 
         var result = await endpointService.UpdateAsync(
-            new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason, model.Version),
+            new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
+                model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
+                model.TargetAuthorizationExpiresAt, model.Version),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {

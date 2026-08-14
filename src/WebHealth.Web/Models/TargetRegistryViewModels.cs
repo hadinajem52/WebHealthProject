@@ -56,6 +56,15 @@ public sealed class EndpointFormViewModel
     [StringLength(500), Display(Name = "Production HTTP exception reason")]
     public string? HttpExceptionReason { get; set; }
 
+    [Display(Name = "Target authorization")]
+    public string? TargetAuthorizationKind { get; set; }
+
+    [StringLength(500), Display(Name = "Ownership or permission reference")]
+    public string? TargetAuthorizationEvidence { get; set; }
+
+    [Display(Name = "Authorization expires")]
+    public DateTimeOffset? TargetAuthorizationExpiresAt { get; set; }
+
     public long Version { get; set; }
     public IReadOnlyList<RegistryOwnerOption> Owners { get; set; } = [];
 }

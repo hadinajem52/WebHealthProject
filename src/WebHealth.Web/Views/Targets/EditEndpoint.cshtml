@@ -1,3 +1,12 @@
 @model EndpointFormViewModel
 @{ViewData.SetTitle("Edit endpoint"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.EnvironmentName), new BreadcrumbItem("Edit endpoint"));}
-<section class="card form-card"><h2 class="card__title">Edit endpoint</h2><p class="card__subtitle">The original version protects concurrent configuration changes.</p><form asp-action="EditEndpoint" method="post" class="form-stack"><input asp-for="EndpointId" type="hidden"/><input asp-for="EnvironmentId" type="hidden"/><input asp-for="Version" type="hidden"/><partial name="_EndpointForm" model="Model"/><div class="form-actions"><button class="button button--primary">Save endpoint</button><a class="button button--secondary" asp-action="Endpoint" asp-route-id="@Model.EndpointId">Cancel</a></div></form></section>
+<section class="card form-card"><h2 class="card__title">Edit endpoint</h2><p class="card__subtitle">The original version protects concurrent configuration changes.</p><form asp-action="EditEndpoint" method="post" class="form-stack"><input asp-for="EndpointId" type="hidden"/><input asp-for="EnvironmentId" type="hidden"/><input asp-for="Version" type="hidden"/><partial name="_EndpointForm" model="Model"/><div class="form-actions">
+    <button class="button button--primary" type="submit">
+        @await Html.PartialAsync("_Icon", "check")
+        <span>Save endpoint</span>
+    </button>
+    <a class="button button--secondary" asp-action="Endpoint" asp-route-id="@Model.EndpointId">
+        @await Html.PartialAsync("_Icon", "close")
+        <span>Cancel</span>
+    </a>
+</div></form></section>

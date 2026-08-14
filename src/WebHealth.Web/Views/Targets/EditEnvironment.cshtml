@@ -1,3 +1,12 @@
 @model EnvironmentFormViewModel
 @{ViewData.SetTitle("Edit environment"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.WebsiteName), new BreadcrumbItem("Edit environment"));}
-<section class="card form-card"><h2 class="card__title">Edit environment</h2><p class="card__subtitle">Changing to Production validates every HTTP endpoint exception.</p><form asp-action="EditEnvironment" method="post" class="form-stack"><input asp-for="EnvironmentId" type="hidden" /><input asp-for="WebsiteId" type="hidden" /><input asp-for="Version" type="hidden" /><partial name="_EnvironmentForm" model="Model" /><div class="form-actions"><button class="button button--primary" type="submit">Save environment</button><a class="button button--secondary" asp-action="Environment" asp-route-id="@Model.EnvironmentId">Cancel</a></div></form></section>
+<section class="card form-card"><h2 class="card__title">Edit environment</h2><p class="card__subtitle">Changing to Production validates every HTTP endpoint exception.</p><form asp-action="EditEnvironment" method="post" class="form-stack"><input asp-for="EnvironmentId" type="hidden" /><input asp-for="WebsiteId" type="hidden" /><input asp-for="Version" type="hidden" /><partial name="_EnvironmentForm" model="Model" /><div class="form-actions">
+    <button class="button button--primary" type="submit">
+        @await Html.PartialAsync("_Icon", "check")
+        <span>Save environment</span>
+    </button>
+    <a class="button button--secondary" asp-action="Environment" asp-route-id="@Model.EnvironmentId">
+        @await Html.PartialAsync("_Icon", "close")
+        <span>Cancel</span>
+    </a>
+</div></form></section>

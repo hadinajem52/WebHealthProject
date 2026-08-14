@@ -1,7 +1,17 @@
 @model EnvironmentDetailsViewModel
 @{ViewData.SetTitle(Model.Environment.Name); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.Environment.WebsiteName), new BreadcrumbItem(Model.Environment.Name));}
 <section class="card">
-    <div class="page-intro"><div><h2 class="card__title">@Model.Environment.Name</h2><p class="card__subtitle">@Model.Environment.WebsiteName · @Model.Environment.EnvironmentType · Version @Model.Environment.Version</p></div><div class="form-actions">@if (Model.CanManage && !Model.Environment.IsDeleted){<a class="button button--secondary" asp-action="CreateEndpoint" asp-route-environmentId="@Model.Environment.Id">Add endpoint</a><a class="button button--primary" asp-action="EditEnvironment" asp-route-id="@Model.Environment.Id">Edit environment</a>}</div></div>
+    <div class="page-intro"><div><h2 class="card__title">@Model.Environment.Name</h2><p class="card__subtitle">@Model.Environment.WebsiteName · @Model.Environment.EnvironmentType · Version @Model.Environment.Version</p></div><div class="form-actions">@if (Model.CanManage && !Model.Environment.IsDeleted)
+    {
+        <a class="button button--secondary" asp-action="CreateEndpoint" asp-route-environmentId="@Model.Environment.Id">
+            @await Html.PartialAsync("_Icon", "plus")
+            <span>Add endpoint</span>
+        </a>
+        <a class="button button--primary" asp-action="EditEnvironment" asp-route-id="@Model.Environment.Id">
+            @await Html.PartialAsync("_Icon", "pencil")
+            <span>Edit environment</span>
+        </a>
+    }</div></div>
     <dl class="registry-facts"><div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Environment.IsDeleted ? "danger" : Model.Environment.IsActive ? "success" : "warning")">@(Model.Environment.IsDeleted ? "Deleted" : Model.Environment.IsActive ? "Active" : "Disabled")</span></dd></div><div><dt>Production</dt><dd>@(Model.Environment.IsProduction ? "Yes" : "No")</dd></div><div><dt>Base URL</dt><dd class="target-url">@(Model.Environment.BaseUrl ?? "Not set")</dd></div></dl>
     @if (Model.CanManage){<div class="registry-lifecycle">@if(Model.Environment.IsDeleted){<form asp-action="RestoreEnvironment" method="post"><input type="hidden" name="id" value="@Model.Environment.Id"/><input type="hidden" name="version" value="@Model.Environment.Version"/><button class="button button--primary">Restore environment</button></form>}else{@if(Model.Environment.IsActive){<form asp-action="DisableEnvironment" method="post"><input type="hidden" name="id" value="@Model.Environment.Id"/><input type="hidden" name="version" value="@Model.Environment.Version"/><button class="button button--secondary">Disable</button></form>}<form asp-action="DeleteEnvironment" method="post"><input type="hidden" name="id" value="@Model.Environment.Id"/><input type="hidden" name="version" value="@Model.Environment.Version"/><button class="button button--danger">Delete</button></form>}</div>}
 </section>

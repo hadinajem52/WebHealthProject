@@ -7,7 +7,14 @@
     <div class="page-intro">
         <div><h2 class="card__title">@Model.WebsiteName environments</h2><p class="card__subtitle">Deployment targets and their endpoint coverage.</p></div>
         <div class="form-actions">
-            @if (Model.CanManage){<a class="button button--secondary" asp-action="Archived">Archived targets</a><a class="button button--primary" asp-action="CreateEnvironment" asp-route-websiteId="@Model.WebsiteId">Add environment</a>}
+            @if (Model.CanManage)
+            {
+                <a class="button button--secondary" asp-action="Archived">Archived targets</a>
+                <a class="button button--primary" asp-action="CreateEnvironment" asp-route-websiteId="@Model.WebsiteId">
+                    @await Html.PartialAsync("_Icon", "plus")
+                    <span>Add environment</span>
+                </a>
+            }
         </div>
     </div>
     @if (Model.Environments.Count == 0){<p class="card__subtitle">No active environments are available.</p>}

@@ -13,6 +13,14 @@ public static class EnvironmentTypes
         [Production, Staging, Preproduction, Test, Development, Custom];
 }
 
+public static class TargetAuthorizationKinds
+{
+    public const string Owned = "Owned";
+    public const string ExplicitPermission = "ExplicitPermission";
+
+    public static IReadOnlyList<string> All { get; } = [Owned, ExplicitPermission];
+}
+
 public sealed record EnvironmentListItem(
     Guid Id,
     Guid WebsiteId,
@@ -69,11 +77,16 @@ public sealed record EndpointDetails(
     bool IsDeleted,
     bool HasHttpException,
     string? HttpExceptionReason,
+    bool HasTargetAuthorization,
+    string? TargetAuthorizationKind,
+    string? TargetAuthorizationEvidence,
+    DateTimeOffset? TargetAuthorizationExpiresAt,
     long Version,
     string MonitorType,
     int IntervalSeconds,
     int TimeoutSeconds,
     bool MonitorEnabled,
+    bool IsMonitoringEligible,
     bool CanTest);
 
 public sealed record CreateEnvironment(
@@ -96,7 +109,10 @@ public sealed record CreateEndpoint(
     string Url,
     Guid? OwnerSubjectId,
     bool IsEnabled,
-    string? HttpExceptionReason);
+    string? HttpExceptionReason,
+    string? TargetAuthorizationKind,
+    string? TargetAuthorizationEvidence,
+    DateTimeOffset? TargetAuthorizationExpiresAt);
 
 public sealed record UpdateEndpoint(
     Guid EndpointId,
@@ -104,4 +120,7 @@ public sealed record UpdateEndpoint(
     Guid? OwnerSubjectId,
     bool IsEnabled,
     string? HttpExceptionReason,
+    string? TargetAuthorizationKind,
+    string? TargetAuthorizationEvidence,
+    DateTimeOffset? TargetAuthorizationExpiresAt,
     long Version);

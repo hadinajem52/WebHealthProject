@@ -9,6 +9,15 @@
     <form asp-action="EditClient" method="post" class="form-stack">
         <input asp-for="ClientId" type="hidden" /><input asp-for="Version" type="hidden" />
         <partial name="_ClientForm" model="Model" />
-        <div class="form-actions"><button class="button button--primary" type="submit">Save client</button><a class="button button--secondary" asp-action="Client" asp-route-id="@Model.ClientId">Cancel</a></div>
+        <div class="form-actions">
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "check")
+                <span>Save client</span>
+            </button>
+            <a class="button button--secondary" asp-action="Client" asp-route-id="@Model.ClientId">
+                @await Html.PartialAsync("_Icon", "close")
+                <span>Cancel</span>
+            </a>
+        </div>
     </form>
 </section>

@@ -1,8 +1,14 @@
 @model EndpointFormViewModel
+@using WebHealth.Application.Registry
 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
 <div class="form-field"><label asp-for="Url"></label><input asp-for="Url" type="url" placeholder="https://example.com/health" /><span class="form-field__hint">Absolute HTTP/HTTPS only. Credentials, fragments, relative URLs and unsupported schemes are rejected.</span><span asp-validation-for="Url"></span></div>
 <div class="form-field"><label asp-for="OwnerSubjectId"></label><select asp-for="OwnerSubjectId"><option value="">Inherit website owner</option>@foreach(var owner in Model.Owners){<option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>}</select><span asp-validation-for="OwnerSubjectId"></span></div>
-<label class="switch-field"><input asp-for="IsEnabled" type="checkbox" /><span>Endpoint and monitor enabled</span></label>
+<label class="switch-field"><input asp-for="IsEnabled" type="checkbox" /><span>Endpoint enabled</span></label>
+<div class="form-grid form-grid--two">
+    <div class="form-field"><label asp-for="TargetAuthorizationKind"></label><select asp-for="TargetAuthorizationKind"><option value="">No evidence recorded</option><option value="@TargetAuthorizationKinds.Owned">I own this target</option><option value="@TargetAuthorizationKinds.ExplicitPermission">I have explicit testing permission</option></select><span asp-validation-for="TargetAuthorizationKind"></span></div>
+    <div class="form-field"><label asp-for="TargetAuthorizationExpiresAt"></label><input asp-for="TargetAuthorizationExpiresAt" type="datetime-local" /><span class="form-field__hint">Optional. Expired evidence makes monitoring ineligible.</span><span asp-validation-for="TargetAuthorizationExpiresAt"></span></div>
+</div>
+<div class="form-field"><label asp-for="TargetAuthorizationEvidence"></label><textarea asp-for="TargetAuthorizationEvidence" rows="3"></textarea><span class="form-field__hint">Required when enabled. Record a safe personal reference, such as “domain owned by me” or a permission ticket; do not paste credentials or tokens.</span><span asp-validation-for="TargetAuthorizationEvidence"></span></div>
 @if (Model.IsProduction)
 {
     <div class="form-field"><label asp-for="HttpExceptionReason"></label><textarea asp-for="HttpExceptionReason" rows="4" readonly="@(!Model.CanApproveHttp)"></textarea><span class="form-field__hint">HTTPS needs no exception. New or changed HTTP exceptions require an Administrator and a bounded reason.</span><span asp-validation-for="HttpExceptionReason"></span></div>

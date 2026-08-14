@@ -5,5 +5,14 @@
 }
 <section class="card form-card">
     <h2 class="card__title">Edit website</h2><p class="card__subtitle">The original version is checked before this update is accepted.</p>
-    <form asp-action="EditWebsite" method="post" class="form-stack"><input asp-for="WebsiteId" type="hidden" /><input asp-for="Version" type="hidden" /><partial name="_WebsiteForm" model="Model" /><div class="form-actions"><button class="button button--primary" type="submit">Save website</button><a class="button button--secondary" asp-action="Website" asp-route-id="@Model.WebsiteId">Cancel</a></div></form>
+    <form asp-action="EditWebsite" method="post" class="form-stack"><input asp-for="WebsiteId" type="hidden" /><input asp-for="Version" type="hidden" /><partial name="_WebsiteForm" model="Model" /><div class="form-actions">
+        <button class="button button--primary" type="submit">
+            @await Html.PartialAsync("_Icon", "check")
+            <span>Save website</span>
+        </button>
+        <a class="button button--secondary" asp-action="Website" asp-route-id="@Model.WebsiteId">
+            @await Html.PartialAsync("_Icon", "close")
+            <span>Cancel</span>
+        </a>
+    </div></form>
 </section>

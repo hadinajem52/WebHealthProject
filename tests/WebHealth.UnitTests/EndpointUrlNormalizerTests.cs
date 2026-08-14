@@ -27,6 +27,8 @@ public sealed class EndpointUrlNormalizerTests
         first.NormalizedUrl.Should().Be(second.NormalizedUrl);
         first.NormalizedUrlHash.Should().Equal(second.NormalizedUrlHash!);
         first.NormalizedUrlHash.Should().HaveCount(32);
+        first.NormalizedHost.Should().Be("xn--bcher-kva.example");
+        first.EffectivePort.Should().Be(443);
     }
 
     [Fact]
@@ -35,5 +37,7 @@ public sealed class EndpointUrlNormalizerTests
         var result = EndpointUrlNormalizer.Normalize("http://Example.com:80/Path/?b=2&a=1");
 
         result.NormalizedUrl.Should().Be("http://example.com/Path/?b=2&a=1");
+        result.NormalizedHost.Should().Be("example.com");
+        result.EffectivePort.Should().Be(80);
     }
 }

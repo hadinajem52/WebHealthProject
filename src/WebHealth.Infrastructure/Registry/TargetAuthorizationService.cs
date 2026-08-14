@@ -11,10 +11,12 @@ internal sealed class TargetAuthorizationService(
     public Task<bool> CanTestEndpointAsync(
         Guid endpointId,
         RegistryAccessContext access,
-        CancellationToken cancellationToken = default) =>
-        visibility.ApplyTestableEndpointScope(
-                dbContext.Endpoints.AsNoTracking(),
-                access,
-                DateTimeOffset.UtcNow)
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return MonitoringEligibility.Apply(
+                visibility.ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now),
+                now)
             .AnyAsync(endpoint => endpoint.Id == endpointId && endpoint.DeletedAt == null, cancellationToken);
+    }
 }

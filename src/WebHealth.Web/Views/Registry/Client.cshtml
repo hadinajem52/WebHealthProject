@@ -8,7 +8,16 @@
         <div><h2 class="card__title">@Model.Client.Name</h2><p class="card__subtitle">Owned by @Model.Client.OwnerName · Version @Model.Client.Version</p></div>
         @if (Model.CanManage && !Model.Client.IsDeleted)
         {
-            <div class="form-actions"><a class="button button--secondary" asp-action="CreateWebsite" asp-route-clientId="@Model.Client.Id">Add website</a><a class="button button--primary" asp-action="EditClient" asp-route-id="@Model.Client.Id">Edit client</a></div>
+            <div class="form-actions">
+                <a class="button button--secondary" asp-action="CreateWebsite" asp-route-clientId="@Model.Client.Id">
+                    @await Html.PartialAsync("_Icon", "plus")
+                    <span>Add website</span>
+                </a>
+                <a class="button button--primary" asp-action="EditClient" asp-route-id="@Model.Client.Id">
+                    @await Html.PartialAsync("_Icon", "pencil")
+                    <span>Edit client</span>
+                </a>
+            </div>
         }
     </div>
     <dl class="registry-facts">

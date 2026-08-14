@@ -866,7 +866,19 @@ code,
 
 .filter-grid .form-field {
     min-width: 0;
-    flex: 1 1 11rem;
+    flex: 1 1 9rem;
+}
+
+/*
+ * Wrapping is decided from the preferred widths, not the shrunk ones, so a
+ * wider actions group pushed itself onto a second line while the fields still
+ * had room to give. On a wide viewport the row is kept intact and the fields
+ * absorb the difference instead.
+ */
+@media (min-width: 62em) {
+    .filter-grid {
+        flex-wrap: nowrap;
+    }
 }
 
 /* One control height across inputs, dates and selects keeps the labels on a

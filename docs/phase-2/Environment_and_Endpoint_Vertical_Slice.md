@@ -10,8 +10,9 @@
 - Environment names use shared name normalization and are unique per Website while not deleted.
 - Supported types are Production, Staging, Preproduction, Test, Development, and Custom. `EnvironmentType = Production` and `IsProduction` are kept consistent in application code and by PostgreSQL.
 - Endpoint list, details, create, edit, disable, soft-delete, restore, and archive flows.
-- Endpoint ownership inherits the Website owner unless an enabled user/team override is selected.
-- Administrator and Operations manage configuration. Developer/Support reads assigned targets and may be authorized to test them. Viewer reads only active grant scope and cannot test targets.
+- Endpoint ownership inherits the Website owner unless an enabled user/team override is selected. An override replaces inherited ownership rather than adding another authorization path.
+- Administrator and Operations manage configuration. Developer/Support reads the single effective owner scope and may test only effectively eligible targets. Viewer reads only active grant scope and cannot test targets.
+- Enabling an Endpoint requires active personal ownership or explicit testing-permission evidence scoped to its normalized host and effective port. Evidence can expire or be revoked.
 - Operational queries exclude deleted records; archive queries are manager-only.
 
 ## URL and production safety
@@ -28,23 +29,27 @@ PostgreSQL provides the final unique constraint on Environment, URL hash, and no
 
 Production endpoints require HTTPS. HTTP is accepted only when an Administrator supplies or changes a non-empty reason of at most 500 characters. Approval actor/time are stored separately. Deferred PostgreSQL triggers reject Production HTTP evidence approved by a non-Administrator and reject changing an Environment to Production while an active HTTP endpoint lacks valid evidence.
 
+The database revalidates the Administrator approver when an Endpoint becomes Production HTTP through an Environment transition, Environment reassignment, or URL scheme change. Historical evidence is not silently promoted into a valid Production exception.
+
 The exception reason is shown only to Administrator and Operations users. Scoped Developer/Support and Viewer details expose only whether exception evidence exists.
 
 ## Phase 3 foundation
 
 Creating an Endpoint also creates one `HttpAvailability` monitor referencing the seeded system policy profile. The record contains typed interval, timeout, confirmation, and threshold defaults plus a configuration fingerprint.
 
+Monitor `IsEnabled` is its configured state and is not rewritten by Website, Environment, or Endpoint lifecycle changes. Effective monitoring eligibility is calculated centrally from active Website, Environment, Endpoint, monitor, and unexpired target-authorization evidence state.
+
 This increment deliberately leaves `schedule_anchor` and `next_due_at` null. It performs no HTTP requests, DNS resolution, Hangfire enqueueing, scheduler work, logical checks, results, redirects, or history writes. Those remain Phase 3 responsibilities.
 
 ## Audit and concurrency
 
-Every Environment and Endpoint mutation writes a typed audit event in the same transaction. Base URL, endpoint URL, and HTTP-exception changes use safe change flags and URL hashes rather than copying query values or exception-reason contents into audit JSON.
+Every Environment and Endpoint mutation writes a typed audit event in the same transaction. Base URL, endpoint URL, HTTP-exception, and target-authorization changes use safe change flags and URL hashes rather than copying query values, exception reasons, or evidence-reference contents into audit JSON.
 
 Every edit and lifecycle action uses the submitted original version. A conflict retains the stale token and requires reopening the edit form.
 
 ## Migration and verification
 
-Migration `20260814115913_EnvironmentEndpointVerticalSlice` adds Endpoint, Endpoint Monitor, Policy Profile, endpoint-scoped grants, constraints, indexes, a deterministic default profile, and deferred cross-table enforcement.
+Migration `20260814115913_EnvironmentEndpointVerticalSlice` adds Endpoint, Endpoint Monitor, Policy Profile, endpoint-scoped grants, constraints, indexes, a deterministic default profile, and deferred cross-table enforcement. Migration `20260814123343_HardenTargetAuthorization` adds host/port-scoped authorization evidence, backfills normalized host/port identity, and hardens Production HTTP transition checks.
 
 Verification covers:
 
@@ -54,5 +59,5 @@ Verification covers:
 - default monitor/profile creation with no scheduling timestamps;
 - Administrator-only Production HTTP exceptions at service and database boundaries;
 - policy-profile/monitor-type consistency;
-- Developer ownership testing authorization and Viewer denial;
+- effective-owner override behavior, external target evidence, centralized monitoring eligibility, Developer testing authorization, and Viewer denial;
 - endpoint-scoped Viewer grants and manager-only archive queries.

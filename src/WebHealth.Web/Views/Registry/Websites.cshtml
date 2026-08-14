@@ -15,7 +15,10 @@
             @if (Model.CanManage)
             {
                 <a class="button button--secondary" asp-action="Archived">Archived</a>
-                <a class="button button--primary" asp-action="CreateWebsite">Add website</a>
+                <a class="button button--primary" asp-action="CreateWebsite">
+                    @await Html.PartialAsync("_Icon", "plus")
+                    <span>Add website</span>
+                </a>
             }
         </div>
     </div>

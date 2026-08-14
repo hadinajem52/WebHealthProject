@@ -139,9 +139,8 @@ internal sealed class RegistryVisibility(ApplicationDbContext dbContext)
         var endpointIds = grants.Where(grant => grant.EndpointId != null).Select(grant => grant.EndpointId!.Value);
 
         return endpoints.Where(endpoint =>
-            (isDeveloper && (assignedOwnerIds.Contains(endpoint.Environment.Website.Client.OwnerSubjectId)
-                || assignedOwnerIds.Contains(endpoint.Environment.Website.OwnerSubjectId)
-                || (endpoint.OwnerSubjectId != null && assignedOwnerIds.Contains(endpoint.OwnerSubjectId.Value))))
+            (isDeveloper && assignedOwnerIds.Contains(
+                endpoint.OwnerSubjectId ?? endpoint.Environment.Website.OwnerSubjectId))
             || (isViewer && (clientIds.Contains(endpoint.Environment.Website.ClientId)
                 || websiteIds.Contains(endpoint.Environment.WebsiteId)
                 || environmentIds.Contains(endpoint.EnvironmentId)
@@ -165,9 +164,7 @@ internal sealed class RegistryVisibility(ApplicationDbContext dbContext)
 
         var assignedOwnerIds = AssignedOwnerIds(access.UserId, now);
         return endpoints.Where(endpoint =>
-            assignedOwnerIds.Contains(endpoint.Environment.Website.Client.OwnerSubjectId)
-            || assignedOwnerIds.Contains(endpoint.Environment.Website.OwnerSubjectId)
-            || (endpoint.OwnerSubjectId != null && assignedOwnerIds.Contains(endpoint.OwnerSubjectId.Value)));
+            assignedOwnerIds.Contains(endpoint.OwnerSubjectId ?? endpoint.Environment.Website.OwnerSubjectId));
     }
 
     public static bool CanManage(RegistryAccessContext access) =>

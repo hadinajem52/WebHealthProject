@@ -148,6 +148,62 @@
         }
     }
 
+    // The account menu is a non-modal popup: it closes on Escape, on a click
+    // outside it, and as soon as focus leaves it, so it never traps the user.
+    function setUpAccountMenu(container, toggle, menu) {
+        var isOpen = false;
+
+        function setOpen(open) {
+            isOpen = open;
+            container.setAttribute('data-open', open ? 'true' : 'false');
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+
+        function close(returnFocus) {
+            if (!isOpen) {
+                return;
+            }
+
+            setOpen(false);
+
+            if (returnFocus) {
+                toggle.focus();
+            }
+        }
+
+        setOpen(false);
+
+        toggle.addEventListener('click', function () {
+            if (isOpen) {
+                close(false);
+            } else {
+                setOpen(true);
+                var focusable = focusableElements(menu);
+                if (focusable.length > 0) {
+                    focusable[0].focus();
+                }
+            }
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (isOpen && event.key === 'Escape') {
+                close(true);
+            }
+        });
+
+        document.addEventListener('pointerdown', function (event) {
+            if (isOpen && !container.contains(event.target)) {
+                close(false);
+            }
+        });
+
+        container.addEventListener('focusout', function (event) {
+            if (isOpen && !container.contains(event.relatedTarget)) {
+                close(false);
+            }
+        });
+    }
+
     onReady(function () {
         var sidebar = document.querySelector('[data-shell-sidebar]');
         var toggle = document.querySelector('[data-shell-toggle]');
@@ -157,6 +213,14 @@
 
         if (sidebar && toggle && scrim) {
             setUpNavigationDrawer(sidebar, toggle, scrim, closeButton, content);
+        }
+
+        var account = document.querySelector('[data-shell-account]');
+        var accountToggle = document.querySelector('[data-shell-account-toggle]');
+        var accountMenu = document.querySelector('[data-shell-account-menu]');
+
+        if (account && accountToggle && accountMenu) {
+            setUpAccountMenu(account, accountToggle, accountMenu);
         }
 
         // A failed submission re-renders the page; move focus to the summary so

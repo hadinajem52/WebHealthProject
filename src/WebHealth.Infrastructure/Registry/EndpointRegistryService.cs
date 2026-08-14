@@ -49,15 +49,25 @@ internal sealed class EndpointRegistryService(
         }
 
         var now = DateTimeOffset.UtcNow;
+        var authorization = DecideTargetAuthorization(
+            command.TargetAuthorizationKind, command.TargetAuthorizationEvidence,
+            command.TargetAuthorizationExpiresAt, command.IsEnabled, url, null, now);
+        if (authorization.Error is not null)
+        {
+            return Validation(authorization.Error);
+        }
+
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
         dbContext.Endpoints.Add(endpoint);
         dbContext.EndpointMonitors.Add(CreateMonitor(endpoint, environment.IsProduction, access.UserId, now));
+        await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
 
         try
         {
             await auditTrail.RecordEndpointMutationAsync(
                 new(access.UserId, now), EndpointAuditAction.Created, null,
-                ToAudit(endpoint, urlChanged: true, httpExceptionChanged: exception.Reason is not null),
+                ToAudit(endpoint, urlChanged: true, httpExceptionChanged: exception.Reason is not null,
+                    targetAuthorizationChanged: authorization.Changed, now),
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
@@ -89,6 +99,7 @@ internal sealed class EndpointRegistryService(
         var endpoint = await dbContext.Endpoints.Include(candidate => candidate.Environment)
             .ThenInclude(environment => environment.Website)
             .Include(candidate => candidate.Monitors)
+            .Include(candidate => candidate.TargetAuthorizations)
             .SingleOrDefaultAsync(candidate => candidate.Id == command.EndpointId, cancellationToken);
         if (endpoint is null)
         {
@@ -116,15 +127,28 @@ internal sealed class EndpointRegistryService(
         var urlChanged = !string.Equals(endpoint.NormalizedUrl, url.NormalizedUrl, StringComparison.Ordinal);
         var exceptionChanged = !string.Equals(endpoint.HttpExceptionReason, exception.Reason, StringComparison.Ordinal)
             || endpoint.HttpExceptionApprovedByUserId != exception.ApprovedByUserId;
-        var before = ToAudit(endpoint, urlChanged: false, httpExceptionChanged: false);
         var now = DateTimeOffset.UtcNow;
-        ApplyEndpointUpdate(endpoint, command, url, exception, access.UserId, now);
+        var currentAuthorization = endpoint.TargetAuthorizations.SingleOrDefault(evidence =>
+            evidence.RevokedAt == null
+            && evidence.NormalizedHost == endpoint.NormalizedHost
+            && evidence.Port == endpoint.EffectivePort);
+        var authorization = DecideTargetAuthorization(
+            command.TargetAuthorizationKind, command.TargetAuthorizationEvidence,
+            command.TargetAuthorizationExpiresAt, command.IsEnabled, url, currentAuthorization, now);
+        if (authorization.Error is not null)
+        {
+            return Validation(authorization.Error);
+        }
 
+        var before = ToAudit(endpoint, urlChanged: false, httpExceptionChanged: false,
+            targetAuthorizationChanged: false, now);
         try
         {
+            await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
+            ApplyEndpointUpdate(endpoint, command, url, exception, access.UserId, now);
             await auditTrail.RecordEndpointMutationAsync(
                 new(access.UserId, now), EndpointAuditAction.Updated, before,
-                ToAudit(endpoint, urlChanged, exceptionChanged), cancellationToken);
+                ToAudit(endpoint, urlChanged, exceptionChanged, authorization.Changed, now), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
         }
@@ -174,14 +198,14 @@ internal sealed class EndpointRegistryService(
         }
 
         dbContext.Entry(endpoint).Property(candidate => candidate.Version).OriginalValue = command.Version;
-        var before = ToAudit(endpoint, false, false);
         var now = DateTimeOffset.UtcNow;
+        var before = ToAudit(endpoint, false, false, false, now);
         ApplyState(endpoint, action, access.UserId, now);
 
         try
         {
             await auditTrail.RecordEndpointMutationAsync(
-                new(access.UserId, now), action, before, ToAudit(endpoint, false, false), cancellationToken);
+                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
         }
@@ -267,6 +291,8 @@ internal sealed class EndpointRegistryService(
             DisplayUrl = url.DisplayUrl!,
             NormalizedUrl = url.NormalizedUrl!,
             NormalizedUrlHash = url.NormalizedUrlHash!,
+            NormalizedHost = url.NormalizedHost!,
+            EffectivePort = url.EffectivePort!.Value,
             NormalizationVersion = EndpointUrlNormalizer.Version,
             IsEnabled = command.IsEnabled,
             HttpExceptionReason = exception.Reason,
@@ -297,7 +323,7 @@ internal sealed class EndpointRegistryService(
             RecoveryConfirmationCount = 2,
             WarningThresholdMs = 1000,
             CriticalThresholdMs = 3000,
-            IsEnabled = endpoint.IsEnabled,
+            IsEnabled = true,
             CreatedAt = now,
             CreatedByUserId = actorId,
             UpdatedAt = now,
@@ -318,6 +344,8 @@ internal sealed class EndpointRegistryService(
         endpoint.DisplayUrl = url.DisplayUrl!;
         endpoint.NormalizedUrl = url.NormalizedUrl!;
         endpoint.NormalizedUrlHash = url.NormalizedUrlHash!;
+        endpoint.NormalizedHost = url.NormalizedHost!;
+        endpoint.EffectivePort = url.EffectivePort!.Value;
         endpoint.NormalizationVersion = EndpointUrlNormalizer.Version;
         endpoint.IsEnabled = command.IsEnabled;
         endpoint.HttpExceptionReason = exception.Reason;
@@ -326,7 +354,6 @@ internal sealed class EndpointRegistryService(
         Touch(endpoint, actorId, now);
         foreach (var monitor in endpoint.Monitors.Where(monitor => monitor.DeletedAt == null))
         {
-            monitor.IsEnabled = endpoint.IsEnabled;
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 endpoint.NormalizedUrl, monitor.IntervalSeconds, monitor.TimeoutSeconds);
             monitor.UpdatedAt = now;
@@ -351,9 +378,17 @@ internal sealed class EndpointRegistryService(
 
         foreach (var monitor in endpoint.Monitors)
         {
-            monitor.IsEnabled = false;
-            monitor.DeletedAt = action == EndpointAuditAction.Deleted ? now : null;
-            monitor.DeletedByUserId = action == EndpointAuditAction.Deleted ? actorId : null;
+            if (action == EndpointAuditAction.Deleted)
+            {
+                monitor.DeletedAt = now;
+                monitor.DeletedByUserId = actorId;
+            }
+            else if (action == EndpointAuditAction.Restored)
+            {
+                monitor.DeletedAt = null;
+                monitor.DeletedByUserId = null;
+            }
+
             monitor.UpdatedAt = now;
             monitor.UpdatedByUserId = actorId;
             monitor.Version++;
@@ -369,11 +404,118 @@ internal sealed class EndpointRegistryService(
         endpoint.Version++;
     }
 
-    private static EndpointAuditSnapshot ToAudit(Endpoint endpoint, bool urlChanged, bool httpExceptionChanged) => new(
+    private static EndpointAuditSnapshot ToAudit(
+        Endpoint endpoint,
+        bool urlChanged,
+        bool httpExceptionChanged,
+        bool targetAuthorizationChanged,
+        DateTimeOffset now) => new(
         endpoint.Id, endpoint.EnvironmentId, endpoint.OwnerSubjectId,
         Convert.ToHexString(endpoint.NormalizedUrlHash).ToLowerInvariant(), endpoint.NormalizationVersion,
         urlChanged, endpoint.IsEnabled, endpoint.HttpExceptionReason is not null,
-        httpExceptionChanged, endpoint.DeletedAt is not null, endpoint.Version);
+        httpExceptionChanged, HasCurrentAuthorization(endpoint, now), targetAuthorizationChanged,
+        endpoint.DeletedAt is not null, endpoint.Version);
+
+    private static bool HasCurrentAuthorization(Endpoint endpoint, DateTimeOffset now) =>
+        endpoint.TargetAuthorizations.Any(evidence =>
+            evidence.RevokedAt == null
+            && evidence.EffectiveFrom <= now
+            && (evidence.ExpiresAt == null || evidence.ExpiresAt > now)
+            && evidence.NormalizedHost == endpoint.NormalizedHost
+            && evidence.Port == endpoint.EffectivePort);
+
+    private static TargetAuthorizationDecision DecideTargetAuthorization(
+        string? submittedKind,
+        string? submittedEvidence,
+        DateTimeOffset? expiresAt,
+        bool endpointEnabled,
+        EndpointUrlNormalizationResult url,
+        TargetAuthorizationEvidence? current,
+        DateTimeOffset now)
+    {
+        var kind = submittedKind?.Trim();
+        var evidence = submittedEvidence?.Trim();
+        if (string.IsNullOrEmpty(kind) && string.IsNullOrEmpty(evidence) && expiresAt is null)
+        {
+            return endpointEnabled
+                ? new(null, current, false, "Enabled endpoints require ownership or explicit testing-permission evidence.")
+                : new(null, current, current is not null, null);
+        }
+
+        if (!TargetAuthorizationKinds.All.Contains(kind, StringComparer.Ordinal))
+        {
+            return new(null, current, false, "Select owned target or explicit testing permission.");
+        }
+
+        if (string.IsNullOrWhiteSpace(evidence) || evidence.Length > 500)
+        {
+            return new(null, current, false, "Enter a target-authorization reference of at most 500 characters.");
+        }
+
+        if (expiresAt is not null && expiresAt <= now)
+        {
+            return new(null, current, false, "Target authorization must expire in the future.");
+        }
+
+        var unchanged = current is not null
+            && current.NormalizedHost == url.NormalizedHost
+            && current.Port == url.EffectivePort
+            && current.AuthorizationKind == kind
+            && current.EvidenceReference == evidence
+            && current.ExpiresAt == expiresAt;
+        if (unchanged)
+        {
+            return new(null, null, false, null);
+        }
+
+        return new(new TargetAuthorizationEvidence
+        {
+            Id = Guid.NewGuid(),
+            AuthorizationKind = kind!,
+            EvidenceReference = evidence,
+            NormalizedHost = url.NormalizedHost!,
+            Port = url.EffectivePort!.Value,
+            EffectiveFrom = now,
+            ExpiresAt = expiresAt,
+            CreatedAt = now,
+            Version = 1
+        }, current, true, null);
+    }
+
+    private async Task ApplyTargetAuthorizationAsync(
+        Endpoint endpoint,
+        TargetAuthorizationDecision decision,
+        Guid actorId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (decision is { ToCreate: not null, ToRevoke: not null }
+            && decision.ToCreate.NormalizedHost == decision.ToRevoke.NormalizedHost
+            && decision.ToCreate.Port == decision.ToRevoke.Port)
+        {
+            decision.ToRevoke.AuthorizationKind = decision.ToCreate.AuthorizationKind;
+            decision.ToRevoke.EvidenceReference = decision.ToCreate.EvidenceReference;
+            decision.ToRevoke.ExpiresAt = decision.ToCreate.ExpiresAt;
+            decision.ToRevoke.Version++;
+            return;
+        }
+
+        if (decision.ToRevoke is not null)
+        {
+            decision.ToRevoke.RevokedAt = now;
+            decision.ToRevoke.RevokedByUserId = actorId;
+            decision.ToRevoke.RevocationReason = "Endpoint authorization evidence replaced or removed.";
+            decision.ToRevoke.Version++;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        if (decision.ToCreate is not null)
+        {
+            decision.ToCreate.EndpointId = endpoint.Id;
+            decision.ToCreate.CreatedByUserId = actorId;
+            endpoint.TargetAuthorizations.Add(decision.ToCreate);
+        }
+    }
 
     private static string? ValidateState(Endpoint endpoint, EndpointAuditAction action) => action switch
     {
@@ -407,7 +549,9 @@ internal sealed class EndpointRegistryService(
             : Validation("A URL identity hash collision was detected. No endpoint was saved.");
     }
 
-    private async Task<RegistryMutationResult> RollBackConcurrencyAsync(Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction, CancellationToken cancellationToken)
+    private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        CancellationToken cancellationToken)
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
@@ -421,4 +565,10 @@ internal sealed class EndpointRegistryService(
 
     private sealed record HttpExceptionDecision(
         string? Reason, Guid? ApprovedByUserId, DateTimeOffset? ApprovedAt, string? Error);
+
+    private sealed record TargetAuthorizationDecision(
+        TargetAuthorizationEvidence? ToCreate,
+        TargetAuthorizationEvidence? ToRevoke,
+        bool Changed,
+        string? Error);
 }

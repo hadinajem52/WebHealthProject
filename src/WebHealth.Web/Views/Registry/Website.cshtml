@@ -8,7 +8,13 @@
         <div><h2 class="card__title">@Model.Website.Name</h2><p class="card__subtitle">@Model.Website.ClientName · Version @Model.Website.Version</p></div>
         <div class="form-actions">
             @if (!Model.Website.IsDeleted){<a class="button button--secondary" asp-controller="Targets" asp-action="Environments" asp-route-websiteId="@Model.Website.Id">Environments</a>}
-            @if (Model.CanManage && !Model.Website.IsDeleted){<a class="button button--primary" asp-action="EditWebsite" asp-route-id="@Model.Website.Id">Edit website</a>}
+            @if (Model.CanManage && !Model.Website.IsDeleted)
+            {
+                <a class="button button--primary" asp-action="EditWebsite" asp-route-id="@Model.Website.Id">
+                    @await Html.PartialAsync("_Icon", "pencil")
+                    <span>Edit website</span>
+                </a>
+            }
         </div>
     </div>
     <dl class="registry-facts">
