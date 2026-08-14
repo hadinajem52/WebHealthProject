@@ -67,6 +67,10 @@ public static class DependencyInjection
         services.AddScoped<IRegistryReader, RegistryReader>();
         services.AddScoped<IClientRegistryService, ClientRegistryService>();
         services.AddScoped<IWebsiteRegistryService, WebsiteRegistryService>();
+        services.AddScoped<ITargetRegistryReader, TargetRegistryReader>();
+        services.AddScoped<IEnvironmentRegistryService, EnvironmentRegistryService>();
+        services.AddScoped<IEndpointRegistryService, EndpointRegistryService>();
+        services.AddScoped<ITargetAuthorizationService, TargetAuthorizationService>();
 
         services.AddHealthChecks()
             .AddCheck<PostgreSqlReadinessCheck>("postgresql", tags: ["ready"]);

@@ -259,10 +259,20 @@ a.app-nav__link:hover {
     font-weight: 700;
 }
 
+/*
+ * The support card follows the navigation directly rather than being pushed to
+ * the bottom of the column, so its position does not move with the height of
+ * the page: a fixed gap below the last navigation group places it identically
+ * on every screen.
+ */
+.app-nav__group:has(+ .app-sidebar__support) {
+    margin-bottom: 2.5rem;
+}
+
 .app-sidebar__support {
     width: 13.625rem; /* 218px */
     max-width: 100%;
-    margin: auto 0 0 1.0625rem; /* 17px */
+    margin: 0 0 0 1.0625rem; /* 17px */
     padding: 1rem; /* 16px */
     border-radius: var(--radius-card);
 

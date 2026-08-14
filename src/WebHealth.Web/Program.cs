@@ -46,6 +46,11 @@ builder.Services.AddAuthorizationBuilder()
         policy.RequireRole(ApplicationRoles.All.Select(role => role.Name).ToArray()))
     .AddPolicy(AuthorizationPolicies.ManageRegistry, policy =>
         policy.RequireRole(ApplicationRoles.Administrator, ApplicationRoles.Operations))
+    .AddPolicy(AuthorizationPolicies.TestRegistryTargets, policy =>
+        policy.RequireRole(
+            ApplicationRoles.Administrator,
+            ApplicationRoles.Operations,
+            ApplicationRoles.DeveloperSupport))
     .SetFallbackPolicy(new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .Build());

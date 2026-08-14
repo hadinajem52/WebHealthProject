@@ -9,4 +9,5 @@ public static class AuthorizationPolicies
     public const string ViewAuditHistory = "ViewAuditHistory";
     public const string ReadRegistry = "ReadRegistry";
     public const string ManageRegistry = "ManageRegistry";
+    public const string TestRegistryTargets = "TestRegistryTargets";
 }

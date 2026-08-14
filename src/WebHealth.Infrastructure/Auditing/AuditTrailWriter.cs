@@ -80,6 +80,39 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             after,
             cancellationToken);
 
+    public Task RecordEnvironmentMutationAsync(
+        AuditWriteContext context,
+        EnvironmentAuditAction action,
+        EnvironmentAuditSnapshot? before,
+        EnvironmentAuditSnapshot after,
+        CancellationToken cancellationToken = default) =>
+        RecordAsync(
+            context,
+            ToAction("environment", action.ToString()),
+            "environment",
+            after.EnvironmentId,
+            before,
+            after,
+            cancellationToken);
+
+    public Task RecordEndpointMutationAsync(
+        AuditWriteContext context,
+        EndpointAuditAction action,
+        EndpointAuditSnapshot? before,
+        EndpointAuditSnapshot after,
+        CancellationToken cancellationToken = default) =>
+        RecordAsync(
+            context,
+            ToAction("endpoint", action.ToString()),
+            "endpoint",
+            after.EndpointId,
+            before,
+            after,
+            cancellationToken);
+
+    private static string ToAction(string entityType, string action) =>
+        $"{entityType}.{action.ToLowerInvariant()}";
+
     private async Task RecordAsync<TSnapshot>(
         AuditWriteContext context,
         string action,

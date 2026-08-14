@@ -12,7 +12,10 @@
                 Group users once, then assign the team to registry records in the next increment.
             </p>
         </div>
-        <a class="button button--primary" asp-action="CreateTeam">Add team</a>
+        <a class="button button--primary" asp-action="CreateTeam">
+            @await Html.PartialAsync("_Icon", "plus")
+            <span>Add team</span>
+        </a>
     </div>
 
     @if (Model.Teams.Count == 0)

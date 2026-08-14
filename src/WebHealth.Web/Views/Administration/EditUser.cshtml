@@ -86,8 +86,14 @@
         </div>
 
         <div class="form-actions form-actions--spaced">
-            <button class="button button--primary" type="submit">Save access</button>
-            <a class="button button--secondary" asp-action="Users">Cancel</a>
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "check")
+                <span>Save access</span>
+            </button>
+            <a class="button button--secondary" asp-action="Users">
+                @await Html.PartialAsync("_Icon", "close")
+                <span>Cancel</span>
+            </a>
         </div>
     </form>
 </section>

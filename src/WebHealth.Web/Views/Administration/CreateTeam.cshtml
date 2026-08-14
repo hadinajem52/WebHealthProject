@@ -15,8 +15,14 @@
     <form asp-action="CreateTeam" method="post" class="form-stack">
         <partial name="_TeamForm" model="Model" />
         <div class="form-actions">
-            <button class="button button--primary" type="submit">Create team</button>
-            <a class="button button--secondary" asp-action="Teams">Cancel</a>
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "plus")
+                <span>Create team</span>
+            </button>
+            <a class="button button--secondary" asp-action="Teams">
+                @await Html.PartialAsync("_Icon", "close")
+                <span>Cancel</span>
+            </a>
         </div>
     </form>
 </section>

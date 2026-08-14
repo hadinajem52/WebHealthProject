@@ -119,7 +119,7 @@ internal sealed class AccessGrantConfiguration : IEntityTypeConfiguration<Access
         {
             table.HasCheckConstraint(
                 "ck_access_grant_exactly_one_scope",
-                "(client_id IS NOT NULL)::int + (website_id IS NOT NULL)::int + (environment_id IS NOT NULL)::int = 1");
+                "(client_id IS NOT NULL)::int + (website_id IS NOT NULL)::int + (environment_id IS NOT NULL)::int + (endpoint_id IS NOT NULL)::int = 1");
             table.HasCheckConstraint(
                 "ck_access_grant_access_level",
                 "access_level IN ('Read', 'Manage')");
@@ -137,6 +137,8 @@ internal sealed class AccessGrantConfiguration : IEntityTypeConfiguration<Access
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<WebsiteEnvironment>().WithMany().HasForeignKey(grant => grant.EnvironmentId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Endpoint>().WithMany().HasForeignKey(grant => grant.EndpointId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(grant => grant.CreatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(grant => grant.RevokedByUserId)
@@ -144,5 +146,105 @@ internal sealed class AccessGrantConfiguration : IEntityTypeConfiguration<Access
         builder.HasIndex(grant => new { grant.UserId, grant.ClientId, grant.EffectiveFrom });
         builder.HasIndex(grant => new { grant.UserId, grant.WebsiteId, grant.EffectiveFrom });
         builder.HasIndex(grant => new { grant.UserId, grant.EnvironmentId, grant.EffectiveFrom });
+        builder.HasIndex(grant => new { grant.UserId, grant.EndpointId, grant.EffectiveFrom });
+    }
+}
+
+internal sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
+{
+    public void Configure(EntityTypeBuilder<Endpoint> builder)
+    {
+        builder.ToTable("endpoint", table =>
+        {
+            table.HasCheckConstraint("ck_endpoint_url_hash_length", "octet_length(normalized_url_hash) = 32");
+            table.HasCheckConstraint(
+                "ck_endpoint_http_exception_complete",
+                "(http_exception_reason IS NULL AND http_exception_approved_by_user_id IS NULL AND http_exception_approved_at IS NULL) OR "
+                + "(http_exception_reason IS NOT NULL AND http_exception_approved_by_user_id IS NOT NULL AND http_exception_approved_at IS NOT NULL)");
+            table.HasCheckConstraint(
+                "ck_endpoint_normalized_scheme",
+                "normalized_url LIKE 'http://%' OR normalized_url LIKE 'https://%'");
+        });
+        builder.Property(endpoint => endpoint.DisplayUrl).HasMaxLength(2048).IsRequired();
+        builder.Property(endpoint => endpoint.NormalizedUrl).HasMaxLength(2048).IsRequired();
+        builder.Property(endpoint => endpoint.NormalizedUrlHash).HasColumnType("bytea").IsRequired();
+        builder.Property(endpoint => endpoint.HttpExceptionReason).HasMaxLength(500);
+        builder.Property(endpoint => endpoint.Version).IsConcurrencyToken();
+        builder.HasIndex(endpoint => new
+        {
+            endpoint.EnvironmentId,
+            endpoint.NormalizedUrlHash,
+            endpoint.NormalizationVersion
+        }).HasDatabaseName("ux_endpoint_environment_url_hash_version_active")
+            .IsUnique().HasFilter("deleted_at IS NULL");
+        builder.HasIndex(endpoint => new { endpoint.EnvironmentId, endpoint.DeletedAt, endpoint.IsEnabled });
+        builder.HasOne(endpoint => endpoint.Environment).WithMany(environment => environment.Endpoints)
+            .HasForeignKey(endpoint => endpoint.EnvironmentId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<OwnerSubject>().WithMany().HasForeignKey(endpoint => endpoint.OwnerSubjectId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(endpoint => endpoint.HttpExceptionApprovedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(endpoint => endpoint.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(endpoint => endpoint.UpdatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(endpoint => endpoint.DeletedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class PolicyProfileConfiguration : IEntityTypeConfiguration<PolicyProfile>
+{
+    public void Configure(EntityTypeBuilder<PolicyProfile> builder)
+    {
+        builder.ToTable("policy_profile");
+        builder.Property(profile => profile.Name).HasMaxLength(200).IsRequired();
+        builder.Property(profile => profile.MonitorType).HasMaxLength(50).IsRequired();
+        builder.Property(profile => profile.BoundedSettings).HasColumnType("jsonb").IsRequired();
+        builder.Property(profile => profile.Version).IsConcurrencyToken();
+        builder.HasIndex(profile => new { profile.Name, profile.MonitorType })
+            .IsUnique().HasFilter("deleted_at IS NULL");
+        builder.HasData(new PolicyProfile
+        {
+            Id = RegistryDefaults.HttpAvailabilityPolicyProfileId,
+            Name = "Default HTTP availability",
+            MonitorType = RegistryDefaults.HttpAvailabilityMonitorType,
+            BoundedSettings = "{}",
+            IsSystem = true,
+            CreatedAt = RegistryDefaults.SeedTimestamp,
+            Version = 1
+        });
+    }
+}
+
+internal sealed class EndpointMonitorConfiguration : IEntityTypeConfiguration<EndpointMonitor>
+{
+    public void Configure(EntityTypeBuilder<EndpointMonitor> builder)
+    {
+        builder.ToTable("endpoint_monitor", table =>
+        {
+            table.HasCheckConstraint("ck_endpoint_monitor_positive_interval", "interval_seconds > 0");
+            table.HasCheckConstraint("ck_endpoint_monitor_positive_timeout", "timeout_seconds > 0");
+            table.HasCheckConstraint("ck_endpoint_monitor_positive_confirmation", "failure_confirmation_count > 0 AND recovery_confirmation_count > 0");
+            table.HasCheckConstraint(
+                "ck_endpoint_monitor_threshold_order",
+                "warning_threshold_ms IS NULL OR critical_threshold_ms IS NULL OR warning_threshold_ms < critical_threshold_ms");
+        });
+        builder.Property(monitor => monitor.MonitorType).HasMaxLength(50).IsRequired();
+        builder.Property(monitor => monitor.BoundedOverrides).HasColumnType("jsonb").IsRequired();
+        builder.Property(monitor => monitor.ConfigurationFingerprint).HasMaxLength(64).IsRequired();
+        builder.Property(monitor => monitor.Version).IsConcurrencyToken();
+        builder.HasIndex(monitor => new { monitor.EndpointId, monitor.MonitorType })
+            .IsUnique().HasFilter("deleted_at IS NULL");
+        builder.HasOne(monitor => monitor.Endpoint).WithMany(endpoint => endpoint.Monitors)
+            .HasForeignKey(monitor => monitor.EndpointId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(monitor => monitor.PolicyProfile).WithMany()
+            .HasForeignKey(monitor => monitor.PolicyProfileId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(monitor => monitor.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(monitor => monitor.UpdatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(monitor => monitor.DeletedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

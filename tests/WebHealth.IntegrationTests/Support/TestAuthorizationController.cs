@@ -35,4 +35,8 @@ public sealed class TestAuthorizationController : ControllerBase
     [HttpGet("registry-manage")]
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry)]
     public IActionResult RegistryManage() => Ok();
+
+    [HttpGet("target-test")]
+    [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets)]
+    public IActionResult TargetTest() => Ok();
 }

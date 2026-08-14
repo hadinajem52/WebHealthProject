@@ -23,7 +23,10 @@
                 @Model.Users.Count account@(Model.Users.Count == 1 ? null : "s") with application access.
             </p>
         </div>
-        <a class="button button--primary" asp-action="CreateUser">Add user</a>
+        <a class="button button--primary" asp-action="CreateUser">
+            @await Html.PartialAsync("_Icon", "plus")
+            <span>Add user</span>
+        </a>
     </div>
 
     @if (Model.Users.Count == 0)

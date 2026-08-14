@@ -117,6 +117,20 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
     }
 
     [Theory]
+    [InlineData(ApplicationRoles.Administrator, HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.Operations, HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.DeveloperSupport, HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.Viewer, HttpStatusCode.Forbidden)]
+    public async Task TargetTestingPolicy_ExcludesViewer(string role, HttpStatusCode expected)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync("/test/authorization/target-test");
+
+        response.StatusCode.Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(ApplicationRoles.Administrator, HttpStatusCode.ServiceUnavailable)]
     [InlineData(ApplicationRoles.Operations, HttpStatusCode.ServiceUnavailable)]
     [InlineData(ApplicationRoles.DeveloperSupport, HttpStatusCode.Forbidden)]

@@ -26,6 +26,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<AccessGrant> AccessGrants => Set<AccessGrant>();
 
+    public DbSet<Endpoint> Endpoints => Set<Endpoint>();
+
+    public DbSet<EndpointMonitor> EndpointMonitors => Set<EndpointMonitor>();
+
+    public DbSet<PolicyProfile> PolicyProfiles => Set<PolicyProfile>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         DatabaseConventions.Configure(configurationBuilder);

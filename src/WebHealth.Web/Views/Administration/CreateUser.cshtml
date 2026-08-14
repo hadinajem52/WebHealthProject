@@ -47,8 +47,14 @@
         </fieldset>
 
         <div class="form-actions">
-            <button class="button button--primary" type="submit">Create user</button>
-            <a class="button button--secondary" asp-action="Users">Cancel</a>
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "plus")
+                <span>Create user</span>
+            </button>
+            <a class="button button--secondary" asp-action="Users">
+                @await Html.PartialAsync("_Icon", "close")
+                <span>Cancel</span>
+            </a>
         </div>
     </form>
 </section>

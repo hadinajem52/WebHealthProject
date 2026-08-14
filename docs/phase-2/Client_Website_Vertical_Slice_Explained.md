@@ -600,5 +600,6 @@ Phase 1 identifies the user.
 Phase 2.2 checks the user’s global role.
 Phase 2.3 supplies ownership, teams, membership, and audit history.
 Phase 2.4 applies those rules to real Client and Website records.
-The next increment adds Environments and Endpoints to complete the registry.
+The Environment and Endpoint increment now completes these target records; see
+`Environment_and_Endpoint_Vertical_Slice.md` for the resulting implementation.
 ```

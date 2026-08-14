@@ -279,24 +279,24 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Create Administrator, Operations, Developer/Support, and Viewer role definitions with stable IDs and explicit bootstrap verification.
 - [x] Implement admin-only user and supported-role assignment management. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
 - [x] Implement account disabling and security-stamp session invalidation. Evidence: [`../phase-2/Administration_and_Authorization_Baseline.md`](../phase-2/Administration_and_Authorization_Baseline.md).
-- [ ] Complete role and assignment policies on the server. Global role policies are implemented; assignment-aware resource checks remain with registry ownership and access grants.
+- [x] Complete current registry role, assignment, grant, and target-testing policies on the server. Evidence: [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md).
 - [x] Protect operational controllers and actions by default through a fallback authorization policy.
 - [x] Require anti-forgery protection for state-changing browser requests.
 - [ ] Restrict Hangfire administration when it is added. Detailed readiness already requires the Administrator/Operations diagnostics policy.
 
 ### 9.3 Registry and audit
 
-- [ ] Implement clients, websites, environments, endpoints, tags, and ownership.
-- [ ] Enforce trimmed, case-insensitive client uniqueness.
-- [ ] Enforce website-name uniqueness within a client.
-- [ ] Require an environment before monitoring can be enabled.
-- [ ] Accept only absolute HTTP/HTTPS endpoint URLs without embedded credentials.
-- [ ] Require HTTPS for production unless an administrator records an exception reason.
-- [ ] Enforce normalized URL uniqueness per environment and monitor type.
-- [ ] Implement website owner inheritance and endpoint override.
+- [ ] Implement clients, websites, environments, endpoints, tags, and ownership. Registry targets and ownership are complete; tags remain.
+- [x] Enforce trimmed, case-insensitive client uniqueness.
+- [x] Enforce website-name uniqueness within a client.
+- [x] Require an environment before monitoring can be enabled.
+- [x] Accept only absolute HTTP/HTTPS endpoint URLs without embedded credentials.
+- [x] Require HTTPS for production unless an administrator records an exception reason.
+- [x] Enforce normalized URL uniqueness per environment and monitor type.
+- [x] Implement website owner inheritance and endpoint override.
 - [ ] Trim and deduplicate tags.
-- [ ] Implement soft deletion for configuration with history.
-- [ ] Add optimistic concurrency to editable configuration.
+- [x] Implement soft deletion for current registry configuration with history.
+- [x] Add optimistic concurrency to current editable registry configuration.
 - [x] Record append-only audit events with safe before/after values for administration, assignment, and authorization denials. Registry configuration events follow registry CRUD. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
 - [ ] Output-encode labels and notes.
 
@@ -313,15 +313,15 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 9.5 Verification gate
 
-- [ ] Unit-test URL and name normalization boundaries.
+- [x] Unit-test URL and name normalization boundaries.
 - [x] Integration-test every role using direct requests for the current global policies. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs`](../../tests/WebHealth.IntegrationTests/AuthorizationBaselineTests.cs); assignment combinations remain with registry.
 - [x] Verify current browser unauthenticated behavior and login redirects; API-specific 401/403 behavior remains due when API endpoints exist.
 - [x] Verify anti-forgery rejection.
 - [x] Verify disabled users and role-only stale principals lose access without deleting historical identity references. Evidence: native PostgreSQL assertions in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
-- [ ] Verify PostgreSQL constraints reject duplicates independently of UI validation. Client and Website duplicate rules and website enablement are verified; later registry remains.
-- [ ] Verify stale configuration updates are rejected. Team assignment and Client/Website edits are verified; later registry configuration remains.
-- [ ] Verify soft deletion preserves reportable identity and relationships. Client and Website lifecycle behavior is verified; later registry remains.
-- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Denial, administration, assignment, Client, and Website events are verified; later registry and incident events remain.
+- [x] Verify PostgreSQL constraints reject current registry duplicates independently of UI validation.
+- [x] Verify stale current registry configuration updates are rejected.
+- [x] Verify current registry soft deletion preserves reportable identity and relationships.
+- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Current registry is verified; later incident events remain.
 - [ ] Inspect logs and repository for secrets and sensitive values.
 
 ### 9.6 Phase exit evidence

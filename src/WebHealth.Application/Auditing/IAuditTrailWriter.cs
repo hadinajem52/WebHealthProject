@@ -37,6 +37,20 @@ public interface IAuditTrailWriter
         WebsiteAuditSnapshot? before,
         WebsiteAuditSnapshot after,
         CancellationToken cancellationToken = default);
+
+    Task RecordEnvironmentMutationAsync(
+        AuditWriteContext context,
+        EnvironmentAuditAction action,
+        EnvironmentAuditSnapshot? before,
+        EnvironmentAuditSnapshot after,
+        CancellationToken cancellationToken = default);
+
+    Task RecordEndpointMutationAsync(
+        AuditWriteContext context,
+        EndpointAuditAction action,
+        EndpointAuditSnapshot? before,
+        EndpointAuditSnapshot after,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record AuditWriteContext(Guid ActorUserId, DateTimeOffset OccurredAt);
@@ -89,5 +103,47 @@ public sealed record WebsiteAuditSnapshot(
     Guid OwnerSubjectId,
     string? TechnologyCms,
     bool IsEnabled,
+    bool IsDeleted,
+    long Version);
+
+public enum EnvironmentAuditAction
+{
+    Created,
+    Updated,
+    Disabled,
+    Deleted,
+    Restored
+}
+
+public sealed record EnvironmentAuditSnapshot(
+    Guid EnvironmentId,
+    Guid WebsiteId,
+    string Name,
+    string EnvironmentType,
+    bool IsProduction,
+    bool BaseUrlChanged,
+    bool IsActive,
+    bool IsDeleted,
+    long Version);
+
+public enum EndpointAuditAction
+{
+    Created,
+    Updated,
+    Disabled,
+    Deleted,
+    Restored
+}
+
+public sealed record EndpointAuditSnapshot(
+    Guid EndpointId,
+    Guid EnvironmentId,
+    Guid? OwnerSubjectId,
+    string NormalizedUrlHash,
+    short NormalizationVersion,
+    bool UrlChanged,
+    bool IsEnabled,
+    bool HasHttpException,
+    bool HttpExceptionChanged,
     bool IsDeleted,
     long Version);

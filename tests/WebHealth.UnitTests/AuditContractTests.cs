@@ -17,7 +17,9 @@ public sealed class AuditContractTests
             nameof(IAuditTrailWriter.RecordTeamCreatedAsync),
             nameof(IAuditTrailWriter.RecordTeamUpdatedAsync),
             nameof(IAuditTrailWriter.RecordClientMutationAsync),
-            nameof(IAuditTrailWriter.RecordWebsiteMutationAsync));
+            nameof(IAuditTrailWriter.RecordWebsiteMutationAsync),
+            nameof(IAuditTrailWriter.RecordEnvironmentMutationAsync),
+            nameof(IAuditTrailWriter.RecordEndpointMutationAsync));
         methods.SelectMany(method => method.GetParameters())
             .Select(parameter => parameter.ParameterType)
             .Should().OnlyContain(type =>
@@ -28,6 +30,10 @@ public sealed class AuditContractTests
                 || type == typeof(ClientAuditSnapshot)
                 || type == typeof(WebsiteAuditAction)
                 || type == typeof(WebsiteAuditSnapshot)
+                || type == typeof(EnvironmentAuditAction)
+                || type == typeof(EnvironmentAuditSnapshot)
+                || type == typeof(EndpointAuditAction)
+                || type == typeof(EndpointAuditSnapshot)
                 || type == typeof(CancellationToken));
         typeof(UserAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
@@ -62,5 +68,29 @@ public sealed class AuditContractTests
                 nameof(WebsiteAuditSnapshot.IsEnabled),
                 nameof(WebsiteAuditSnapshot.IsDeleted),
                 nameof(WebsiteAuditSnapshot.Version));
+        typeof(EnvironmentAuditSnapshot).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(EnvironmentAuditSnapshot.EnvironmentId),
+                nameof(EnvironmentAuditSnapshot.WebsiteId),
+                nameof(EnvironmentAuditSnapshot.Name),
+                nameof(EnvironmentAuditSnapshot.EnvironmentType),
+                nameof(EnvironmentAuditSnapshot.IsProduction),
+                nameof(EnvironmentAuditSnapshot.BaseUrlChanged),
+                nameof(EnvironmentAuditSnapshot.IsActive),
+                nameof(EnvironmentAuditSnapshot.IsDeleted),
+                nameof(EnvironmentAuditSnapshot.Version));
+        typeof(EndpointAuditSnapshot).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(EndpointAuditSnapshot.EndpointId),
+                nameof(EndpointAuditSnapshot.EnvironmentId),
+                nameof(EndpointAuditSnapshot.OwnerSubjectId),
+                nameof(EndpointAuditSnapshot.NormalizedUrlHash),
+                nameof(EndpointAuditSnapshot.NormalizationVersion),
+                nameof(EndpointAuditSnapshot.UrlChanged),
+                nameof(EndpointAuditSnapshot.IsEnabled),
+                nameof(EndpointAuditSnapshot.HasHttpException),
+                nameof(EndpointAuditSnapshot.HttpExceptionChanged),
+                nameof(EndpointAuditSnapshot.IsDeleted),
+                nameof(EndpointAuditSnapshot.Version));
     }
 }

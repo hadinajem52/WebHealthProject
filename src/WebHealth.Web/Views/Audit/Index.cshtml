@@ -48,8 +48,14 @@
                 <input asp-for="Entity" placeholder="type or identifier" />
             </div>
             <div class="filter-grid__actions">
-                <button class="button button--primary" type="submit">Apply filters</button>
-                <a class="button button--secondary" asp-action="Index">Clear</a>
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>Apply filters</span>
+                </button>
+                <a class="button button--secondary" asp-action="Index">
+                    @await Html.PartialAsync("_Icon", "close")
+                    <span>Clear</span>
+                </a>
             </div>
         </form>
     </section>
@@ -139,7 +145,10 @@
                            asp-route-actorUserId="@Model.ActorUserId"
                            asp-route-action="@Model.Action"
                            asp-route-entity="@Model.Entity"
-                           asp-route-page="@(Model.Result.Page - 1)">Previous</a>
+                           asp-route-page="@(Model.Result.Page - 1)">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
                     }
                     @if (hasNext)
                     {
@@ -149,7 +158,10 @@
                            asp-route-actorUserId="@Model.ActorUserId"
                            asp-route-action="@Model.Action"
                            asp-route-entity="@Model.Entity"
-                           asp-route-page="@(Model.Result.Page + 1)">Next</a>
+                           asp-route-page="@(Model.Result.Page + 1)">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
                     }
                 </span>
             </nav>

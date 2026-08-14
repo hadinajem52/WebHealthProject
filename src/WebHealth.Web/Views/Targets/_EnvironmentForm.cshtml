@@ -1,0 +1,6 @@
+@model EnvironmentFormViewModel
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<div class="form-field"><label asp-for="Name"></label><input asp-for="Name" /><span class="form-field__hint">Unique within @Model.WebsiteName after normalization.</span><span asp-validation-for="Name"></span></div>
+<div class="form-field"><label asp-for="EnvironmentType"></label><select asp-for="EnvironmentType">@foreach (var type in WebHealth.Application.Registry.EnvironmentTypes.All){<option value="@type">@type</option>}</select><span asp-validation-for="EnvironmentType"></span></div>
+<div class="form-field"><label asp-for="BaseUrl"></label><input asp-for="BaseUrl" type="url" placeholder="https://example.com/" /><span class="form-field__hint">Optional. Production base URLs require HTTPS.</span><span asp-validation-for="BaseUrl"></span></div>
+<label class="switch-field"><input asp-for="IsActive" type="checkbox" /><span>Environment active</span></label>

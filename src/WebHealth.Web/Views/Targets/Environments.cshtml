@@ -1,0 +1,20 @@
+@model EnvironmentListViewModel
+@{
+    ViewData.SetTitle("Environments");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.WebsiteName), new BreadcrumbItem("Environments"));
+}
+<section class="card">
+    <div class="page-intro">
+        <div><h2 class="card__title">@Model.WebsiteName environments</h2><p class="card__subtitle">Deployment targets and their endpoint coverage.</p></div>
+        <div class="form-actions">
+            @if (Model.CanManage){<a class="button button--secondary" asp-action="Archived">Archived targets</a><a class="button button--primary" asp-action="CreateEnvironment" asp-route-websiteId="@Model.WebsiteId">Add environment</a>}
+        </div>
+    </div>
+    @if (Model.Environments.Count == 0){<p class="card__subtitle">No active environments are available.</p>}
+    else
+    {
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Environment</th><th>Type</th><th>Base URL</th><th>Endpoints</th><th>Status</th><th></th></tr></thead><tbody>
+        @foreach (var environment in Model.Environments){<tr><td><span class="data-table__primary">@environment.Name</span><span class="data-table__secondary">Version @environment.Version</span></td><td>@environment.EnvironmentType</td><td class="target-url">@(environment.BaseUrl ?? "Not set")</td><td>@environment.ActiveEndpointCount enabled</td><td><span class="badge" data-status="@(environment.IsActive ? "success" : "warning")">@(environment.IsActive ? "Active" : "Disabled")</span></td><td class="data-table__action"><a asp-action="Environment" asp-route-id="@environment.Id">Details</a></td></tr>}
+        </tbody></table></div>
+    }
+</section>

@@ -503,10 +503,10 @@ The authorization integration tests verify:
 - role-aware navigation shows Teams and Audit only to permitted roles;
 - direct requests remain protected even when a link is hidden.
 
-## What is intentionally deferred
+## Boundary when this foundation increment completed
 
-This increment is a foundation, not the final resource-access feature. The
-following work belongs to the next registry increment:
+This increment was a foundation, not the final resource-access feature. At its
+completion, the following work was assigned to the registry increments:
 
 1. Client, Website, Environment, and Endpoint tables.
 2. Scoped grants at exactly one resource level.
@@ -517,19 +517,21 @@ following work belongs to the next registry increment:
 7. Viewer explicit-grant evaluation.
 8. Registry-specific audit events.
 
-The current evaluator can be consumed by those future handlers, but it does not
-yet decide access to a registry record because those records and grants do not
-exist yet.
+Those registry records, scoped grants, inheritance rules, query scopes, resource
+authorization decisions, and typed registry audit events have since been
+implemented. See `Client_and_Website_Vertical_Slice.md` and
+`Environment_and_Endpoint_Vertical_Slice.md` for the current evidence. Tags
+remain outside the completed registry slices.
 
 ## The complete Phase 2 mental model
 
-When a future registry request arrives, trace it through this sequence:
+When a registry request arrives, trace it through this sequence:
 
 ```mermaid
 flowchart TD
     A[HTTP request] --> B[Authentication from Phase 1]
     B --> C[Global role policy from Phase 2.2]
-    C --> D[Resource policy from future registry increment]
+    C --> D[Resource policy and scoped registry query]
     D --> E[Owner subject]
     E --> F[Direct user or effective team membership]
     F --> G[Read or Manage grant decision]
@@ -546,5 +548,5 @@ In short:
 Phase 1 identifies the user.
 Phase 2.2 checks the user's global role.
 Phase 2.3 supplies teams, ownership references, effective membership, and audit history.
-The next increment will apply those pieces to registry resources and scoped grants.
+The registry slices apply those pieces to resource ownership, scoped grants, queries, and mutations.
 ```
