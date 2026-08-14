@@ -124,6 +124,19 @@
           "Docker.DotNet.Enhanced.Handler.Abstractions": "4.3.3"
         }
       },
+      "Microsoft.AspNetCore.Cryptography.Internal": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "rDS7psQk0UGKAHFg8O3Ho9E+wLz1E2O9Ppt47wtc7A5H0kI6rwTcJ7V1rxj5jN7FfD/KkS4jzbdMiVOaHGUyiQ=="
+      },
+      "Microsoft.AspNetCore.Cryptography.KeyDerivation": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "4L8yQnfUR6SJ2uu52YOyNGNmvSmX77Wr/XLNn+dM5IazSFz/z71BEzdDCLBlGU/GCUxxPhogJJ+l6rHR3WWEaQ==",
+        "dependencies": {
+          "Microsoft.AspNetCore.Cryptography.Internal": "10.0.11"
+        }
+      },
       "Microsoft.AspNetCore.TestHost": {
         "type": "Transitive",
         "resolved": "10.0.11",
@@ -279,11 +292,6 @@
           "Microsoft.Extensions.Options": "10.0.11"
         }
       },
-      "Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions": {
-        "type": "Transitive",
-        "resolved": "10.0.11",
-        "contentHash": "5DCBP95vpklAkEfIbT2yzunianCeRtjaLrmAwoIgTf+xOJGFMmkAut/p3R2YmZL7TM1dnV81adGIg4m7Kg6wUw=="
-      },
       "Microsoft.Extensions.FileProviders.Abstractions": {
         "type": "Transitive",
         "resolved": "10.0.11",
@@ -346,6 +354,27 @@
           "Microsoft.Extensions.Diagnostics.Abstractions": "10.0.11",
           "Microsoft.Extensions.FileProviders.Abstractions": "10.0.11",
           "Microsoft.Extensions.Logging.Abstractions": "10.0.11"
+        }
+      },
+      "Microsoft.Extensions.Identity.Core": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "74BKWqcioSjoG2NopnIPoxtc8uqJjsMEXsZ+a0dGkLnZmCtcEOnwS7FFqxcA7TbJVNk54IMLqjrvacPSOKH80Q==",
+        "dependencies": {
+          "Microsoft.AspNetCore.Cryptography.KeyDerivation": "10.0.11",
+          "Microsoft.Extensions.Diagnostics": "10.0.11",
+          "Microsoft.Extensions.Logging": "10.0.11",
+          "Microsoft.Extensions.Options": "10.0.11"
+        }
+      },
+      "Microsoft.Extensions.Identity.Stores": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "9g72hwc5ARsracMp9aQuG0HcTg1Oj62dnq+LcRNpoqk5MIVfUE3xvlMprxhDhU/Dj1Vpc658W6vs3Rjs5dp0Jg==",
+        "dependencies": {
+          "Microsoft.Extensions.Caching.Abstractions": "10.0.11",
+          "Microsoft.Extensions.Identity.Core": "10.0.11",
+          "Microsoft.Extensions.Logging": "10.0.11"
         }
       },
       "Microsoft.Extensions.Logging": {
@@ -660,7 +689,7 @@
       "webhealth.infrastructure": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Extensions.Diagnostics.HealthChecks": "[10.0.11, )",
+          "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.11, )",
           "Npgsql": "[10.0.3, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "WebHealth.Application": "[1.0.0, )",
@@ -673,6 +702,16 @@
           "Serilog.AspNetCore": "[10.0.0, )",
           "WebHealth.Application": "[1.0.0, )",
           "WebHealth.Infrastructure": "[1.0.0, )"
+        }
+      },
+      "Microsoft.AspNetCore.Identity.EntityFrameworkCore": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.11, )",
+        "resolved": "10.0.11",
+        "contentHash": "N3+Fs465t08FyrQ+uoQyYH6TehLjtuGr/v5IjlFZANBbsivq9M5xFCVD25Ktq+HpWCfWXIrRjoakgymzO2trlw==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore.Relational": "10.0.11",
+          "Microsoft.Extensions.Identity.Stores": "10.0.11"
         }
       },
       "Microsoft.EntityFrameworkCore": {
@@ -697,18 +736,6 @@
           "Microsoft.Extensions.Caching.Memory": "10.0.11",
           "Microsoft.Extensions.Configuration.Abstractions": "10.0.11",
           "Microsoft.Extensions.Logging": "10.0.11"
-        }
-      },
-      "Microsoft.Extensions.Diagnostics.HealthChecks": {
-        "type": "CentralTransitive",
-        "requested": "[10.0.11, )",
-        "resolved": "10.0.11",
-        "contentHash": "fzUGzOCLquuyIxVVvvcw9h8KaUrRZ/cGTai2gBDQ1YxbdH/8eZnSyoOu+PQJYoD+RUcgTTlVe6D4+FrcaUOR9w==",
-        "dependencies": {
-          "Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions": "10.0.11",
-          "Microsoft.Extensions.Hosting.Abstractions": "10.0.11",
-          "Microsoft.Extensions.Logging.Abstractions": "10.0.11",
-          "Microsoft.Extensions.Options": "10.0.11"
         }
       },
       "Npgsql": {

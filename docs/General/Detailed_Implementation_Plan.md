@@ -269,19 +269,19 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 9.1 Dependencies
 
-- [ ] Phase 1 application, database, logging, and test foundation is complete.
-- [ ] Phase 0 normalization, authorization, audit, and application-assignment decisions are recorded.
-- [ ] Role and assignment semantics are confirmed.
+- [x] Phase 1 application, database, logging, and test foundation is complete.
+- [x] Phase 0 normalization, authorization, audit, and application-assignment decisions are recorded.
+- [x] Role and assignment semantics are confirmed.
 
 ### 9.2 Identity and authorization
 
-- [ ] Configure ASP.NET Core Identity.
-- [ ] Create Administrator, Operations, Developer/Support, and Viewer roles.
+- [x] Configure ASP.NET Core Identity. Evidence: [`../phase-1/Authentication_and_Protected_Shell.md`](../phase-1/Authentication_and_Protected_Shell.md).
+- [x] Create Administrator, Operations, Developer/Support, and Viewer role definitions with stable IDs and explicit bootstrap verification.
 - [ ] Implement admin-only user and role management.
 - [ ] Implement account disabling and security-stamp session invalidation.
 - [ ] Implement role and assignment policies on the server.
-- [ ] Protect operational controllers and actions by default.
-- [ ] Require anti-forgery protection for state-changing browser requests.
+- [x] Protect operational controllers and actions by default through a fallback authorization policy.
+- [x] Require anti-forgery protection for state-changing browser requests.
 - [ ] Restrict detailed diagnostics and Hangfire administration.
 
 ### 9.3 Registry and audit
@@ -308,15 +308,15 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Add database uniqueness constraints matching business rules.
 - [ ] Add concurrency tokens.
 - [ ] Index normalized names, active registry lists, ownership filters, and audit searches.
-- [ ] Seed role definitions and a controlled bootstrap-admin mechanism.
-- [ ] Validate clean database creation and migration repeatability.
+- [x] Seed role definitions through a controlled, idempotent bootstrap-admin mechanism; no password or role row is embedded in a migration.
+- [x] Validate clean database creation and migration repeatability for the current foundation and Identity migrations against PostgreSQL 18.
 
 ### 9.5 Verification gate
 
 - [ ] Unit-test URL and name normalization boundaries.
 - [ ] Integration-test every role using direct requests.
-- [ ] Verify unauthenticated behavior and appropriate login/401/403 results.
-- [ ] Verify anti-forgery rejection.
+- [x] Verify current browser unauthenticated behavior and login redirects; API-specific 401/403 behavior remains due when API endpoints exist.
+- [x] Verify anti-forgery rejection.
 - [ ] Verify disabled users lose access without deleting historical identity references.
 - [ ] Verify PostgreSQL constraints reject duplicates independently of UI validation.
 - [ ] Verify stale configuration updates are rejected.

@@ -107,10 +107,20 @@
       "webhealth.infrastructure": {
         "type": "Project",
         "dependencies": {
+          "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.11, )",
           "Npgsql": "[10.0.3, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "WebHealth.Application": "[1.0.0, )",
           "WebHealth.Domain": "[1.0.0, )"
+        }
+      },
+      "Microsoft.AspNetCore.Identity.EntityFrameworkCore": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.11, )",
+        "resolved": "10.0.11",
+        "contentHash": "N3+Fs465t08FyrQ+uoQyYH6TehLjtuGr/v5IjlFZANBbsivq9M5xFCVD25Ktq+HpWCfWXIrRjoakgymzO2trlw==",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore.Relational": "10.0.11"
         }
       },
       "Microsoft.EntityFrameworkCore": {

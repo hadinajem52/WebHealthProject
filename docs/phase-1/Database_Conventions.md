@@ -11,7 +11,7 @@
 - Migrations remain in `WebHealth.Infrastructure` beside `ApplicationDbContext`.
 - Database creation and migration are explicit operations; application startup never applies migrations.
 
-The `InitialFoundation` migration intentionally contains no application tables. Applying it to a clean PostgreSQL database creates only the `web_health` schema and EF migration-history table. Phase 2 introduces the first business schema after the revised database design is re-approved.
+The `InitialFoundation` migration intentionally contains no application tables. Phase 2 now adds the separate `IdentityFoundation` migration, which creates the seven Identity tables in `web_health`; keeping the migrations separate preserves the original foundation boundary and explicit upgrade path.
 
 ## Entity configuration rules
 

@@ -440,6 +440,16 @@ a.app-nav__link:hover {
     white-space: nowrap;
 }
 
+.app-header__account span:first-of-type {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-header__account-form {
+    margin: 0;
+}
+
 .app-header__icon {
     width: 2.75rem;
     flex: 0 0 auto;

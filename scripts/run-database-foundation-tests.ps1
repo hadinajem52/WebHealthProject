@@ -20,9 +20,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Tool restore failed.' }
     dotnet restore (Join-Path $root 'WebHealthProject.sln') --locked-mode
     if ($LASTEXITCODE -ne 0) { throw 'Locked restore failed.' }
-    dotnet test (Join-Path $root 'tests\WebHealth.IntegrationTests\WebHealth.IntegrationTests.csproj') --no-restore --filter 'FullyQualifiedName~DatabaseFoundationTests' --logger 'console;verbosity=normal'
+    dotnet test (Join-Path $root 'tests\WebHealth.IntegrationTests\WebHealth.IntegrationTests.csproj') --configuration Release --no-restore --filter 'FullyQualifiedName~DatabaseFoundationTests' --logger 'console;verbosity=normal'
     if ($LASTEXITCODE -ne 0) { throw 'Database foundation integration test failed.' }
-    dotnet ef database update --project (Join-Path $root 'src\WebHealth.Infrastructure') --startup-project (Join-Path $root 'src\WebHealth.Infrastructure') --no-build
+    dotnet ef database update --project (Join-Path $root 'src\WebHealth.Infrastructure') --startup-project (Join-Path $root 'src\WebHealth.Infrastructure') --configuration Release --no-build
     if ($LASTEXITCODE -ne 0) { throw 'Explicit migration update failed.' }
 }
 finally {

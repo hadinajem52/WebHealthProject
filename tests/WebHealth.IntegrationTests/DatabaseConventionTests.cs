@@ -87,7 +87,7 @@ public sealed class DatabaseFoundationTests
     private const string TestConnectionEnvironmentVariable = "WEBHEALTH_TEST_POSTGRES";
 
     [PostgreSqlFact]
-    public async Task CleanDatabase_AppliesOnlyTheFoundationMigration()
+    public async Task CleanDatabase_AppliesAllCurrentMigrations()
     {
         var connectionString = Environment.GetEnvironmentVariable(TestConnectionEnvironmentVariable)!;
 

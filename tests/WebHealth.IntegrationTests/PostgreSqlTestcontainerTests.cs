@@ -7,7 +7,7 @@ namespace WebHealth.IntegrationTests;
 public sealed class PostgreSqlTestcontainerTests
 {
     [TestcontainersFact]
-    public async Task FoundationMigration_AppliesToPostgreSqlContainer()
+    public async Task CurrentMigrations_ApplyToPostgreSqlContainer()
     {
         await using var postgreSql = new PostgreSqlBuilder("postgres:18.0-bookworm").Build();
 

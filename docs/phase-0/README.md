@@ -1,6 +1,6 @@
 # Phase 0 — Foundation Design
 
-**Status:** Reopened for owner review after database-design revision
+**Status:** Complete
 **Owner:** Intern (sole project owner, implementer, reviewer, and operator)  
 **Approval:** Approved by the intern/project owner on 2026-08-13  
 **Project type:** Personal internship/portfolio project; not enterprise-grade and not production-certified
@@ -16,7 +16,7 @@ The Administrator, Operations, Developer/Support, and Viewer roles are applicati
 | Artifact | Purpose | Status |
 |---|---|---|
 | [`Scope_and_Decisions.md`](Scope_and_Decisions.md) | Scope, sole ownership, core decisions, assumptions, and later-phase deferrals | Complete |
-| [`Database_Design.md`](Database_Design.md) | Core entities, normalization, PostgreSQL constraints, concurrency, leases, and idempotency | Revised; owner re-approval pending |
+| [`Database_Design.md`](Database_Design.md) | Core entities, normalization, PostgreSQL constraints, concurrency, leases, and idempotency | Approved |
 | [`Security_and_Operations.md`](Security_and_Operations.md) | Threat model, SSRF/network policy, safe HTTP boundary, and personal-project operational notes | Complete |
 | [`UI_Direction.md`](UI_Direction.md) | Purity UI Dashboard Figma direction, main journeys, and accessibility | Approved; implementation-ready |
 | [`Backlog.md`](Backlog.md) | Prioritized implementation packages and completion criteria | Complete |

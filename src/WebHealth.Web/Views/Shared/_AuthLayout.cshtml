@@ -1,0 +1,24 @@
+@{
+    var pageTitle = ViewData.GetTitle();
+    var documentTitle = string.IsNullOrWhiteSpace(pageTitle) ? "WebHealth" : $"{pageTitle} - WebHealth";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@documentTitle</title>
+    <link rel="icon" href="~/favicon.ico" />
+    <link rel="stylesheet" href="~/css/tokens.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/shell.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/auth.css" asp-append-version="true" />
+</head>
+<body class="auth-page">
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <main id="main-content" class="auth-shell" tabindex="-1">
+        @RenderBody()
+    </main>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

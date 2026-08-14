@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Web.Models;
 
@@ -12,12 +13,14 @@ public class HomeController : Controller
     }
 
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    [AllowAnonymous]
     public IActionResult Error()
     {
         return View(ErrorViewModel.Create(500, HttpContext.TraceIdentifier));
     }
 
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    [AllowAnonymous]
     public IActionResult HttpStatusCode(int code)
     {
         if (code is < 400 or > 599)

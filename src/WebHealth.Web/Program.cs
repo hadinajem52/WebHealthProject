@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
 using WebHealth.Infrastructure;
+using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,13 +17,38 @@ builder.Services.AddSerilog((services, loggerConfiguration) => loggerConfigurati
     .Enrich.WithProperty("Application", "WebHealth")
     .WriteTo.Console());
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
 builder.Services
     .AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live", "ready"]);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddAuthorizationBuilder()
+    .SetFallbackPolicy(new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build());
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    options.AccessDeniedPath = "/Account/AccessDenied";
+    options.LoginPath = "/Account/Login";
+    options.SlidingExpiration = true;
+});
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+    options.ValidationInterval = TimeSpan.FromMinutes(5));
 
 var app = builder.Build();
+
+if (args.Contains("--bootstrap-admin", StringComparer.Ordinal))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<AdminBootstrapper>()
+        .BootstrapAsync();
+    return;
+}
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseExceptionHandler(new ExceptionHandlerOptions
@@ -43,13 +72,14 @@ app.UseSerilogRequestLogging(options =>
 
 app.UseHttpsRedirection();
 app.UseRouting();
+app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapStaticAssets();
+app.MapStaticAssets().AllowAnonymous();
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("live")
-});
+}).AllowAnonymous();
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready")

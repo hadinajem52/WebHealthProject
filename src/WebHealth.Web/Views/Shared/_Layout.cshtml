@@ -61,11 +61,13 @@
                             </span>
                         </div>
 
-                        <button type="button" class="app-header__account">
-                            @await Html.PartialAsync("_Icon", "person")
-                            <span>Sign In</span>
-                            <span class="visually-hidden">&mdash; available in Phase 2</span>
-                        </button>
+                        <form asp-controller="Account" asp-action="Logout" method="post" class="app-header__account-form">
+                            <button type="submit" class="app-header__account">
+                                @await Html.PartialAsync("_Icon", "person")
+                                <span>@User.Identity?.Name</span>
+                                <span class="visually-hidden">&mdash; sign out</span>
+                            </button>
+                        </form>
 
                         <button type="button" class="app-header__icon">
                             @await Html.PartialAsync("_Icon", "settings")
@@ -92,7 +94,7 @@
             </main>
 
             <footer class="app-footer">
-                <p>Website Health Monitoring &mdash; Phase 1 foundation.</p>
+                <p>Website Health Monitoring</p>
                 <div class="app-footer__links">
                     <a href="/health/live">Liveness</a>
                     <a href="/health/ready">Readiness</a>

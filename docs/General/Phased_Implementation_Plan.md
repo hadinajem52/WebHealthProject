@@ -196,15 +196,15 @@ These requirements apply throughout the project:
 
 ### Identity and access
 
-- [ ] Configure ASP.NET Core Identity.
-- [ ] Add Administrator, Operations, Developer/Support, and Viewer roles.
-- [ ] Implement sign-in and sign-out.
-- [ ] Configure password, lockout, and security-stamp policies.
+- [x] Configure ASP.NET Core Identity. Evidence: [`../phase-1/Authentication_and_Protected_Shell.md`](../phase-1/Authentication_and_Protected_Shell.md).
+- [x] Add Administrator, Operations, Developer/Support, and Viewer roles. Evidence: stable definitions and bootstrap verification recorded in [`../phase-1/Authentication_and_Protected_Shell.md`](../phase-1/Authentication_and_Protected_Shell.md).
+- [x] Implement sign-in and sign-out. Evidence: [`../../src/WebHealth.Web/Controllers/AccountController.cs`](../../src/WebHealth.Web/Controllers/AccountController.cs) and authentication-shell integration tests.
+- [x] Configure password, lockout, and security-stamp policies. Evidence: [`../../src/WebHealth.Infrastructure/DependencyInjection.cs`](../../src/WebHealth.Infrastructure/DependencyInjection.cs).
 - [ ] Implement admin-only user and role management.
 - [ ] Implement account disabling and session invalidation.
 - [ ] Implement role and assignment-aware authorization policies.
-- [ ] Protect every operational endpoint server-side.
-- [ ] Add anti-forgery protection to state-changing MVC actions.
+- [x] Protect every current and future operational endpoint server-side through the fallback policy; liveness and safe login/error endpoints explicitly opt out.
+- [x] Add anti-forgery protection to state-changing MVC actions.
 
 ### Registry management
 
@@ -236,8 +236,8 @@ These requirements apply throughout the project:
 - [ ] Add required foreign keys and uniqueness constraints.
 - [ ] Add concurrency tokens and operational indexes.
 - [ ] Verify direct requests for every role.
-- [ ] Verify anti-forgery rejection.
-- [ ] Verify disabled-account behavior.
+- [x] Verify anti-forgery rejection. Evidence: [`../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs`](../../tests/WebHealth.IntegrationTests/AuthenticationShellTests.cs).
+- [x] Verify disabled-account sign-in rejection. Evidence: the real Identity/PostgreSQL verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs); existing-session invalidation remains with user management.
 - [ ] Verify database constraints independently of UI validation.
 - [ ] Verify stale updates fail safely.
 - [ ] Verify output encoding and secret-safe logs.
