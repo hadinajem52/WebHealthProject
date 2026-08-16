@@ -34,6 +34,7 @@ internal sealed class SafeHttpTransport(
         try
         {
             using var globalLease = await concurrencyLimiter.AcquireGlobalAsync(timeout.Token);
+            using var client = httpClientFactory.CreateClient(SafeHttpTransportOptions.ClientName);
             var current = new Uri(normalized.NormalizedUrl!, UriKind.Absolute);
             var visited = new HashSet<string>(StringComparer.Ordinal);
 
@@ -67,8 +68,10 @@ internal sealed class SafeHttpTransport(
                 message.Version = HttpVersion.Version11;
                 message.VersionPolicy = HttpVersionPolicy.RequestVersionExact;
                 message.Headers.ConnectionClose = true;
-                using var response = await httpClientFactory.CreateClient(SafeHttpTransportOptions.ClientName)
-                    .SendAsync(message, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                using var response = await client.SendAsync(
+                    message,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    timeout.Token);
 
                 if (!IsRedirect(response.StatusCode))
                 {
@@ -212,6 +215,14 @@ internal sealed class SafeHttpTransport(
                 HttpRequestError.ConfigurationLimitExceeded => SafeHttpFailureKind.ResponseHeadersTooLarge,
                 _ => SafeHttpFailureKind.Protocol
             };
+            return true;
+        }
+
+        if (Find<HttpIOException>(exception) is not null
+            || Find<InvalidDataException>(exception) is not null
+            || Find<IOException>(exception) is not null)
+        {
+            failure = SafeHttpFailureKind.Protocol;
             return true;
         }
 

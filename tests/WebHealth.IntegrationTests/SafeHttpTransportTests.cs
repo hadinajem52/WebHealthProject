@@ -233,6 +233,44 @@ public sealed class SafeHttpTransportTests
         cancelled.Failure.Should().Be(SafeHttpFailureKind.Cancelled);
     }
 
+    [Theory]
+    [InlineData("HTTP/1.1 200 OK\r\nContent-Length: 10\r\nConnection: close\r\n\r\nabc")]
+    [InlineData("HTTP/1.1 200 OK\r\nContent-Length: 8\r\nContent-Encoding: gzip\r\nConnection: close\r\n\r\nnot-gzip")]
+    public async Task SendAsync_ClassifiesUntrustedResponseReadFailures(string response)
+    {
+        await using var server = await HttpFixture.Start(response);
+        await using var harness = CreateHarness(
+            new HostResolver(("broken.test", [IPAddress.Loopback])), AuthorizeAll);
+
+        var result = await harness.Transport.SendAsync(
+            new(Guid.NewGuid(), $"http://broken.test:{server.Port}/", false));
+
+        result.Failure.Should().Be(SafeHttpFailureKind.Protocol);
+    }
+
+    [Fact]
+    public async Task SendAsync_ReusesAndDisposesOneFactoryClientAcrossRedirects()
+    {
+        var handler = new RedirectThenSuccessHandler();
+        var client = new TrackingHttpClient(handler);
+        var factory = new TrackingClientFactory(client);
+        var options = DefaultOptions();
+        var transport = new SafeHttpTransport(
+            factory,
+            new DelegateAuthorizer(AuthorizeAll),
+            new SafeHttpConcurrencyLimiter(options),
+            options,
+            TimeProvider.System);
+
+        var result = await transport.SendAsync(
+            new(Guid.NewGuid(), "http://allowed.test/start", false));
+
+        result.Succeeded.Should().BeTrue();
+        handler.RequestCount.Should().Be(2);
+        factory.CreateCount.Should().Be(1);
+        client.DisposeCount.Should().Be(1);
+    }
+
     [Fact]
     public async Task ConcurrencyLimiter_QueuesAboveConfiguredGlobalHostAndAddressBounds()
     {
@@ -328,6 +366,28 @@ public sealed class SafeHttpTransportTests
         public HttpClient CreateClient(string name) => client;
     }
 
+    private sealed class TrackingClientFactory(TrackingHttpClient client) : IHttpClientFactory
+    {
+        public int CreateCount { get; private set; }
+
+        public HttpClient CreateClient(string name)
+        {
+            CreateCount++;
+            return client;
+        }
+    }
+
+    private sealed class TrackingHttpClient(HttpMessageHandler handler) : HttpClient(handler)
+    {
+        public int DisposeCount { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            DisposeCount++;
+            base.Dispose(disposing);
+        }
+    }
+
     private sealed class RedirectHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
@@ -340,6 +400,29 @@ public sealed class SafeHttpTransportTests
                 Content = new ByteArrayContent([])
             };
             response.Headers.Location = new Uri("http://allowed.test/next");
+            return Task.FromResult(response);
+        }
+    }
+
+    private sealed class RedirectThenSuccessHandler : HttpMessageHandler
+    {
+        public int RequestCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            var response = new HttpResponseMessage(
+                RequestCount == 1 ? HttpStatusCode.Redirect : HttpStatusCode.OK)
+            {
+                RequestMessage = request,
+                Content = new ByteArrayContent([])
+            };
+            if (RequestCount == 1)
+            {
+                response.Headers.Location = new Uri("/final", UriKind.Relative);
+            }
             return Task.FromResult(response);
         }
     }

@@ -35,12 +35,12 @@ Loopback is available only through the test-injected policy used by controlled T
 
 The initial target and every redirect require current `target_authorization` evidence for the same endpoint and exact normalized host/port. An unauthorized redirect is rejected before DNS resolution or connection. Expired and revoked evidence fails closed.
 
-Expected transport failures return a stable category: invalid URL, unauthorized target, prohibited destination, name resolution, connection, TLS, timeout, caller cancellation, oversized headers, malformed/missing redirect location, loop, hop limit, production downgrade, or protocol failure. Raw exception messages, headers, cookies, query values, credentials, and response content are not included in the failure contract.
+Expected transport failures return a stable category: invalid URL, unauthorized target, prohibited destination, name resolution, connection, TLS, timeout, caller cancellation, oversized headers, malformed/missing redirect location, loop, hop limit, production downgrade, or protocol failure. Premature response disconnects and malformed compressed bodies are contained as protocol failures. Raw exception messages, headers, cookies, query values, credentials, and response content are not included in the failure contract.
 
 ## Verification evidence
 
 - Unit coverage exercises public and prohibited IPv4/IPv6 boundaries, including mapped and translated forms.
-- Controlled TCP tests verify Host/user-agent preservation, bounded decoded bodies, mixed-answer rejection before contact, DNS rebinding rejection, per-hop authorization, loop and hop-limit termination, invalid redirects, oversized headers, timeout, caller cancellation, and concurrency queues.
+- Controlled TCP tests verify Host/user-agent preservation, bounded decoded bodies, mixed-answer rejection before contact, DNS rebinding rejection, per-hop authorization, loop and hop-limit termination, invalid redirects, oversized headers, premature disconnects, malformed compression, timeout, caller cancellation, and concurrency queues.
 - A controlled TLS fixture proves an invalid certificate remains a TLS failure.
 - Handler configuration tests prove automatic redirects, proxies, cookies, and certificate-validation overrides are disabled. The Phase 0 feasibility spike remains the lower-level evidence for IPv4/IPv6 socket pinning and no-proxy behavior.
 - No database migration is required for this increment; it consumes Phase 2 target-authorization evidence.
