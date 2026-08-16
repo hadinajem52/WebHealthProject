@@ -29,6 +29,7 @@ internal static class DatabaseFoundationAssertions
         "access_grant",
         "client",
         "check_configuration_snapshot",
+        "check_result",
         "durable_work",
         "environment",
         "endpoint",
@@ -37,6 +38,8 @@ internal static class DatabaseFoundationAssertions
         "execution_lease",
         "logical_check",
         "policy_profile",
+        "redirect_hop",
+        "finding",
         "tag",
         "website",
         "website_tag",
@@ -62,8 +65,8 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(4);
-        context.Model.GetEntityTypes().Should().HaveCount(26);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(5);
+        context.Model.GetEntityTypes().Should().HaveCount(29);
 
         var state = await ReadFoundationState(connectionString);
         state.SchemaExists.Should().BeTrue();
@@ -74,6 +77,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyClientWebsiteRegistryAsync(connectionString);
         await VerifyEnvironmentEndpointRegistryAsync(connectionString);
         await VerifyMonitoringExecutionFoundationAsync(connectionString);
+        await VerifyHttpMonitoringHistoryAsync(connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
@@ -463,6 +467,193 @@ internal static class DatabaseFoundationAssertions
         recoveredClaim!.FencingGeneration.Should().Be(2);
     }
 
+    private static async Task VerifyHttpMonitoringHistoryAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration)
+            .BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
+        var historyService = scope.ServiceProvider.GetRequiredService<IHttpCheckHistoryService>();
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint)
+                .ThenInclude(endpoint => endpoint.Environment)
+            .FirstAsync(candidate => !candidate.Endpoint.Environment.IsProduction);
+        var now = DateTimeOffset.UtcNow;
+        var logicalCheckId = Guid.NewGuid();
+        database.LogicalChecks.Add(new LogicalCheck
+        {
+            Id = logicalCheckId,
+            EndpointMonitorId = monitor.Id,
+            Source = LogicalCheckSources.Scheduled,
+            ScheduledFor = now,
+            State = LogicalCheckStates.Running,
+            CadenceKey = MonitorCadence.CreateCadenceKey(monitor.Id, now),
+            PolicyFingerprint = monitor.ConfigurationFingerprint,
+            CreatedAt = now,
+            QueuedAt = now,
+            StartedAt = now
+        });
+        database.CheckConfigurationSnapshots.Add(new CheckConfigurationSnapshot
+        {
+            LogicalCheckId = logicalCheckId,
+            SchemaVersion = 2,
+            MonitorType = monitor.MonitorType,
+            ConfigurationFingerprint = monitor.ConfigurationFingerprint,
+            IntervalSeconds = monitor.IntervalSeconds,
+            TimeoutSeconds = monitor.TimeoutSeconds,
+            FailureConfirmationCount = monitor.FailureConfirmationCount,
+            RecoveryConfirmationCount = monitor.RecoveryConfirmationCount,
+            WarningThresholdMs = monitor.WarningThresholdMs,
+            CriticalThresholdMs = monitor.CriticalThresholdMs,
+            IntervalSource = ConfigurationValueSources.EnvironmentDefault,
+            TimeoutSource = ConfigurationValueSources.PolicyProfile,
+            ConfirmationSource = ConfigurationValueSources.PolicyProfile,
+            ThresholdSource = ConfigurationValueSources.PolicyProfile,
+            AcceptedStatusCodes = "204,404",
+            RequiredContentMarker = "READY",
+            ContentMarkerComparison = "OrdinalIgnoreCase",
+            ProductionHttpSeverity = FindingSeverities.Warning,
+            MaxResponseBodyBytes = 8,
+            MaxRedirects = 10,
+            CreatedAt = now
+        });
+        await database.SaveChangesAsync();
+
+        var claim = await leaseService.TryAcquireAsync(new(
+            monitor.Id,
+            logicalCheckId,
+            Guid.NewGuid(),
+            TimeSpan.FromMinutes(1)));
+        claim.Should().NotBeNull();
+        var endpointUri = new Uri(monitor.Endpoint.NormalizedUrl);
+        var request = new SafeHttpTransportRequest(
+            monitor.EndpointId,
+            monitor.Endpoint.NormalizedUrl,
+            false,
+            MaxRedirects: 10,
+            MaxResponseBodyBytes: 8);
+        var transport = new SafeHttpTransportResult(
+            null,
+            200,
+            new(endpointUri.Scheme, endpointUri.IdnHost, endpointUri.Port),
+            TimeSpan.FromMilliseconds(42),
+            7,
+            false,
+            "offline"u8.ToArray(),
+            [new(
+                302,
+                endpointUri.GetLeftPart(UriPartial.Path),
+                $"{endpointUri.Scheme}://{endpointUri.Authority}/landing",
+                endpointUri.Scheme,
+                endpointUri.IdnHost,
+                endpointUri.Port,
+                endpointUri.Scheme,
+                endpointUri.IdnHost,
+                endpointUri.Port,
+                false)]);
+
+        var staleClaim = claim! with { OwnerToken = Guid.NewGuid() };
+        (await historyService.RecordAsync(new(staleClaim, request, transport)))
+            .Should().Be(HttpCheckHistoryWriteStatus.LeaseLost);
+        await using var competingScope = services.CreateAsyncScope();
+        var competingHistoryService = competingScope.ServiceProvider
+            .GetRequiredService<IHttpCheckHistoryService>();
+        var concurrentWrites = await Task.WhenAll(
+            historyService.RecordAsync(new(claim, request, transport)),
+            competingHistoryService.RecordAsync(new(claim, request, transport)));
+        concurrentWrites.Should().BeEquivalentTo([
+            HttpCheckHistoryWriteStatus.Recorded,
+            HttpCheckHistoryWriteStatus.AlreadyRecorded]);
+        (await historyService.RecordAsync(new(claim, request, transport)))
+            .Should().Be(HttpCheckHistoryWriteStatus.AlreadyRecorded);
+
+        database.ChangeTracker.Clear();
+        var result = await database.CheckResults.SingleAsync(candidate =>
+            candidate.LogicalCheckId == logicalCheckId);
+        result.Outcome.Should().Be(HttpResultOutcomes.Critical);
+        result.FailureCategory.Should().Be(HttpFailureCategories.ContentMismatch);
+        result.HttpStatus.Should().Be(200);
+        result.TotalDurationMs.Should().Be(42);
+        result.DecodedLength.Should().Be(7);
+        result.CountsForUptime.Should().BeTrue();
+        result.SafeDiagnostic.Should().NotContain("READY").And.NotContain("offline");
+        (await database.RedirectHops.SingleAsync(hop => hop.LogicalCheckId == logicalCheckId))
+            .HopNumber.Should().Be(1);
+        var finding = await database.Findings.SingleAsync(candidate =>
+            candidate.LogicalCheckId == logicalCheckId);
+        finding.RuleKey.Should().Be("Http.ContentMismatch");
+        finding.ObservedValue.Should().NotContain("offline").And.NotContain("READY");
+        finding.ExpectedValue.Should().NotContain("offline").And.NotContain("READY");
+        (await database.LogicalChecks.SingleAsync(check => check.Id == logicalCheckId))
+            .State.Should().Be(LogicalCheckStates.Completed);
+
+        await VerifyHttpHistoryConstraintsAsync(connectionString, logicalCheckId);
+    }
+
+    private static async Task VerifyHttpHistoryConstraintsAsync(
+        string connectionString,
+        Guid logicalCheckId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        await using (var duplicateResult = new NpgsqlCommand(
+            "INSERT INTO web_health.check_result SELECT * FROM web_health.check_result WHERE logical_check_id = @id",
+            connection))
+        {
+            duplicateResult.Parameters.AddWithValue("id", logicalCheckId);
+            var exception = await Assert.ThrowsAsync<PostgresException>(
+                () => duplicateResult.ExecuteNonQueryAsync());
+            exception.ConstraintName.Should().Be("pk_check_result");
+        }
+
+        const string orphanFindingSql = """
+            INSERT INTO web_health.finding
+                (id, logical_check_id, rule_key, severity, issue_key)
+            VALUES (@id, @check_id, 'Http.Test', 'Critical', 'http:test');
+            """;
+        await using (var orphanFinding = new NpgsqlCommand(orphanFindingSql, connection))
+        {
+            orphanFinding.Parameters.AddWithValue("id", Guid.NewGuid());
+            orphanFinding.Parameters.AddWithValue("check_id", Guid.NewGuid());
+            var exception = await Assert.ThrowsAsync<PostgresException>(
+                () => orphanFinding.ExecuteNonQueryAsync());
+            exception.ConstraintName.Should().Be("fk_finding_check_result_logical_check_id");
+        }
+
+        await using (var duplicateHop = new NpgsqlCommand(
+            """
+            INSERT INTO web_health.redirect_hop
+                (id, logical_check_id, hop_number, normalized_from_url,
+                 normalized_to_url, http_status, is_loop)
+            SELECT @id, logical_check_id, hop_number, normalized_from_url,
+                   normalized_to_url, http_status, is_loop
+            FROM web_health.redirect_hop WHERE logical_check_id = @check_id;
+            """,
+            connection))
+        {
+            duplicateHop.Parameters.AddWithValue("id", Guid.NewGuid());
+            duplicateHop.Parameters.AddWithValue("check_id", logicalCheckId);
+            var exception = await Assert.ThrowsAsync<PostgresException>(
+                () => duplicateHop.ExecuteNonQueryAsync());
+            exception.ConstraintName.Should().Be("ix_redirect_hop_logical_check_id_hop_number");
+        }
+
+        await using var bodyColumn = new NpgsqlCommand(
+            """
+            SELECT count(*) FROM information_schema.columns
+            WHERE table_schema = 'web_health' AND table_name = 'check_result'
+              AND column_name IN ('body', 'response_body', 'content');
+            """,
+            connection);
+        Convert.ToInt32(await bodyColumn.ExecuteScalarAsync()).Should().Be(0);
+    }
+
     private static async Task VerifyDuplicateCadenceRejectedAsync(
         string connectionString,
         Guid monitorId,
@@ -646,7 +837,7 @@ internal static class DatabaseFoundationAssertions
 
         await database.Database.MigrateAsync();
         var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Should().HaveCount(4);
+        applied.Should().HaveCount(5);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         var upgraded = await ReadFoundationState(connectionString);
         upgraded.Tables.Should().BeEquivalentTo(

@@ -299,21 +299,21 @@ These requirements apply throughout the project:
 
 ### Results and history
 
-- [ ] Capture status, duration, available timing metrics, length, and redirect path.
-- [ ] Normalize DNS, connection, TLS, timeout, HTTP, redirect, and content failures.
-- [ ] Implement accepted-status and content-marker evaluation.
-- [ ] Detect redirect loops and excessive chains.
-- [ ] Persist bounded diagnostics without full bodies or sensitive headers.
+- [x] Capture status, duration, available timing metrics, length, and redirect path. Evidence: [`../phase-3/Http_Result_Normalization_and_History.md`](../phase-3/Http_Result_Normalization_and_History.md).
+- [x] Normalize DNS, connection, TLS, timeout, HTTP, redirect, and content failures.
+- [x] Implement accepted-status and content-marker evaluation.
+- [x] Detect redirect loops and excessive chains.
+- [x] Persist bounded diagnostics without full bodies or sensitive headers.
 - [ ] Add check history and details pages.
 - [ ] Add structured check, endpoint, and job identifiers to logs.
 
 ### Database and verification
 
-- [ ] Add logical checks, results, findings, leases, and durable work migration.
-- [ ] Add scheduling and history indexes.
-- [ ] Unit-test cadence, status rules, markers, redirects, loops, limits, and timeout classification.
-- [ ] Integration-test controlled status, delay, redirect, cancellation, and large-body scenarios.
-- [ ] Test IPv4, IPv6, redirects to prohibited ranges, actual connection addresses, DNS rebinding, and proxy policy.
+- [x] Add logical checks, results, findings, leases, and durable work migration. Evidence: `MonitoringExecutionFoundation` and `HttpMonitoringHistory`.
+- [x] Add scheduling and history indexes.
+- [x] Unit-test cadence, status rules, markers, redirects, loops, limits, and timeout classification.
+- [x] Integration-test controlled status, delay, redirect, cancellation, and large-body scenarios.
+- [x] Test IPv4, IPv6, redirects to prohibited ranges, actual connection addresses, DNS rebinding, and proxy policy.
 - [ ] Test duplicate delivery, competing workers, lease expiry, restart, and catch-up.
 - [ ] Verify disabled targets produce no new checks.
 

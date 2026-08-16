@@ -76,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<ITargetAuthorizationService, TargetAuthorizationService>();
         services.AddScoped<IMonitoringEligibilityService, MonitoringEligibilityService>();
         services.AddScoped<IExecutionLeaseService, ExecutionLeaseService>();
+        services.AddScoped<IHttpCheckHistoryService, HttpCheckHistoryService>();
         var configuredUserAgent = configuration[$"{SafeHttpTransportOptions.SectionName}:UserAgent"];
         var safeHttpOptions = new SafeHttpTransportOptions
         {

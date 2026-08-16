@@ -76,6 +76,19 @@ internal sealed class CheckConfigurationSnapshotConfiguration
             table.HasCheckConstraint(
                 "ck_check_configuration_snapshot_fingerprint",
                 "length(configuration_fingerprint) = 64");
+            table.HasCheckConstraint(
+                "ck_check_configuration_snapshot_marker_comparison",
+                "content_marker_comparison IN ('Ordinal', 'OrdinalIgnoreCase')");
+            table.HasCheckConstraint(
+                "ck_check_configuration_snapshot_http_severity",
+                "production_http_severity IN ('Warning', 'Critical')");
+            table.HasCheckConstraint(
+                "ck_check_configuration_snapshot_http_limits",
+                "max_response_body_bytes BETWEEN 1 AND 2097152 AND max_redirects BETWEEN 0 AND 10");
+            table.HasCheckConstraint(
+                "ck_check_configuration_snapshot_accepted_statuses",
+                "accepted_status_codes = '' OR accepted_status_codes ~ "
+                + "'^[1-5][0-9]{2}(,[1-5][0-9]{2})*$'");
         });
         builder.HasKey(snapshot => snapshot.LogicalCheckId);
         builder.Property(snapshot => snapshot.MonitorType).HasMaxLength(50).IsRequired();
@@ -84,9 +97,109 @@ internal sealed class CheckConfigurationSnapshotConfiguration
         builder.Property(snapshot => snapshot.TimeoutSource).HasMaxLength(30).IsRequired();
         builder.Property(snapshot => snapshot.ConfirmationSource).HasMaxLength(30).IsRequired();
         builder.Property(snapshot => snapshot.ThresholdSource).HasMaxLength(30).IsRequired();
+        builder.Property(snapshot => snapshot.AcceptedStatusCodes).HasMaxLength(500).IsRequired();
+        builder.Property(snapshot => snapshot.RequiredContentMarker).HasMaxLength(500);
+        builder.Property(snapshot => snapshot.ContentMarkerComparison).HasMaxLength(30).IsRequired();
+        builder.Property(snapshot => snapshot.ProductionHttpSeverity).HasMaxLength(20).IsRequired();
         builder.HasOne(snapshot => snapshot.LogicalCheck).WithOne(check => check.ConfigurationSnapshot)
             .HasForeignKey<CheckConfigurationSnapshot>(snapshot => snapshot.LogicalCheckId)
             .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckResult>
+{
+    public void Configure(EntityTypeBuilder<CheckResult> builder)
+    {
+        builder.ToTable("check_result", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_check_result_outcome",
+                "outcome IN ('Healthy', 'Warning', 'Critical', 'Cancelled')");
+            table.HasCheckConstraint(
+                "ck_check_result_http_status",
+                "http_status IS NULL OR http_status BETWEEN 100 AND 599");
+            table.HasCheckConstraint(
+                "ck_check_result_timings",
+                "dns_duration_ms IS NULL OR dns_duration_ms >= 0");
+            table.HasCheckConstraint(
+                "ck_check_result_more_timings",
+                "(connect_duration_ms IS NULL OR connect_duration_ms >= 0) "
+                + "AND (tls_duration_ms IS NULL OR tls_duration_ms >= 0) "
+                + "AND (ttfb_duration_ms IS NULL OR ttfb_duration_ms >= 0) "
+                + "AND total_duration_ms >= 0");
+            table.HasCheckConstraint(
+                "ck_check_result_lengths",
+                "(transferred_length IS NULL OR transferred_length >= 0) "
+                + "AND (decoded_length IS NULL OR decoded_length >= 0) "
+                + "AND ((decoded_length IS NULL AND length_source IS NULL) "
+                + "OR (decoded_length IS NOT NULL AND length_source IS NOT NULL))");
+            table.HasCheckConstraint("ck_check_result_completed", "completed_at >= measured_at");
+            table.HasCheckConstraint(
+                "ck_check_result_failure_category",
+                "failure_category IS NULL OR failure_category IN "
+                + "('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError',"
+                + "'RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge',"
+                + "'HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect','Protocol')");
+            table.HasCheckConstraint(
+                "ck_check_result_outcome_category",
+                "(outcome = 'Healthy' AND failure_category IS NULL) OR "
+                + "(outcome = 'Cancelled' AND failure_category = 'Cancellation') OR "
+                + "(outcome IN ('Warning','Critical') AND failure_category IS NOT NULL)");
+            table.HasCheckConstraint(
+                "ck_check_result_truncation",
+                "NOT response_truncated OR failure_category = 'ResponseTooLarge'");
+        });
+        builder.HasKey(result => result.LogicalCheckId);
+        builder.Property(result => result.Outcome).HasMaxLength(20).IsRequired();
+        builder.Property(result => result.FailureCategory).HasMaxLength(50);
+        builder.Property(result => result.LengthSource).HasMaxLength(30);
+        builder.Property(result => result.MonitorSource).HasMaxLength(50).IsRequired();
+        builder.Property(result => result.SafeDiagnostic).HasMaxLength(200);
+        builder.HasIndex(result => new { result.MeasuredAt, result.LogicalCheckId });
+        builder.HasOne(result => result.LogicalCheck).WithOne(check => check.Result)
+            .HasForeignKey<CheckResult>(result => result.LogicalCheckId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class RedirectHopConfiguration : IEntityTypeConfiguration<RedirectHop>
+{
+    public void Configure(EntityTypeBuilder<RedirectHop> builder)
+    {
+        builder.ToTable("redirect_hop", table =>
+        {
+            table.HasCheckConstraint("ck_redirect_hop_number", "hop_number > 0");
+            table.HasCheckConstraint("ck_redirect_hop_status", "http_status BETWEEN 300 AND 399");
+        });
+        builder.Property(hop => hop.NormalizedFromUrl).HasMaxLength(2048).IsRequired();
+        builder.Property(hop => hop.NormalizedToUrl).HasMaxLength(2048).IsRequired();
+        builder.HasIndex(hop => new { hop.LogicalCheckId, hop.HopNumber }).IsUnique();
+        builder.HasOne(hop => hop.Result).WithMany(result => result.RedirectHops)
+            .HasForeignKey(hop => hop.LogicalCheckId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class FindingConfiguration : IEntityTypeConfiguration<Finding>
+{
+    public void Configure(EntityTypeBuilder<Finding> builder)
+    {
+        builder.ToTable("finding", table => table.HasCheckConstraint(
+            "ck_finding_severity",
+            "severity IN ('Warning', 'Critical')"));
+        builder.Property(finding => finding.RuleKey).HasMaxLength(100).IsRequired();
+        builder.Property(finding => finding.Severity).HasMaxLength(20).IsRequired();
+        builder.Property(finding => finding.ObservedValue).HasMaxLength(500);
+        builder.Property(finding => finding.ExpectedValue).HasMaxLength(500);
+        builder.Property(finding => finding.IssueKey).HasMaxLength(200).IsRequired();
+        builder.HasIndex(finding => new
+        {
+            finding.LogicalCheckId,
+            finding.IssueKey,
+            finding.RuleKey
+        }).IsUnique();
+        builder.HasOne(finding => finding.Result).WithMany(result => result.Findings)
+            .HasForeignKey(finding => finding.LogicalCheckId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

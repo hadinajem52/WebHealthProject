@@ -366,25 +366,25 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Validate the actual connection address to mitigate DNS rebinding.
 - [x] Enforce proxy policy and production TLS validation.
 - [x] Apply timeout, cancellation, response-size, redirect, global concurrency, and per-host limits.
-- [ ] Capture status, total duration, available timing metrics, response length, and redirect path.
-- [ ] Normalize DNS, connection, TLS, timeout, client, server, redirect, and content failures.
-- [ ] Apply accepted-status and required-content-marker rules.
-- [ ] Detect redirect loops and excessive chains.
-- [ ] Persist bounded safe diagnostics, never full response bodies by default.
+- [x] Capture status, total duration, available timing metrics, response length, and redirect path. Evidence: [`../phase-3/Http_Result_Normalization_and_History.md`](../phase-3/Http_Result_Normalization_and_History.md).
+- [x] Normalize DNS, connection, TLS, timeout, client, server, redirect, and content failures.
+- [x] Apply accepted-status and required-content-marker rules.
+- [x] Detect redirect loops and excessive chains.
+- [x] Persist bounded safe diagnostics, never full response bodies by default.
 - [ ] Add structured `CorrelationId`, `LogicalCheckId`, `EndpointId`, and `JobId` properties.
 
 ### 10.4 Database and migration
 
-- [ ] Add logical checks, execution attempts if required, results, findings, leases, and durable work records.
-- [ ] Enforce exactly one final result per logical check.
+- [x] Add logical checks, execution attempts if required, results, findings, leases, and durable work records. Evidence: `MonitoringExecutionFoundation` and `HttpMonitoringHistory`.
+- [x] Enforce exactly one final result per logical check.
 - [x] Store scheduling anchor, due time, source, initiator, attempts, and logical-check state. Evidence: `MonitoringExecutionFoundation`.
-- [ ] Bound metric and diagnostic columns.
-- [ ] Index endpoint eligibility, next-due time, check state, endpoint/result time, and issue key.
-- [x] Validate clean and Phase 2 upgrade migrations. Evidence: isolated PostgreSQL 18 gate in [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
+- [x] Bound metric and diagnostic columns.
+- [x] Index endpoint eligibility, next-due time, check state, endpoint/result time, and issue key.
+- [x] Validate clean and Phase 2 upgrade migrations. Evidence: isolated PostgreSQL 18 gate in [`../phase-3/Http_Result_Normalization_and_History.md`](../phase-3/Http_Result_Normalization_and_History.md).
 
 ### 10.5 Verification gate
 
-- [ ] Unit-test cadence, catch-up behavior, status classification, markers, timeouts, redirect loops, and hop limits.
+- [ ] Unit-test cadence and catch-up behavior. Status classification, markers, timeouts, redirect loops, and hop limits are complete.
 - [x] Integration-test controlled statuses, redirects, delays, malformed redirects, large responses, and cancellation. Evidence: `SafeHttpTransportTests`.
 - [x] Test prohibited IPv4 and IPv6 destinations. Evidence: `DestinationAddressPolicyTests` and the controlled Phase 0 IPv4/IPv6 fixture.
 - [x] Test redirects into prohibited destinations.
@@ -395,7 +395,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Verify expired leases recover after worker failure.
 - [ ] Verify restart reconciliation without duplicate samples.
 - [ ] Verify disabled targets produce no new scheduled work.
-- [ ] Verify logs and history exclude sensitive headers and complete bodies.
+- [x] Verify logs and history exclude sensitive headers and complete bodies.
 
 ### 10.6 Phase exit evidence
 

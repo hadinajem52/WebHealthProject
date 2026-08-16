@@ -47,4 +47,4 @@ Expected transport failures return a stable category: invalid URL, unauthorized 
 
 ## Remaining work
 
-The next increment owns normalized HTTP results, accepted-status and marker evaluation, detailed safe timing availability, terminal result persistence, and zero-body history. Scheduling, Hangfire execution, durable retries, and monitoring UI remain later Phase 3 increments.
+Normalized HTTP results, accepted-status and marker evaluation, terminal result persistence, and zero-body history are implemented in [HTTP Result Normalization and History](Http_Result_Normalization_and_History.md). Detailed phase timing, scheduling, Hangfire execution, durable retries, and monitoring UI remain later Phase 3 increments.

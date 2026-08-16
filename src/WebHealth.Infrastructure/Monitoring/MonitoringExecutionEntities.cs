@@ -21,6 +21,7 @@ public sealed class LogicalCheck
     public EndpointMonitor EndpointMonitor { get; set; } = null!;
     public ApplicationUser? InitiatedByUser { get; set; }
     public CheckConfigurationSnapshot ConfigurationSnapshot { get; set; } = null!;
+    public CheckResult? Result { get; set; }
     public ICollection<ExecutionAttempt> Attempts { get; } = [];
     public ICollection<DurableWork> DurableWork { get; } = [];
 }
@@ -41,6 +42,12 @@ public sealed class CheckConfigurationSnapshot
     public required string TimeoutSource { get; set; }
     public required string ConfirmationSource { get; set; }
     public required string ThresholdSource { get; set; }
+    public string AcceptedStatusCodes { get; set; } = string.Empty;
+    public string? RequiredContentMarker { get; set; }
+    public string ContentMarkerComparison { get; set; } = "OrdinalIgnoreCase";
+    public string ProductionHttpSeverity { get; set; } = "Warning";
+    public int MaxResponseBodyBytes { get; set; } = 2 * 1024 * 1024;
+    public int MaxRedirects { get; set; } = 10;
     public DateTimeOffset CreatedAt { get; set; }
     public LogicalCheck LogicalCheck { get; set; } = null!;
 }
@@ -89,4 +96,53 @@ public sealed class DurableWork
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public LogicalCheck LogicalCheck { get; set; } = null!;
+}
+
+public sealed class CheckResult
+{
+    public Guid LogicalCheckId { get; set; }
+    public required string Outcome { get; set; }
+    public string? FailureCategory { get; set; }
+    public int? HttpStatus { get; set; }
+    public int? DnsDurationMs { get; set; }
+    public int? ConnectDurationMs { get; set; }
+    public int? TlsDurationMs { get; set; }
+    public int? TtfbDurationMs { get; set; }
+    public int TotalDurationMs { get; set; }
+    public long? TransferredLength { get; set; }
+    public long? DecodedLength { get; set; }
+    public string? LengthSource { get; set; }
+    public bool ResponseTruncated { get; set; }
+    public required string MonitorSource { get; set; }
+    public DateTimeOffset MeasuredAt { get; set; }
+    public bool CountsForUptime { get; set; }
+    public string? SafeDiagnostic { get; set; }
+    public DateTimeOffset CompletedAt { get; set; }
+    public LogicalCheck LogicalCheck { get; set; } = null!;
+    public ICollection<RedirectHop> RedirectHops { get; } = [];
+    public ICollection<Finding> Findings { get; } = [];
+}
+
+public sealed class RedirectHop
+{
+    public Guid Id { get; set; }
+    public Guid LogicalCheckId { get; set; }
+    public int HopNumber { get; set; }
+    public required string NormalizedFromUrl { get; set; }
+    public required string NormalizedToUrl { get; set; }
+    public int HttpStatus { get; set; }
+    public bool IsLoop { get; set; }
+    public CheckResult Result { get; set; } = null!;
+}
+
+public sealed class Finding
+{
+    public Guid Id { get; set; }
+    public Guid LogicalCheckId { get; set; }
+    public required string RuleKey { get; set; }
+    public required string Severity { get; set; }
+    public string? ObservedValue { get; set; }
+    public string? ExpectedValue { get; set; }
+    public required string IssueKey { get; set; }
+    public CheckResult Result { get; set; } = null!;
 }

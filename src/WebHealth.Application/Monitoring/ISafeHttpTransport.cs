@@ -31,7 +31,12 @@ public interface IMonitoringTargetAuthorizer
         CancellationToken cancellationToken = default);
 }
 
-public sealed record SafeHttpTransportRequest(Guid EndpointId, string Url, bool IsProduction);
+public sealed record SafeHttpTransportRequest(
+    Guid EndpointId,
+    string Url,
+    bool IsProduction,
+    int MaxRedirects = SafeHttpTransportDefaults.MaxRedirects,
+    int MaxResponseBodyBytes = SafeHttpTransportDefaults.MaxDecodedBodyBytes);
 
 public sealed record SafeHttpTransportResult(
     SafeHttpFailureKind? Failure,
@@ -48,12 +53,15 @@ public sealed record SafeHttpTransportResult(
 
 public sealed record SafeHttpRedirectHop(
     int StatusCode,
+    string FromUrl,
+    string ToUrl,
     string FromScheme,
     string FromHost,
     int FromPort,
     string ToScheme,
     string ToHost,
-    int ToPort);
+    int ToPort,
+    bool IsLoop);
 
 public sealed record SafeHttpDestination(string Scheme, string Host, int Port);
 
@@ -74,4 +82,10 @@ public enum SafeHttpFailureKind
     RedirectLimit,
     HttpsDowngrade,
     Protocol
+}
+
+public static class SafeHttpTransportDefaults
+{
+    public const int MaxRedirects = 10;
+    public const int MaxDecodedBodyBytes = 2 * 1024 * 1024;
 }

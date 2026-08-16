@@ -23,7 +23,10 @@ internal sealed class SafeHttpTransport(
         var stopwatch = Stopwatch.StartNew();
         var redirects = new List<SafeHttpRedirectHop>();
         var normalized = EndpointUrlNormalizer.Normalize(request.Url);
-        if (!normalized.Succeeded)
+        if (!normalized.Succeeded
+            || request.MaxRedirects is < 0 or > SafeHttpTransportDefaults.MaxRedirects
+            || request.MaxResponseBodyBytes <= 0
+            || request.MaxResponseBodyBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes)
         {
             return Failure(SafeHttpFailureKind.InvalidUrl, stopwatch, redirects);
         }
@@ -41,14 +44,23 @@ internal sealed class SafeHttpTransport(
             while (true)
             {
                 var currentNormalization = EndpointUrlNormalizer.Normalize(current.AbsoluteUri);
-                if (!currentNormalization.Succeeded || !visited.Add(currentNormalization.NormalizedUrl!))
+                if (!currentNormalization.Succeeded)
                 {
+                    return Failure(SafeHttpFailureKind.RedirectInvalid, stopwatch, redirects);
+                }
+
+                if (!visited.Add(currentNormalization.NormalizedUrl!))
+                {
+                    if (redirects.Count > 0)
+                    {
+                        redirects[^1] = redirects[^1] with { IsLoop = true };
+                    }
                     return Failure(
-                        currentNormalization.Succeeded
-                            ? SafeHttpFailureKind.RedirectLoop
-                            : SafeHttpFailureKind.RedirectInvalid,
+                        SafeHttpFailureKind.RedirectLoop,
                         stopwatch,
-                        redirects);
+                        redirects,
+                        redirects[^1].StatusCode,
+                        Destination(currentNormalization));
                 }
 
                 if (!await targetAuthorizer.IsAuthorizedAsync(
@@ -75,7 +87,10 @@ internal sealed class SafeHttpTransport(
 
                 if (!IsRedirect(response.StatusCode))
                 {
-                    var body = await ReadBodyAsync(response.Content, timeout.Token);
+                    var body = await ReadBodyAsync(
+                        response.Content,
+                        Math.Min(request.MaxResponseBodyBytes, options.MaxDecodedBodyBytes),
+                        timeout.Token);
                     return new SafeHttpTransportResult(
                         null,
                         (int)response.StatusCode,
@@ -89,12 +104,22 @@ internal sealed class SafeHttpTransport(
 
                 if (response.Headers.Location is null)
                 {
-                    return Failure(SafeHttpFailureKind.RedirectMissingLocation, stopwatch, redirects);
+                    return Failure(
+                        SafeHttpFailureKind.RedirectMissingLocation,
+                        stopwatch,
+                        redirects,
+                        (int)response.StatusCode,
+                        Destination(currentNormalization));
                 }
 
-                if (redirects.Count >= options.MaxRedirects)
+                if (redirects.Count >= Math.Min(request.MaxRedirects, options.MaxRedirects))
                 {
-                    return Failure(SafeHttpFailureKind.RedirectLimit, stopwatch, redirects);
+                    return Failure(
+                        SafeHttpFailureKind.RedirectLimit,
+                        stopwatch,
+                        redirects,
+                        (int)response.StatusCode,
+                        Destination(currentNormalization));
                 }
 
                 Uri target;
@@ -104,30 +129,48 @@ internal sealed class SafeHttpTransport(
                 }
                 catch (UriFormatException)
                 {
-                    return Failure(SafeHttpFailureKind.RedirectInvalid, stopwatch, redirects);
+                    return Failure(
+                        SafeHttpFailureKind.RedirectInvalid,
+                        stopwatch,
+                        redirects,
+                        (int)response.StatusCode,
+                        Destination(currentNormalization));
                 }
 
                 var targetNormalization = EndpointUrlNormalizer.Normalize(target.AbsoluteUri);
                 if (!targetNormalization.Succeeded)
                 {
-                    return Failure(SafeHttpFailureKind.RedirectInvalid, stopwatch, redirects);
+                    return Failure(
+                        SafeHttpFailureKind.RedirectInvalid,
+                        stopwatch,
+                        redirects,
+                        (int)response.StatusCode,
+                        Destination(currentNormalization));
                 }
 
                 if (request.IsProduction
                     && current.Scheme == Uri.UriSchemeHttps
                     && target.Scheme == Uri.UriSchemeHttp)
                 {
-                    return Failure(SafeHttpFailureKind.HttpsDowngrade, stopwatch, redirects);
+                    return Failure(
+                        SafeHttpFailureKind.HttpsDowngrade,
+                        stopwatch,
+                        redirects,
+                        (int)response.StatusCode,
+                        Destination(currentNormalization));
                 }
 
                 redirects.Add(new SafeHttpRedirectHop(
                     (int)response.StatusCode,
+                    RedactedUrl(currentNormalization),
+                    RedactedUrl(targetNormalization),
                     current.Scheme,
                     currentNormalization.NormalizedHost!,
                     currentNormalization.EffectivePort!.Value,
                     target.Scheme,
                     targetNormalization.NormalizedHost!,
-                    targetNormalization.EffectivePort!.Value));
+                    targetNormalization.EffectivePort!.Value,
+                    false));
                 current = new Uri(targetNormalization.NormalizedUrl!, UriKind.Absolute);
             }
         }
@@ -145,10 +188,13 @@ internal sealed class SafeHttpTransport(
         }
     }
 
-    private async Task<BodyReadResult> ReadBodyAsync(HttpContent content, CancellationToken cancellationToken)
+    private static async Task<BodyReadResult> ReadBodyAsync(
+        HttpContent content,
+        int maxBodyBytes,
+        CancellationToken cancellationToken)
     {
         await using var stream = await content.ReadAsStreamAsync(cancellationToken);
-        var buffer = new byte[options.MaxDecodedBodyBytes + 1];
+        var buffer = new byte[maxBodyBytes + 1];
         var offset = 0;
         while (offset < buffer.Length)
         {
@@ -160,8 +206,8 @@ internal sealed class SafeHttpTransport(
             offset += read;
         }
 
-        var truncated = offset > options.MaxDecodedBodyBytes;
-        var length = Math.Min(offset, options.MaxDecodedBodyBytes);
+        var truncated = offset > maxBodyBytes;
+        var length = Math.Min(offset, maxBodyBytes);
         return new(buffer.AsMemory(0, length), offset, truncated);
     }
 
@@ -177,11 +223,16 @@ internal sealed class SafeHttpTransport(
             normalized.NormalizedHost!,
             normalized.EffectivePort!.Value);
 
+    private static string RedactedUrl(EndpointUrlNormalizationResult normalized) =>
+        new Uri(normalized.NormalizedUrl!, UriKind.Absolute).GetLeftPart(UriPartial.Path);
+
     private static SafeHttpTransportResult Failure(
         SafeHttpFailureKind failure,
         Stopwatch stopwatch,
-        IReadOnlyList<SafeHttpRedirectHop> redirects) =>
-        new(failure, null, null, stopwatch.Elapsed, 0, false, ReadOnlyMemory<byte>.Empty, redirects);
+        IReadOnlyList<SafeHttpRedirectHop> redirects,
+        int? statusCode = null,
+        SafeHttpDestination? finalDestination = null) =>
+        new(failure, statusCode, finalDestination, stopwatch.Elapsed, 0, false, ReadOnlyMemory<byte>.Empty, redirects);
 
     private static bool TryClassify(Exception exception, out SafeHttpFailureKind failure)
     {
