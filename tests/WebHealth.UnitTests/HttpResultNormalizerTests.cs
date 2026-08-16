@@ -10,6 +10,43 @@ public sealed class HttpResultNormalizerTests
     private static readonly DateTimeOffset MeasuredAt =
         new(2026, 8, 16, 12, 0, 0, TimeSpan.Zero);
 
+    [Fact]
+    public void PolicyFingerprint_ChangesForEveryEffectivePolicyField()
+    {
+        var baseline = PolicyFingerprintInput();
+        var baselineFingerprint = HttpPolicyFingerprint.Create(baseline);
+        var variants = new[]
+        {
+            baseline with { NormalizedUrl = "https://other.test/" },
+            baseline with { MonitorType = "Other" },
+            baseline with { IsProduction = true },
+            baseline with { IntervalSeconds = 61 },
+            baseline with { TimeoutSeconds = 11 },
+            baseline with { FailureConfirmationCount = 3 },
+            baseline with { RecoveryConfirmationCount = 3 },
+            baseline with { WarningThresholdMs = 101 },
+            baseline with { CriticalThresholdMs = 201 },
+            baseline with { AcceptedStatusCodes = [204, 404] },
+            baseline with { RequiredContentMarker = "READY" },
+            baseline with { ContentMarkerComparison = "Ordinal" },
+            baseline with { ProductionHttpSeverity = FindingSeverities.Critical },
+            baseline with { MaxResponseBodyBytes = 1024 },
+            baseline with { MaxRedirects = 4 }
+        };
+
+        variants.Should().OnlyContain(variant =>
+            HttpPolicyFingerprint.Create(variant) != baselineFingerprint);
+    }
+
+    [Fact]
+    public void PolicyFingerprint_SortsAndDeduplicatesAcceptedStatuses()
+    {
+        var first = PolicyFingerprintInput() with { AcceptedStatusCodes = [404, 204, 404] };
+        var second = PolicyFingerprintInput() with { AcceptedStatusCodes = [204, 404] };
+
+        HttpPolicyFingerprint.Create(first).Should().Be(HttpPolicyFingerprint.Create(second));
+    }
+
     [Theory]
     [InlineData(200, false, "Healthy", null)]
     [InlineData(204, false, "Healthy", null)]
@@ -58,7 +95,7 @@ public sealed class HttpResultNormalizerTests
         var request = new SafeHttpTransportRequest(Guid.NewGuid(), "http://example.test/", true);
         var transport = Success(200) with
         {
-            FinalDestination = new("http", "example.test", 80)
+            FinalDestination = new("http://example.test/")
         };
 
         var result = HttpResultNormalizer.Normalize(new(
@@ -74,7 +111,7 @@ public sealed class HttpResultNormalizerTests
         var request = new SafeHttpTransportRequest(Guid.NewGuid(), "http://example.test/", true);
         var transport = Success(200) with
         {
-            FinalDestination = new("https", "example.test", 443)
+            FinalDestination = new("https://example.test/")
         };
 
         var result = HttpResultNormalizer.Normalize(new(
@@ -137,15 +174,11 @@ public sealed class HttpResultNormalizerTests
                 302,
                 "http://example.test/start",
                 "http://example.test/again",
-                "http", "example.test", 80,
-                "http", "example.test", 80,
                 false),
             new SafeHttpRedirectHop(
                 302,
                 "http://example.test/again",
                 "http://example.test/again",
-                "http", "example.test", 80,
-                "http", "example.test", 80,
                 true)
         };
         var transport = Failure(SafeHttpFailureKind.RedirectLoop) with { Redirects = redirects };
@@ -155,6 +188,45 @@ public sealed class HttpResultNormalizerTests
         result.Redirects.Select(hop => hop.HopNumber).Should().Equal(1, 2);
         result.Redirects[^1].IsLoop.Should().BeTrue();
         result.Redirects.Should().OnlyContain(hop => !hop.FromUrl.Contains('?') && !hop.ToUrl.Contains('?'));
+    }
+
+    [Fact]
+    public void Normalize_UsesExplicitPrimaryFailurePrecedence()
+    {
+        var policy = HttpResultPolicy.Default with { MaxResponseBodyBytes = 8 };
+        var transport = Success(500, "12345678") with
+        {
+            BodyTruncated = true,
+            ResponseBytesRead = 9
+        };
+
+        var result = Normalize(transport, policy);
+
+        result.Findings.Select(finding => finding.FailureCategory)
+            .Should().Contain(["ResponseTooLarge", "ServerError"]);
+        result.FailureCategory.Should().Be("ResponseTooLarge");
+    }
+
+    [Fact]
+    public void Normalize_UsesVersionedIssueKeysIndependentOfSeverity()
+    {
+        var warningPolicy = HttpResultPolicy.Default with
+        {
+            ProductionHttpSeverity = FindingSeverities.Warning
+        };
+        var criticalPolicy = warningPolicy with
+        {
+            ProductionHttpSeverity = FindingSeverities.Critical
+        };
+        var request = new SafeHttpTransportRequest(Guid.NewGuid(), "http://example.test/", true);
+        var transport = Success(200) with { FinalDestination = new("http://example.test/") };
+
+        var warning = HttpResultNormalizer.Normalize(new(request, transport, warningPolicy, MeasuredAt));
+        var critical = HttpResultNormalizer.Normalize(new(request, transport, criticalPolicy, MeasuredAt));
+
+        warning.Findings.Single().IssueKey.Should()
+            .Be("v1|HttpAvailability|Http.HttpsRequired|default");
+        critical.Findings.Single().IssueKey.Should().Be(warning.Findings.Single().IssueKey);
     }
 
     private static NormalizedHttpResult Normalize(
@@ -169,7 +241,7 @@ public sealed class HttpResultNormalizerTests
     private static SafeHttpTransportResult Success(int status, string body = "ok") => new(
         null,
         status,
-        new("https", "example.test", 443),
+        new("https://example.test/"),
         TimeSpan.FromMilliseconds(123.4),
         Encoding.UTF8.GetByteCount(body),
         false,
@@ -185,4 +257,21 @@ public sealed class HttpResultNormalizerTests
         false,
         ReadOnlyMemory<byte>.Empty,
         []);
+
+    private static HttpPolicyFingerprintInput PolicyFingerprintInput() => new(
+        "https://example.test/",
+        HttpIssueIdentity.MonitorType,
+        false,
+        60,
+        10,
+        2,
+        2,
+        100,
+        200,
+        [],
+        null,
+        "OrdinalIgnoreCase",
+        FindingSeverities.Warning,
+        SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+        SafeHttpTransportDefaults.MaxRedirects);
 }

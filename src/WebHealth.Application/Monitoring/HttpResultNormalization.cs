@@ -185,9 +185,14 @@ public static class HttpResultNormalizer
         }
 
         var start = EndpointUrlNormalizer.Normalize(input.Request.Url);
+        var final = input.Transport.FinalDestination is null
+            ? null
+            : EndpointUrlNormalizer.Normalize(input.Transport.FinalDestination.Url);
         return start.Succeeded
             && new Uri(start.NormalizedUrl!, UriKind.Absolute).Scheme == Uri.UriSchemeHttp
-            && input.Transport.FinalDestination?.Scheme != Uri.UriSchemeHttps;
+            && (final is null
+                || !final.Succeeded
+                || new Uri(final.NormalizedUrl!, UriKind.Absolute).Scheme != Uri.UriSchemeHttps);
     }
 
     private static bool ContainsRequiredMarker(ReadOnlySpan<byte> body, HttpResultPolicy policy)
@@ -212,9 +217,25 @@ public static class HttpResultNormalizer
             return MapTransportFailure(failure);
         }
 
-        return findings.FirstOrDefault(finding => finding.Severity == FindingSeverities.Critical)?.FailureCategory
-            ?? findings.FirstOrDefault()?.FailureCategory;
+        return findings
+            .OrderByDescending(FailurePriority)
+            .ThenBy(finding => finding.RuleKey, StringComparer.Ordinal)
+            .Select(finding => finding.FailureCategory)
+            .FirstOrDefault();
     }
+
+    private static int FailurePriority(NormalizedFinding finding) =>
+        (finding.Severity, finding.FailureCategory) switch
+        {
+            (FindingSeverities.Critical, HttpFailureCategories.ResponseTooLarge) => 500,
+            (FindingSeverities.Critical, HttpFailureCategories.ServerError) => 490,
+            (FindingSeverities.Critical, HttpFailureCategories.ClientError) => 480,
+            (FindingSeverities.Critical, HttpFailureCategories.ContentMismatch) => 470,
+            (FindingSeverities.Critical, _) => 400,
+            (FindingSeverities.Warning, HttpFailureCategories.HttpsRequired) => 300,
+            (FindingSeverities.Warning, _) => 200,
+            _ => 0
+        };
 
     private static string SelectOutcome(
         SafeHttpTransportResult transport,
@@ -260,7 +281,13 @@ public static class HttpResultNormalizer
         string? observed,
         string? expected,
         string severity = FindingSeverities.Critical) =>
-        new(category, $"Http.{category}", severity, observed, expected, $"http:{category}");
+        new(
+            category,
+            $"Http.{category}",
+            severity,
+            observed,
+            expected,
+            HttpIssueIdentity.Create($"Http.{category}"));
 
     private static string? Diagnostic(string? category) => category switch
     {

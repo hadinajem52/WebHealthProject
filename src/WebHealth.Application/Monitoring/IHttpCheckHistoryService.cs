@@ -18,5 +18,7 @@ public enum HttpCheckHistoryWriteStatus
     AlreadyRecorded,
     LeaseLost,
     InvalidLogicalCheck,
-    TargetMismatch
+    TargetMismatch,
+    PolicyMismatch,
+    InvalidTransportResult
 }

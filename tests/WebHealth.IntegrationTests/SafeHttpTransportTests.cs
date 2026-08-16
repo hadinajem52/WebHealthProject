@@ -25,19 +25,21 @@ public sealed class SafeHttpTransportTests
             new HostResolver(("allowed.test", [IPAddress.Loopback])),
             (_, host, _, _, _) => Task.FromResult(host == "allowed.test"));
 
-        var result = await harness.Transport.SendAsync(
-            new(
-                Guid.NewGuid(),
-                $"http://allowed.test:{server.Port}/health?token=not-logged",
-                false,
-                MaxResponseBodyBytes: 8));
+        var transportRequest = new SafeHttpTransportRequest(
+            Guid.NewGuid(),
+            $"http://allowed.test:{server.Port}/health?token=not-logged",
+            false,
+            MaxResponseBodyBytes: 8);
+        var result = await harness.Transport.SendAsync(transportRequest);
 
         result.Succeeded.Should().BeTrue();
         result.StatusCode.Should().Be(200);
         result.BodyTruncated.Should().BeTrue();
         result.ResponseBytesRead.Should().Be(9);
         Encoding.UTF8.GetString(result.Body.Span).Should().Be("Hello wo");
-        result.FinalDestination.Should().Be(new SafeHttpDestination("http", "allowed.test", server.Port));
+        result.FinalDestination.Should().Be(new SafeHttpDestination(
+            $"http://allowed.test:{server.Port}/health"));
+        result.RequestIdentity.Should().Be(SafeHttpRequestIdentity.Create(transportRequest));
         var request = await server.Request;
         request.Should().Contain($"Host: allowed.test:{server.Port}");
         request.Should().Contain("User-Agent: WebHealthMonitor/1.0");
@@ -180,6 +182,31 @@ public sealed class SafeHttpTransportTests
         failure.StatusCode.Should().Be(302);
         failure.Redirects.Should().HaveCount(10);
         excessive.ContactCount.Should().Be(11);
+    }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 2)]
+    public async Task SendAsync_ClassifiesRedirectBeyondLimitBeforeMissingLocation(
+        int maxRedirects,
+        int expectedContacts)
+    {
+        await using var server = await HttpFixture.Start(
+            contact => contact < expectedContacts
+                ? "HTTP/1.1 302 Found\r\nLocation: /next\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                : "HTTP/1.1 302 Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            repeat: true);
+        await using var harness = CreateHarness(
+            new HostResolver(("limit.test", [IPAddress.Loopback])), AuthorizeAll);
+
+        var result = await harness.Transport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://limit.test:{server.Port}/",
+            false,
+            MaxRedirects: maxRedirects));
+
+        result.Failure.Should().Be(SafeHttpFailureKind.RedirectLimit);
+        server.ContactCount.Should().Be(expectedContacts);
     }
 
     [Fact]

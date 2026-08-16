@@ -62,6 +62,113 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 maxLength: 500,
                 nullable: true);
 
+            migrationBuilder.Sql(
+                """
+                CREATE FUNCTION web_health.http_policy_fingerprint_v2(
+                    p_url text,
+                    p_monitor_type text,
+                    p_is_production boolean,
+                    p_interval integer,
+                    p_timeout integer,
+                    p_failure_count integer,
+                    p_recovery_count integer,
+                    p_warning integer,
+                    p_critical integer,
+                    p_statuses text,
+                    p_marker text,
+                    p_comparison text,
+                    p_http_severity text,
+                    p_body_limit integer,
+                    p_redirect_limit integer)
+                RETURNS text
+                LANGUAGE sql
+                IMMUTABLE
+                AS $function$
+                    SELECT encode(sha256(convert_to(
+                        'v2|' ||
+                        octet_length(p_url)::text || ':' || p_url || '|' ||
+                        octet_length(p_monitor_type)::text || ':' || p_monitor_type || '|' ||
+                        '1:' || CASE WHEN p_is_production THEN '1' ELSE '0' END || '|' ||
+                        octet_length(p_interval::text)::text || ':' || p_interval::text || '|' ||
+                        octet_length(p_timeout::text)::text || ':' || p_timeout::text || '|' ||
+                        octet_length(p_failure_count::text)::text || ':' || p_failure_count::text || '|' ||
+                        octet_length(p_recovery_count::text)::text || ':' || p_recovery_count::text || '|' ||
+                        CASE WHEN p_warning IS NULL THEN '-1:|' ELSE octet_length(p_warning::text)::text || ':' || p_warning::text || '|' END ||
+                        CASE WHEN p_critical IS NULL THEN '-1:|' ELSE octet_length(p_critical::text)::text || ':' || p_critical::text || '|' END ||
+                        octet_length(p_statuses)::text || ':' || p_statuses || '|' ||
+                        CASE WHEN p_marker IS NULL THEN '-1:|' ELSE octet_length(p_marker)::text || ':' || p_marker || '|' END ||
+                        octet_length(p_comparison)::text || ':' || p_comparison || '|' ||
+                        octet_length(p_http_severity)::text || ':' || p_http_severity || '|' ||
+                        octet_length(p_body_limit::text)::text || ':' || p_body_limit::text || '|' ||
+                        octet_length(p_redirect_limit::text)::text || ':' || p_redirect_limit::text || '|',
+                        'UTF8')), 'hex');
+                $function$;
+
+                UPDATE web_health.endpoint_monitor monitor
+                SET configuration_fingerprint = web_health.http_policy_fingerprint_v2(
+                    endpoint.normalized_url,
+                    monitor.monitor_type,
+                    environment.is_production,
+                    monitor.interval_seconds,
+                    monitor.timeout_seconds,
+                    monitor.failure_confirmation_count,
+                    monitor.recovery_confirmation_count,
+                    monitor.warning_threshold_ms,
+                    monitor.critical_threshold_ms,
+                    '',
+                    NULL,
+                    'OrdinalIgnoreCase',
+                    'Warning',
+                    2097152,
+                    10)
+                FROM web_health.endpoint endpoint
+                JOIN web_health.environment environment ON environment.id = endpoint.environment_id
+                WHERE endpoint.id = monitor.endpoint_id;
+
+                ALTER TABLE web_health.check_configuration_snapshot
+                    DISABLE TRIGGER trg_check_configuration_snapshot_immutable;
+
+                UPDATE web_health.check_configuration_snapshot snapshot
+                SET configuration_fingerprint = web_health.http_policy_fingerprint_v2(
+                    endpoint.normalized_url,
+                    snapshot.monitor_type,
+                    environment.is_production,
+                    snapshot.interval_seconds,
+                    snapshot.timeout_seconds,
+                    snapshot.failure_confirmation_count,
+                    snapshot.recovery_confirmation_count,
+                    snapshot.warning_threshold_ms,
+                    snapshot.critical_threshold_ms,
+                    CASE WHEN snapshot.accepted_status_codes = '' THEN '' ELSE (
+                        SELECT string_agg(code, ',' ORDER BY code::integer)
+                        FROM (
+                            SELECT DISTINCT unnest(string_to_array(snapshot.accepted_status_codes, ',')) AS code
+                        ) accepted
+                    ) END,
+                    snapshot.required_content_marker,
+                    snapshot.content_marker_comparison,
+                    snapshot.production_http_severity,
+                    snapshot.max_response_body_bytes,
+                    snapshot.max_redirects)
+                FROM web_health.logical_check logical_check
+                JOIN web_health.endpoint_monitor monitor ON monitor.id = logical_check.endpoint_monitor_id
+                JOIN web_health.endpoint endpoint ON endpoint.id = monitor.endpoint_id
+                JOIN web_health.environment environment ON environment.id = endpoint.environment_id
+                WHERE logical_check.id = snapshot.logical_check_id;
+
+                UPDATE web_health.logical_check logical_check
+                SET policy_fingerprint = snapshot.configuration_fingerprint
+                FROM web_health.check_configuration_snapshot snapshot
+                WHERE snapshot.logical_check_id = logical_check.id;
+
+                ALTER TABLE web_health.check_configuration_snapshot
+                    ENABLE TRIGGER trg_check_configuration_snapshot_immutable;
+
+                DROP FUNCTION web_health.http_policy_fingerprint_v2(
+                    text, text, boolean, integer, integer, integer, integer,
+                    integer, integer, text, text, text, text, integer, integer);
+                """);
+
             migrationBuilder.CreateTable(
                 name: "check_result",
                 schema: "web_health",
@@ -208,6 +315,38 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql(
+                """
+                UPDATE web_health.endpoint_monitor monitor
+                SET configuration_fingerprint = encode(sha256(convert_to(
+                    'v1|' || endpoint.normalized_url || '|' || monitor.monitor_type || '|' ||
+                    monitor.interval_seconds::text || '|' || monitor.timeout_seconds::text,
+                    'UTF8')), 'hex')
+                FROM web_health.endpoint endpoint
+                WHERE endpoint.id = monitor.endpoint_id;
+
+                ALTER TABLE web_health.check_configuration_snapshot
+                    DISABLE TRIGGER trg_check_configuration_snapshot_immutable;
+
+                UPDATE web_health.check_configuration_snapshot snapshot
+                SET configuration_fingerprint = encode(sha256(convert_to(
+                    'v1|' || endpoint.normalized_url || '|' || snapshot.monitor_type || '|' ||
+                    snapshot.interval_seconds::text || '|' || snapshot.timeout_seconds::text,
+                    'UTF8')), 'hex')
+                FROM web_health.logical_check logical_check
+                JOIN web_health.endpoint_monitor monitor ON monitor.id = logical_check.endpoint_monitor_id
+                JOIN web_health.endpoint endpoint ON endpoint.id = monitor.endpoint_id
+                WHERE logical_check.id = snapshot.logical_check_id;
+
+                UPDATE web_health.logical_check logical_check
+                SET policy_fingerprint = snapshot.configuration_fingerprint
+                FROM web_health.check_configuration_snapshot snapshot
+                WHERE snapshot.logical_check_id = logical_check.id;
+
+                ALTER TABLE web_health.check_configuration_snapshot
+                    ENABLE TRIGGER trg_check_configuration_snapshot_immutable;
+                """);
+
             migrationBuilder.DropTable(
                 name: "finding",
                 schema: "web_health");

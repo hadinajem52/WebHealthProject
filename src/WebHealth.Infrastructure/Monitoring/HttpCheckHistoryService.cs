@@ -47,19 +47,29 @@ internal sealed class HttpCheckHistoryService(
             return HttpCheckHistoryWriteStatus.TargetMismatch;
         }
 
+        var requestIdentity = SafeHttpRequestIdentity.Create(request.Request);
+        if (requestIdentity is null || request.Transport.RequestIdentity != requestIdentity)
+        {
+            return HttpCheckHistoryWriteStatus.TargetMismatch;
+        }
+
         var now = timeProvider.GetUtcNow();
         if (!await TryConsumeLeaseAsync(request.Lease, cancellationToken))
         {
             return HttpCheckHistoryWriteStatus.LeaseLost;
         }
 
-        var policy = CreatePolicy(logicalCheck.ConfigurationSnapshot);
-        if (logicalCheck.PolicyFingerprint != logicalCheck.ConfigurationSnapshot.ConfigurationFingerprint
-            || request.Request.MaxRedirects != logicalCheck.ConfigurationSnapshot.MaxRedirects
-            || request.Request.MaxResponseBodyBytes != policy.MaxResponseBodyBytes
-            || !IsTransportConsistent(request))
+        var snapshot = logicalCheck.ConfigurationSnapshot;
+        var acceptedStatuses = ParseAcceptedStatuses(snapshot.AcceptedStatusCodes);
+        var policy = CreatePolicy(snapshot, acceptedStatuses);
+        if (!MatchesPolicy(logicalCheck, request.Request, acceptedStatuses))
         {
-            return HttpCheckHistoryWriteStatus.TargetMismatch;
+            return HttpCheckHistoryWriteStatus.PolicyMismatch;
+        }
+
+        if (!IsTransportConsistent(request))
+        {
+            return HttpCheckHistoryWriteStatus.InvalidTransportResult;
         }
 
         var normalized = HttpResultNormalizer.Normalize(new(
@@ -125,12 +135,42 @@ internal sealed class HttpCheckHistoryService(
             && normalized.NormalizedUrl == endpoint.NormalizedUrl;
     }
 
-    private static HttpResultPolicy CreatePolicy(CheckConfigurationSnapshot snapshot) => new(
-        ParseAcceptedStatuses(snapshot.AcceptedStatusCodes),
+    private static HttpResultPolicy CreatePolicy(
+        CheckConfigurationSnapshot snapshot,
+        IReadOnlyCollection<int> acceptedStatuses) => new(
+        acceptedStatuses,
         snapshot.RequiredContentMarker,
         snapshot.ContentMarkerComparison == "Ordinal",
         snapshot.ProductionHttpSeverity,
         snapshot.MaxResponseBodyBytes);
+
+    private static bool MatchesPolicy(
+        LogicalCheck logicalCheck,
+        SafeHttpTransportRequest request,
+        IReadOnlyCollection<int> acceptedStatuses)
+    {
+        var snapshot = logicalCheck.ConfigurationSnapshot;
+        var expected = HttpPolicyFingerprint.Create(new(
+            logicalCheck.EndpointMonitor.Endpoint.NormalizedUrl,
+            snapshot.MonitorType,
+            logicalCheck.EndpointMonitor.Endpoint.Environment.IsProduction,
+            snapshot.IntervalSeconds,
+            snapshot.TimeoutSeconds,
+            snapshot.FailureConfirmationCount,
+            snapshot.RecoveryConfirmationCount,
+            snapshot.WarningThresholdMs,
+            snapshot.CriticalThresholdMs,
+            acceptedStatuses,
+            snapshot.RequiredContentMarker,
+            snapshot.ContentMarkerComparison,
+            snapshot.ProductionHttpSeverity,
+            snapshot.MaxResponseBodyBytes,
+            snapshot.MaxRedirects));
+        return logicalCheck.PolicyFingerprint == expected
+            && snapshot.ConfigurationFingerprint == expected
+            && request.MaxRedirects == snapshot.MaxRedirects
+            && request.MaxResponseBodyBytes == snapshot.MaxResponseBodyBytes;
+    }
 
     private static bool IsTransportConsistent(RecordHttpCheckHistory request)
     {
@@ -138,21 +178,73 @@ internal sealed class HttpCheckHistoryService(
         if (transport.Redirects.Count > request.Request.MaxRedirects
             || transport.Body.Length > request.Request.MaxResponseBodyBytes
             || transport.ResponseBytesRead < transport.Body.Length
-            || transport.Redirects.Any(hop =>
-                hop.StatusCode is < 300 or > 399
-                || hop.FromUrl.Length > 2048
-                || hop.ToUrl.Length > 2048
-                || hop.FromUrl.Contains('?')
-                || hop.ToUrl.Contains('?')))
+            || !HasValidBodyEvidence(request)
+            || !HasValidRedirectChain(request))
         {
             return false;
         }
 
-        return transport.BodyTruncated
-            ? transport.Body.Length == request.Request.MaxResponseBodyBytes
-              && transport.ResponseBytesRead == request.Request.MaxResponseBodyBytes + 1L
-            : transport.ResponseBytesRead == transport.Body.Length;
+        return transport.Failure is null
+            || transport is { Body.Length: 0, ResponseBytesRead: 0, BodyTruncated: false };
     }
+
+    private static bool HasValidBodyEvidence(RecordHttpCheckHistory request) =>
+        request.Transport.BodyTruncated
+            ? request.Transport.Body.Length == request.Request.MaxResponseBodyBytes
+              && request.Transport.ResponseBytesRead == request.Request.MaxResponseBodyBytes + 1L
+            : request.Transport.ResponseBytesRead == request.Transport.Body.Length;
+
+    private static bool HasValidRedirectChain(RecordHttpCheckHistory request)
+    {
+        var initial = EndpointUrlNormalizer.Normalize(request.Request.Url);
+        if (!initial.Succeeded)
+        {
+            return false;
+        }
+
+        var currentUrl = RedactedUrl(initial.NormalizedUrl!);
+        for (var index = 0; index < request.Transport.Redirects.Count; index++)
+        {
+            var hop = request.Transport.Redirects[index];
+            if (hop.StatusCode is < 300 or > 399
+                || !IsSafeNormalizedUrl(hop.FromUrl)
+                || !IsSafeNormalizedUrl(hop.ToUrl)
+                || hop.FromUrl != currentUrl
+                || hop.IsLoop != (request.Transport.Failure == SafeHttpFailureKind.RedirectLoop
+                    && index == request.Transport.Redirects.Count - 1))
+            {
+                return false;
+            }
+
+            currentUrl = hop.ToUrl;
+        }
+
+        if (request.Transport.Failure == SafeHttpFailureKind.RedirectLoop
+            && request.Transport.Redirects.Count == 0)
+        {
+            return false;
+        }
+
+        return request.Transport.FinalDestination is null
+            || MatchesDestination(currentUrl, request.Transport.FinalDestination);
+    }
+
+    private static bool IsSafeNormalizedUrl(string url)
+    {
+        if (url.Length > 2048 || url.Contains('?'))
+        {
+            return false;
+        }
+
+        var normalized = EndpointUrlNormalizer.Normalize(url);
+        return normalized.Succeeded && RedactedUrl(normalized.NormalizedUrl!) == url;
+    }
+
+    private static bool MatchesDestination(string url, SafeHttpDestination destination)
+        => IsSafeNormalizedUrl(destination.Url) && destination.Url == url;
+
+    private static string RedactedUrl(string normalizedUrl) =>
+        new Uri(normalizedUrl, UriKind.Absolute).GetLeftPart(UriPartial.Path);
 
     private static IReadOnlyCollection<int> ParseAcceptedStatuses(string value)
     {

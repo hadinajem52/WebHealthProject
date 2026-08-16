@@ -349,7 +349,27 @@ internal static class DatabaseFoundationAssertions
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
-        var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).FirstAsync();
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint)
+                .ThenInclude(endpoint => endpoint.Environment)
+            .OrderBy(candidate => candidate.CreatedAt)
+            .FirstAsync();
+        monitor.ConfigurationFingerprint.Should().Be(HttpPolicyFingerprint.Create(new(
+            monitor.Endpoint.NormalizedUrl,
+            monitor.MonitorType,
+            monitor.Endpoint.Environment.IsProduction,
+            monitor.IntervalSeconds,
+            monitor.TimeoutSeconds,
+            monitor.FailureConfirmationCount,
+            monitor.RecoveryConfirmationCount,
+            monitor.WarningThresholdMs,
+            monitor.CriticalThresholdMs,
+            [],
+            null,
+            "OrdinalIgnoreCase",
+            FindingSeverities.Warning,
+            SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+            SafeHttpTransportDefaults.MaxRedirects)));
         var scheduledFor = monitor.NextDueAt;
         var logicalCheckId = Guid.NewGuid();
         var cadenceKey = MonitorCadence.CreateCadenceKey(monitor.Id, scheduledFor);
@@ -485,6 +505,22 @@ internal static class DatabaseFoundationAssertions
             .FirstAsync(candidate => !candidate.Endpoint.Environment.IsProduction);
         var now = DateTimeOffset.UtcNow;
         var logicalCheckId = Guid.NewGuid();
+        var policyFingerprint = HttpPolicyFingerprint.Create(new(
+            monitor.Endpoint.NormalizedUrl,
+            monitor.MonitorType,
+            monitor.Endpoint.Environment.IsProduction,
+            monitor.IntervalSeconds,
+            monitor.TimeoutSeconds,
+            monitor.FailureConfirmationCount,
+            monitor.RecoveryConfirmationCount,
+            monitor.WarningThresholdMs,
+            monitor.CriticalThresholdMs,
+            [204, 404],
+            "READY",
+            "OrdinalIgnoreCase",
+            FindingSeverities.Warning,
+            8,
+            10));
         database.LogicalChecks.Add(new LogicalCheck
         {
             Id = logicalCheckId,
@@ -493,7 +529,7 @@ internal static class DatabaseFoundationAssertions
             ScheduledFor = now,
             State = LogicalCheckStates.Running,
             CadenceKey = MonitorCadence.CreateCadenceKey(monitor.Id, now),
-            PolicyFingerprint = monitor.ConfigurationFingerprint,
+            PolicyFingerprint = policyFingerprint,
             CreatedAt = now,
             QueuedAt = now,
             StartedAt = now
@@ -503,7 +539,7 @@ internal static class DatabaseFoundationAssertions
             LogicalCheckId = logicalCheckId,
             SchemaVersion = 2,
             MonitorType = monitor.MonitorType,
-            ConfigurationFingerprint = monitor.ConfigurationFingerprint,
+            ConfigurationFingerprint = policyFingerprint,
             IntervalSeconds = monitor.IntervalSeconds,
             TimeoutSeconds = monitor.TimeoutSeconds,
             FailureConfirmationCount = monitor.FailureConfirmationCount,
@@ -530,6 +566,7 @@ internal static class DatabaseFoundationAssertions
             Guid.NewGuid(),
             TimeSpan.FromMinutes(1)));
         claim.Should().NotBeNull();
+        var activeClaim = claim!;
         var endpointUri = new Uri(monitor.Endpoint.NormalizedUrl);
         var request = new SafeHttpTransportRequest(
             monitor.EndpointId,
@@ -540,7 +577,7 @@ internal static class DatabaseFoundationAssertions
         var transport = new SafeHttpTransportResult(
             null,
             200,
-            new(endpointUri.Scheme, endpointUri.IdnHost, endpointUri.Port),
+            new($"{endpointUri.Scheme}://{endpointUri.Authority}/landing"),
             TimeSpan.FromMilliseconds(42),
             7,
             false,
@@ -549,27 +586,48 @@ internal static class DatabaseFoundationAssertions
                 302,
                 endpointUri.GetLeftPart(UriPartial.Path),
                 $"{endpointUri.Scheme}://{endpointUri.Authority}/landing",
-                endpointUri.Scheme,
-                endpointUri.IdnHost,
-                endpointUri.Port,
-                endpointUri.Scheme,
-                endpointUri.IdnHost,
-                endpointUri.Port,
-                false)]);
+                false)],
+            SafeHttpRequestIdentity.Create(request));
 
-        var staleClaim = claim! with { OwnerToken = Guid.NewGuid() };
+        var otherRequest = request with
+        {
+            EndpointId = Guid.NewGuid(),
+            Url = "https://other-endpoint.test/"
+        };
+        var otherResult = transport with { RequestIdentity = SafeHttpRequestIdentity.Create(otherRequest) };
+        (await historyService.RecordAsync(new(activeClaim, request, otherResult)))
+            .Should().Be(HttpCheckHistoryWriteStatus.TargetMismatch);
+
+        var policyMismatchRequest = request with { MaxRedirects = 9 };
+        var policyMismatchResult = transport with
+        {
+            RequestIdentity = SafeHttpRequestIdentity.Create(policyMismatchRequest)
+        };
+        (await historyService.RecordAsync(new(activeClaim, policyMismatchRequest, policyMismatchResult)))
+            .Should().Be(HttpCheckHistoryWriteStatus.PolicyMismatch);
+
+        var invalidResult = transport with
+        {
+            Redirects = [transport.Redirects[0] with { FromUrl = "https://other.test/" }]
+        };
+        (await historyService.RecordAsync(new(activeClaim, request, invalidResult)))
+            .Should().Be(HttpCheckHistoryWriteStatus.InvalidTransportResult);
+        (await database.CheckResults.AnyAsync(result => result.LogicalCheckId == logicalCheckId))
+            .Should().BeFalse();
+
+        var staleClaim = activeClaim with { OwnerToken = Guid.NewGuid() };
         (await historyService.RecordAsync(new(staleClaim, request, transport)))
             .Should().Be(HttpCheckHistoryWriteStatus.LeaseLost);
         await using var competingScope = services.CreateAsyncScope();
         var competingHistoryService = competingScope.ServiceProvider
             .GetRequiredService<IHttpCheckHistoryService>();
         var concurrentWrites = await Task.WhenAll(
-            historyService.RecordAsync(new(claim, request, transport)),
-            competingHistoryService.RecordAsync(new(claim, request, transport)));
+            historyService.RecordAsync(new(activeClaim, request, transport)),
+            competingHistoryService.RecordAsync(new(activeClaim, request, transport)));
         concurrentWrites.Should().BeEquivalentTo([
             HttpCheckHistoryWriteStatus.Recorded,
             HttpCheckHistoryWriteStatus.AlreadyRecorded]);
-        (await historyService.RecordAsync(new(claim, request, transport)))
+        (await historyService.RecordAsync(new(activeClaim, request, transport)))
             .Should().Be(HttpCheckHistoryWriteStatus.AlreadyRecorded);
 
         database.ChangeTracker.Clear();

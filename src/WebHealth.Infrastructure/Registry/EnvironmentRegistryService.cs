@@ -304,8 +304,13 @@ internal sealed class EnvironmentRegistryService(
             monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(monitor.ScheduleAnchor, interval, now);
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 monitor.Endpoint.NormalizedUrl,
+                environment.IsProduction,
                 interval,
-                monitor.TimeoutSeconds);
+                monitor.TimeoutSeconds,
+                monitor.FailureConfirmationCount,
+                monitor.RecoveryConfirmationCount,
+                monitor.WarningThresholdMs,
+                monitor.CriticalThresholdMs);
             monitor.UpdatedAt = now;
             monitor.UpdatedByUserId = actorId;
             monitor.Version++;

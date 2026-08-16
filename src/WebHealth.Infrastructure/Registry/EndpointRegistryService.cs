@@ -146,7 +146,14 @@ internal sealed class EndpointRegistryService(
         try
         {
             await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
-            ApplyEndpointUpdate(endpoint, command, url, exception, access.UserId, now);
+            ApplyEndpointUpdate(
+                endpoint,
+                command,
+                url,
+                exception,
+                endpoint.Environment.IsProduction,
+                access.UserId,
+                now);
             await auditTrail.RecordEndpointMutationAsync(
                 new(access.UserId, now), EndpointAuditAction.Updated, before,
                 ToAudit(endpoint, urlChanged, exceptionChanged, authorization.Changed, now), cancellationToken);
@@ -318,7 +325,14 @@ internal sealed class EndpointRegistryService(
             MonitorType = RegistryDefaults.HttpAvailabilityMonitorType,
             BoundedOverrides = "{}",
             ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
-                endpoint.NormalizedUrl, interval, RegistryDefaults.HttpTimeoutSeconds),
+                endpoint.NormalizedUrl,
+                isProduction,
+                interval,
+                RegistryDefaults.HttpTimeoutSeconds,
+                2,
+                2,
+                1000,
+                3000),
             ScheduleAnchor = schedule.Anchor,
             NextDueAt = schedule.NextDueAt,
             IntervalSeconds = interval,
@@ -341,6 +355,7 @@ internal sealed class EndpointRegistryService(
         UpdateEndpoint command,
         EndpointUrlNormalizationResult url,
         HttpExceptionDecision exception,
+        bool isProduction,
         Guid actorId,
         DateTimeOffset now)
     {
@@ -359,7 +374,14 @@ internal sealed class EndpointRegistryService(
         foreach (var monitor in endpoint.Monitors.Where(monitor => monitor.DeletedAt == null))
         {
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
-                endpoint.NormalizedUrl, monitor.IntervalSeconds, monitor.TimeoutSeconds);
+                endpoint.NormalizedUrl,
+                isProduction,
+                monitor.IntervalSeconds,
+                monitor.TimeoutSeconds,
+                monitor.FailureConfirmationCount,
+                monitor.RecoveryConfirmationCount,
+                monitor.WarningThresholdMs,
+                monitor.CriticalThresholdMs);
             monitor.UpdatedAt = now;
             monitor.UpdatedByUserId = actorId;
             monitor.Version++;

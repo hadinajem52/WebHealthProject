@@ -9,9 +9,7 @@ internal sealed record SafeHttpTransportOptions
 
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(5);
-    public int MaxRedirects { get; init; } = SafeHttpTransportDefaults.MaxRedirects;
     public int MaxResponseHeadersKilobytes { get; init; } = 32;
-    public int MaxDecodedBodyBytes { get; init; } = SafeHttpTransportDefaults.MaxDecodedBodyBytes;
     public int MaxDnsAnswers { get; init; } = 16;
     public int GlobalConcurrency { get; init; } = 20;
     public int PerHostConcurrency { get; init; } = 2;

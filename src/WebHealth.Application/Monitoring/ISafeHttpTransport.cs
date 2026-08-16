@@ -46,7 +46,8 @@ public sealed record SafeHttpTransportResult(
     long ResponseBytesRead,
     bool BodyTruncated,
     ReadOnlyMemory<byte> Body,
-    IReadOnlyList<SafeHttpRedirectHop> Redirects)
+    IReadOnlyList<SafeHttpRedirectHop> Redirects,
+    string? RequestIdentity = null)
 {
     public bool Succeeded => Failure is null;
 }
@@ -55,15 +56,9 @@ public sealed record SafeHttpRedirectHop(
     int StatusCode,
     string FromUrl,
     string ToUrl,
-    string FromScheme,
-    string FromHost,
-    int FromPort,
-    string ToScheme,
-    string ToHost,
-    int ToPort,
     bool IsLoop);
 
-public sealed record SafeHttpDestination(string Scheme, string Host, int Port);
+public sealed record SafeHttpDestination(string Url);
 
 public enum SafeHttpFailureKind
 {

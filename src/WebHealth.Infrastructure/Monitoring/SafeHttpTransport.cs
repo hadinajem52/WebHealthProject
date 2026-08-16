@@ -23,12 +23,11 @@ internal sealed class SafeHttpTransport(
         var stopwatch = Stopwatch.StartNew();
         var redirects = new List<SafeHttpRedirectHop>();
         var normalized = EndpointUrlNormalizer.Normalize(request.Url);
+        var requestIdentity = SafeHttpRequestIdentity.Create(request);
         if (!normalized.Succeeded
-            || request.MaxRedirects is < 0 or > SafeHttpTransportDefaults.MaxRedirects
-            || request.MaxResponseBodyBytes <= 0
-            || request.MaxResponseBodyBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes)
+            || requestIdentity is null)
         {
-            return Failure(SafeHttpFailureKind.InvalidUrl, stopwatch, redirects);
+            return Failure(SafeHttpFailureKind.InvalidUrl, stopwatch, redirects, requestIdentity);
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -46,7 +45,7 @@ internal sealed class SafeHttpTransport(
                 var currentNormalization = EndpointUrlNormalizer.Normalize(current.AbsoluteUri);
                 if (!currentNormalization.Succeeded)
                 {
-                    return Failure(SafeHttpFailureKind.RedirectInvalid, stopwatch, redirects);
+                    return Failure(SafeHttpFailureKind.RedirectInvalid, stopwatch, redirects, requestIdentity);
                 }
 
                 if (!visited.Add(currentNormalization.NormalizedUrl!))
@@ -59,6 +58,7 @@ internal sealed class SafeHttpTransport(
                         SafeHttpFailureKind.RedirectLoop,
                         stopwatch,
                         redirects,
+                        requestIdentity,
                         redirects[^1].StatusCode,
                         Destination(currentNormalization));
                 }
@@ -70,7 +70,7 @@ internal sealed class SafeHttpTransport(
                     timeProvider.GetUtcNow(),
                     timeout.Token))
                 {
-                    return Failure(SafeHttpFailureKind.TargetNotAuthorized, stopwatch, redirects);
+                    return Failure(SafeHttpFailureKind.TargetNotAuthorized, stopwatch, redirects, requestIdentity);
                 }
 
                 using var hostLease = await concurrencyLimiter.AcquireHostAsync(
@@ -89,7 +89,7 @@ internal sealed class SafeHttpTransport(
                 {
                     var body = await ReadBodyAsync(
                         response.Content,
-                        Math.Min(request.MaxResponseBodyBytes, options.MaxDecodedBodyBytes),
+                        request.MaxResponseBodyBytes,
                         timeout.Token);
                     return new SafeHttpTransportResult(
                         null,
@@ -99,7 +99,19 @@ internal sealed class SafeHttpTransport(
                         body.BytesRead,
                         body.Truncated,
                         body.Content,
-                        redirects);
+                        redirects,
+                        requestIdentity);
+                }
+
+                if (redirects.Count >= request.MaxRedirects)
+                {
+                    return Failure(
+                        SafeHttpFailureKind.RedirectLimit,
+                        stopwatch,
+                        redirects,
+                        requestIdentity,
+                        (int)response.StatusCode,
+                        Destination(currentNormalization));
                 }
 
                 if (response.Headers.Location is null)
@@ -108,16 +120,7 @@ internal sealed class SafeHttpTransport(
                         SafeHttpFailureKind.RedirectMissingLocation,
                         stopwatch,
                         redirects,
-                        (int)response.StatusCode,
-                        Destination(currentNormalization));
-                }
-
-                if (redirects.Count >= Math.Min(request.MaxRedirects, options.MaxRedirects))
-                {
-                    return Failure(
-                        SafeHttpFailureKind.RedirectLimit,
-                        stopwatch,
-                        redirects,
+                        requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization));
                 }
@@ -133,6 +136,7 @@ internal sealed class SafeHttpTransport(
                         SafeHttpFailureKind.RedirectInvalid,
                         stopwatch,
                         redirects,
+                        requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization));
                 }
@@ -144,6 +148,7 @@ internal sealed class SafeHttpTransport(
                         SafeHttpFailureKind.RedirectInvalid,
                         stopwatch,
                         redirects,
+                        requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization));
                 }
@@ -156,6 +161,7 @@ internal sealed class SafeHttpTransport(
                         SafeHttpFailureKind.HttpsDowngrade,
                         stopwatch,
                         redirects,
+                        requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization));
                 }
@@ -164,27 +170,21 @@ internal sealed class SafeHttpTransport(
                     (int)response.StatusCode,
                     RedactedUrl(currentNormalization),
                     RedactedUrl(targetNormalization),
-                    current.Scheme,
-                    currentNormalization.NormalizedHost!,
-                    currentNormalization.EffectivePort!.Value,
-                    target.Scheme,
-                    targetNormalization.NormalizedHost!,
-                    targetNormalization.EffectivePort!.Value,
                     false));
                 current = new Uri(targetNormalization.NormalizedUrl!, UriKind.Absolute);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Failure(SafeHttpFailureKind.Cancelled, stopwatch, redirects);
+            return Failure(SafeHttpFailureKind.Cancelled, stopwatch, redirects, requestIdentity);
         }
         catch (OperationCanceledException)
         {
-            return Failure(SafeHttpFailureKind.Timeout, stopwatch, redirects);
+            return Failure(SafeHttpFailureKind.Timeout, stopwatch, redirects, requestIdentity);
         }
         catch (Exception exception) when (TryClassify(exception, out var failure))
         {
-            return Failure(failure, stopwatch, redirects);
+            return Failure(failure, stopwatch, redirects, requestIdentity);
         }
     }
 
@@ -219,9 +219,7 @@ internal sealed class SafeHttpTransport(
         or HttpStatusCode.PermanentRedirect;
 
     private static SafeHttpDestination Destination(EndpointUrlNormalizationResult normalized) =>
-        new(new Uri(normalized.NormalizedUrl!, UriKind.Absolute).Scheme,
-            normalized.NormalizedHost!,
-            normalized.EffectivePort!.Value);
+        new(RedactedUrl(normalized));
 
     private static string RedactedUrl(EndpointUrlNormalizationResult normalized) =>
         new Uri(normalized.NormalizedUrl!, UriKind.Absolute).GetLeftPart(UriPartial.Path);
@@ -230,9 +228,19 @@ internal sealed class SafeHttpTransport(
         SafeHttpFailureKind failure,
         Stopwatch stopwatch,
         IReadOnlyList<SafeHttpRedirectHop> redirects,
+        string? requestIdentity,
         int? statusCode = null,
         SafeHttpDestination? finalDestination = null) =>
-        new(failure, statusCode, finalDestination, stopwatch.Elapsed, 0, false, ReadOnlyMemory<byte>.Empty, redirects);
+        new(
+            failure,
+            statusCode,
+            finalDestination,
+            stopwatch.Elapsed,
+            0,
+            false,
+            ReadOnlyMemory<byte>.Empty,
+            redirects,
+            requestIdentity);
 
     private static bool TryClassify(Exception exception, out SafeHttpFailureKind failure)
     {

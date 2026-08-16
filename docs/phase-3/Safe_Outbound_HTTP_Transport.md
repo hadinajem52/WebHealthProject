@@ -20,10 +20,10 @@ The transport:
 - authorizes the exact endpoint, normalized host, and port against active target-authorization evidence before every hop;
 - rejects production HTTPS-to-HTTP redirects, normalized redirect loops, unsupported redirect targets, and chains beyond ten hops;
 - retains normal platform TLS certificate and hostname validation;
-- applies a 15-second whole-check timeout, 5-second connect timeout, 32 KiB header limit, 2 MiB decoded-body limit plus one sentinel byte, 16-answer DNS limit, and 20 global / 2 per-host / 4 per-IP concurrency limits;
+- applies a 15-second whole-check timeout, 5-second connect timeout, 32 KiB header limit, snapshotted decoded-body and redirect limits capped by hard 2 MiB/10-hop ceilings, a one-byte body sentinel, 16-answer DNS limit, and 20 global / 2 per-host / 4 per-IP concurrency limits;
 - performs no transport-level retry; later durable execution policy owns retry decisions.
 
-Only status, total duration, bytes actually read, truncation state, final scheme/host/port, a query-free redirect summary, and the bounded in-memory body are returned. The transport logs and persists none of these values. Result normalization will consume the body in memory and persistence will retain zero body bytes by default.
+Only status, total duration, bytes actually read, truncation state, a query-free final URL and redirect summary, a normalized request-identity hash, and the bounded in-memory body are returned. Redirect hops store one authoritative from/to URL representation. The transport logs and persists none of these values. Result normalization consumes the body in memory and persistence retains zero body bytes.
 
 ## Destination policy
 
