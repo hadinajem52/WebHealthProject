@@ -302,14 +302,14 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 9.4 Database and migration
 
-- [ ] Add Identity, registry, ownership, tag, policy/default, and audit schemas. Identity, teams, owner subjects, and audit are complete; registry, grants, tags, and policy/default data remain.
-- [ ] Add required relationships and prevent cascading deletion of future history. Client, Website, Environment foundation, and access grants use restrictive relationships; later registry remains.
-- [ ] Add normalized fields or a documented equivalent normalization strategy. Client, Website, and Environment foundation are complete; later registry remains.
-- [ ] Add database uniqueness constraints matching business rules. Client and Website rules are complete; later registry remains.
-- [ ] Add concurrency tokens. Client, Website, and Environment foundation are complete; later registry remains.
-- [ ] Index normalized names, active registry lists, ownership filters, and audit searches.
+- [x] Add Phase 2 Identity, registry, ownership, tag, policy-default foundation, and audit schemas in two reviewable migrations.
+- [x] Add required relationships and prevent cascading deletion of history through restrictive foreign keys.
+- [x] Add normalized fields and documented normalization versions.
+- [x] Add database uniqueness constraints matching Phase 2 business rules.
+- [x] Add concurrency tokens to mutable registry configuration.
+- [x] Index normalized names, active registry lists, ownership filters, and audit searches.
 - [x] Seed role definitions through a controlled, idempotent bootstrap-admin mechanism; no password or role row is embedded in a migration.
-- [x] Validate clean database creation and migration repeatability for the current foundation, Identity, and authorization-denial audit migrations against PostgreSQL 18.
+- [x] Validate clean creation, Phase 1-baseline upgrade, and migration repeatability against PostgreSQL 18. Evidence: [`../phase-2/Database_and_Completion_Gate.md`](../phase-2/Database_and_Completion_Gate.md).
 
 ### 9.5 Verification gate
 
@@ -321,8 +321,8 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Verify PostgreSQL constraints reject current registry duplicates independently of UI validation.
 - [x] Verify stale current registry configuration updates are rejected.
 - [x] Verify current registry soft deletion preserves reportable identity and relationships.
-- [ ] Verify all required audit event kinds contain actor, timestamp, action, entity, and safe values. Current registry is verified; later incident events remain.
-- [ ] Inspect logs and repository for secrets and sensitive values.
+- [x] Verify all Phase 2 audit event kinds contain actor, timestamp, action, entity, and safe values; incident events remain owned by Phase 3.
+- [x] Inspect logs and repository for secrets and sensitive values.
 
 ### 9.6 Phase exit evidence
 

@@ -242,15 +242,16 @@ These requirements apply throughout the project:
 - [x] Verify disabled-account sign-in rejection and existing-session invalidation. Evidence: the real Identity/PostgreSQL verification in [`../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs`](../../tests/WebHealth.IntegrationTests/Support/DatabaseFoundationAssertions.cs).
 - [x] Verify Phase 2 database constraints independently of UI validation, including normalized tag uniqueness.
 - [x] Verify stale assignment and current registry updates fail safely and retain the submitted original version.
-- [ ] Verify output encoding and secret-safe logs.
+- [x] Verify output encoding and secret-safe logs. Evidence: [`../phase-2/Database_and_Completion_Gate.md`](../phase-2/Database_and_Completion_Gate.md).
 
 ### Phase 2 completion gate
 
-- [ ] AC-01 passes with database constraint evidence.
-- [ ] AC-10 passes for direct unauthorized requests.
-- [ ] Configuration changes satisfy the configuration portion of AC-13.
-- [ ] Registry migration succeeds from clean and previous schemas.
-- [ ] Secured registry workflow is demonstrated.
+- [x] AC-01 passes with database constraint evidence.
+- [x] AC-10 passes for direct unauthorized requests.
+- [x] Configuration changes satisfy the configuration portion of AC-13.
+- [x] Registry migration succeeds from a clean database and the Phase 1 baseline.
+- [x] Secured registry workflow is demonstrated through the native PostgreSQL 18 gate.
+- [ ] Full Testcontainers delivery rerun passes; currently blocked by container-registry TLS timeouts. Evidence: [`../phase-2/Database_and_Completion_Gate.md`](../phase-2/Database_and_Completion_Gate.md).
 
 ---
 
