@@ -251,7 +251,7 @@ These requirements apply throughout the project:
 - [x] Configuration changes satisfy the configuration portion of AC-13.
 - [x] Registry migration succeeds from a clean database and the Phase 1 baseline.
 - [x] Secured registry workflow is demonstrated through the native PostgreSQL 18 gate.
-- [ ] Full Testcontainers delivery rerun passes; currently blocked by container-registry TLS timeouts. Evidence: [`../phase-2/Database_and_Completion_Gate.md`](../phase-2/Database_and_Completion_Gate.md).
+- [x] Full Testcontainers delivery rerun passes against PostgreSQL 18. Evidence: [`../phase-2/Database_and_Completion_Gate.md`](../phase-2/Database_and_Completion_Gate.md), 2026-08-16 delivery run.
 
 ---
 
@@ -276,8 +276,8 @@ These requirements apply throughout the project:
 
 ### Concurrency and idempotency
 
-- [ ] Implement a PostgreSQL-backed lease per endpoint and monitor type.
-- [ ] Store lease owner, acquisition, and expiry.
+- [x] Implement a PostgreSQL-backed lease per endpoint and monitor type. Evidence: [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
+- [x] Store lease owner, acquisition, expiry, and fencing generation. Evidence: `MonitoringExecutionFoundation`.
 - [ ] Ensure duplicate jobs use the same logical-check ID.
 - [ ] Enforce one terminal result per logical check.
 - [ ] Recover safely after worker failure or expired lease.
@@ -285,17 +285,17 @@ These requirements apply throughout the project:
 
 ### Safe HTTP transport
 
-- [ ] Implement monitoring through `IHttpClientFactory`.
-- [ ] Disable uncontrolled automatic redirects.
-- [ ] Validate URL syntax, scheme, and credentials.
-- [ ] Resolve and enforce destination policy for every request and redirect.
-- [ ] Validate the actual connection address.
-- [ ] Cover prohibited IPv4 and IPv6 destinations.
-- [ ] Protect against DNS rebinding.
-- [ ] Control outbound proxy behavior.
-- [ ] Keep TLS validation enabled.
-- [ ] Enforce timeout, cancellation, response-size, redirect, concurrency, and per-host bounds.
-- [ ] Set the configured monitoring user-agent.
+- [x] Implement monitoring through `IHttpClientFactory`. Evidence: [`../phase-3/Safe_Outbound_HTTP_Transport.md`](../phase-3/Safe_Outbound_HTTP_Transport.md).
+- [x] Disable uncontrolled automatic redirects.
+- [x] Validate URL syntax, scheme, and credentials.
+- [x] Resolve and enforce destination policy for every request and redirect.
+- [x] Validate the actual connection address.
+- [x] Cover prohibited IPv4 and IPv6 destinations.
+- [x] Protect against DNS rebinding.
+- [x] Control outbound proxy behavior.
+- [x] Keep TLS validation enabled.
+- [x] Enforce timeout, cancellation, response-size, redirect, concurrency, and per-host bounds.
+- [x] Set the configured monitoring user-agent.
 
 ### Results and history
 

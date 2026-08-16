@@ -12,6 +12,9 @@ using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Registry;
+using WebHealth.Application.Monitoring;
+using WebHealth.Infrastructure.Monitoring;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace WebHealth.Infrastructure;
 
@@ -72,6 +75,32 @@ public static class DependencyInjection
         services.AddScoped<IEndpointRegistryService, EndpointRegistryService>();
         services.AddScoped<ITargetAuthorizationService, TargetAuthorizationService>();
         services.AddScoped<IMonitoringEligibilityService, MonitoringEligibilityService>();
+        services.AddScoped<IExecutionLeaseService, ExecutionLeaseService>();
+        var configuredUserAgent = configuration[$"{SafeHttpTransportOptions.SectionName}:UserAgent"];
+        var safeHttpOptions = new SafeHttpTransportOptions
+        {
+            UserAgent = string.IsNullOrWhiteSpace(configuredUserAgent)
+                ? "WebHealthMonitor/1.0"
+                : configuredUserAgent.Trim()
+        };
+        services.AddSingleton(safeHttpOptions);
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<IMonitoringDnsResolver, SystemMonitoringDnsResolver>();
+        services.AddSingleton<IDestinationAddressPolicy, StrictDestinationAddressPolicy>();
+        services.AddSingleton<SafeHttpConcurrencyLimiter>();
+        services.AddScoped<IMonitoringTargetAuthorizer, MonitoringTargetAuthorizer>();
+        services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
+        services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
+            {
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(safeHttpOptions.UserAgent);
+            })
+            .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
+                SafeHttpConnectionFactory.Create(
+                    serviceProvider.GetRequiredService<IMonitoringDnsResolver>(),
+                    serviceProvider.GetRequiredService<IDestinationAddressPolicy>(),
+                    serviceProvider.GetRequiredService<SafeHttpConcurrencyLimiter>(),
+                    safeHttpOptions));
 
         services.AddHealthChecks()
             .AddCheck<PostgreSqlReadinessCheck>("postgresql", tags: ["ready"]);

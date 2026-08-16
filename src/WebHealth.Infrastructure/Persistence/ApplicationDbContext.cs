@@ -4,6 +4,7 @@ using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Auditing;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Registry;
+using WebHealth.Infrastructure.Monitoring;
 
 namespace WebHealth.Infrastructure.Persistence;
 
@@ -37,6 +38,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<EndpointMonitor> EndpointMonitors => Set<EndpointMonitor>();
 
     public DbSet<PolicyProfile> PolicyProfiles => Set<PolicyProfile>();
+
+    public DbSet<LogicalCheck> LogicalChecks => Set<LogicalCheck>();
+
+    public DbSet<CheckConfigurationSnapshot> CheckConfigurationSnapshots => Set<CheckConfigurationSnapshot>();
+
+    public DbSet<ExecutionAttempt> ExecutionAttempts => Set<ExecutionAttempt>();
+
+    public DbSet<ExecutionLease> ExecutionLeases => Set<ExecutionLease>();
+
+    public DbSet<DurableWork> DurableWork => Set<DurableWork>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

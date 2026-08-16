@@ -14,6 +14,8 @@ internal static class MonitoringEligibility
             && endpoint.Environment.IsActive
             && endpoint.Environment.Website.DeletedAt == null
             && endpoint.Environment.Website.IsEnabled
+            && endpoint.Environment.Website.Client.DeletedAt == null
+            && endpoint.Environment.Website.Client.IsActive
             && endpoint.Monitors.Any(monitor => monitor.DeletedAt == null && monitor.IsEnabled)
             && endpoint.TargetAuthorizations.Any(evidence =>
                 evidence.RevokedAt == null

@@ -11,7 +11,7 @@
 - Migrations remain in `WebHealth.Infrastructure` beside `ApplicationDbContext`.
 - Database creation and migration are explicit operations; application startup never applies migrations.
 
-The `InitialFoundation` migration intentionally contains no application tables and is the durable Phase 1 database baseline. Phase 2 adds two reviewable migrations: `IdentityAccessAndAudit` and `RegistryFoundation`.
+The `InitialFoundation` migration intentionally contains no application tables and is the durable Phase 1 database baseline. Phase 2 adds `IdentityAccessAndAudit` and `RegistryFoundation`. Phase 3 begins with `MonitoringExecutionFoundation` for durable logical-check execution state.
 
 ## Entity configuration rules
 

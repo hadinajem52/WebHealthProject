@@ -293,7 +293,10 @@ internal sealed class EndpointMonitorConfiguration : IEntityTypeConfiguration<En
             table.HasCheckConstraint("ck_endpoint_monitor_positive_confirmation", "failure_confirmation_count > 0 AND recovery_confirmation_count > 0");
             table.HasCheckConstraint(
                 "ck_endpoint_monitor_threshold_order",
-                "warning_threshold_ms IS NULL OR critical_threshold_ms IS NULL OR warning_threshold_ms < critical_threshold_ms");
+                "(warning_threshold_ms IS NULL OR warning_threshold_ms >= 0) "
+                + "AND (critical_threshold_ms IS NULL OR critical_threshold_ms >= 0) "
+                + "AND (warning_threshold_ms IS NULL OR critical_threshold_ms IS NULL "
+                + "OR warning_threshold_ms < critical_threshold_ms)");
         });
         builder.Property(monitor => monitor.MonitorType).HasMaxLength(50).IsRequired();
         builder.Property(monitor => monitor.BoundedOverrides).HasColumnType("jsonb").IsRequired();
@@ -301,6 +304,8 @@ internal sealed class EndpointMonitorConfiguration : IEntityTypeConfiguration<En
         builder.Property(monitor => monitor.Version).IsConcurrencyToken();
         builder.HasIndex(monitor => new { monitor.EndpointId, monitor.MonitorType })
             .IsUnique().HasFilter("deleted_at IS NULL");
+        builder.HasIndex(monitor => new { monitor.NextDueAt, monitor.Id })
+            .HasFilter("deleted_at IS NULL AND is_enabled");
         builder.HasOne(monitor => monitor.Endpoint).WithMany(endpoint => endpoint.Monitors)
             .HasForeignKey(monitor => monitor.EndpointId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(monitor => monitor.PolicyProfile).WithMany()

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
 using WebHealth.Domain.Normalization;
+using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
 
@@ -308,6 +309,7 @@ internal sealed class EndpointRegistryService(
     private static EndpointMonitor CreateMonitor(Endpoint endpoint, bool isProduction, Guid actorId, DateTimeOffset now)
     {
         var interval = RegistryDefaults.GetHttpIntervalSeconds(isProduction);
+        var schedule = MonitorCadence.Initialize(now);
         return new EndpointMonitor
         {
             Id = Guid.NewGuid(),
@@ -317,6 +319,8 @@ internal sealed class EndpointRegistryService(
             BoundedOverrides = "{}",
             ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 endpoint.NormalizedUrl, interval, RegistryDefaults.HttpTimeoutSeconds),
+            ScheduleAnchor = schedule.Anchor,
+            NextDueAt = schedule.NextDueAt,
             IntervalSeconds = interval,
             TimeoutSeconds = RegistryDefaults.HttpTimeoutSeconds,
             FailureConfirmationCount = 2,

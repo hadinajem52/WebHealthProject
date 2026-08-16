@@ -12,6 +12,9 @@ using WebHealth.Application.Auditing;
 using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Application.Registry;
+using WebHealth.Application.Monitoring;
+using WebHealth.Domain.Monitoring;
+using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Registry;
 using Xunit;
 using System.Text.Json;
@@ -25,9 +28,14 @@ internal static class DatabaseFoundationAssertions
         "audit_event",
         "access_grant",
         "client",
+        "check_configuration_snapshot",
+        "durable_work",
         "environment",
         "endpoint",
         "endpoint_monitor",
+        "execution_attempt",
+        "execution_lease",
+        "logical_check",
         "policy_profile",
         "tag",
         "website",
@@ -54,8 +62,8 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(3);
-        context.Model.GetEntityTypes().Should().HaveCount(21);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(4);
+        context.Model.GetEntityTypes().Should().HaveCount(26);
 
         var state = await ReadFoundationState(connectionString);
         state.SchemaExists.Should().BeTrue();
@@ -65,6 +73,8 @@ internal static class DatabaseFoundationAssertions
         await VerifyIdentityBootstrapAsync(connectionString);
         await VerifyClientWebsiteRegistryAsync(connectionString);
         await VerifyEnvironmentEndpointRegistryAsync(connectionString);
+        await VerifyMonitoringExecutionFoundationAsync(connectionString);
+        await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
 
@@ -128,8 +138,8 @@ internal static class DatabaseFoundationAssertions
         endpoint.Monitors.Should().ContainSingle();
         var monitor = endpoint.Monitors.Single();
         monitor.MonitorType.Should().Be("HttpAvailability");
-        monitor.ScheduleAnchor.Should().BeNull();
-        monitor.NextDueAt.Should().BeNull();
+        monitor.ScheduleAnchor.Should().Be(monitor.CreatedAt);
+        monitor.NextDueAt.Should().Be(monitor.CreatedAt);
         var authorizationEvidence = await database.TargetAuthorizations.SingleAsync(
             evidence => evidence.EndpointId == endpointId && evidence.RevokedAt == null);
         authorizationEvidence.AuthorizationKind.Should().Be(TargetAuthorizationKinds.Owned);
@@ -189,6 +199,8 @@ internal static class DatabaseFoundationAssertions
                 EndpointActive = candidate.DeletedAt == null && candidate.IsEnabled,
                 EnvironmentActive = candidate.Environment.DeletedAt == null && candidate.Environment.IsActive,
                 WebsiteActive = candidate.Environment.Website.DeletedAt == null && candidate.Environment.Website.IsEnabled,
+                ClientActive = candidate.Environment.Website.Client.DeletedAt == null
+                    && candidate.Environment.Website.Client.IsActive,
                 MonitorActive = candidate.Monitors.Any(monitor => monitor.DeletedAt == null && monitor.IsEnabled),
                 EvidenceActive = candidate.TargetAuthorizations.Any(evidence =>
                     evidence.RevokedAt == null
@@ -200,6 +212,7 @@ internal static class DatabaseFoundationAssertions
         eligibilityState.EndpointActive.Should().BeTrue();
         eligibilityState.EnvironmentActive.Should().BeTrue();
         eligibilityState.WebsiteActive.Should().BeTrue();
+        eligibilityState.ClientActive.Should().BeTrue();
         eligibilityState.MonitorActive.Should().BeTrue();
         eligibilityState.EvidenceActive.Should().BeTrue();
         (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeTrue();
@@ -220,6 +233,16 @@ internal static class DatabaseFoundationAssertions
             .Select(candidate => candidate.IsEnabled).SingleAsync()).Should().BeTrue();
         website.IsEnabled = true;
         website.Version++;
+        await database.SaveChangesAsync();
+        (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeTrue();
+
+        var client = await database.Clients.SingleAsync(candidate => candidate.Id == website.ClientId);
+        client.IsActive = false;
+        client.Version++;
+        await database.SaveChangesAsync();
+        (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeFalse();
+        client.IsActive = true;
+        client.Version++;
         await database.SaveChangesAsync();
         (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeTrue();
 
@@ -312,6 +335,305 @@ internal static class DatabaseFoundationAssertions
 
     }
 
+    private static async Task VerifyMonitoringExecutionFoundationAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
+        var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).FirstAsync();
+        var scheduledFor = monitor.NextDueAt;
+        var logicalCheckId = Guid.NewGuid();
+        var cadenceKey = MonitorCadence.CreateCadenceKey(monitor.Id, scheduledFor);
+
+        database.LogicalChecks.Add(new LogicalCheck
+        {
+            Id = logicalCheckId,
+            EndpointMonitorId = monitor.Id,
+            Source = LogicalCheckSources.Scheduled,
+            ScheduledFor = scheduledFor,
+            State = LogicalCheckStates.Pending,
+            CadenceKey = cadenceKey,
+            PolicyFingerprint = monitor.ConfigurationFingerprint,
+            CreatedAt = scheduledFor
+        });
+        database.CheckConfigurationSnapshots.Add(new CheckConfigurationSnapshot
+        {
+            LogicalCheckId = logicalCheckId,
+            SchemaVersion = 1,
+            MonitorType = monitor.MonitorType,
+            ConfigurationFingerprint = monitor.ConfigurationFingerprint,
+            IntervalSeconds = monitor.IntervalSeconds,
+            TimeoutSeconds = monitor.TimeoutSeconds,
+            FailureConfirmationCount = monitor.FailureConfirmationCount,
+            RecoveryConfirmationCount = monitor.RecoveryConfirmationCount,
+            WarningThresholdMs = monitor.WarningThresholdMs,
+            CriticalThresholdMs = monitor.CriticalThresholdMs,
+            IntervalSource = ConfigurationValueSources.EnvironmentDefault,
+            TimeoutSource = ConfigurationValueSources.PolicyProfile,
+            ConfirmationSource = ConfigurationValueSources.PolicyProfile,
+            ThresholdSource = ConfigurationValueSources.PolicyProfile,
+            CreatedAt = scheduledFor
+        });
+        database.DurableWork.Add(new DurableWork
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = logicalCheckId,
+            WorkKind = "HttpCheck",
+            DedupeKey = $"v1|{logicalCheckId:N}|http-check",
+            QueueName = "monitoring",
+            State = DurableWorkStates.Pending,
+            AvailableAt = scheduledFor,
+            CreatedAt = scheduledFor,
+            UpdatedAt = scheduledFor
+        });
+        await database.SaveChangesAsync();
+
+        var queuedCheck = await database.LogicalChecks.SingleAsync(check => check.Id == logicalCheckId);
+        queuedCheck.State = LogicalCheckStates.Queued;
+        queuedCheck.QueuedAt = scheduledFor;
+        await database.SaveChangesAsync();
+
+        await VerifyDuplicateCadenceRejectedAsync(
+            connectionString,
+            monitor.Id,
+            monitor.ConfigurationFingerprint,
+            scheduledFor,
+            cadenceKey);
+        await VerifySnapshotIsImmutableAsync(connectionString, logicalCheckId);
+        await VerifyMissingSnapshotRejectedAsync(
+            connectionString, monitor.Id, monitor.ConfigurationFingerprint, scheduledFor);
+        await VerifySystemUrgentCheckAsync(
+            connectionString, monitor.Id, monitor.ConfigurationFingerprint, scheduledFor);
+        await VerifyNegativeThresholdsRejectedAsync(
+            connectionString, monitor.Id, monitor.ConfigurationFingerprint, scheduledFor);
+
+        var invalidLease = async () => await leaseService.TryAcquireAsync(new(
+            monitor.Id,
+            logicalCheckId,
+            Guid.NewGuid(),
+            TimeSpan.FromMinutes(16)));
+        await invalidLease.Should().ThrowAsync<ArgumentOutOfRangeException>();
+
+        var otherMonitorId = await database.EndpointMonitors
+            .Where(candidate => candidate.Id != monitor.Id)
+            .Select(candidate => candidate.Id)
+            .FirstAsync();
+        var mismatchedLease = async () => await leaseService.TryAcquireAsync(new(
+            otherMonitorId,
+            logicalCheckId,
+            Guid.NewGuid(),
+            TimeSpan.FromMinutes(1)));
+        var mismatch = await mismatchedLease.Should().ThrowAsync<PostgresException>();
+        mismatch.Which.ConstraintName.Should().Be("fk_execution_lease_logical_check_monitor");
+
+        await using var competingScope = services.CreateAsyncScope();
+        var competingLeaseService = competingScope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
+        var claims = await Task.WhenAll(
+            leaseService.TryAcquireAsync(new(
+                monitor.Id,
+                logicalCheckId,
+                Guid.NewGuid(),
+                TimeSpan.FromMinutes(1))),
+            competingLeaseService.TryAcquireAsync(new(
+                monitor.Id,
+                logicalCheckId,
+                Guid.NewGuid(),
+                TimeSpan.FromMinutes(1))));
+        claims.Should().ContainSingle(claim => claim != null);
+        var firstClaim = claims.Single(claim => claim != null)!;
+        firstClaim.FencingGeneration.Should().Be(1);
+        var persistedLease = await database.ExecutionLeases.AsNoTracking()
+            .SingleAsync(lease => lease.EndpointMonitorId == monitor.Id);
+        persistedLease.OwnerToken.Should().Be(firstClaim.OwnerToken);
+        persistedLease.ExpiresAt.Should().BeAfter(persistedLease.AcquiredAt);
+        (persistedLease.ExpiresAt - persistedLease.AcquiredAt).Should().Be(TimeSpan.FromMinutes(1));
+
+        (await leaseService.ReleaseAsync(firstClaim)).Should().BeTrue();
+        var recoveredClaim = await leaseService.TryAcquireAsync(new(
+            monitor.Id,
+            logicalCheckId,
+            Guid.NewGuid(),
+            TimeSpan.FromMinutes(1)));
+        recoveredClaim.Should().NotBeNull();
+        recoveredClaim!.FencingGeneration.Should().Be(2);
+    }
+
+    private static async Task VerifyDuplicateCadenceRejectedAsync(
+        string connectionString,
+        Guid monitorId,
+        string fingerprint,
+        DateTimeOffset scheduledFor,
+        string cadenceKey)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string sql = """
+            INSERT INTO web_health.logical_check
+                (id, endpoint_monitor_id, source, scheduled_for, state, cadence_key, policy_fingerprint, created_at)
+            VALUES (@id, @monitor_id, 'Scheduled', @scheduled_for, 'Pending', @cadence_key, @fingerprint, @created_at);
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("monitor_id", monitorId);
+        command.Parameters.AddWithValue("scheduled_for", scheduledFor);
+        command.Parameters.AddWithValue("cadence_key", cadenceKey);
+        command.Parameters.AddWithValue("fingerprint", fingerprint);
+        command.Parameters.AddWithValue("created_at", scheduledFor);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+        exception.ConstraintName.Should().Be("ix_logical_check_endpoint_monitor_id_cadence_key");
+    }
+
+    private static async Task VerifySnapshotIsImmutableAsync(string connectionString, Guid logicalCheckId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE web_health.check_configuration_snapshot SET schema_version = 2 WHERE logical_check_id = @id",
+            connection);
+        command.Parameters.AddWithValue("id", logicalCheckId);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.SqlState.Should().Be(PostgresErrorCodes.RaiseException);
+    }
+
+    private static async Task VerifyMissingSnapshotRejectedAsync(
+        string connectionString,
+        Guid monitorId,
+        string fingerprint,
+        DateTimeOffset now)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        const string sql = """
+            INSERT INTO web_health.logical_check
+                (id, endpoint_monitor_id, source, scheduled_for, state, cadence_key,
+                 policy_fingerprint, created_at, queued_at)
+            VALUES (@id, @monitor_id, 'Scheduled', @now, 'Queued', @cadence_key,
+                    @fingerprint, @now, @now);
+            """;
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("monitor_id", monitorId);
+        command.Parameters.AddWithValue("now", now);
+        command.Parameters.AddWithValue("cadence_key", $"missing-snapshot-{Guid.NewGuid():N}");
+        command.Parameters.AddWithValue("fingerprint", fingerprint);
+        await command.ExecuteNonQueryAsync();
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => transaction.CommitAsync());
+        exception.ConstraintName.Should().Be("ck_logical_check_nonpending_snapshot");
+    }
+
+    private static async Task VerifySystemUrgentCheckAsync(
+        string connectionString,
+        Guid monitorId,
+        string fingerprint,
+        DateTimeOffset now)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        var urgentCheckId = Guid.NewGuid();
+        const string urgentSql = """
+            INSERT INTO web_health.logical_check
+                (id, endpoint_monitor_id, source, requested_at, state, policy_fingerprint, created_at)
+            VALUES (@id, @monitor_id, 'Urgent', @now, 'Pending', @fingerprint, @now);
+            """;
+        await using (var urgent = new NpgsqlCommand(urgentSql, connection))
+        {
+            urgent.Parameters.AddWithValue("id", urgentCheckId);
+            urgent.Parameters.AddWithValue("monitor_id", monitorId);
+            urgent.Parameters.AddWithValue("now", now);
+            urgent.Parameters.AddWithValue("fingerprint", fingerprint);
+            (await urgent.ExecuteNonQueryAsync()).Should().Be(1);
+        }
+
+        const string manualSql = """
+            INSERT INTO web_health.logical_check
+                (id, endpoint_monitor_id, source, requested_at, state, policy_fingerprint, created_at)
+            VALUES (@id, @monitor_id, 'Manual', @now, 'Pending', @fingerprint, @now);
+            """;
+        await using var manual = new NpgsqlCommand(manualSql, connection);
+        manual.Parameters.AddWithValue("id", Guid.NewGuid());
+        manual.Parameters.AddWithValue("monitor_id", monitorId);
+        manual.Parameters.AddWithValue("now", now);
+        manual.Parameters.AddWithValue("fingerprint", fingerprint);
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => manual.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("ck_logical_check_source_fields");
+    }
+
+    private static async Task VerifyNegativeThresholdsRejectedAsync(
+        string connectionString,
+        Guid monitorId,
+        string fingerprint,
+        DateTimeOffset now)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using (var monitor = new NpgsqlCommand(
+            "UPDATE web_health.endpoint_monitor SET warning_threshold_ms = -1 WHERE id = @id",
+            connection))
+        {
+            monitor.Parameters.AddWithValue("id", monitorId);
+            var exception = await Assert.ThrowsAsync<PostgresException>(() => monitor.ExecuteNonQueryAsync());
+            exception.ConstraintName.Should().Be("ck_endpoint_monitor_threshold_order");
+        }
+
+        await using var transaction = await connection.BeginTransactionAsync();
+        var checkId = Guid.NewGuid();
+        const string checkSql = """
+            INSERT INTO web_health.logical_check
+                (id, endpoint_monitor_id, source, requested_at, state, policy_fingerprint, created_at)
+            VALUES (@id, @monitor_id, 'Urgent', @now, 'Pending', @fingerprint, @now);
+            """;
+        await using (var check = new NpgsqlCommand(checkSql, connection, transaction))
+        {
+            check.Parameters.AddWithValue("id", checkId);
+            check.Parameters.AddWithValue("monitor_id", monitorId);
+            check.Parameters.AddWithValue("now", now);
+            check.Parameters.AddWithValue("fingerprint", fingerprint);
+            await check.ExecuteNonQueryAsync();
+        }
+
+        const string snapshotSql = """
+            INSERT INTO web_health.check_configuration_snapshot
+                (logical_check_id, schema_version, monitor_type, configuration_fingerprint,
+                 interval_seconds, timeout_seconds, failure_confirmation_count, recovery_confirmation_count,
+                 warning_threshold_ms, critical_threshold_ms, interval_source, timeout_source,
+                 confirmation_source, threshold_source, created_at)
+            VALUES (@id, 1, 'HttpAvailability', @fingerprint,
+                    300, 15, 2, 2, -1, 3000, 'EnvironmentDefault', 'PolicyProfile',
+                    'PolicyProfile', 'PolicyProfile', @now);
+            """;
+        await using var snapshot = new NpgsqlCommand(snapshotSql, connection, transaction);
+        snapshot.Parameters.AddWithValue("id", checkId);
+        snapshot.Parameters.AddWithValue("fingerprint", fingerprint);
+        snapshot.Parameters.AddWithValue("now", now);
+        var snapshotException = await Assert.ThrowsAsync<PostgresException>(() => snapshot.ExecuteNonQueryAsync());
+        snapshotException.ConstraintName.Should().Be("ck_check_configuration_snapshot_threshold_order");
+        await transaction.RollbackAsync();
+    }
+
+    private static async Task VerifyPhaseTwoUpgradeAsync(ApplicationDbContext database)
+    {
+        database.ChangeTracker.Clear();
+        await database.Database.MigrateAsync("RegistryFoundation");
+        await database.Database.ExecuteSqlRawAsync(
+            "UPDATE web_health.endpoint_monitor SET schedule_anchor = NULL, next_due_at = NULL");
+
+        await database.Database.MigrateAsync();
+
+        (await database.EndpointMonitors.AnyAsync(monitor =>
+            monitor.ScheduleAnchor != monitor.CreatedAt || monitor.NextDueAt != monitor.CreatedAt))
+            .Should().BeFalse();
+    }
+
     private static async Task VerifyPhaseOneUpgradeAndRepeatabilityAsync(
         ApplicationDbContext database,
         string connectionString)
@@ -324,7 +646,7 @@ internal static class DatabaseFoundationAssertions
 
         await database.Database.MigrateAsync();
         var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Should().HaveCount(3);
+        applied.Should().HaveCount(4);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         var upgraded = await ReadFoundationState(connectionString);
         upgraded.Tables.Should().BeEquivalentTo(
@@ -484,9 +806,10 @@ internal static class DatabaseFoundationAssertions
             INSERT INTO web_health.endpoint_monitor
                 (id, endpoint_id, policy_profile_id, monitor_type, bounded_overrides, configuration_fingerprint,
                  interval_seconds, timeout_seconds, failure_confirmation_count, recovery_confirmation_count,
-                 is_enabled, created_at, created_by_user_id, updated_at, updated_by_user_id, version)
+                 schedule_anchor, next_due_at, is_enabled,
+                 created_at, created_by_user_id, updated_at, updated_by_user_id, version)
             VALUES (@id, @endpoint_id, 'fd3c8021-ff54-4f31-a3ad-2010b7b193dd', 'SslCertificate', '{}', repeat('0', 64),
-                    900, 30, 2, 2, FALSE, now(), @actor, now(), @actor, 1);
+                    900, 30, 2, 2, now(), now(), FALSE, now(), @actor, now(), @actor, 1);
             """;
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("id", Guid.NewGuid());

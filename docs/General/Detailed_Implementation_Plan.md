@@ -321,7 +321,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Verify PostgreSQL constraints reject current registry duplicates independently of UI validation.
 - [x] Verify stale current registry configuration updates are rejected.
 - [x] Verify current registry soft deletion preserves reportable identity and relationships.
-- [x] Verify all Phase 2 audit event kinds contain actor, timestamp, action, entity, and safe values; incident events remain owned by Phase 3.
+- [x] Verify all Phase 2 audit event kinds contain actor, timestamp, action, entity, and safe values; incident events remain owned by Phase 4.
 - [x] Inspect logs and repository for secrets and sensitive values.
 
 ### 9.6 Phase exit evidence
@@ -329,7 +329,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - **AC-01:** An administrator creates a client, website, production environment, and endpoint; validation and PostgreSQL uniqueness are demonstrated.
 - **AC-10:** Unauthorized direct requests fail with no data change.
 - **AC-13 partial:** Configuration changes are queryable by actor, time, action, and entity.
-- Secured application shell, registry CRUD, initial migration, audit baseline, and passing tests are demonstrated.
+- Secured application shell, registry CRUD, consolidated migrations, audit baseline, and the full PostgreSQL 18 Testcontainers delivery workflow are demonstrated.
 
 ## 10. Phase 3 — Scheduling and Monitoring Engine
 
@@ -338,10 +338,10 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 10.1 Dependencies
 
-- [ ] Enabled registry entities and endpoint policies exist.
-- [ ] Safe-network and no-proxy decisions are recorded and immediate tests pass.
-- [ ] Hangfire PostgreSQL storage compatibility is confirmed.
-- [ ] Controlled HTTP targets are available.
+- [x] Enabled registry entities and endpoint policies exist. Evidence: [`../phase-2/Environment_and_Endpoint_Vertical_Slice.md`](../phase-2/Environment_and_Endpoint_Vertical_Slice.md).
+- [x] Safe-network and no-proxy decisions are recorded and immediate tests pass. Evidence: [`../phase-0/Test_and_Delivery_Strategy.md`](../phase-0/Test_and_Delivery_Strategy.md), SP-02/SP-03.
+- [x] Hangfire PostgreSQL storage compatibility is confirmed. Evidence: [`../phase-0/Test_and_Delivery_Strategy.md`](../phase-0/Test_and_Delivery_Strategy.md), SP-01.
+- [x] Controlled HTTP targets are available. Evidence: deterministic fixtures in the Phase 0 feasibility spikes.
 
 ### 10.2 Scheduling and logical checks
 
@@ -352,20 +352,20 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Create one catch-up check after scheduler downtime, not every missed interval.
 - [ ] Queue authorized manual checks with source and initiating user.
 - [ ] Keep manual checks outside scheduled cadence and contractual uptime by default.
-- [ ] Implement the PostgreSQL-backed endpoint/monitor execution lease.
+- [x] Implement the PostgreSQL-backed endpoint/monitor execution lease. Evidence: [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 - [ ] Make every retry reference the same logical-check ID.
 - [ ] Close exhausted work with a terminal normalized result.
 - [ ] Reconcile committed but unqueued or incomplete work after restart.
 
 ### 10.3 Safe HTTP monitoring
 
-- [ ] Create the application-owned monitoring transport through `IHttpClientFactory`.
-- [ ] Reject invalid schemes, relative URLs, and credentials in URLs.
-- [ ] Disable uncontrolled automatic redirects.
-- [ ] Resolve and validate every destination and redirect.
-- [ ] Validate the actual connection address to mitigate DNS rebinding.
-- [ ] Enforce proxy policy and production TLS validation.
-- [ ] Apply timeout, cancellation, response-size, redirect, global concurrency, and per-host limits.
+- [x] Create the application-owned monitoring transport through `IHttpClientFactory`. Evidence: [`../phase-3/Safe_Outbound_HTTP_Transport.md`](../phase-3/Safe_Outbound_HTTP_Transport.md).
+- [x] Reject invalid schemes, relative URLs, and credentials in URLs.
+- [x] Disable uncontrolled automatic redirects.
+- [x] Resolve and validate every destination and redirect.
+- [x] Validate the actual connection address to mitigate DNS rebinding.
+- [x] Enforce proxy policy and production TLS validation.
+- [x] Apply timeout, cancellation, response-size, redirect, global concurrency, and per-host limits.
 - [ ] Capture status, total duration, available timing metrics, response length, and redirect path.
 - [ ] Normalize DNS, connection, TLS, timeout, client, server, redirect, and content failures.
 - [ ] Apply accepted-status and required-content-marker rules.
@@ -377,19 +377,19 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 - [ ] Add logical checks, execution attempts if required, results, findings, leases, and durable work records.
 - [ ] Enforce exactly one final result per logical check.
-- [ ] Store scheduling anchor, due time, source, initiator, attempts, and terminal state.
+- [x] Store scheduling anchor, due time, source, initiator, attempts, and logical-check state. Evidence: `MonitoringExecutionFoundation`.
 - [ ] Bound metric and diagnostic columns.
 - [ ] Index endpoint eligibility, next-due time, check state, endpoint/result time, and issue key.
-- [ ] Validate clean and Phase 2 upgrade migrations.
+- [x] Validate clean and Phase 2 upgrade migrations. Evidence: isolated PostgreSQL 18 gate in [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 
 ### 10.5 Verification gate
 
 - [ ] Unit-test cadence, catch-up behavior, status classification, markers, timeouts, redirect loops, and hop limits.
-- [ ] Integration-test controlled statuses, redirects, delays, malformed redirects, large responses, and cancellation.
-- [ ] Test prohibited IPv4 and IPv6 destinations.
-- [ ] Test redirects into prohibited destinations.
-- [ ] Test actual-connection address enforcement and DNS-rebinding defense.
-- [ ] Verify proxy configuration cannot bypass policy.
+- [x] Integration-test controlled statuses, redirects, delays, malformed redirects, large responses, and cancellation. Evidence: `SafeHttpTransportTests`.
+- [x] Test prohibited IPv4 and IPv6 destinations. Evidence: `DestinationAddressPolicyTests` and the controlled Phase 0 IPv4/IPv6 fixture.
+- [x] Test redirects into prohibited destinations.
+- [x] Test actual-connection address enforcement and DNS-rebinding defense.
+- [x] Verify proxy configuration cannot bypass policy.
 - [ ] Verify one logical result across retries and duplicate job delivery.
 - [ ] Verify competing workers cannot execute the same endpoint/monitor concurrently.
 - [ ] Verify expired leases recover after worker failure.

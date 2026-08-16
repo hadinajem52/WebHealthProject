@@ -1,5 +1,7 @@
 namespace WebHealth.Infrastructure.Registry;
 
+using WebHealth.Infrastructure.Monitoring;
+
 public sealed class Client
 {
     public Guid Id { get; set; }
@@ -150,8 +152,8 @@ public sealed class EndpointMonitor
     public Guid PolicyProfileId { get; set; }
     public required string MonitorType { get; set; }
     public required string BoundedOverrides { get; set; }
-    public DateTimeOffset? ScheduleAnchor { get; set; }
-    public DateTimeOffset? NextDueAt { get; set; }
+    public DateTimeOffset ScheduleAnchor { get; set; }
+    public DateTimeOffset NextDueAt { get; set; }
     public required string ConfigurationFingerprint { get; set; }
     public int IntervalSeconds { get; set; }
     public int TimeoutSeconds { get; set; }
@@ -169,6 +171,8 @@ public sealed class EndpointMonitor
     public long Version { get; set; }
     public Endpoint Endpoint { get; set; } = null!;
     public PolicyProfile PolicyProfile { get; set; } = null!;
+    public ICollection<LogicalCheck> LogicalChecks { get; } = [];
+    public ExecutionLease? ExecutionLease { get; set; }
 }
 
 public sealed class AccessGrant

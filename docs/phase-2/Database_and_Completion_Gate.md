@@ -38,9 +38,9 @@ The isolated PostgreSQL 18 gate verifies:
 | Production HTTP exception authorization | Service and direct PostgreSQL transition assertions | Passed |
 | Audit contents and sensitive-value exclusion | Native action/snapshot/search/append-only assertions and sensitive canaries | Passed |
 | Output encoding | `RegistryLabelsTagsAndNotes_AreHtmlEncoded` | Passed |
-| Full delivery workflow with Testcontainers | Docker Desktop 29.6.2 started, but Docker Hub and ECR image requests timed out during TLS negotiation before PostgreSQL 18 could be pulled | Blocked externally |
+| Full delivery workflow with Testcontainers | `run-delivery-checks.ps1 -UseTestcontainers` completed against PostgreSQL 18 on 2026-08-16: 14 unit tests passed; 70 integration tests passed; the native-only alternative was skipped as expected | Passed |
 
-The equivalent repository-native disposable PostgreSQL 18 workflow passed. The Phase 2 completion gate remains open only for a successful Testcontainers rerun after container-registry connectivity is available:
+The repository-native disposable PostgreSQL 18 workflow and the Testcontainers workflow both pass. The repeatable Testcontainers command is:
 
 ```powershell
 ./scripts/run-delivery-checks.ps1 -UseTestcontainers

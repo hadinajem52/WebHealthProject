@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
+using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Normalization;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
@@ -300,6 +301,7 @@ internal sealed class EnvironmentRegistryService(
         foreach (var monitor in environment.Endpoints.SelectMany(endpoint => endpoint.Monitors))
         {
             monitor.IntervalSeconds = interval;
+            monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(monitor.ScheduleAnchor, interval, now);
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 monitor.Endpoint.NormalizedUrl,
                 interval,
