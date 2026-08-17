@@ -865,6 +865,31 @@ code,
     color: var(--text-primary);
 }
 
+.lifecycle-action-form {
+    display: flex;
+    max-width: 32rem;
+    flex-direction: column;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    gap: var(--space-3);
+    border-top: 1px solid var(--color-gray-100);
+}
+
+.notification-recipients {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    gap: var(--space-2);
+}
+
+.notification-recipients li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
 .registry-tag-filter {
     max-width: 34rem;
 }

@@ -1,0 +1,279 @@
+@model IncidentDetailsViewModel
+@using WebHealth.Application.Incidents
+@{
+    ViewData.SetTitle("Incident details");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Incidents", "/Incidents"), new BreadcrumbItem("Details"));
+    var incident = Model.Incident;
+    var isGlobal = User.IsInRole("Administrator") || User.IsInRole("Operations");
+    var isAdministrator = User.IsInRole("Administrator");
+    var isActive = incident.Status is "Open" or "Acknowledged" or "InProgress" or "MonitoringRecovery";
+
+    static string StatusBadge(string status) => status switch
+    {
+        "Open" or "Acknowledged" => "danger",
+        "InProgress" or "MonitoringRecovery" => "warning",
+        _ => "success"
+    };
+
+    static string DeliveryBadge(string state) => state switch
+    {
+        "Sent" => "success",
+        "FailedPermanently" => "danger",
+        "Suppressed" => "warning",
+        _ => "warning"
+    };
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title target-url">@incident.EndpointDisplayUrl</h2>
+                <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName · @incident.IssueKey</p>
+            </div>
+            <div class="form-actions">
+                <span class="badge" data-status="@(incident.Severity == "Critical" ? "danger" : "warning")">@incident.Severity</span>
+                <span class="badge" data-status="@StatusBadge(incident.Status)">@incident.Status</span>
+            </div>
+        </div>
+
+        <dl class="registry-facts">
+            <div><dt>Owner</dt><dd>@incident.OwnerDisplayName</dd></div>
+            <div><dt>Opened</dt><dd>@incident.OpenedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
+            <div><dt>Acknowledged</dt><dd>@(incident.AcknowledgedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not yet")</dd></div>
+            <div><dt>Recovery started</dt><dd>@(incident.RecoveryStartedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+            <div><dt>Resolved</dt><dd>@(incident.ResolvedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+            <div><dt>Closed</dt><dd>@(incident.ClosedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+            <div><dt>Outage duration</dt><dd>@(incident.OutageDurationMs is { } outage ? $"{TimeSpan.FromMilliseconds(outage):g}" : "—")</dd></div>
+            <div><dt>Recurrence</dt><dd>@incident.RecurrenceCount</dd></div>
+            <div><dt>Resolution</dt><dd>@(incident.ResolutionCategory ?? "—")@(incident.ResolutionNote is null ? "" : $" — {incident.ResolutionNote}")</dd></div>
+        </dl>
+
+        @if (incident.CanManage)
+        {
+            <div class="registry-lifecycle">
+                @if (incident.Status == "Open")
+                {
+                    <form asp-action="Acknowledge" method="post">
+                        <input type="hidden" name="id" value="@incident.Id" />
+                        <input type="hidden" name="version" value="@incident.Version" />
+                        <button class="button button--primary" type="submit">Acknowledge</button>
+                    </form>
+                }
+                @if (incident.Status == "Acknowledged")
+                {
+                    <form asp-action="StartProgress" method="post">
+                        <input type="hidden" name="id" value="@incident.Id" />
+                        <input type="hidden" name="version" value="@incident.Version" />
+                        <button class="button button--secondary" type="submit">Start progress</button>
+                    </form>
+                }
+                @if (incident.Status == "Resolved")
+                {
+                    <form asp-action="Close" method="post">
+                        <input type="hidden" name="id" value="@incident.Id" />
+                        <input type="hidden" name="version" value="@incident.Version" />
+                        <button class="button button--primary" type="submit">Close</button>
+                    </form>
+                }
+            </div>
+            @if (isActive)
+            {
+                <form asp-action="Resolve" method="post" class="lifecycle-action-form">
+                    <input type="hidden" name="id" value="@incident.Id" />
+                    <input type="hidden" name="version" value="@incident.Version" />
+                    <div class="form-field"><label>Resolution category</label><input type="text" name="category" maxlength="@IncidentLifecycleEngine.MaximumCategoryLength" required /></div>
+                    <div class="form-field"><label>Resolution note</label><textarea name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
+                    <button class="button button--primary" type="submit">Resolve incident</button>
+                </form>
+            }
+            @if (incident.Status != "Closed")
+            {
+                <form asp-action="AddNote" method="post" class="lifecycle-action-form">
+                    <input type="hidden" name="id" value="@incident.Id" />
+                    <input type="hidden" name="version" value="@incident.Version" />
+                    <div class="form-field"><label>Note</label><textarea name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
+                    <button class="button button--secondary" type="submit">Add note</button>
+                </form>
+            }
+            @if (isGlobal && incident.Status != "Closed" && Model.OwnerOptions.Count > 0)
+            {
+                <form asp-action="Reassign" method="post" class="lifecycle-action-form">
+                    <input type="hidden" name="id" value="@incident.Id" />
+                    <input type="hidden" name="version" value="@incident.Version" />
+                    <div class="form-field">
+                        <label>New owner</label>
+                        <select name="ownerSubjectId" required>
+                            @foreach (var owner in Model.OwnerOptions)
+                            {
+                                <option value="@owner.OwnerSubjectId">@owner.DisplayName</option>
+                            }
+                        </select>
+                    </div>
+                    <button class="button button--secondary" type="submit">Reassign</button>
+                </form>
+            }
+        }
+        @if (isAdministrator && incident.Status != "Closed")
+        {
+            <form asp-action="ForceClose" method="post" class="lifecycle-action-form">
+                <input type="hidden" name="id" value="@incident.Id" />
+                <input type="hidden" name="version" value="@incident.Version" />
+                <div class="form-field"><label>Administrator reason</label><textarea name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                <button class="button button--danger" type="submit">Force close</button>
+            </form>
+        }
+        @if (isAdministrator && incident.Status == "Closed")
+        {
+            <form asp-action="Reopen" method="post" class="lifecycle-action-form">
+                <input type="hidden" name="id" value="@incident.Id" />
+                <input type="hidden" name="version" value="@incident.Version" />
+                <div class="form-field"><label>Administrator reason</label><textarea name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                <button class="button button--secondary" type="submit">Reopen</button>
+            </form>
+        }
+    </section>
+
+    <section class="card">
+        <div class="page-intro"><div><h3 class="card__title">Timeline</h3><p class="card__subtitle">Append-only history of status, assignment and notes.</p></div></div>
+        @if (incident.Timeline.Count == 0)
+        {
+            <p class="card__subtitle">No timeline events recorded.</p>
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Incident timeline</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">When (UTC)</th>
+                            <th scope="col">Event</th>
+                            <th scope="col">Detail</th>
+                            <th scope="col">Actor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in incident.Timeline)
+                        {
+                            <tr>
+                                <td data-label="When (UTC)">@entry.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td data-label="Event"><span class="tag">@entry.EventType</span></td>
+                                <td data-label="Detail">
+                                    @if (entry.EventType == "StatusChanged")
+                                    {
+                                        @:@entry.FromStatus → @entry.ToStatus
+                                    }
+                                    else if (entry.EventType == "Reassigned")
+                                    {
+                                        @:@entry.FromOwnerDisplayName → @entry.ToOwnerDisplayName
+                                    }
+                                    else if (entry.Note is not null)
+                                    {
+                                        @entry.Note
+                                    }
+                                    else
+                                    {
+                                        @:—
+                                    }
+                                </td>
+                                <td data-label="Actor">@(entry.ActorDisplayName ?? "System")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="card">
+        <div class="page-intro"><div><h3 class="card__title">Evidence</h3><p class="card__subtitle">Bounded snapshots captured at each confirmation step.</p></div></div>
+        @if (incident.Evidence.Count == 0)
+        {
+            <p class="card__subtitle">No evidence recorded.</p>
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Incident evidence</caption>
+                    <thead><tr><th scope="col">Captured (UTC)</th><th scope="col">Type</th><th scope="col">Role</th></tr></thead>
+                    <tbody>
+                        @foreach (var item in incident.Evidence)
+                        {
+                            <tr>
+                                <td data-label="Captured (UTC)">@item.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td data-label="Type"><span class="tag">@item.EvidenceType</span></td>
+                                <td data-label="Role">@item.EvidenceRole</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="card">
+        <div class="page-intro"><div><h3 class="card__title">Notifications</h3><p class="card__subtitle">Delivery state and suppression reason for every notification this incident triggered.</p></div></div>
+        @if (incident.Notifications.Count == 0)
+        {
+            <p class="card__subtitle">No notifications have been triggered yet.</p>
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Notifications triggered by this incident</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">When (UTC)</th>
+                            <th scope="col">Event</th>
+                            <th scope="col">Suppressed</th>
+                            <th scope="col">Recipients</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var notification in incident.Notifications)
+                        {
+                            <tr>
+                                <td data-label="When (UTC)">@notification.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td data-label="Event"><span class="tag">@notification.EventType</span></td>
+                                <td data-label="Suppressed">
+                                    @if (notification.IsSuppressed)
+                                    {
+                                        <span class="badge" data-status="warning">@(notification.SuppressionReason ?? "Suppressed")</span>
+                                    }
+                                    else
+                                    {
+                                        <span>No</span>
+                                    }
+                                </td>
+                                <td data-label="Recipients">
+                                    @if (notification.Deliveries.Count == 0)
+                                    {
+                                        @:—
+                                    }
+                                    else
+                                    {
+                                        <ul class="notification-recipients">
+                                            @foreach (var delivery in notification.Deliveries)
+                                            {
+                                                <li>
+                                                    <span class="badge" data-status="@DeliveryBadge(delivery.State)">@delivery.State</span>
+                                                    @if (incident.CanManage)
+                                                    {
+                                                        <span>@delivery.NormalizedRecipient</span>
+                                                    }
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

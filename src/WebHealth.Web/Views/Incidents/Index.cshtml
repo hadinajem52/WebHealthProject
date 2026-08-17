@@ -1,0 +1,140 @@
+@model IncidentListViewModel
+@{
+    ViewData.SetTitle("Incidents");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Incidents"));
+    var listPage = Model.Page;
+    var firstVisible = listPage.TotalCount == 0 ? 0 : ((listPage.Page - 1) * listPage.PageSize) + 1;
+    var lastVisible = Math.Min(listPage.Page * listPage.PageSize, listPage.TotalCount);
+    var hasPrevious = listPage.Page > 1;
+    var hasNext = lastVisible < listPage.TotalCount;
+
+    static string StatusBadge(string status) => status switch
+    {
+        "Open" or "Acknowledged" => "danger",
+        "InProgress" or "MonitoringRecovery" => "warning",
+        _ => "success"
+    };
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Incidents</h2>
+                <p class="card__subtitle">Confirmed availability issues across your assigned targets.</p>
+            </div>
+            <span class="tag">@listPage.TotalCount incident@(listPage.TotalCount == 1 ? null : "s")</span>
+        </div>
+
+        <form method="get" class="filter-grid">
+            <div class="form-field">
+                <label asp-for="Status">Status</label>
+                <select asp-for="Status">
+                    <option value="">Any</option>
+                    <option value="Open">Open</option>
+                    <option value="Acknowledged">Acknowledged</option>
+                    <option value="InProgress">In progress</option>
+                    <option value="MonitoringRecovery">Monitoring recovery</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Severity">Severity</label>
+                <select asp-for="Severity">
+                    <option value="">Any</option>
+                    <option value="Critical">Critical</option>
+                    <option value="Warning">Warning</option>
+                </select>
+            </div>
+            <label class="switch-field">
+                <input asp-for="UnacknowledgedOnly" type="checkbox" />
+                <span>Unacknowledged only</span>
+            </label>
+            <div class="filter-grid__actions">
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>Apply filters</span>
+                </button>
+                <a class="button button--secondary" asp-action="Index">
+                    @await Html.PartialAsync("_Icon", "close")
+                    <span>Clear</span>
+                </a>
+            </div>
+        </form>
+
+        @if (listPage.Items.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No incidents match these filters",
+                "Incidents open automatically when a monitored endpoint confirms a failure.",
+                "incidents"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Incidents visible to your account</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Endpoint</th>
+                            <th scope="col">Issue</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Opened</th>
+                            <th scope="col">Owner</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in listPage.Items)
+                        {
+                            <tr>
+                                <td data-label="Endpoint">
+                                    <span class="data-table__primary target-url">@item.EndpointDisplayUrl</span>
+                                    <span class="data-table__secondary">@item.ClientName / @item.WebsiteName / @item.EnvironmentName</span>
+                                </td>
+                                <td data-label="Issue">@item.IssueKey @if (item.RecurrenceCount > 0) { <span class="tag">Recurrence @item.RecurrenceCount</span> }</td>
+                                <td data-label="Severity"><span class="badge" data-status="@(item.Severity == "Critical" ? "danger" : "warning")">@item.Severity</span></td>
+                                <td data-label="Status">
+                                    <span class="badge" data-status="@StatusBadge(item.Status)">@item.Status</span>
+                                    @if (item.AcknowledgedAt is null && item.Status != "Resolved" && item.Status != "Closed")
+                                    {
+                                        <span class="data-table__secondary">Unacknowledged</span>
+                                    }
+                                </td>
+                                <td data-label="Opened">@item.OpenedAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</td>
+                                <td data-label="Owner">@item.OwnerDisplayName</td>
+                                <td data-label="Details">
+                                    <a class="button button--secondary" asp-action="Details" asp-route-id="@item.Id">
+                                        <span>View</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="pagination" aria-label="Incident pages">
+                <span>Showing @firstVisible–@lastVisible of @listPage.TotalCount</span>
+                <span class="pagination__actions">
+                    @if (hasPrevious)
+                    {
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page - 1)" asp-route-status="@Model.Status" asp-route-severity="@Model.Severity" asp-route-unacknowledgedOnly="@Model.UnacknowledgedOnly">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (hasNext)
+                    {
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page + 1)" asp-route-status="@Model.Status" asp-route-severity="@Model.Severity" asp-route-unacknowledgedOnly="@Model.UnacknowledgedOnly">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
+        }
+    </section>
+</div>

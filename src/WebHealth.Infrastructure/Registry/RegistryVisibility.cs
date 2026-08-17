@@ -173,7 +173,7 @@ internal sealed class RegistryVisibility(ApplicationDbContext dbContext)
 
     private static bool HasGlobalAccess(RegistryAccessContext access) => CanManage(access);
 
-    private IQueryable<Guid> AssignedOwnerIds(Guid userId, DateTimeOffset now) =>
+    internal IQueryable<Guid> AssignedOwnerIds(Guid userId, DateTimeOffset now) =>
         dbContext.OwnerSubjects.Where(subject =>
                 dbContext.Users.Any(user => user.Id == userId && !user.IsDisabled)
                 && (subject.UserId == userId

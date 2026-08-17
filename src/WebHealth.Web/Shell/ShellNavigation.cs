@@ -20,7 +20,12 @@ public static class ShellNavigation
                 "Clients",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"]),
             new NavigationItem("Maintenance", "warning", "Maintenance", "Index", ["Administrator", "Operations"]),
-            new NavigationItem("Incidents", "incidents"),
+            new NavigationItem(
+                "Incidents",
+                "incidents",
+                "Incidents",
+                "Index",
+                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
             new NavigationItem("Reports", "reports")
         ]),
         new("Administration",

@@ -103,6 +103,7 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
+        services.AddScoped<IIncidentReader, IncidentReader>();
         services.AddScoped<NotificationEventWriter>();
         services.AddScoped<IncidentAutomationService>();
         services.AddScoped<NotificationDispatchService>();

@@ -135,8 +135,8 @@ internal sealed class IncidentLifecycleService(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        var note = command.Note.Trim();
-        if (note.Length is 0 or > IncidentLifecycleEngine.MaximumNoteLength)
+        var note = command.Note?.Trim();
+        if (string.IsNullOrEmpty(note) || note.Length > IncidentLifecycleEngine.MaximumNoteLength)
         {
             return Fail(IncidentMutationStatus.ValidationFailed,
                 $"A note of up to {IncidentLifecycleEngine.MaximumNoteLength} characters is required.");

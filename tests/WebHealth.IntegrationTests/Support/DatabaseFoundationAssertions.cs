@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 using WebHealth.Infrastructure;
 using WebHealth.Infrastructure.Identity;
@@ -76,6 +77,9 @@ internal static class DatabaseFoundationAssertions
         ,"incident"
         ,"incident_event"
         ,"incident_evidence"
+        ,"notification_event"
+        ,"notification_delivery"
+        ,"notification_attempt"
     ];
 
     public static async Task VerifyAsync(string connectionString)
@@ -87,8 +91,8 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(9);
-        context.Model.GetEntityTypes().Should().HaveCount(37);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(10);
+        context.Model.GetEntityTypes().Should().HaveCount(40);
 
         var state = await ReadFoundationState(connectionString);
         state.SchemaExists.Should().BeTrue();
@@ -106,6 +110,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyManualChecksAndHistoryAsync(connectionString);
         await VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(connectionString);
         await VerifyHealthMaintenanceAndIncidentsAsync(connectionString);
+        await VerifyDurableNotificationsAsync(connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
@@ -2064,7 +2069,7 @@ internal static class DatabaseFoundationAssertions
 
         await database.Database.MigrateAsync();
         var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Should().HaveCount(9);
+        applied.Should().HaveCount(10);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         var upgraded = await ReadFoundationState(connectionString);
         upgraded.Tables.Should().BeEquivalentTo(
@@ -2465,6 +2470,211 @@ internal static class DatabaseFoundationAssertions
         var conflictingWindowUpdate = async () => await database.SaveChangesAsync();
         await conflictingWindowUpdate.Should().ThrowAsync<DbUpdateConcurrencyException>();
         database.ChangeTracker.Clear();
+    }
+
+    private static async Task VerifyDurableNotificationsAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var transport = (RecordingEmailTransport)scope.ServiceProvider.GetRequiredService<IEmailTransport>();
+        var dispatchService = scope.ServiceProvider.GetRequiredService<NotificationDispatchService>();
+
+        var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).FirstAsync();
+        var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
+        var ownerSubjectId = await database.OwnerSubjects
+            .Where(subject => subject.UserId == developer.Id)
+            .Select(subject => subject.Id)
+            .SingleAsync();
+        var now = DateTimeOffset.UtcNow;
+
+        var (incident, openedEvent) = await CreateOpenIncidentAsync(
+            database, monitor.Id, ownerSubjectId, $"v1|HttpAvailability|notification-open|{Guid.NewGuid():N}", now);
+
+        var writer = new NotificationEventWriter(database);
+        await writer.WriteAsync(
+            incident,
+            openedEvent.Id,
+            NotificationSourceKinds.IncidentEvent,
+            NotificationEventTypes.Opened,
+            NotificationOccurrenceKeys.Opening(incident.Id),
+            isMaintenance: false,
+            now,
+            default);
+        await database.SaveChangesAsync();
+
+        var notificationEvent = await database.NotificationEvents.AsNoTracking()
+            .SingleAsync(candidate => candidate.IncidentId == incident.Id);
+        notificationEvent.IsSuppressed.Should().BeFalse();
+        var delivery = await database.NotificationDeliveries.AsNoTracking()
+            .SingleAsync(candidate => candidate.NotificationEventId == notificationEvent.Id);
+        delivery.NormalizedRecipient.Should().Be("registry-developer@example.test");
+        delivery.State.Should().Be(NotificationDeliveryStates.Pending);
+
+        await VerifyDuplicateNotificationEventRejectedAsync(connectionString, incident.Id, notificationEvent.OccurrenceKey);
+
+        var dispatchResult = await dispatchService.DispatchDueAsync();
+        dispatchResult.Sent.Should().BeGreaterThanOrEqualTo(1);
+        transport.SentMessages.Should().Contain(message =>
+            message.ToAddress == "registry-developer@example.test"
+            && message.Subject.Contains(monitor.Endpoint.DisplayUrl, StringComparison.Ordinal));
+        database.ChangeTracker.Clear();
+        var sentDelivery = await database.NotificationDeliveries.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == delivery.Id);
+        sentDelivery.State.Should().Be(NotificationDeliveryStates.Sent);
+        sentDelivery.SentAt.Should().NotBeNull();
+        (await database.NotificationAttempts.AsNoTracking()
+            .Where(attempt => attempt.NotificationDeliveryId == delivery.Id)
+            .Select(attempt => attempt.TransportOutcome)
+            .SingleAsync()).Should().Be(NotificationTransportOutcomes.Sent);
+
+        var (maintenanceIncident, maintenanceEvent) = await CreateOpenIncidentAsync(
+            database, monitor.Id, ownerSubjectId, $"v1|HttpAvailability|notification-suppressed|{Guid.NewGuid():N}", now);
+        await writer.WriteAsync(
+            maintenanceIncident,
+            maintenanceEvent.Id,
+            NotificationSourceKinds.IncidentEvent,
+            NotificationEventTypes.Opened,
+            NotificationOccurrenceKeys.Opening(maintenanceIncident.Id),
+            isMaintenance: true,
+            now,
+            default);
+        await database.SaveChangesAsync();
+        var suppressedDelivery = await database.NotificationDeliveries.AsNoTracking()
+            .SingleAsync(candidate => candidate.NotificationEvent.IncidentId == maintenanceIncident.Id);
+        suppressedDelivery.State.Should().Be(NotificationDeliveryStates.Suppressed);
+        suppressedDelivery.NextAttemptAt.Should().BeNull();
+        (await database.NotificationEvents.AsNoTracking()
+            .Where(candidate => candidate.IncidentId == maintenanceIncident.Id)
+            .Select(candidate => candidate.SuppressionReason)
+            .SingleAsync()).Should().Be("ActiveMaintenanceWindow");
+
+        await VerifyTransientFailureRetriesThenFailsPermanentlyAsync(connectionString, database, monitor.Id, ownerSubjectId);
+    }
+
+    private static async Task<(Incident Incident, IncidentEvent OpenedEvent)> CreateOpenIncidentAsync(
+        ApplicationDbContext database,
+        Guid monitorId,
+        Guid ownerSubjectId,
+        string issueKey,
+        DateTimeOffset now)
+    {
+        var incident = new Incident
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = monitorId,
+            OwnerSubjectId = ownerSubjectId,
+            IssueKey = issueKey,
+            Severity = IncidentSeverities.Critical,
+            Status = IncidentStatuses.Open,
+            OpenedAt = now,
+            Version = 1
+        };
+        database.Incidents.Add(incident);
+        var openedEvent = new IncidentEvent
+        {
+            Id = Guid.NewGuid(),
+            IncidentId = incident.Id,
+            SequenceNumber = 1,
+            EventType = IncidentEventTypes.Opened,
+            ToStatus = IncidentStatuses.Open,
+            OccurredAt = now
+        };
+        database.IncidentEvents.Add(openedEvent);
+        await database.SaveChangesAsync();
+        return (incident, openedEvent);
+    }
+
+    private static async Task VerifyDuplicateNotificationEventRejectedAsync(
+        string connectionString, Guid incidentId, string occurrenceKey)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string sql = """
+            INSERT INTO web_health.notification_event
+                (id, incident_event_id, incident_id, source_kind, event_type, occurrence_key,
+                 template_version, is_suppressed, occurred_at)
+            VALUES (@id, NULL, @incident_id, 'Reminder', 'Reminder', @occurrence_key, 'v1', FALSE, now());
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("incident_id", incidentId);
+        command.Parameters.AddWithValue("occurrence_key", occurrenceKey);
+
+        // Different source_kind/event_type than the existing row, so this exercises the check
+        // constraint pairing source_kind to a null incident_event_id, not the uniqueness index.
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("ck_notification_event_type");
+    }
+
+    private static async Task VerifyTransientFailureRetriesThenFailsPermanentlyAsync(
+        string connectionString,
+        ApplicationDbContext database,
+        Guid monitorId,
+        Guid ownerSubjectId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var (incident, openedEvent) = await CreateOpenIncidentAsync(
+            database, monitorId, ownerSubjectId, $"v1|HttpAvailability|notification-retry|{Guid.NewGuid():N}", now);
+        var writer = new NotificationEventWriter(database);
+        await writer.WriteAsync(
+            incident, openedEvent.Id, NotificationSourceKinds.IncidentEvent, NotificationEventTypes.Opened,
+            NotificationOccurrenceKeys.Opening(incident.Id), isMaintenance: false, now, default);
+        await database.SaveChangesAsync();
+        var deliveryId = await database.NotificationDeliveries.AsNoTracking()
+            .Where(candidate => candidate.NotificationEvent.IncidentId == incident.Id)
+            .Select(candidate => candidate.Id)
+            .SingleAsync();
+
+        var failingConfiguration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        var failingTransport = new AlwaysTransientFailureEmailTransport();
+        await using var failingServices = new ServiceCollection().AddLogging()
+            .AddInfrastructure(failingConfiguration)
+            .Replace(ServiceDescriptor.Singleton<IEmailTransport>(failingTransport))
+            .BuildServiceProvider();
+        await using var failingScope = failingServices.CreateAsyncScope();
+        var failingDispatcher = failingScope.ServiceProvider.GetRequiredService<NotificationDispatchService>();
+        var failingDatabase = failingScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await failingDispatcher.DispatchDueAsync();
+        var afterFirstFailure = await failingDatabase.NotificationDeliveries.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == deliveryId);
+        afterFirstFailure.State.Should().Be(NotificationDeliveryStates.RetryScheduled);
+        afterFirstFailure.NextAttemptAt.Should().NotBeNull();
+        afterFirstFailure.AttemptCount.Should().Be(1);
+
+        var maxAttempts = new NotificationSchedulingOptions().MaxAttempts;
+        for (var attempt = afterFirstFailure.AttemptCount; attempt < maxAttempts; attempt++)
+        {
+            await using var connection = new NpgsqlConnection(connectionString);
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                "UPDATE web_health.notification_delivery SET next_attempt_at = now() - interval '1 minute' WHERE id = @id",
+                connection);
+            command.Parameters.AddWithValue("id", deliveryId);
+            await command.ExecuteNonQueryAsync();
+            await failingDispatcher.DispatchDueAsync();
+        }
+
+        var finalState = await failingDatabase.NotificationDeliveries.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == deliveryId);
+        finalState.State.Should().Be(NotificationDeliveryStates.FailedPermanently);
+        finalState.NextAttemptAt.Should().BeNull();
+        (await failingDatabase.NotificationAttempts.AsNoTracking()
+            .CountAsync(attempt => attempt.NotificationDeliveryId == deliveryId)).Should().Be(maxAttempts);
+    }
+
+    private sealed class AlwaysTransientFailureEmailTransport : IEmailTransport
+    {
+        public Task<EmailTransportResult> SendAsync(EmailMessage message, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmailTransportResult(EmailTransportOutcome.TransientFailure, "simulated outage"));
     }
 
     private static async Task VerifyDuplicateIssueStateRejectedAsync(
