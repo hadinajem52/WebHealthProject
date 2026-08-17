@@ -5,14 +5,17 @@ using WebHealth.Application.Health;
 using WebHealth.Application.Incidents;
 using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Incidents;
+using WebHealth.Domain.Notifications;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.Notifications;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Incidents;
 
 internal sealed class IncidentAutomationService(
     ApplicationDbContext dbContext,
-    IAuditTrailWriter auditTrail)
+    IAuditTrailWriter auditTrail,
+    NotificationEventWriter notificationEventWriter)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -21,6 +24,7 @@ internal sealed class IncidentAutomationService(
         NormalizedHttpResult result,
         HealthConfirmationDecision healthDecision,
         HealthCounterMode counterMode,
+        bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -32,14 +36,14 @@ internal sealed class IncidentAutomationService(
         var incidents = await LoadActiveAsync(check.EndpointMonitorId, cancellationToken);
         if (result.Outcome == HttpResultOutcomes.Healthy)
         {
-            await ApplyRecoveryAsync(check, result, healthDecision, incidents, now, cancellationToken);
+            await ApplyRecoveryAsync(check, result, healthDecision, incidents, isMaintenance, now, cancellationToken);
             return;
         }
 
         var interruptedIncidentIds = await InterruptRecoveryAsync(
             check, result, incidents, now, cancellationToken);
         await ApplyFailuresAsync(
-            check, result, healthDecision, incidents, interruptedIncidentIds, now, cancellationToken);
+            check, result, healthDecision, incidents, interruptedIncidentIds, isMaintenance, now, cancellationToken);
     }
 
     private async Task ApplyFailuresAsync(
@@ -48,6 +52,7 @@ internal sealed class IncidentAutomationService(
         HealthConfirmationDecision healthDecision,
         List<Incident> incidents,
         IReadOnlySet<Guid> interruptedIncidentIds,
+        bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -63,7 +68,7 @@ internal sealed class IncidentAutomationService(
             var incident = incidents.SingleOrDefault(candidate => candidate.IssueKey == issueKey);
             if (incident is null)
             {
-                incident = await OpenAsync(check, result, issueKey, now, cancellationToken);
+                incident = await OpenAsync(check, result, issueKey, isMaintenance, now, cancellationToken);
                 incidents.Add(incident);
                 continue;
             }
@@ -90,6 +95,7 @@ internal sealed class IncidentAutomationService(
         NormalizedHttpResult result,
         HealthConfirmationDecision healthDecision,
         IReadOnlyCollection<Incident> incidents,
+        bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -108,7 +114,7 @@ internal sealed class IncidentAutomationService(
             // confirmed in a single pass) resolve directly, same as ones that went through it.
             foreach (var incident in incidents)
             {
-                await ResolveAsync(incident, check, result, now, cancellationToken);
+                await ResolveAsync(incident, check, result, isMaintenance, now, cancellationToken);
             }
         }
     }
@@ -155,6 +161,7 @@ internal sealed class IncidentAutomationService(
         LogicalCheck check,
         NormalizedHttpResult result,
         string issueKey,
+        bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -174,7 +181,7 @@ internal sealed class IncidentAutomationService(
             Version = 1
         };
         dbContext.Incidents.Add(incident);
-        AddOpenedEvent(incident, now);
+        var openedEvent = AddOpenedEvent(incident, now);
         AddEvidence(incident, check, result, IncidentEvidenceTypes.Opening, "ConfirmationThreshold", now);
         AddEvidenceEvent(incident, "Opening evidence recorded.", now);
         await auditTrail.RecordIncidentMutationAsync(
@@ -182,6 +189,15 @@ internal sealed class IncidentAutomationService(
             IncidentAuditAction.Opened,
             null,
             IncidentLifecycleService.Snapshot(incident),
+            cancellationToken);
+        await notificationEventWriter.WriteAsync(
+            incident,
+            openedEvent.Id,
+            NotificationSourceKinds.IncidentEvent,
+            NotificationEventTypes.Opened,
+            NotificationOccurrenceKeys.Opening(incident.Id),
+            isMaintenance,
+            now,
             cancellationToken);
         return incident;
     }
@@ -221,6 +237,7 @@ internal sealed class IncidentAutomationService(
         Incident incident,
         LogicalCheck check,
         NormalizedHttpResult result,
+        bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -245,7 +262,7 @@ internal sealed class IncidentAutomationService(
             incident.OpenedAt,
             result.MeasuredAt);
         incident.Version++;
-        AddStatusEvent(incident, previousStatus, incident.Status, now);
+        var statusEvent = AddStatusEvent(incident, previousStatus, incident.Status, now);
         AddEvidence(incident, check, result, IncidentEvidenceTypes.Recovery, "RecoveryConfirmed", now);
         AddEvidence(incident, check, result, IncidentEvidenceTypes.Resolution, "AutomaticRecovery", now);
         AddEvidenceEvent(incident, "Recovery and resolution evidence recorded.", now);
@@ -253,6 +270,15 @@ internal sealed class IncidentAutomationService(
             IncidentAuditAction.Resolved,
             before,
             incident,
+            now,
+            cancellationToken);
+        await notificationEventWriter.WriteAsync(
+            incident,
+            statusEvent.Id,
+            NotificationSourceKinds.IncidentEvent,
+            NotificationEventTypes.Recovered,
+            NotificationOccurrenceKeys.Recovery(statusEvent.Id),
+            isMaintenance,
             now,
             cancellationToken);
     }
@@ -325,27 +351,28 @@ internal sealed class IncidentAutomationService(
             CapturedAt = now
         });
 
-    private void AddOpenedEvent(Incident incident, DateTimeOffset now) =>
+    private IncidentEvent AddOpenedEvent(Incident incident, DateTimeOffset now) =>
         AddEvent(incident, IncidentEventTypes.Opened, now, toStatus: IncidentStatuses.Open);
 
-    private void AddStatusEvent(
+    private IncidentEvent AddStatusEvent(
         Incident incident,
         string fromStatus,
         string toStatus,
         DateTimeOffset now) =>
         AddEvent(incident, IncidentEventTypes.StatusChanged, now, fromStatus, toStatus);
 
-    private void AddEvidenceEvent(Incident incident, string note, DateTimeOffset now) =>
+    private IncidentEvent AddEvidenceEvent(Incident incident, string note, DateTimeOffset now) =>
         AddEvent(incident, IncidentEventTypes.EvidenceRecorded, now, note: note);
 
-    private void AddEvent(
+    private IncidentEvent AddEvent(
         Incident incident,
         string eventType,
         DateTimeOffset now,
         string? fromStatus = null,
         string? toStatus = null,
-        string? note = null) =>
-        dbContext.IncidentEvents.Add(new IncidentEvent
+        string? note = null)
+    {
+        var incidentEvent = new IncidentEvent
         {
             Id = Guid.NewGuid(),
             IncidentId = incident.Id,
@@ -355,7 +382,10 @@ internal sealed class IncidentAutomationService(
             ToStatus = toStatus,
             BoundedNote = note,
             OccurredAt = now
-        });
+        };
+        dbContext.IncidentEvents.Add(incidentEvent);
+        return incidentEvent;
+    }
 
     private long NextSequence(Guid incidentId) =>
         dbContext.IncidentEvents.Local

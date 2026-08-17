@@ -85,7 +85,7 @@ internal sealed class LogicalCheckFinalizationService(
         var healthDecision = await ApplyHealthAsync(
             check, normalized, counterMode, now, cancellationToken);
         await incidentAutomation.ApplyAsync(
-            check, normalized, healthDecision, counterMode, now, cancellationToken);
+            check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken);
         CompleteAttempt(attempt!, command.Evidence, now);
         CompleteWork(work, now);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -153,6 +153,7 @@ internal sealed class LogicalCheckFinalizationService(
                 .ThenInclude(monitor => monitor.Endpoint)
                     .ThenInclude(endpoint => endpoint.Environment)
                         .ThenInclude(environment => environment.Website)
+                            .ThenInclude(website => website.Client)
             .Include(check => check.Result)
             .Include(check => check.Attempts)
             .Include(check => check.DurableWork)

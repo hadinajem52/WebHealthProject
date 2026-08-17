@@ -26,6 +26,9 @@ using WebHealth.Infrastructure.Registry;
 using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Maintenance;
+using WebHealth.Application.Notifications;
+using WebHealth.Domain.Notifications;
+using WebHealth.Infrastructure.Notifications;
 using Xunit;
 using System.Text.Json;
 using System.Collections.Concurrent;
@@ -1286,7 +1289,8 @@ internal static class DatabaseFoundationAssertions
         new(
             database,
             new MaintenanceEvaluator(database),
-            new IncidentAutomationService(database, new AuditTrailWriter(database)),
+            new IncidentAutomationService(
+                database, new AuditTrailWriter(database), new NotificationEventWriter(database)),
             timeProvider);
 
     private static async Task<LogicalCheck> CreateQueuedCheckAsync(

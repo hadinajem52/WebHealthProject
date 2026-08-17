@@ -8,6 +8,7 @@ using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Incidents;
+using WebHealth.Infrastructure.Notifications;
 
 namespace WebHealth.Infrastructure.Persistence;
 
@@ -73,6 +74,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<IncidentEvent> IncidentEvents => Set<IncidentEvent>();
 
     public DbSet<IncidentEvidence> IncidentEvidence => Set<IncidentEvidence>();
+
+    public DbSet<NotificationEvent> NotificationEvents => Set<NotificationEvent>();
+
+    public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
+
+    public DbSet<NotificationAttempt> NotificationAttempts => Set<NotificationAttempt>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

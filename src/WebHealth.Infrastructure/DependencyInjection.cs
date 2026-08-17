@@ -18,6 +18,8 @@ using WebHealth.Application.Maintenance;
 using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Application.Incidents;
 using WebHealth.Infrastructure.Incidents;
+using WebHealth.Application.Notifications;
+using WebHealth.Infrastructure.Notifications;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -36,6 +38,11 @@ public static class DependencyInjection
             .Get<MonitoringSchedulingOptions>() ?? new MonitoringSchedulingOptions();
         ValidateSchedulingOptions(schedulingOptions);
         services.AddSingleton(schedulingOptions);
+
+        var notificationOptions = configuration.GetSection(NotificationSchedulingOptions.SectionName)
+            .Get<NotificationSchedulingOptions>() ?? new NotificationSchedulingOptions();
+        ValidateNotificationOptions(notificationOptions);
+        services.AddSingleton(notificationOptions);
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
@@ -96,10 +103,16 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
+        services.AddScoped<NotificationEventWriter>();
         services.AddScoped<IncidentAutomationService>();
+        services.AddScoped<NotificationDispatchService>();
+        services.AddScoped<NotificationReminderService>();
+        services.TryAddSingleton<IEmailTransport, RecordingEmailTransport>();
         services.AddScoped<LogicalCheckJob>();
         services.AddScoped<MonitoringDispatchJob>();
-        if (schedulingOptions.Enabled)
+        services.AddScoped<NotificationDispatchJob>();
+        var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled;
+        if (hangfireEnabled)
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
             if (string.IsNullOrWhiteSpace(connectionString))
@@ -118,9 +131,24 @@ public static class DependencyInjection
                     }));
             services.AddHangfireServer(options =>
             {
-                options.Queues = [MonitoringQueueNames.ShortChecks];
+                var queues = new List<string>();
+                if (schedulingOptions.Enabled)
+                {
+                    queues.Add(MonitoringQueueNames.ShortChecks);
+                }
+
+                if (notificationOptions.Enabled)
+                {
+                    queues.Add(NotificationQueueNames.Notifications);
+                }
+
+                options.Queues = queues.ToArray();
                 options.WorkerCount = Math.Max(1, Math.Min(Environment.ProcessorCount, 4));
             });
+        }
+
+        if (schedulingOptions.Enabled)
+        {
             services.AddScoped<ILogicalCheckQueue, HangfireLogicalCheckQueue>();
         }
         else
@@ -167,6 +195,20 @@ public static class DependencyInjection
             || options.RecoveryDelay > TimeSpan.FromHours(1))
         {
             throw new InvalidOperationException("Monitoring scheduling options are outside their safe bounds.");
+        }
+    }
+
+    private static void ValidateNotificationOptions(NotificationSchedulingOptions options)
+    {
+        if (options.DispatchBatchSize is < 1 or > 500
+            || options.MaxAttempts is < 1 or > 20
+            || options.InitialRetryDelay < TimeSpan.FromSeconds(30)
+            || options.MaxRetryDelay < options.InitialRetryDelay
+            || options.LeaseDuration < TimeSpan.FromMinutes(1)
+            || options.ReminderInterval < TimeSpan.FromMinutes(5)
+            || options.EscalationDelay < TimeSpan.FromMinutes(5))
+        {
+            throw new InvalidOperationException("Notification scheduling options are outside their safe bounds.");
         }
     }
 }
