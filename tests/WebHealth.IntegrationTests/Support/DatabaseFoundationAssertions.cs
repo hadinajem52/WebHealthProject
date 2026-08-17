@@ -12,9 +12,11 @@ using WebHealth.Application.Administration;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Assignments;
+using WebHealth.Infrastructure.Auditing;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Maintenance;
+using WebHealth.Application.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Incidents;
@@ -82,7 +84,7 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(8);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(9);
         context.Model.GetEntityTypes().Should().HaveCount(37);
 
         var state = await ReadFoundationState(connectionString);
@@ -987,6 +989,7 @@ internal static class DatabaseFoundationAssertions
         var monitor = await database.EndpointMonitors
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
+                    .ThenInclude(environment => environment.Website)
             .OrderBy(candidate => candidate.CreatedAt)
             .FirstAsync();
 
@@ -995,49 +998,107 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         await database.ExecutionLeases.Where(lease => lease.EndpointMonitorId == monitor.Id).ExecuteDeleteAsync();
 
-        await FinalizeScheduledResultAsync(database, monitor, 20, 500);
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        var previousIncident = new Incident
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = monitor.Id,
+            OwnerSubjectId = monitor.Endpoint.OwnerSubjectId
+                ?? monitor.Endpoint.Environment.Website.OwnerSubjectId,
+            IssueKey = HttpIssueIdentity.Create("Http.ServerError"),
+            Severity = IncidentSeverities.Critical,
+            Status = IncidentStatuses.Closed,
+            OpenedAt = clock.GetUtcNow().AddDays(-31),
+            ResolvedAt = clock.GetUtcNow().AddDays(-30),
+            ClosedAt = clock.GetUtcNow().AddDays(-30),
+            ResolutionCategory = IncidentResolutionCategories.AutomaticRecovery,
+            ResolutionNote = "Previous controlled incident.",
+            OutageDurationMs = (long)TimeSpan.FromDays(1).TotalMilliseconds,
+            Version = 1
+        };
+        database.Incidents.Add(previousIncident);
+        await database.SaveChangesAsync();
+
+        await FinalizeScheduledResultAsync(database, monitor, 20, 500, clock);
         (await database.IssueStates.SingleAsync(state => state.EndpointMonitorId == monitor.Id))
             .ConsecutiveFailures.Should().Be(1);
         (await database.EndpointHealth.AnyAsync(health => health.EndpointMonitorId == monitor.Id))
             .Should().BeFalse();
+        (await database.Incidents.AnyAsync(incident => incident.EndpointMonitorId == monitor.Id
+            && incident.IssueKey == HttpIssueIdentity.Create("Http.ServerError")
+            && IncidentStatuses.Active.Contains(incident.Status))).Should().BeFalse();
 
-        var resetPass = await FinalizeScheduledResultAsync(database, monitor, 21, 200);
+        var resetPass = await FinalizeScheduledResultAsync(database, monitor, 21, 200, clock);
         var healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Healthy);
         healthy.EvidenceLogicalCheckId.Should().Be(resetPass);
         (await database.IssueStates.SingleAsync(state => state.EndpointMonitorId == monitor.Id))
             .ConsecutiveFailures.Should().Be(0);
 
-        await FinalizeScheduledResultAsync(database, monitor, 22, 500);
-        var confirmedFailure = await FinalizeScheduledResultAsync(database, monitor, 23, 500);
+        await FinalizeScheduledResultAsync(database, monitor, 22, 500, clock);
+        var confirmedFailure = await FinalizeScheduledResultAsync(database, monitor, 23, 500, clock);
         healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Critical);
         healthy.EvidenceLogicalCheckId.Should().Be(confirmedFailure);
+        var incident = await database.Incidents.Include(candidate => candidate.Evidence)
+            .Include(candidate => candidate.Events)
+            .SingleAsync(candidate => candidate.EndpointMonitorId == monitor.Id
+                && candidate.IssueKey == HttpIssueIdentity.Create("Http.ServerError")
+                && candidate.Status != IncidentStatuses.Closed);
+        incident.Status.Should().Be(IncidentStatuses.Open);
+        incident.PreviousIncidentId.Should().Be(previousIncident.Id);
+        incident.RecurrenceCount.Should().Be(1);
+        incident.OwnerSubjectId.Should().Be(
+            monitor.Endpoint.OwnerSubjectId ?? monitor.Endpoint.Environment.Website.OwnerSubjectId);
+        incident.Evidence.Should().ContainSingle(evidence =>
+            evidence.EvidenceType == IncidentEvidenceTypes.Opening
+            && evidence.LogicalCheckId == confirmedFailure);
+        incident.Events.Should().Contain(eventRecord => eventRecord.EventType == IncidentEventTypes.Opened);
 
-        await FinalizeScheduledResultAsync(database, monitor, 24, 200);
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await FinalizeScheduledResultAsync(database, monitor, 24, 200, clock);
         healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Critical);
         healthy.EvidenceLogicalCheckId.Should().Be(confirmedFailure);
         (await database.IssueStates.SingleAsync(state => state.EndpointMonitorId == monitor.Id))
             .ConsecutiveRecoveries.Should().Be(1);
+        incident = await database.Incidents.Include(candidate => candidate.Evidence)
+            .SingleAsync(candidate => candidate.Id == incident.Id);
+        incident.Status.Should().Be(IncidentStatuses.MonitoringRecovery);
+        incident.RecoveryStartedAt.Should().NotBeNull();
+        incident.Evidence.Should().Contain(evidence =>
+            evidence.EvidenceType == IncidentEvidenceTypes.Recovery
+            && evidence.EvidenceRole == "RecoveryStarted");
 
-        var confirmedRecovery = await FinalizeScheduledResultAsync(database, monitor, 25, 200);
+        clock.Advance(TimeSpan.FromMinutes(1));
+        var confirmedRecovery = await FinalizeScheduledResultAsync(database, monitor, 25, 200, clock);
         healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Healthy);
         healthy.EvidenceLogicalCheckId.Should().Be(confirmedRecovery);
         (await database.IssueStates.SingleAsync(state => state.EndpointMonitorId == monitor.Id))
             .ConsecutiveRecoveries.Should().Be(2);
+        incident = await database.Incidents.Include(candidate => candidate.Evidence)
+            .SingleAsync(candidate => candidate.Id == incident.Id);
+        incident.Status.Should().Be(IncidentStatuses.Resolved);
+        incident.RecoveryDurationMs.Should().BeGreaterThanOrEqualTo(0);
+        incident.OutageDurationMs.Should().BeGreaterThanOrEqualTo(0);
+        incident.Evidence.Should().Contain(evidence =>
+            evidence.EvidenceType == IncidentEvidenceTypes.Resolution
+            && evidence.LogicalCheckId == confirmedRecovery);
+        (await database.AuditEvents.AnyAsync(audit => audit.EntityIdentifier == incident.Id.ToString()
+            && audit.Action == "incident.resolved")).Should().BeTrue();
     }
 
     private static async Task<Guid> FinalizeScheduledResultAsync(
         ApplicationDbContext database,
         EndpointMonitor monitor,
         int sequence,
-        int statusCode)
+        int statusCode,
+        TimeProvider? timeProvider = null)
     {
         var check = await CreateQueuedCheckAsync(database, monitor, sequence);
         var work = check.DurableWork.Single();
-        var now = DateTimeOffset.UtcNow;
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         check.State = LogicalCheckStates.Running;
         check.StartedAt = now;
         work.State = DurableWorkStates.Processing;
@@ -1076,8 +1137,7 @@ internal static class DatabaseFoundationAssertions
             "ok"u8.ToArray(),
             [],
             SafeHttpRequestIdentity.Create(request));
-        var finalization = new LogicalCheckFinalizationService(
-            database, new MaintenanceEvaluator(database), TimeProvider.System);
+        var finalization = CreateFinalizationService(database, timeProvider ?? TimeProvider.System);
 
         (await finalization.FinalizeAsync(new(
             claim!, attempt.Id, work.Id, new HttpTransportEvidence(request, result))))
@@ -1113,7 +1173,7 @@ internal static class DatabaseFoundationAssertions
             monitor.Id, check.Id, Guid.NewGuid(), TimeSpan.FromMinutes(1)));
         claim.Should().NotBeNull();
 
-        var finalization = new LogicalCheckFinalizationService(database, new MaintenanceEvaluator(database), TimeProvider.System);
+        var finalization = CreateFinalizationService(database, TimeProvider.System);
         (await finalization.FinalizeAsync(new(
             claim!, attempt.Id, work.Id,
             new ExecutionTerminalEvidence(ExecutionTerminalReason.RetriesExhausted))))
@@ -1173,7 +1233,7 @@ internal static class DatabaseFoundationAssertions
         database.ExecutionAttempts.Add(winningAttempt);
         await database.SaveChangesAsync();
 
-        var finalization = new LogicalCheckFinalizationService(database, new MaintenanceEvaluator(database), TimeProvider.System);
+        var finalization = CreateFinalizationService(database, TimeProvider.System);
         (await finalization.PrepareRetryAsync(new(
             staleClaim!, staleAttempt.Id, work.Id, "Infrastructure")))
             .Should().Be(LogicalCheckRetryStatus.Superseded);
@@ -1209,7 +1269,7 @@ internal static class DatabaseFoundationAssertions
     {
         var timeProvider = TimeProvider.System;
         var leaseService = new ExecutionLeaseService(database);
-        var finalizationService = new LogicalCheckFinalizationService(database, new MaintenanceEvaluator(database), timeProvider);
+        var finalizationService = CreateFinalizationService(database, timeProvider);
         return new(
             database,
             new FixedEligibilityService(isEligible),
@@ -1219,6 +1279,15 @@ internal static class DatabaseFoundationAssertions
             timeProvider,
             NullLogger<LogicalCheckExecutionService>.Instance);
     }
+
+    private static LogicalCheckFinalizationService CreateFinalizationService(
+        ApplicationDbContext database,
+        TimeProvider timeProvider) =>
+        new(
+            database,
+            new MaintenanceEvaluator(database),
+            new IncidentAutomationService(database, new AuditTrailWriter(database)),
+            timeProvider);
 
     private static async Task<LogicalCheck> CreateQueuedCheckAsync(
         ApplicationDbContext database,
@@ -1991,7 +2060,7 @@ internal static class DatabaseFoundationAssertions
 
         await database.Database.MigrateAsync();
         var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Should().HaveCount(8);
+        applied.Should().HaveCount(9);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         var upgraded = await ReadFoundationState(connectionString);
         upgraded.Tables.Should().BeEquivalentTo(
@@ -2180,8 +2249,13 @@ internal static class DatabaseFoundationAssertions
             .Where(candidate => candidate.Id != monitor.Id)
             .Select(candidate => candidate.Id)
             .FirstAsync();
-        var ownerSubjectId = await database.OwnerSubjects.Select(subject => subject.Id).FirstAsync();
-        var userId = await database.Users.Select(user => user.Id).FirstAsync();
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
+        var ownerSubjectId = await database.OwnerSubjects
+            .Where(subject => subject.UserId == developer.Id)
+            .Select(subject => subject.Id)
+            .SingleAsync();
+        var userId = administrator.Id;
         var now = DateTimeOffset.UtcNow;
         const string issueKey = "v1|HttpAvailability|status-code|default";
 
@@ -2264,17 +2338,46 @@ internal static class DatabaseFoundationAssertions
         await conflictingIncidentUpdate.Should().ThrowAsync<DbUpdateConcurrencyException>();
         database.ChangeTracker.Clear();
 
-        database.IncidentEvents.Add(new IncidentEvent
-        {
-            Id = Guid.NewGuid(),
-            IncidentId = incidentId,
-            ActorUserId = userId,
-            SequenceNumber = 1,
-            EventType = IncidentEventTypes.Opened,
-            ToStatus = IncidentStatuses.Open,
-            OccurredAt = now
-        });
-        await database.SaveChangesAsync();
+        var lifecycle = scope.ServiceProvider.GetRequiredService<IIncidentLifecycleService>();
+        var developerAccess = new RegistryAccessContext(developer.Id, [ApplicationRoles.DeveloperSupport]);
+        var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var operationsAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Operations]);
+        (await lifecycle.CloseAsync(new(incidentId, 1), developerAccess)).Status
+            .Should().Be(IncidentMutationStatus.ValidationFailed);
+        (await lifecycle.StartProgressAsync(new(incidentId, 1), developerAccess)).Succeeded.Should().BeTrue();
+        (await lifecycle.ResolveAsync(new(incidentId, 2, "", ""), developerAccess)).Status
+            .Should().Be(IncidentMutationStatus.ValidationFailed);
+        (await lifecycle.ResolveAsync(new(incidentId, 2, "Remediated", "The assigned developer confirmed the fix."), developerAccess))
+            .Succeeded.Should().BeTrue();
+        (await lifecycle.CloseAsync(new(incidentId, 3), developerAccess)).Succeeded.Should().BeTrue();
+        (await lifecycle.ReopenAsync(new(incidentId, 4, "Needs another review."), operationsAccess)).Status
+            .Should().Be(IncidentMutationStatus.Forbidden);
+        (await lifecycle.ReopenAsync(new(incidentId, 4, "Needs another review."), administratorAccess))
+            .Succeeded.Should().BeTrue();
+        (await lifecycle.AddNoteAsync(new(incidentId, 5, "Reopened for controlled verification."), developerAccess))
+            .Succeeded.Should().BeTrue();
+        var reassignedOwnerId = await database.OwnerSubjects
+            .Where(subject => subject.Id != ownerSubjectId)
+            .Select(subject => subject.Id)
+            .FirstAsync();
+        (await lifecycle.ReassignAsync(new(incidentId, 6, reassignedOwnerId), administratorAccess))
+            .Succeeded.Should().BeTrue();
+        (await lifecycle.ForceCloseAsync(new(incidentId, 7, "Controlled administrative closure."), operationsAccess)).Status
+            .Should().Be(IncidentMutationStatus.Forbidden);
+        (await lifecycle.ForceCloseAsync(new(incidentId, 7, "Controlled administrative closure."), administratorAccess))
+            .Succeeded.Should().BeTrue();
+
+        var lifecycleIncident = await database.Incidents.SingleAsync(incident => incident.Id == incidentId);
+        lifecycleIncident.Status.Should().Be(IncidentStatuses.Closed);
+        lifecycleIncident.ResolutionCategory.Should().Be(IncidentResolutionCategories.ForcedClosure);
+        (await database.IncidentEvents.CountAsync(eventRecord => eventRecord.IncidentId == incidentId))
+            .Should().Be(7);
+        (await database.IncidentEvidence.AnyAsync(evidence => evidence.IncidentId == incidentId
+            && evidence.EvidenceType == IncidentEvidenceTypes.Resolution
+            && evidence.ActorUserId == developer.Id)).Should().BeTrue();
+        (await database.AuditEvents.CountAsync(audit => audit.EntityIdentifier == incidentId.ToString()
+            && audit.Action.StartsWith("incident."))).Should().Be(7);
+
         await VerifyDuplicateIncidentEventSequenceRejectedAsync(connectionString, incidentId);
         await VerifyIncidentEventImmutableAsync(connectionString, incidentId);
         await VerifyIncidentEventFieldsRejectedAsync(connectionString, incidentId);

@@ -348,17 +348,17 @@ These requirements apply throughout the project:
 - [x] Implement stable issue-key generation. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
 - [x] Implement failure and recovery counters. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
 - [x] Reset failure count after a passing result.
-- [ ] Open incidents only after confirmation.
-- [ ] Maintain one active incident per endpoint, monitor type, and issue key.
-- [ ] Support separate incidents for materially different issues.
-- [ ] Implement owner assignment and override precedence.
-- [ ] Implement the complete incident state machine.
-- [ ] Reject invalid state transitions server-side.
-- [ ] Require resolution category and note for manual resolution.
-- [ ] Require audit reasons for forced closure and reopening.
-- [ ] Implement recurrence linking.
-- [ ] Calculate outage and recovery durations.
-- [ ] Append all operational changes to the incident timeline.
+- [x] Open incidents only after confirmation. Evidence: [`../phase-4/Incident_Creation_and_Lifecycle.md`](../phase-4/Incident_Creation_and_Lifecycle.md).
+- [x] Maintain one active incident per endpoint, monitor type, and issue key.
+- [x] Support separate incidents for materially different issues.
+- [x] Implement owner assignment and override precedence.
+- [x] Implement the complete incident state machine.
+- [x] Reject invalid state transitions server-side.
+- [x] Require resolution category and note for manual resolution.
+- [x] Require audit reasons for forced closure and reopening.
+- [x] Implement recurrence linking.
+- [x] Calculate outage and recovery durations.
+- [x] Append all operational changes to the incident timeline and safe audit trail.
 
 ### Notification processing
 
@@ -383,19 +383,19 @@ These requirements apply throughout the project:
 ### Database, UI, and verification
 
 - [ ] Add minimum maintenance, health counters, incidents, events, notifications, escalation, and delivery-attempt migration.
-- [ ] Add active-incident and notification uniqueness constraints.
-- [ ] Add incident optimistic concurrency and query indexes.
+- [ ] Add notification uniqueness constraints. Active-incident uniqueness is complete.
+- [x] Add incident optimistic concurrency and query indexes.
 - [ ] Build incident list, details, timeline, acknowledgement, assignment, resolution, and closure pages.
 - [ ] Authorize incident actions by role and assignment.
 - [x] Test failure confirmation and recovery boundaries.
 - [x] Test fail-pass-fail reset behavior.
-- [ ] Test valid and invalid state transitions.
-- [ ] Test distinct issues and recurrence.
+- [x] Test valid and invalid state transitions.
+- [x] Test distinct issues and recurrence.
 - [ ] Test duplicate job delivery and restart.
 - [ ] Test SMTP failure independently from incident commit.
 - [ ] Test maintenance suppression, marked-result retention, escalation pause, and post-maintenance counter reset.
 - [ ] Test reminder and escalation timing, acknowledgement cancellation, duplicate delivery, and restart.
-- [ ] Verify incident audit and timeline records.
+- [x] Verify incident audit and timeline records.
 
 ### Phase 4 completion gate
 

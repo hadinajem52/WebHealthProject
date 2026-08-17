@@ -10,6 +10,7 @@ using WebHealth.Domain.Health;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Normalization;
 using WebHealth.Infrastructure.Health;
+using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Monitoring;
@@ -17,6 +18,7 @@ namespace WebHealth.Infrastructure.Monitoring;
 internal sealed class LogicalCheckFinalizationService(
     ApplicationDbContext dbContext,
     IMaintenanceEvaluator maintenanceEvaluator,
+    IncidentAutomationService incidentAutomation,
     TimeProvider timeProvider) : ILogicalCheckFinalizationService
 {
     public async Task<LogicalCheckFinalizationStatus> FinalizeAsync(
@@ -74,7 +76,16 @@ internal sealed class LogicalCheckFinalizationService(
         var normalized = Normalize(check, command.Evidence, now);
         var maintenance = await maintenanceEvaluator.FindActiveAsync(check.EndpointMonitorId, normalized.MeasuredAt, cancellationToken);
         AddHistory(check, normalized, IsResponseTruncated(command.Evidence), maintenance, now);
-        await ApplyHealthAsync(check, normalized, maintenance, now, cancellationToken);
+        var counterMode = HealthConfirmationEngine.SelectCounterMode(
+            check.Source,
+            normalized.Outcome,
+            normalized.FailureCategory,
+            maintenance is not null,
+            maintenance?.ContinueFailureCounter ?? false);
+        var healthDecision = await ApplyHealthAsync(
+            check, normalized, counterMode, now, cancellationToken);
+        await incidentAutomation.ApplyAsync(
+            check, normalized, healthDecision, counterMode, now, cancellationToken);
         CompleteAttempt(attempt!, command.Evidence, now);
         CompleteWork(work, now);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -141,6 +152,7 @@ internal sealed class LogicalCheckFinalizationService(
             .Include(check => check.EndpointMonitor)
                 .ThenInclude(monitor => monitor.Endpoint)
                     .ThenInclude(endpoint => endpoint.Environment)
+                        .ThenInclude(environment => environment.Website)
             .Include(check => check.Result)
             .Include(check => check.Attempts)
             .Include(check => check.DurableWork)
@@ -399,10 +411,10 @@ internal sealed class LogicalCheckFinalizationService(
         check.CompletedAt = completedAt;
     }
 
-    private async Task ApplyHealthAsync(
+    private async Task<HealthConfirmationDecision> ApplyHealthAsync(
         LogicalCheck check,
         NormalizedHttpResult result,
-        ActiveMaintenanceOccurrence? maintenance,
+        HealthCounterMode counterMode,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -424,15 +436,11 @@ internal sealed class LogicalCheckFinalizationService(
             result.Outcome == HttpResultOutcomes.Healthy,
             check.ConfigurationSnapshot.FailureConfirmationCount,
             check.ConfigurationSnapshot.RecoveryConfirmationCount,
-            HealthConfirmationEngine.SelectCounterMode(
-                check.Source,
-                result.Outcome,
-                result.FailureCategory,
-                maintenance is not null,
-                maintenance?.ContinueFailureCounter ?? false)));
+            counterMode));
 
         ApplyIssueCounters(check.EndpointMonitorId, states, decision.Issues, now);
         ApplyConfirmedHealth(check, health, decision.ConfirmedStatus, now);
+        return decision;
     }
 
     private void ApplyIssueCounters(

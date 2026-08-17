@@ -20,7 +20,7 @@
 - Maintenance resets pending counters by default. A window with `ContinueFailureCounter` explicitly enabled continues normal confirmation behavior.
 - Endpoint health is written only on a confirmed status transition, so later duplicate or same-status evidence does not replace the original confirming check.
 
-`RecoveryStarted` is an explicit application decision for the incident lifecycle increment. Phase 4.3 does not create or mutate incidents; Phase 4.4 consumes this decision when it adds incident opening, monitoring-recovery, and resolution orchestration.
+`RecoveryStarted` is an explicit application decision consumed by the Phase 4.4 [incident lifecycle orchestration](Incident_Creation_and_Lifecycle.md) for monitoring-recovery and resolution changes.
 
 ## Data and migration impact
 

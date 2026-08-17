@@ -26,6 +26,7 @@ public static class IncidentEventTypes
     public const string StatusChanged = "StatusChanged";
     public const string Reassigned = "Reassigned";
     public const string NoteAdded = "NoteAdded";
+    public const string EvidenceRecorded = "EvidenceRecorded";
 }
 
 public static class IncidentEvidenceTypes
@@ -33,4 +34,11 @@ public static class IncidentEvidenceTypes
     public const string Opening = "Opening";
     public const string Failure = "Failure";
     public const string Recovery = "Recovery";
+    public const string Resolution = "Resolution";
+}
+
+public static class IncidentResolutionCategories
+{
+    public const string AutomaticRecovery = "AutomaticRecovery";
+    public const string ForcedClosure = "ForcedClosure";
 }

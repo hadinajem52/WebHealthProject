@@ -124,6 +124,19 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             _ => throw new ArgumentOutOfRangeException(nameof(action))
         }, "maintenance_window", after.MaintenanceWindowId, before, after, cancellationToken);
 
+    public Task RecordIncidentMutationAsync(
+        IncidentAuditWriteContext context,
+        IncidentAuditAction action,
+        IncidentAuditSnapshot? before,
+        IncidentAuditSnapshot after,
+        CancellationToken cancellationToken = default) =>
+        RecordIncidentAsync(
+            context,
+            $"incident.{action.ToString().ToLowerInvariant()}",
+            before,
+            after,
+            cancellationToken);
+
     private static string ToAction(string entityType, string action) =>
         $"{entityType}.{action.ToLowerInvariant()}";
 
@@ -146,6 +159,29 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             Action = action,
             EntityType = entityType,
             EntityIdentifier = entityId.ToString(),
+            Outcome = "succeeded",
+            BeforeValues = before is null ? null : JsonSerializer.Serialize(before, SerializerOptions),
+            AfterValues = JsonSerializer.Serialize(after, SerializerOptions)
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RecordIncidentAsync(
+        IncidentAuditWriteContext context,
+        string action,
+        IncidentAuditSnapshot? before,
+        IncidentAuditSnapshot after,
+        CancellationToken cancellationToken)
+    {
+        dbContext.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid(),
+            ActorUserId = context.ActorUserId,
+            ActorIdentifier = context.ActorIdentifier,
+            OccurredAt = context.OccurredAt,
+            Action = action,
+            EntityType = "incident",
+            EntityIdentifier = after.IncidentId.ToString(),
             Outcome = "succeeded",
             BeforeValues = before is null ? null : JsonSerializer.Serialize(before, SerializerOptions),
             AfterValues = JsonSerializer.Serialize(after, SerializerOptions)

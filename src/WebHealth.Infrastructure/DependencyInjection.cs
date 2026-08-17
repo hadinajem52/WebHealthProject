@@ -16,6 +16,8 @@ using WebHealth.Application.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Application.Maintenance;
 using WebHealth.Infrastructure.Maintenance;
+using WebHealth.Application.Incidents;
+using WebHealth.Infrastructure.Incidents;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -93,6 +95,8 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceWindowService, MaintenanceWindowService>();
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
+        services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
+        services.AddScoped<IncidentAutomationService>();
         services.AddScoped<LogicalCheckJob>();
         services.AddScoped<MonitoringDispatchJob>();
         if (schedulingOptions.Enabled)

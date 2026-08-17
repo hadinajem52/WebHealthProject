@@ -58,9 +58,21 @@ public interface IAuditTrailWriter
         MaintenanceAuditSnapshot? before,
         MaintenanceAuditSnapshot after,
         CancellationToken cancellationToken = default);
+
+    Task RecordIncidentMutationAsync(
+        IncidentAuditWriteContext context,
+        IncidentAuditAction action,
+        IncidentAuditSnapshot? before,
+        IncidentAuditSnapshot after,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record AuditWriteContext(Guid ActorUserId, DateTimeOffset OccurredAt);
+
+public sealed record IncidentAuditWriteContext(
+    Guid? ActorUserId,
+    string ActorIdentifier,
+    DateTimeOffset OccurredAt);
 
 public sealed record UserAuditSnapshot(
     Guid UserId,
@@ -174,4 +186,39 @@ public sealed record MaintenanceAuditSnapshot(
     bool ContinueFailureCounter,
     bool IsCancelled,
     bool ReasonChanged,
+    long Version);
+
+public enum IncidentAuditAction
+{
+    Opened,
+    FailureRecorded,
+    RecoveryStarted,
+    RecoveryInterrupted,
+    Resolved,
+    Acknowledged,
+    InProgress,
+    Reassigned,
+    NoteAdded,
+    Closed,
+    ForceClosed,
+    Reopened
+}
+
+public sealed record IncidentAuditSnapshot(
+    Guid IncidentId,
+    Guid EndpointMonitorId,
+    Guid OwnerSubjectId,
+    Guid? PreviousIncidentId,
+    string IssueKey,
+    string Severity,
+    string Status,
+    int RecurrenceCount,
+    string? ResolutionCategory,
+    bool HasResolutionNote,
+    DateTimeOffset OpenedAt,
+    DateTimeOffset? RecoveryStartedAt,
+    DateTimeOffset? ResolvedAt,
+    DateTimeOffset? ClosedAt,
+    long? RecoveryDurationMs,
+    long? OutageDurationMs,
     long Version);

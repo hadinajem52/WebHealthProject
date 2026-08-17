@@ -17,8 +17,11 @@ public sealed class Incident
     public int RecurrenceCount { get; set; }
     public DateTimeOffset OpenedAt { get; set; }
     public DateTimeOffset? AcknowledgedAt { get; set; }
+    public DateTimeOffset? RecoveryStartedAt { get; set; }
     public DateTimeOffset? ResolvedAt { get; set; }
     public DateTimeOffset? ClosedAt { get; set; }
+    public long? RecoveryDurationMs { get; set; }
+    public long? OutageDurationMs { get; set; }
     public string? ResolutionCategory { get; set; }
     public string? ResolutionNote { get; set; }
     public long Version { get; set; }
@@ -51,11 +54,13 @@ public sealed class IncidentEvidence
     public Guid Id { get; init; }
     public Guid IncidentId { get; init; }
     public Guid EndpointMonitorId { get; init; }
-    public Guid LogicalCheckId { get; init; }
+    public Guid? LogicalCheckId { get; init; }
+    public Guid? ActorUserId { get; init; }
     public required string EvidenceType { get; init; }
     public required string EvidenceRole { get; init; }
     public required string BoundedSnapshot { get; init; }
     public DateTimeOffset CapturedAt { get; init; }
     public Incident Incident { get; init; } = null!;
-    public LogicalCheck LogicalCheck { get; init; } = null!;
+    public LogicalCheck? LogicalCheck { get; init; }
+    public ApplicationUser? ActorUser { get; init; }
 }

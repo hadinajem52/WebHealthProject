@@ -20,7 +20,8 @@ public sealed class AuditContractTests
             nameof(IAuditTrailWriter.RecordWebsiteMutationAsync),
             nameof(IAuditTrailWriter.RecordEnvironmentMutationAsync),
             nameof(IAuditTrailWriter.RecordEndpointMutationAsync),
-            nameof(IAuditTrailWriter.RecordMaintenanceMutationAsync));
+            nameof(IAuditTrailWriter.RecordMaintenanceMutationAsync),
+            nameof(IAuditTrailWriter.RecordIncidentMutationAsync));
         methods.SelectMany(method => method.GetParameters())
             .Select(parameter => parameter.ParameterType)
             .Should().OnlyContain(type =>
@@ -37,6 +38,9 @@ public sealed class AuditContractTests
                 || type == typeof(EndpointAuditSnapshot)
                 || type == typeof(MaintenanceAuditAction)
                 || type == typeof(MaintenanceAuditSnapshot)
+                || type == typeof(IncidentAuditWriteContext)
+                || type == typeof(IncidentAuditAction)
+                || type == typeof(IncidentAuditSnapshot)
                 || type == typeof(CancellationToken));
         typeof(UserAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
@@ -114,5 +118,24 @@ public sealed class AuditContractTests
                 nameof(MaintenanceAuditSnapshot.IsCancelled),
                 nameof(MaintenanceAuditSnapshot.ReasonChanged),
                 nameof(MaintenanceAuditSnapshot.Version));
+        typeof(IncidentAuditSnapshot).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(IncidentAuditSnapshot.IncidentId),
+                nameof(IncidentAuditSnapshot.EndpointMonitorId),
+                nameof(IncidentAuditSnapshot.OwnerSubjectId),
+                nameof(IncidentAuditSnapshot.PreviousIncidentId),
+                nameof(IncidentAuditSnapshot.IssueKey),
+                nameof(IncidentAuditSnapshot.Severity),
+                nameof(IncidentAuditSnapshot.Status),
+                nameof(IncidentAuditSnapshot.RecurrenceCount),
+                nameof(IncidentAuditSnapshot.ResolutionCategory),
+                nameof(IncidentAuditSnapshot.HasResolutionNote),
+                nameof(IncidentAuditSnapshot.OpenedAt),
+                nameof(IncidentAuditSnapshot.RecoveryStartedAt),
+                nameof(IncidentAuditSnapshot.ResolvedAt),
+                nameof(IncidentAuditSnapshot.ClosedAt),
+                nameof(IncidentAuditSnapshot.RecoveryDurationMs),
+                nameof(IncidentAuditSnapshot.OutageDurationMs),
+                nameof(IncidentAuditSnapshot.Version));
     }
 }

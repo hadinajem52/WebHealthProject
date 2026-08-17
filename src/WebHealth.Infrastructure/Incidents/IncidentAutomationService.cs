@@ -1,0 +1,369 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using WebHealth.Application.Auditing;
+using WebHealth.Application.Health;
+using WebHealth.Application.Incidents;
+using WebHealth.Application.Monitoring;
+using WebHealth.Domain.Incidents;
+using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.Persistence;
+
+namespace WebHealth.Infrastructure.Incidents;
+
+internal sealed class IncidentAutomationService(
+    ApplicationDbContext dbContext,
+    IAuditTrailWriter auditTrail)
+{
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
+    public async Task ApplyAsync(
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        HealthConfirmationDecision healthDecision,
+        HealthCounterMode counterMode,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (counterMode != HealthCounterMode.Count)
+        {
+            return;
+        }
+
+        var incidents = await LoadActiveAsync(check.EndpointMonitorId, cancellationToken);
+        if (result.Outcome == HttpResultOutcomes.Healthy)
+        {
+            await ApplyRecoveryAsync(check, result, healthDecision, incidents, now, cancellationToken);
+            return;
+        }
+
+        var interruptedIncidentIds = await InterruptRecoveryAsync(
+            check, result, incidents, now, cancellationToken);
+        await ApplyFailuresAsync(
+            check, result, healthDecision, incidents, interruptedIncidentIds, now, cancellationToken);
+    }
+
+    private async Task ApplyFailuresAsync(
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        HealthConfirmationDecision healthDecision,
+        List<Incident> incidents,
+        IReadOnlySet<Guid> interruptedIncidentIds,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var observed = ObservedIssueKeys(result);
+        var confirmed = healthDecision.Issues
+            .Where(issue => observed.Contains(issue.IssueKey)
+                && issue.ConsecutiveFailures >= check.ConfigurationSnapshot.FailureConfirmationCount)
+            .Select(issue => issue.IssueKey)
+            .ToArray();
+
+        foreach (var issueKey in confirmed)
+        {
+            var incident = incidents.SingleOrDefault(candidate => candidate.IssueKey == issueKey);
+            if (incident is null)
+            {
+                incident = await OpenAsync(check, result, issueKey, now, cancellationToken);
+                incidents.Add(incident);
+                continue;
+            }
+
+            if (interruptedIncidentIds.Contains(incident.Id))
+            {
+                continue;
+            }
+
+            await RecordEvidenceMutationAsync(
+                incident,
+                check,
+                result,
+                IncidentEvidenceTypes.Failure,
+                "ConfirmedFailure",
+                IncidentAuditAction.FailureRecorded,
+                now,
+                cancellationToken);
+        }
+    }
+
+    private async Task ApplyRecoveryAsync(
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        HealthConfirmationDecision healthDecision,
+        IReadOnlyCollection<Incident> incidents,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (healthDecision.Transition == HealthTransition.RecoveryStarted)
+        {
+            foreach (var incident in incidents.Where(candidate =>
+                         candidate.Status != IncidentStatuses.MonitoringRecovery))
+            {
+                await BeginRecoveryAsync(incident, check, result, now, cancellationToken);
+            }
+        }
+        else if (healthDecision.Transition == HealthTransition.RecoveryConfirmed)
+        {
+            foreach (var incident in incidents.Where(candidate =>
+                         candidate.Status == IncidentStatuses.MonitoringRecovery))
+            {
+                await ResolveAsync(incident, check, result, now, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<HashSet<Guid>> InterruptRecoveryAsync(
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        IEnumerable<Incident> incidents,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var interruptedIncidentIds = new HashSet<Guid>();
+        foreach (var incident in incidents.Where(candidate =>
+                     candidate.Status == IncidentStatuses.MonitoringRecovery))
+        {
+            interruptedIncidentIds.Add(incident.Id);
+            var before = IncidentLifecycleService.Snapshot(incident);
+            var decision = IncidentLifecycleEngine.Evaluate(new(
+                incident.Status,
+                IncidentLifecycleAction.InterruptRecovery,
+                WasAcknowledged: incident.AcknowledgedAt is not null));
+            var previousStatus = incident.Status;
+            incident.Status = decision.NewStatus!;
+            incident.RecoveryStartedAt = null;
+            incident.RecoveryDurationMs = null;
+            incident.Version++;
+            AddStatusEvent(incident, previousStatus, incident.Status, now);
+            AddEvidence(incident, check, result, IncidentEvidenceTypes.Failure, "RecoveryInterrupted", now);
+            AddEvidenceEvent(incident, "Failure evidence interrupted recovery.", now);
+            await WriteAuditAsync(
+                IncidentAuditAction.RecoveryInterrupted,
+                before,
+                incident,
+                now,
+                cancellationToken);
+        }
+
+        return interruptedIncidentIds;
+    }
+
+    private async Task<Incident> OpenAsync(
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        string issueKey,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var previous = await FindPreviousAsync(check.EndpointMonitorId, issueKey, result.MeasuredAt, cancellationToken);
+        var incident = new Incident
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = check.EndpointMonitorId,
+            OwnerSubjectId = check.EndpointMonitor.Endpoint.OwnerSubjectId
+                ?? check.EndpointMonitor.Endpoint.Environment.Website.OwnerSubjectId,
+            PreviousIncidentId = previous?.Id,
+            IssueKey = issueKey,
+            Severity = IncidentSeverities.Critical,
+            Status = IncidentStatuses.Open,
+            RecurrenceCount = previous is null ? 0 : previous.RecurrenceCount + 1,
+            OpenedAt = result.MeasuredAt,
+            Version = 1
+        };
+        dbContext.Incidents.Add(incident);
+        AddOpenedEvent(incident, now);
+        AddEvidence(incident, check, result, IncidentEvidenceTypes.Opening, "ConfirmationThreshold", now);
+        AddEvidenceEvent(incident, "Opening evidence recorded.", now);
+        await auditTrail.RecordIncidentMutationAsync(
+            SystemContext(now),
+            IncidentAuditAction.Opened,
+            null,
+            IncidentLifecycleService.Snapshot(incident),
+            cancellationToken);
+        return incident;
+    }
+
+    private async Task BeginRecoveryAsync(
+        Incident incident,
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var before = IncidentLifecycleService.Snapshot(incident);
+        var previousStatus = incident.Status;
+        incident.Status = IncidentStatuses.MonitoringRecovery;
+        incident.RecoveryStartedAt = result.MeasuredAt;
+        incident.Version++;
+        AddStatusEvent(incident, previousStatus, incident.Status, now);
+        AddEvidence(incident, check, result, IncidentEvidenceTypes.Recovery, "RecoveryStarted", now);
+        AddEvidenceEvent(incident, "First recovery pass recorded.", now);
+        await WriteAuditAsync(
+            IncidentAuditAction.RecoveryStarted,
+            before,
+            incident,
+            now,
+            cancellationToken);
+    }
+
+    private async Task ResolveAsync(
+        Incident incident,
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var before = IncidentLifecycleService.Snapshot(incident);
+        var previousStatus = incident.Status;
+        incident.Status = IncidentStatuses.Resolved;
+        incident.ResolutionCategory = IncidentResolutionCategories.AutomaticRecovery;
+        incident.ResolutionNote = "Recovery was confirmed by scheduled monitoring evidence.";
+        incident.ResolvedAt = result.MeasuredAt;
+        incident.RecoveryDurationMs = IncidentLifecycleEngine.DurationMilliseconds(
+            incident.RecoveryStartedAt ?? result.MeasuredAt,
+            result.MeasuredAt);
+        incident.OutageDurationMs = IncidentLifecycleEngine.DurationMilliseconds(
+            incident.OpenedAt,
+            result.MeasuredAt);
+        incident.Version++;
+        AddStatusEvent(incident, previousStatus, incident.Status, now);
+        AddEvidence(incident, check, result, IncidentEvidenceTypes.Recovery, "RecoveryConfirmed", now);
+        AddEvidence(incident, check, result, IncidentEvidenceTypes.Resolution, "AutomaticRecovery", now);
+        AddEvidenceEvent(incident, "Recovery and resolution evidence recorded.", now);
+        await WriteAuditAsync(
+            IncidentAuditAction.Resolved,
+            before,
+            incident,
+            now,
+            cancellationToken);
+    }
+
+    private async Task RecordEvidenceMutationAsync(
+        Incident incident,
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        string evidenceType,
+        string evidenceRole,
+        IncidentAuditAction action,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var before = IncidentLifecycleService.Snapshot(incident);
+        incident.Version++;
+        AddEvidence(incident, check, result, evidenceType, evidenceRole, now);
+        AddEvidenceEvent(incident, $"{evidenceType} evidence recorded.", now);
+        await WriteAuditAsync(action, before, incident, now, cancellationToken);
+    }
+
+    private Task<List<Incident>> LoadActiveAsync(Guid monitorId, CancellationToken cancellationToken) =>
+        dbContext.Incidents.Include(incident => incident.Events)
+            .Where(incident => incident.EndpointMonitorId == monitorId
+                && IncidentStatuses.Active.Contains(incident.Status))
+            .ToListAsync(cancellationToken);
+
+    private Task<Incident?> FindPreviousAsync(
+        Guid monitorId,
+        string issueKey,
+        DateTimeOffset openedAt,
+        CancellationToken cancellationToken) =>
+        dbContext.Incidents
+            .Where(incident => incident.EndpointMonitorId == monitorId
+                && incident.IssueKey == issueKey
+                && incident.Status == IncidentStatuses.Closed
+                && incident.ClosedAt != null
+                && incident.ClosedAt <= openedAt
+                && incident.ClosedAt >= openedAt - IncidentLifecycleEngine.RecurrenceWindow)
+            .OrderByDescending(incident => incident.ClosedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private void AddEvidence(
+        Incident incident,
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        string evidenceType,
+        string evidenceRole,
+        DateTimeOffset now) =>
+        dbContext.IncidentEvidence.Add(new IncidentEvidence
+        {
+            Id = Guid.NewGuid(),
+            IncidentId = incident.Id,
+            EndpointMonitorId = incident.EndpointMonitorId,
+            LogicalCheckId = check.Id,
+            EvidenceType = evidenceType,
+            EvidenceRole = evidenceRole,
+            BoundedSnapshot = JsonSerializer.Serialize(new
+            {
+                schemaVersion = 1,
+                result.Outcome,
+                result.FailureCategory,
+                result.MeasuredAt
+            }, SerializerOptions),
+            CapturedAt = now
+        });
+
+    private void AddOpenedEvent(Incident incident, DateTimeOffset now) =>
+        AddEvent(incident, IncidentEventTypes.Opened, now, toStatus: IncidentStatuses.Open);
+
+    private void AddStatusEvent(
+        Incident incident,
+        string fromStatus,
+        string toStatus,
+        DateTimeOffset now) =>
+        AddEvent(incident, IncidentEventTypes.StatusChanged, now, fromStatus, toStatus);
+
+    private void AddEvidenceEvent(Incident incident, string note, DateTimeOffset now) =>
+        AddEvent(incident, IncidentEventTypes.EvidenceRecorded, now, note: note);
+
+    private void AddEvent(
+        Incident incident,
+        string eventType,
+        DateTimeOffset now,
+        string? fromStatus = null,
+        string? toStatus = null,
+        string? note = null) =>
+        dbContext.IncidentEvents.Add(new IncidentEvent
+        {
+            Id = Guid.NewGuid(),
+            IncidentId = incident.Id,
+            SequenceNumber = NextSequence(incident.Id),
+            EventType = eventType,
+            FromStatus = fromStatus,
+            ToStatus = toStatus,
+            BoundedNote = note,
+            OccurredAt = now
+        });
+
+    private long NextSequence(Guid incidentId) =>
+        dbContext.IncidentEvents.Local
+            .Where(item => item.IncidentId == incidentId)
+            .Select(item => item.SequenceNumber)
+            .DefaultIfEmpty()
+            .Max() + 1;
+
+    private Task WriteAuditAsync(
+        IncidentAuditAction action,
+        IncidentAuditSnapshot before,
+        Incident incident,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        auditTrail.RecordIncidentMutationAsync(
+            SystemContext(now),
+            action,
+            before,
+            IncidentLifecycleService.Snapshot(incident),
+            cancellationToken);
+
+    private static IncidentAuditWriteContext SystemContext(DateTimeOffset now) =>
+        new(null, "system", now);
+
+    private static HashSet<string> ObservedIssueKeys(NormalizedHttpResult result)
+    {
+        var issueKeys = result.Findings.Select(finding => finding.IssueKey)
+            .ToHashSet(StringComparer.Ordinal);
+        if (issueKeys.Count == 0)
+        {
+            issueKeys.Add(HttpIssueIdentity.Create($"Http.{result.FailureCategory ?? "Unknown"}"));
+        }
+
+        return issueKeys;
+    }
+}

@@ -429,18 +429,18 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 - [x] Implement failure and recovery counters. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
 - [x] Reset the failure counter after a passing result.
-- [ ] Open an incident at the configured confirmation threshold.
-- [ ] Maintain one active incident per endpoint, monitor type, and issue key.
-- [ ] Allow materially different issues to create separate incidents.
-- [ ] Assign endpoint override first, then website owner.
-- [ ] Implement Open, Acknowledged, In Progress, Monitoring Recovery, Resolved, and Closed states.
-- [ ] Reject invalid transitions server-side.
-- [ ] Require resolution category and note for manual resolution.
-- [ ] Require an audit reason for forced closure and administrator reopening.
-- [ ] Keep closed incidents immutable except controlled reopening.
-- [ ] Link matching recurrence within 30 days.
-- [ ] Append acknowledgement, assignment, note, and state events to the timeline.
-- [ ] Calculate recovery time and outage duration from persisted evidence.
+- [x] Open an incident at the configured confirmation threshold. Evidence: [`../phase-4/Incident_Creation_and_Lifecycle.md`](../phase-4/Incident_Creation_and_Lifecycle.md).
+- [x] Maintain one active incident per endpoint, monitor type, and issue key.
+- [x] Allow materially different issues to create separate incidents.
+- [x] Assign endpoint override first, then website owner.
+- [x] Implement Open, Acknowledged, In Progress, Monitoring Recovery, Resolved, and Closed states.
+- [x] Reject invalid transitions server-side.
+- [x] Require resolution category and note for manual resolution.
+- [x] Require an audit reason for forced closure and administrator reopening.
+- [x] Keep closed incidents immutable except controlled reopening.
+- [x] Link matching recurrence within the inclusive 30-day boundary.
+- [x] Append acknowledgement, assignment, note, evidence, and state events to the timeline and safe audit trail.
+- [x] Calculate recovery time and outage duration from persisted evidence.
 
 ### 11.4 Durable notifications
 
@@ -462,20 +462,20 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 ### 11.5 Database and migration
 
 - [ ] Add minimum maintenance, health/counter state, incidents, events, notifications, escalation, and delivery attempts.
-- [ ] Add issue keys and recurrence links.
-- [ ] Enforce one active incident per endpoint/monitor/issue key.
+- [x] Add issue keys and recurrence links.
+- [x] Enforce one active incident per endpoint/monitor/issue key.
 - [ ] Enforce notification uniqueness by event/channel/recipient.
-- [ ] Add incident concurrency protection.
-- [ ] Index status, severity, owner, age, issue key, notification state, and pending age.
-- [ ] Validate clean and Phase 3 upgrade migrations.
+- [x] Add incident concurrency protection.
+- [ ] Index notification state and pending age. Incident status, severity, owner, age, and issue-key indexes are complete.
+- [x] Validate clean and Phase 3 upgrade migrations.
 
 ### 11.6 Verification gate
 
 - [ ] Unit-test fail-pass-fail reset behavior.
 - [ ] Unit-test two-failure opening and two-pass recovery.
-- [ ] Unit-test issue deduplication, distinct issues, transitions, recurrence, and duration.
+- [x] Unit/integration-test issue deduplication, distinct issues, transitions, recurrence, and duration.
 - [ ] Unit-test notification idempotency and retry classification.
-- [ ] Integration-test result, health, incident, timeline, and notification atomicity.
+- [ ] Integration-test notification atomicity. Result, health, incident, and timeline atomicity are complete.
 - [ ] Simulate duplicate job delivery and application restart.
 - [ ] Verify exactly one active incident and one opening notification.
 - [ ] Verify first pass enters Monitoring Recovery without a recovery notification.
