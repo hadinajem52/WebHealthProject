@@ -92,7 +92,8 @@ internal sealed class MonitoringSchedulingService(
             QueuedAt = now
         };
         dbContext.LogicalChecks.Add(check);
-        dbContext.CheckConfigurationSnapshots.Add(CreateSnapshot(monitor, logicalCheckId, now));
+        dbContext.CheckConfigurationSnapshots.Add(
+            CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now));
         dbContext.DurableWork.Add(new DurableWork
         {
             Id = durableWorkId,
@@ -109,30 +110,6 @@ internal sealed class MonitoringSchedulingService(
             monitor.ScheduleAnchor, monitor.IntervalSeconds, now);
         return new(logicalCheckId, durableWorkId);
     }
-
-    private static CheckConfigurationSnapshot CreateSnapshot(
-        EndpointMonitor monitor,
-        Guid logicalCheckId,
-        DateTimeOffset now) => new()
-        {
-            LogicalCheckId = logicalCheckId,
-            SchemaVersion = 1,
-            MonitorType = monitor.MonitorType,
-            ConfigurationFingerprint = monitor.ConfigurationFingerprint,
-            IntervalSeconds = monitor.IntervalSeconds,
-            TimeoutSeconds = monitor.TimeoutSeconds,
-            FailureConfirmationCount = monitor.FailureConfirmationCount,
-            RecoveryConfirmationCount = monitor.RecoveryConfirmationCount,
-            WarningThresholdMs = monitor.WarningThresholdMs,
-            CriticalThresholdMs = monitor.CriticalThresholdMs,
-            IntervalSource = MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides)
-                ? ConfigurationValueSources.EndpointOverride
-                : ConfigurationValueSources.EnvironmentDefault,
-            TimeoutSource = ConfigurationValueSources.PolicyProfile,
-            ConfirmationSource = ConfigurationValueSources.PolicyProfile,
-            ThresholdSource = ConfigurationValueSources.PolicyProfile,
-            CreatedAt = now
-        };
 
     private async Task<IReadOnlyList<DispatchWork>> ClaimRecoverableWorkAsync(CancellationToken token)
     {

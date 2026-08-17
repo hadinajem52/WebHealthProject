@@ -1,0 +1,132 @@
+@model CheckDetailsViewModel
+@{
+    ViewData.SetTitle("Check details");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Endpoint", Url.Action("Endpoint", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check history", Url.Action("History", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check details"));
+    var check = Model.Check;
+    var hasResult = check.Outcome is not null;
+    var outcomeStatus = check.Outcome switch
+    {
+        "Healthy" => "success",
+        "Critical" => "danger",
+        _ => "warning"
+    };
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Check details</h2>
+                <p class="card__subtitle target-url">@check.EndpointDisplayUrl</p>
+            </div>
+            <a class="button button--secondary" asp-action="History" asp-route-id="@check.EndpointId">
+                @await Html.PartialAsync("_Icon", "arrow-left")
+                <span>Back to history</span>
+            </a>
+        </div>
+
+        <dl class="registry-facts">
+            <div><dt>Source</dt><dd>@check.Source</dd></div>
+            <div><dt>Initiator</dt><dd>@(check.InitiatedByDisplayName ?? "System schedule")</dd></div>
+            <div><dt>State</dt><dd>@check.State</dd></div>
+            <div><dt>@(check.ScheduledFor is not null ? "Scheduled for" : "Requested at")</dt><dd>@((check.ScheduledFor ?? check.RequestedAt)?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+            <div><dt>Started</dt><dd>@(check.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not started")</dd></div>
+            <div><dt>Completed</dt><dd>@(check.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not completed")</dd></div>
+            <div><dt>Outcome</dt><dd><span class="badge" data-status="@outcomeStatus">@(check.Outcome ?? "Pending")</span></dd></div>
+            <div><dt>Failure category</dt><dd>@(check.FailureCategory ?? "None")</dd></div>
+            <div><dt>HTTP status</dt><dd>@(check.HttpStatus?.ToString() ?? "—")</dd></div>
+            <div><dt>Duration</dt><dd>@(check.TotalDurationMs is { } total ? $"{total} ms" : "—")</dd></div>
+            <div><dt>Counts toward uptime</dt><dd>@(check.CountsForUptime ? "Yes" : "No")</dd></div>
+            <div><dt>Safe diagnostic</dt><dd>@(check.SafeDiagnostic ?? "None recorded")</dd></div>
+        </dl>
+    </section>
+
+    @if (hasResult)
+    {
+        <section class="card">
+            <div class="page-intro"><div><h3 class="card__title">Timing and response</h3></div></div>
+            <dl class="registry-facts">
+                <div><dt>DNS</dt><dd>@(check.DnsDurationMs is { } dns ? $"{dns} ms" : "—")</dd></div>
+                <div><dt>Connect</dt><dd>@(check.ConnectDurationMs is { } connect ? $"{connect} ms" : "—")</dd></div>
+                <div><dt>TLS</dt><dd>@(check.TlsDurationMs is { } tls ? $"{tls} ms" : "—")</dd></div>
+                <div><dt>Time to first byte</dt><dd>@(check.TtfbDurationMs is { } ttfb ? $"{ttfb} ms" : "—")</dd></div>
+                <div><dt>Decoded length</dt><dd>@(check.DecodedLength is { } length ? $"{length:N0} bytes" : "—")</dd></div>
+                <div><dt>Response truncated</dt><dd>@(check.ResponseTruncated ? "Yes" : "No")</dd></div>
+            </dl>
+        </section>
+    }
+
+    <section class="card">
+        <div class="page-intro"><div><h3 class="card__title">Findings</h3></div></div>
+        @if (check.Findings.Count == 0)
+        {
+            <p class="data-table__secondary">No findings recorded.</p>
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Findings recorded for this check</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Rule</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Observed</th>
+                            <th scope="col">Expected</th>
+                            <th scope="col">Issue key</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var finding in check.Findings)
+                        {
+                            <tr>
+                                <td data-label="Rule">@finding.RuleKey</td>
+                                <td data-label="Severity"><span class="badge" data-status="@(finding.Severity == "Critical" ? "danger" : "warning")">@finding.Severity</span></td>
+                                <td data-label="Observed">@(finding.ObservedValue ?? "—")</td>
+                                <td data-label="Expected">@(finding.ExpectedValue ?? "—")</td>
+                                <td data-label="Issue key" class="code">@finding.IssueKey</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="card">
+        <div class="page-intro"><div><h3 class="card__title">Redirect chain</h3></div></div>
+        @if (check.RedirectHops.Count == 0)
+        {
+            <p class="data-table__secondary">No redirects recorded.</p>
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Redirect hops recorded for this check</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Hop</th>
+                            <th scope="col">From</th>
+                            <th scope="col">To</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Loop</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var hop in check.RedirectHops)
+                        {
+                            <tr>
+                                <td data-label="Hop">@hop.HopNumber</td>
+                                <td data-label="From" class="target-url">@hop.FromUrl</td>
+                                <td data-label="To" class="target-url">@hop.ToUrl</td>
+                                <td data-label="Status">@hop.HttpStatus</td>
+                                <td data-label="Loop">@(hop.IsLoop ? "Yes" : "No")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

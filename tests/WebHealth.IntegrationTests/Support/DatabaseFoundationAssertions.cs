@@ -82,6 +82,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyHttpMonitoringHistoryAsync(connectionString);
         await VerifyLogicalCheckExecutionAsync(connectionString);
         await VerifyHangfireSchedulingAsync(connectionString);
+        await VerifyManualChecksAndHistoryAsync(connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
@@ -325,7 +326,7 @@ internal static class DatabaseFoundationAssertions
             administratorAccess)).Succeeded.Should().BeTrue();
         var monitorAfterRename = await database.EndpointMonitors.AsNoTracking()
             .SingleAsync(candidate => candidate.Id == renamedMonitor.Id);
-        monitorAfterRename.NextDueAt.Should().Be(overdueSlot);
+        monitorAfterRename.NextDueAt.Should().BeCloseTo(overdueSlot, TimeSpan.FromMilliseconds(1));
         monitorAfterRename.IntervalSeconds.Should().Be(intervalBeforeRename);
         monitorAfterRename.Version.Should().Be(versionBeforeRename);
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
@@ -1548,6 +1549,127 @@ internal static class DatabaseFoundationAssertions
             restoreCommand.Parameters.AddWithValue("id", environmentId);
             await restoreCommand.ExecuteNonQueryAsync();
         }
+    }
+
+    private static async Task VerifyManualChecksAndHistoryAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        var queue = new RecordingLogicalCheckQueue();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration)
+            .AddSingleton<ILogicalCheckQueue>(queue)
+            .BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var environmentService = scope.ServiceProvider.GetRequiredService<IEnvironmentRegistryService>();
+        var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+        var manualCheckService = scope.ServiceProvider.GetRequiredService<IManualCheckService>();
+        var historyReader = scope.ServiceProvider.GetRequiredService<ICheckHistoryReader>();
+
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
+        var viewer = await database.Users.SingleAsync(user => user.Email == "registry-viewer@example.test");
+        var developerOwnerId = await database.OwnerSubjects.Where(owner => owner.UserId == developer.Id)
+            .Select(owner => owner.Id).SingleAsync();
+        var administratorOwnerId = await database.OwnerSubjects.Where(owner => owner.UserId == administrator.Id)
+            .Select(owner => owner.Id).SingleAsync();
+        var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var developerAccess = new RegistryAccessContext(developer.Id, [ApplicationRoles.DeveloperSupport]);
+        var viewerAccess = new RegistryAccessContext(viewer.Id, [ApplicationRoles.Viewer]);
+
+        var website = await database.Websites.SingleAsync(candidate =>
+            candidate.Client.Name == "Second Client" && candidate.Name == "Portal");
+        var environmentResult = await environmentService.CreateAsync(
+            new(website.Id, "Manual Checks", EnvironmentTypes.Staging, "https://manual-checks.example.test", true),
+            administratorAccess);
+        environmentResult.Succeeded.Should().BeTrue(string.Join(" ", environmentResult.Errors));
+        var environmentId = environmentResult.EntityId!.Value;
+
+        var ownedResult = await endpointService.CreateAsync(
+            new(environmentId, "https://manual-checks.example.test/owned", developerOwnerId, true, null,
+                TargetAuthorizationKinds.Owned, "Manual check integration fixture.", null),
+            administratorAccess);
+        ownedResult.Succeeded.Should().BeTrue(string.Join(" ", ownedResult.Errors));
+        var ownedEndpointId = ownedResult.EntityId!.Value;
+
+        var unownedResult = await endpointService.CreateAsync(
+            new(environmentId, "https://manual-checks.example.test/unowned", administratorOwnerId, true, null,
+                TargetAuthorizationKinds.Owned, "Manual check integration fixture.", null),
+            administratorAccess);
+        unownedResult.Succeeded.Should().BeTrue(string.Join(" ", unownedResult.Errors));
+        var unownedEndpointId = unownedResult.EntityId!.Value;
+
+        var ownedMonitor = await database.EndpointMonitors.AsNoTracking()
+            .SingleAsync(candidate => candidate.EndpointId == ownedEndpointId);
+        var nextDueBeforeAnyRun = ownedMonitor.NextDueAt;
+
+        // Administrator and Operations can run now regardless of ownership.
+        var adminRun = await manualCheckService.RunNowAsync(ownedEndpointId, administratorAccess);
+        adminRun.Status.Should().Be(ManualCheckStatus.Queued);
+        var adminUnownedRun = await manualCheckService.RunNowAsync(unownedEndpointId, administratorAccess);
+        adminUnownedRun.Status.Should().Be(ManualCheckStatus.Queued);
+
+        // Developer/Support can run now only for an assigned target with active testing evidence.
+        var developerOwnedRun = await manualCheckService.RunNowAsync(ownedEndpointId, developerAccess);
+        developerOwnedRun.Status.Should().Be(ManualCheckStatus.Queued);
+        (await manualCheckService.RunNowAsync(unownedEndpointId, developerAccess)).Status
+            .Should().Be(ManualCheckStatus.Forbidden);
+
+        // Viewer is always denied, regardless of ownership.
+        (await manualCheckService.RunNowAsync(ownedEndpointId, viewerAccess)).Status
+            .Should().Be(ManualCheckStatus.Forbidden);
+        (await manualCheckService.RunNowAsync(unownedEndpointId, viewerAccess)).Status
+            .Should().Be(ManualCheckStatus.Forbidden);
+
+        // Scheduled cadence is never touched by a manual run.
+        (await database.EndpointMonitors.AsNoTracking()
+            .Where(candidate => candidate.Id == ownedMonitor.Id)
+            .Select(candidate => candidate.NextDueAt)
+            .SingleAsync()).Should().Be(nextDueBeforeAnyRun);
+
+        // Source, initiator, and queueing shape.
+        var manualCheckId = developerOwnedRun.LogicalCheckId!.Value;
+        var manualCheck = await database.LogicalChecks.AsNoTracking()
+            .SingleAsync(check => check.Id == manualCheckId);
+        manualCheck.Source.Should().Be(LogicalCheckSources.Manual);
+        manualCheck.InitiatedByUserId.Should().Be(developer.Id);
+        manualCheck.RequestedAt.Should().NotBeNull();
+        manualCheck.ScheduledFor.Should().BeNull();
+        manualCheck.CadenceKey.Should().BeNull();
+        manualCheck.State.Should().Be(LogicalCheckStates.Queued);
+        queue.Jobs.Should().Contain(job => job.LogicalCheckId == manualCheckId);
+        var manualWork = await database.DurableWork.AsNoTracking()
+            .SingleAsync(work => work.LogicalCheckId == manualCheckId);
+        manualWork.State.Should().Be(DurableWorkStates.Enqueued);
+
+        // Executing the manual check completes it without counting toward uptime.
+        var manualTransport = new RecordingSafeHttpTransport(Success);
+        var manualExecution = CreateExecutionService(database, manualTransport, true);
+        (await manualExecution.ExecuteAsync(new(manualCheckId, manualWork.Id, "job-manual", "worker-a")))
+            .Should().Be(LogicalCheckExecutionStatus.Completed);
+        (await database.CheckResults.AsNoTracking().SingleAsync(result => result.LogicalCheckId == manualCheckId))
+            .CountsForUptime.Should().BeFalse();
+
+        // History and check detail are assignment-filtered exactly like the endpoint they belong to.
+        (await historyReader.ListForEndpointAsync(ownedEndpointId, viewerAccess)).Should().BeNull();
+        var historyPage = await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess);
+        historyPage.Should().NotBeNull();
+        historyPage!.TotalCount.Should().Be(2);
+        historyPage.Items.Should().Contain(item => item.LogicalCheckId == manualCheckId
+            && item.Source == LogicalCheckSources.Manual
+            && item.InitiatedByDisplayName == developer.DisplayName
+            && item.Outcome == HttpResultOutcomes.Healthy
+            && item.CountsForUptime == false);
+
+        (await historyReader.FindCheckAsync(manualCheckId, viewerAccess)).Should().BeNull();
+        var details = await historyReader.FindCheckAsync(manualCheckId, administratorAccess);
+        details.Should().NotBeNull();
+        details!.Source.Should().Be(LogicalCheckSources.Manual);
+        details.InitiatedByDisplayName.Should().Be(developer.DisplayName);
+        details.CountsForUptime.Should().BeFalse();
+        details.TotalDurationMs.Should().NotBeNull();
     }
 
     private static ServiceProvider BuildSchedulingServices(

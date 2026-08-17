@@ -1,0 +1,102 @@
+@model CheckHistoryViewModel
+@{
+    ViewData.SetTitle("Check history");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Endpoint", Url.Action("Endpoint", new { id = Model.Page.EndpointId })), new BreadcrumbItem("Check history"));
+    var history = Model.Page;
+    var firstVisible = history.TotalCount == 0 ? 0 : ((history.Page - 1) * history.PageSize) + 1;
+    var lastVisible = Math.Min(history.Page * history.PageSize, history.TotalCount);
+    var hasPrevious = history.Page > 1;
+    var hasNext = lastVisible < history.TotalCount;
+
+    static string OutcomeStatus(string? outcome) => outcome switch
+    {
+        "Healthy" => "success",
+        "Critical" => "danger",
+        _ => "warning"
+    };
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Check history</h2>
+                <p class="card__subtitle target-url">@history.EndpointDisplayUrl</p>
+            </div>
+            <span class="tag">@history.TotalCount check@(history.TotalCount == 1 ? null : "s")</span>
+        </div>
+
+        @if (history.Items.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No checks yet",
+                "Run a check now, or wait for the next scheduled run.",
+                "clock"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Scheduled and manual checks for this endpoint</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Time</th>
+                            <th scope="col">Source</th>
+                            <th scope="col">Initiator</th>
+                            <th scope="col">Outcome</th>
+                            <th scope="col">Duration</th>
+                            <th scope="col">HTTP status</th>
+                            <th scope="col">Uptime</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in history.Items)
+                        {
+                            <tr>
+                                <td data-label="Time">@((item.ScheduledFor ?? item.RequestedAt)?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</td>
+                                <td data-label="Source"><span class="tag">@item.Source</span></td>
+                                <td data-label="Initiator">@(item.InitiatedByDisplayName ?? "—")</td>
+                                <td data-label="Outcome">
+                                    <span class="badge" data-status="@OutcomeStatus(item.Outcome)">@(item.Outcome ?? "Pending")</span>
+                                    @if (item.FailureCategory is not null)
+                                    {
+                                        <span class="data-table__secondary">@item.FailureCategory</span>
+                                    }
+                                </td>
+                                <td data-label="Duration">@(item.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</td>
+                                <td data-label="HTTP status">@(item.HttpStatus?.ToString() ?? "—")</td>
+                                <td data-label="Uptime">@(item.CountsForUptime ? "Counts" : "Excluded")</td>
+                                <td data-label="Details">
+                                    <a class="button button--secondary" asp-action="Check" asp-route-id="@item.LogicalCheckId">
+                                        <span>View</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="pagination" aria-label="Check history pages">
+                <span>Showing @firstVisible–@lastVisible of @history.TotalCount</span>
+                <span class="pagination__actions">
+                    @if (hasPrevious)
+                    {
+                        <a class="button button--secondary" asp-route-id="@history.EndpointId" asp-route-page="@(history.Page - 1)">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (hasNext)
+                    {
+                        <a class="button button--secondary" asp-route-id="@history.EndpointId" asp-route-page="@(history.Page + 1)">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
+        }
+    </section>
+</div>

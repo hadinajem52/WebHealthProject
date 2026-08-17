@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Authorization;
+using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
@@ -14,7 +15,9 @@ public sealed class TargetsController(
     IRegistryReader registryReader,
     ITargetRegistryReader targetReader,
     IEnvironmentRegistryService environmentService,
-    IEndpointRegistryService endpointService) : Controller
+    IEndpointRegistryService endpointService,
+    IManualCheckService manualCheckService,
+    ICheckHistoryReader checkHistoryReader) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Environments(Guid websiteId, CancellationToken cancellationToken)
@@ -47,6 +50,39 @@ public sealed class TargetsController(
         var access = GetAccess();
         var endpoint = await targetReader.FindEndpointAsync(id, access, cancellationToken);
         return endpoint is null ? NotFound() : View(new EndpointDetailsViewModel(endpoint, CanManage(access)));
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost]
+    public async Task<IActionResult> RunCheck(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await manualCheckService.RunNowAsync(id, GetAccess(), cancellationToken);
+        switch (result.Status)
+        {
+            case ManualCheckStatus.Forbidden:
+                return Forbid();
+            case ManualCheckStatus.MonitorNotAvailable:
+                TempData.AddFlashMessage(FlashLevel.Error, "This endpoint has no active monitor to run.");
+                break;
+            default:
+                TempData.AddFlashMessage(FlashLevel.Success, "Check queued. It will appear in history shortly.");
+                break;
+        }
+
+        return RedirectToAction(nameof(Endpoint), new { id });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> History(Guid id, int page = 1, CancellationToken cancellationToken = default)
+    {
+        var result = await checkHistoryReader.ListForEndpointAsync(id, GetAccess(), page, cancellationToken);
+        return result is null ? NotFound() : View(new CheckHistoryViewModel(result));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Check(Guid id, CancellationToken cancellationToken)
+    {
+        var check = await checkHistoryReader.FindCheckAsync(id, GetAccess(), cancellationToken);
+        return check is null ? NotFound() : View(new CheckDetailsViewModel(check));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
