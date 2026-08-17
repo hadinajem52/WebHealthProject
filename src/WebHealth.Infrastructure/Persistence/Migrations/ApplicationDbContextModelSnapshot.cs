@@ -422,8 +422,8 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasKey("EndpointMonitorId")
                         .HasName("pk_endpoint_health");
 
-                    b.HasIndex("EvidenceLogicalCheckId")
-                        .HasDatabaseName("ix_endpoint_health_evidence_logical_check_id");
+                    b.HasIndex("EvidenceLogicalCheckId", "EndpointMonitorId")
+                        .HasDatabaseName("ix_endpoint_health_evidence_check_monitor");
 
                     b.ToTable("endpoint_health", "web_health", t =>
                         {
@@ -696,6 +696,9 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_incident");
 
+                    b.HasAlternateKey("Id", "EndpointMonitorId")
+                        .HasName("ak_incident_id_endpoint_monitor_id");
+
                     b.HasIndex("OwnerSubjectId")
                         .HasDatabaseName("ix_incident_owner_subject_id");
 
@@ -712,15 +715,15 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
                     b.ToTable("incident", "web_health", t =>
                         {
-                            t.HasCheckConstraint("ck_incident_acknowledged_required", "status NOT IN ('Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') OR acknowledged_at IS NOT NULL");
+                            t.HasCheckConstraint("ck_incident_acknowledged_fields", "(status = 'Open' AND acknowledged_at IS NULL) OR (status <> 'Open' AND acknowledged_at IS NOT NULL)");
 
-                            t.HasCheckConstraint("ck_incident_closed_required", "status <> 'Closed' OR closed_at IS NOT NULL");
+                            t.HasCheckConstraint("ck_incident_closed_fields", "(status = 'Closed' AND closed_at IS NOT NULL) OR (status <> 'Closed' AND closed_at IS NULL)");
 
-                            t.HasCheckConstraint("ck_incident_lifecycle_order", "(acknowledged_at IS NULL OR acknowledged_at >= opened_at) AND (resolved_at IS NULL OR resolved_at >= opened_at) AND (closed_at IS NULL OR (resolved_at IS NOT NULL AND closed_at >= resolved_at))");
+                            t.HasCheckConstraint("ck_incident_lifecycle_order", "(acknowledged_at IS NULL OR acknowledged_at >= opened_at) AND (resolved_at IS NULL OR (acknowledged_at IS NOT NULL AND resolved_at >= acknowledged_at)) AND (closed_at IS NULL OR (resolved_at IS NOT NULL AND closed_at >= resolved_at))");
 
                             t.HasCheckConstraint("ck_incident_recurrence_count", "recurrence_count >= 0");
 
-                            t.HasCheckConstraint("ck_incident_resolution_complete", "(status NOT IN ('Resolved', 'Closed') AND resolution_category IS NULL AND resolution_note IS NULL AND resolved_at IS NULL) OR (status IN ('Resolved', 'Closed') AND resolution_category IS NOT NULL AND resolution_note IS NOT NULL AND resolved_at IS NOT NULL)");
+                            t.HasCheckConstraint("ck_incident_resolution_complete", "(status IN ('Resolved', 'Closed') AND resolution_category IS NOT NULL AND length(resolution_category) > 0 AND resolution_note IS NOT NULL AND length(resolution_note) > 0 AND resolved_at IS NOT NULL) OR (status NOT IN ('Resolved', 'Closed') AND resolution_category IS NULL AND resolution_note IS NULL AND resolved_at IS NULL)");
 
                             t.HasCheckConstraint("ck_incident_severity", "severity IN ('Warning', 'Critical')");
 
@@ -798,6 +801,8 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
                     b.ToTable("incident_event", "web_health", t =>
                         {
+                            t.HasCheckConstraint("ck_incident_event_fields", "(event_type = 'Opened' AND to_status IS NOT NULL AND from_status IS NULL AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL) OR (event_type = 'StatusChanged' AND from_status IS NOT NULL AND to_status IS NOT NULL AND from_status <> to_status AND from_status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') AND to_status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL) OR (event_type = 'Reassigned' AND from_status IS NULL AND to_status IS NULL AND to_owner_subject_id IS NOT NULL AND (from_owner_subject_id IS NULL OR from_owner_subject_id <> to_owner_subject_id)) OR (event_type = 'NoteAdded' AND from_status IS NULL AND to_status IS NULL AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL AND bounded_note IS NOT NULL AND length(bounded_note) > 0)");
+
                             t.HasCheckConstraint("ck_incident_event_sequence_number", "sequence_number > 0");
 
                             t.HasCheckConstraint("ck_incident_event_type", "event_type IN ('Opened', 'StatusChanged', 'Reassigned', 'NoteAdded')");
@@ -819,6 +824,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CapturedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("captured_at");
+
+                    b.Property<Guid>("EndpointMonitorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("endpoint_monitor_id");
 
                     b.Property<string>("EvidenceRole")
                         .IsRequired()
@@ -843,11 +852,11 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_incident_evidence");
 
-                    b.HasIndex("IncidentId")
-                        .HasDatabaseName("ix_incident_evidence_incident_id");
+                    b.HasIndex("IncidentId", "EndpointMonitorId")
+                        .HasDatabaseName("ix_incident_evidence_incident_id_endpoint_monitor_id");
 
-                    b.HasIndex("LogicalCheckId")
-                        .HasDatabaseName("ix_incident_evidence_logical_check_id");
+                    b.HasIndex("LogicalCheckId", "EndpointMonitorId")
+                        .HasDatabaseName("ix_incident_evidence_logical_check_id_endpoint_monitor_id");
 
                     b.ToTable("incident_evidence", "web_health", t =>
                         {
@@ -2735,9 +2744,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
                     b.HasOne("WebHealth.Infrastructure.Monitoring.LogicalCheck", "EvidenceLogicalCheck")
                         .WithMany()
-                        .HasForeignKey("EvidenceLogicalCheckId")
+                        .HasForeignKey("EvidenceLogicalCheckId", "EndpointMonitorId")
+                        .HasPrincipalKey("Id", "EndpointMonitorId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_endpoint_health_logical_check_evidence_logical_check_id");
+                        .HasConstraintName("fk_endpoint_health_logical_check_monitor");
 
                     b.Navigation("EndpointMonitor");
 
@@ -2821,12 +2831,23 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("WebHealth.Infrastructure.Incidents.Incident", "Incident")
                         .WithMany("Evidence")
-                        .HasForeignKey("IncidentId")
+                        .HasForeignKey("IncidentId", "EndpointMonitorId")
+                        .HasPrincipalKey("Id", "EndpointMonitorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_incident_evidence_incident_incident_id");
+                        .HasConstraintName("fk_incident_evidence_incident_monitor");
+
+                    b.HasOne("WebHealth.Infrastructure.Monitoring.LogicalCheck", "LogicalCheck")
+                        .WithMany()
+                        .HasForeignKey("LogicalCheckId", "EndpointMonitorId")
+                        .HasPrincipalKey("Id", "EndpointMonitorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_incident_evidence_logical_check_monitor");
 
                     b.Navigation("Incident");
+
+                    b.Navigation("LogicalCheck");
                 });
 
             modelBuilder.Entity("WebHealth.Infrastructure.Maintenance.MaintenanceOccurrence", b =>

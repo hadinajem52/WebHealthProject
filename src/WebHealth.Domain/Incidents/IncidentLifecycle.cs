@@ -15,10 +15,9 @@ public static class IncidentStatuses
     public const string Resolved = "Resolved";
     public const string Closed = "Closed";
 
-    public static readonly string[] Active =
-    [
-        Open, Acknowledged, InProgress, MonitoringRecovery
-    ];
+    private static readonly string[] ActiveValues = [Open, Acknowledged, InProgress, MonitoringRecovery];
+
+    public static IReadOnlyList<string> Active => ActiveValues;
 }
 
 public static class IncidentEventTypes

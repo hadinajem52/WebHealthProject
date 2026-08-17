@@ -2068,6 +2068,10 @@ internal static class DatabaseFoundationAssertions
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).FirstAsync();
+        var otherMonitorId = await database.EndpointMonitors
+            .Where(candidate => candidate.Id != monitor.Id)
+            .Select(candidate => candidate.Id)
+            .FirstAsync();
         var ownerSubjectId = await database.OwnerSubjects.Select(subject => subject.Id).FirstAsync();
         var userId = await database.Users.Select(user => user.Id).FirstAsync();
         var now = DateTimeOffset.UtcNow;
@@ -2092,6 +2096,7 @@ internal static class DatabaseFoundationAssertions
             ConfirmedAt = now
         });
         await database.SaveChangesAsync();
+        await VerifyEndpointHealthCrossMonitorRejectedAsync(connectionString, monitor.Id, otherMonitorId);
 
         var incidentId = Guid.NewGuid();
         database.Incidents.Add(new Incident
@@ -2108,6 +2113,8 @@ internal static class DatabaseFoundationAssertions
 
         await VerifyDuplicateActiveIncidentRejectedAsync(connectionString, monitor.Id, ownerSubjectId, issueKey);
         await VerifyIncidentResolutionFieldsRejectedAsync(connectionString, monitor.Id, ownerSubjectId);
+        await VerifyIncidentAcknowledgedFieldExactnessRejectedAsync(connectionString, monitor.Id, ownerSubjectId);
+        await VerifyIncidentClosedFieldExactnessRejectedAsync(connectionString, monitor.Id, ownerSubjectId);
 
         var trackedIncident = await database.Incidents.SingleAsync(incident => incident.Id == incidentId);
         trackedIncident.Status = IncidentStatuses.Acknowledged;
@@ -2141,13 +2148,22 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         await VerifyDuplicateIncidentEventSequenceRejectedAsync(connectionString, incidentId);
         await VerifyIncidentEventImmutableAsync(connectionString, incidentId);
+        await VerifyIncidentEventFieldsRejectedAsync(connectionString, incidentId);
+
+        var evidenceLogicalCheckId = await database.LogicalChecks
+            .Where(check => check.EndpointMonitorId == monitor.Id)
+            .Select(check => check.Id)
+            .FirstAsync();
+        await VerifyIncidentEvidenceCrossMonitorRejectedAsync(
+            connectionString, incidentId, monitor.Id, otherMonitorId);
 
         var evidenceId = Guid.NewGuid();
         database.IncidentEvidence.Add(new IncidentEvidence
         {
             Id = evidenceId,
             IncidentId = incidentId,
-            LogicalCheckId = Guid.NewGuid(),
+            EndpointMonitorId = monitor.Id,
+            LogicalCheckId = evidenceLogicalCheckId,
             EvidenceType = IncidentEvidenceTypes.Opening,
             EvidenceRole = "CheckResult",
             BoundedSnapshot = "{}",
@@ -2192,6 +2208,8 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         await VerifyMaintenanceOccurrenceIntervalRejectedAsync(connectionString, windowId);
         await VerifyCheckResultMaintenanceFieldGroupRejectedAsync(connectionString, occurrenceId);
+        await VerifyCheckResultMaintenanceIntervalRejectedAsync(connectionString, occurrenceId);
+        await VerifyMaintenanceOccurrenceImmutableAsync(connectionString, occurrenceId);
 
         var trackedWindow = await database.MaintenanceWindows.SingleAsync(window => window.Id == windowId);
         trackedWindow.Reason = "Extended patching";
@@ -2274,6 +2292,164 @@ internal static class DatabaseFoundationAssertions
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
         exception.ConstraintName.Should().Be("ck_incident_resolution_complete");
+    }
+
+    private static async Task VerifyIncidentAcknowledgedFieldExactnessRejectedAsync(
+        string connectionString, Guid monitorId, Guid ownerSubjectId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string sql = """
+            INSERT INTO web_health.incident
+                (id, endpoint_monitor_id, owner_subject_id, issue_key, severity, status,
+                 recurrence_count, opened_at, acknowledged_at, version)
+            VALUES (@id, @monitor_id, @owner_subject_id, @issue_key, 'Critical', 'Open', 0, now(), now(), 1);
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("monitor_id", monitorId);
+        command.Parameters.AddWithValue("owner_subject_id", ownerSubjectId);
+        command.Parameters.AddWithValue("issue_key", $"v1|HttpAvailability|open-with-ack|{Guid.NewGuid():N}");
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("ck_incident_acknowledged_fields");
+    }
+
+    private static async Task VerifyIncidentClosedFieldExactnessRejectedAsync(
+        string connectionString, Guid monitorId, Guid ownerSubjectId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string sql = """
+            INSERT INTO web_health.incident
+                (id, endpoint_monitor_id, owner_subject_id, issue_key, severity, status,
+                 recurrence_count, opened_at, acknowledged_at, resolved_at, resolution_category,
+                 resolution_note, closed_at, version)
+            VALUES (@id, @monitor_id, @owner_subject_id, @issue_key, 'Warning', 'Resolved', 0, now(), now(), now(),
+                    'Fixed', 'Root cause addressed', now(), 1);
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("monitor_id", monitorId);
+        command.Parameters.AddWithValue("owner_subject_id", ownerSubjectId);
+        command.Parameters.AddWithValue("issue_key", $"v1|HttpAvailability|closed-while-resolved|{Guid.NewGuid():N}");
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("ck_incident_closed_fields");
+    }
+
+    private static async Task VerifyIncidentEventFieldsRejectedAsync(string connectionString, Guid incidentId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string sql = """
+            INSERT INTO web_health.incident_event
+                (id, incident_id, sequence_number, event_type, bounded_note, occurred_at)
+            VALUES (@id, @incident_id, 2, 'NoteAdded', '', now());
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("incident_id", incidentId);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("ck_incident_event_fields");
+    }
+
+    private static async Task VerifyEndpointHealthCrossMonitorRejectedAsync(
+        string connectionString, Guid monitorId, Guid otherMonitorId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        var otherCheckId = Guid.NewGuid();
+        const string checkSql = """
+            INSERT INTO web_health.logical_check
+                (id, endpoint_monitor_id, source, requested_at, state, policy_fingerprint, created_at)
+            VALUES (@id, @monitor_id, 'Urgent', now(), 'Pending', repeat('0', 64), now());
+            """;
+        await using (var check = new NpgsqlCommand(checkSql, connection))
+        {
+            check.Parameters.AddWithValue("id", otherCheckId);
+            check.Parameters.AddWithValue("monitor_id", otherMonitorId);
+            await check.ExecuteNonQueryAsync();
+        }
+
+        const string updateSql = """
+            UPDATE web_health.endpoint_health
+            SET evidence_logical_check_id = @check_id
+            WHERE endpoint_monitor_id = @monitor_id;
+            """;
+        await using var update = new NpgsqlCommand(updateSql, connection);
+        update.Parameters.AddWithValue("check_id", otherCheckId);
+        update.Parameters.AddWithValue("monitor_id", monitorId);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => update.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("fk_endpoint_health_logical_check_monitor");
+    }
+
+    private static async Task VerifyIncidentEvidenceCrossMonitorRejectedAsync(
+        string connectionString, Guid incidentId, Guid monitorId, Guid otherMonitorId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        var otherCheckId = Guid.NewGuid();
+        const string checkSql = """
+            INSERT INTO web_health.logical_check
+                (id, endpoint_monitor_id, source, requested_at, state, policy_fingerprint, created_at)
+            VALUES (@id, @monitor_id, 'Urgent', now(), 'Pending', repeat('0', 64), now());
+            """;
+        await using (var check = new NpgsqlCommand(checkSql, connection))
+        {
+            check.Parameters.AddWithValue("id", otherCheckId);
+            check.Parameters.AddWithValue("monitor_id", otherMonitorId);
+            await check.ExecuteNonQueryAsync();
+        }
+
+        const string evidenceSql = """
+            INSERT INTO web_health.incident_evidence
+                (id, incident_id, endpoint_monitor_id, logical_check_id, evidence_type, evidence_role,
+                 bounded_snapshot, captured_at)
+            VALUES (@id, @incident_id, @monitor_id, @check_id, 'Opening', 'CheckResult', '{}', now());
+            """;
+        await using var evidence = new NpgsqlCommand(evidenceSql, connection);
+        evidence.Parameters.AddWithValue("id", Guid.NewGuid());
+        evidence.Parameters.AddWithValue("incident_id", incidentId);
+        evidence.Parameters.AddWithValue("monitor_id", monitorId);
+        evidence.Parameters.AddWithValue("check_id", otherCheckId);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => evidence.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("fk_incident_evidence_logical_check_monitor");
+    }
+
+    private static async Task VerifyMaintenanceOccurrenceImmutableAsync(string connectionString, Guid occurrenceId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE web_health.maintenance_occurrence SET ends_at = ends_at + interval '1 hour' WHERE id = @id",
+            connection);
+        command.Parameters.AddWithValue("id", occurrenceId);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.SqlState.Should().Be(PostgresErrorCodes.RaiseException);
+    }
+
+    private static async Task VerifyCheckResultMaintenanceIntervalRejectedAsync(
+        string connectionString, Guid occurrenceId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        const string sql = """
+            UPDATE web_health.check_result
+            SET maintenance_occurrence_id = @occurrence_id, is_maintenance = TRUE
+            WHERE logical_check_id = (SELECT logical_check_id FROM web_health.check_result LIMIT 1);
+            """;
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("occurrence_id", occurrenceId);
+        await command.ExecuteNonQueryAsync();
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => transaction.CommitAsync());
+        exception.ConstraintName.Should().Be("ck_check_result_maintenance_interval");
     }
 
     private static async Task VerifyDuplicateIncidentEventSequenceRejectedAsync(

@@ -1,12 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using WebHealth.Domain.Incidents;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Identity;
+using WebHealth.Infrastructure.Monitoring;
 
 namespace WebHealth.Infrastructure.Incidents;
 
 internal sealed class IncidentConfiguration : IEntityTypeConfiguration<Incident>
 {
+    private static readonly string ActiveStatusFilter =
+        "status IN (" + string.Join(", ", IncidentStatuses.Active.Select(status => $"'{status}'")) + ")";
+
     public void Configure(EntityTypeBuilder<Incident> builder)
     {
         builder.ToTable("incident", table =>
@@ -17,20 +22,23 @@ internal sealed class IncidentConfiguration : IEntityTypeConfiguration<Incident>
                 "status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed')");
             table.HasCheckConstraint("ck_incident_recurrence_count", "recurrence_count >= 0");
             table.HasCheckConstraint(
-                "ck_incident_acknowledged_required",
-                "status NOT IN ('Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') "
-                + "OR acknowledged_at IS NOT NULL");
+                "ck_incident_acknowledged_fields",
+                "(status = 'Open' AND acknowledged_at IS NULL) OR "
+                + "(status <> 'Open' AND acknowledged_at IS NOT NULL)");
             table.HasCheckConstraint(
                 "ck_incident_resolution_complete",
-                "(status NOT IN ('Resolved', 'Closed') AND resolution_category IS NULL "
-                + "AND resolution_note IS NULL AND resolved_at IS NULL) OR "
-                + "(status IN ('Resolved', 'Closed') AND resolution_category IS NOT NULL "
-                + "AND resolution_note IS NOT NULL AND resolved_at IS NOT NULL)");
-            table.HasCheckConstraint("ck_incident_closed_required", "status <> 'Closed' OR closed_at IS NOT NULL");
+                "(status IN ('Resolved', 'Closed') AND resolution_category IS NOT NULL "
+                + "AND length(resolution_category) > 0 AND resolution_note IS NOT NULL "
+                + "AND length(resolution_note) > 0 AND resolved_at IS NOT NULL) OR "
+                + "(status NOT IN ('Resolved', 'Closed') AND resolution_category IS NULL "
+                + "AND resolution_note IS NULL AND resolved_at IS NULL)");
+            table.HasCheckConstraint(
+                "ck_incident_closed_fields",
+                "(status = 'Closed' AND closed_at IS NOT NULL) OR (status <> 'Closed' AND closed_at IS NULL)");
             table.HasCheckConstraint(
                 "ck_incident_lifecycle_order",
                 "(acknowledged_at IS NULL OR acknowledged_at >= opened_at) "
-                + "AND (resolved_at IS NULL OR resolved_at >= opened_at) "
+                + "AND (resolved_at IS NULL OR (acknowledged_at IS NOT NULL AND resolved_at >= acknowledged_at)) "
                 + "AND (closed_at IS NULL OR (resolved_at IS NOT NULL AND closed_at >= resolved_at))");
         });
         builder.Property(incident => incident.IssueKey).HasMaxLength(200).IsRequired();
@@ -39,9 +47,11 @@ internal sealed class IncidentConfiguration : IEntityTypeConfiguration<Incident>
         builder.Property(incident => incident.ResolutionCategory).HasMaxLength(50);
         builder.Property(incident => incident.ResolutionNote).HasMaxLength(2000);
         builder.Property(incident => incident.Version).IsConcurrencyToken();
+        builder.HasAlternateKey(incident => new { incident.Id, incident.EndpointMonitorId })
+            .HasName("ak_incident_id_endpoint_monitor_id");
         builder.HasIndex(incident => new { incident.EndpointMonitorId, incident.IssueKey })
             .IsUnique()
-            .HasFilter("status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery')");
+            .HasFilter(ActiveStatusFilter);
         builder.HasIndex(incident => new { incident.Status, incident.Severity, incident.OpenedAt });
         builder.HasIndex(incident => incident.OwnerSubjectId);
         builder.HasOne(incident => incident.EndpointMonitor).WithMany()
@@ -63,6 +73,21 @@ internal sealed class IncidentEventConfiguration : IEntityTypeConfiguration<Inci
             table.HasCheckConstraint(
                 "ck_incident_event_type",
                 "event_type IN ('Opened', 'StatusChanged', 'Reassigned', 'NoteAdded')");
+            table.HasCheckConstraint(
+                "ck_incident_event_fields",
+                "(event_type = 'Opened' AND to_status IS NOT NULL AND from_status IS NULL "
+                + "AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL) OR "
+                + "(event_type = 'StatusChanged' AND from_status IS NOT NULL AND to_status IS NOT NULL "
+                + "AND from_status <> to_status "
+                + "AND from_status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') "
+                + "AND to_status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') "
+                + "AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL) OR "
+                + "(event_type = 'Reassigned' AND from_status IS NULL AND to_status IS NULL "
+                + "AND to_owner_subject_id IS NOT NULL "
+                + "AND (from_owner_subject_id IS NULL OR from_owner_subject_id <> to_owner_subject_id)) OR "
+                + "(event_type = 'NoteAdded' AND from_status IS NULL AND to_status IS NULL "
+                + "AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL "
+                + "AND bounded_note IS NOT NULL AND length(bounded_note) > 0)");
         });
         builder.Property(incidentEvent => incidentEvent.EventType).HasMaxLength(30).IsRequired();
         builder.Property(incidentEvent => incidentEvent.FromStatus).HasMaxLength(30);
@@ -93,8 +118,15 @@ internal sealed class IncidentEvidenceConfiguration : IEntityTypeConfiguration<I
         builder.Property(evidence => evidence.EvidenceType).HasMaxLength(20).IsRequired();
         builder.Property(evidence => evidence.EvidenceRole).HasMaxLength(50).IsRequired();
         builder.Property(evidence => evidence.BoundedSnapshot).HasColumnType("jsonb").IsRequired();
-        builder.HasIndex(evidence => evidence.LogicalCheckId);
         builder.HasOne(evidence => evidence.Incident).WithMany(incident => incident.Evidence)
-            .HasForeignKey(evidence => evidence.IncidentId).OnDelete(DeleteBehavior.Restrict);
+            .HasForeignKey(evidence => new { evidence.IncidentId, evidence.EndpointMonitorId })
+            .HasPrincipalKey(incident => new { incident.Id, incident.EndpointMonitorId })
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_incident_evidence_incident_monitor");
+        builder.HasOne(evidence => evidence.LogicalCheck).WithMany()
+            .HasForeignKey(evidence => new { evidence.LogicalCheckId, evidence.EndpointMonitorId })
+            .HasPrincipalKey(check => new { check.Id, check.EndpointMonitorId })
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_incident_evidence_logical_check_monitor");
     }
 }

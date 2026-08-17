@@ -1,5 +1,6 @@
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Identity;
+using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Incidents;
@@ -30,29 +31,31 @@ public sealed class Incident
 
 public sealed class IncidentEvent
 {
-    public Guid Id { get; set; }
-    public Guid IncidentId { get; set; }
-    public Guid? ActorUserId { get; set; }
-    public long SequenceNumber { get; set; }
-    public required string EventType { get; set; }
-    public string? FromStatus { get; set; }
-    public string? ToStatus { get; set; }
-    public Guid? FromOwnerSubjectId { get; set; }
-    public Guid? ToOwnerSubjectId { get; set; }
-    public string? BoundedNote { get; set; }
-    public DateTimeOffset OccurredAt { get; set; }
-    public Incident Incident { get; set; } = null!;
-    public ApplicationUser? ActorUser { get; set; }
+    public Guid Id { get; init; }
+    public Guid IncidentId { get; init; }
+    public Guid? ActorUserId { get; init; }
+    public long SequenceNumber { get; init; }
+    public required string EventType { get; init; }
+    public string? FromStatus { get; init; }
+    public string? ToStatus { get; init; }
+    public Guid? FromOwnerSubjectId { get; init; }
+    public Guid? ToOwnerSubjectId { get; init; }
+    public string? BoundedNote { get; init; }
+    public DateTimeOffset OccurredAt { get; init; }
+    public Incident Incident { get; init; } = null!;
+    public ApplicationUser? ActorUser { get; init; }
 }
 
 public sealed class IncidentEvidence
 {
-    public Guid Id { get; set; }
-    public Guid IncidentId { get; set; }
-    public Guid LogicalCheckId { get; set; }
-    public required string EvidenceType { get; set; }
-    public required string EvidenceRole { get; set; }
-    public required string BoundedSnapshot { get; set; }
-    public DateTimeOffset CapturedAt { get; set; }
-    public Incident Incident { get; set; } = null!;
+    public Guid Id { get; init; }
+    public Guid IncidentId { get; init; }
+    public Guid EndpointMonitorId { get; init; }
+    public Guid LogicalCheckId { get; init; }
+    public required string EvidenceType { get; init; }
+    public required string EvidenceRole { get; init; }
+    public required string BoundedSnapshot { get; init; }
+    public DateTimeOffset CapturedAt { get; init; }
+    public Incident Incident { get; init; } = null!;
+    public LogicalCheck LogicalCheck { get; init; } = null!;
 }

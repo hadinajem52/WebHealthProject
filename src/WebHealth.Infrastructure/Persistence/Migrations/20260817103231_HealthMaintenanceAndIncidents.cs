@@ -49,11 +49,11 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_endpoint_health_logical_check_evidence_logical_check_id",
-                        column: x => x.evidence_logical_check_id,
+                        name: "fk_endpoint_health_logical_check_monitor",
+                        columns: x => new { x.evidence_logical_check_id, x.endpoint_monitor_id },
                         principalSchema: "web_health",
                         principalTable: "logical_check",
-                        principalColumn: "id",
+                        principalColumns: new[] { "id", "endpoint_monitor_id" },
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -81,11 +81,12 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_incident", x => x.id);
-                    table.CheckConstraint("ck_incident_acknowledged_required", "status NOT IN ('Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') OR acknowledged_at IS NOT NULL");
-                    table.CheckConstraint("ck_incident_closed_required", "status <> 'Closed' OR closed_at IS NOT NULL");
-                    table.CheckConstraint("ck_incident_lifecycle_order", "(acknowledged_at IS NULL OR acknowledged_at >= opened_at) AND (resolved_at IS NULL OR resolved_at >= opened_at) AND (closed_at IS NULL OR (resolved_at IS NOT NULL AND closed_at >= resolved_at))");
+                    table.UniqueConstraint("ak_incident_id_endpoint_monitor_id", x => new { x.id, x.endpoint_monitor_id });
+                    table.CheckConstraint("ck_incident_acknowledged_fields", "(status = 'Open' AND acknowledged_at IS NULL) OR (status <> 'Open' AND acknowledged_at IS NOT NULL)");
+                    table.CheckConstraint("ck_incident_closed_fields", "(status = 'Closed' AND closed_at IS NOT NULL) OR (status <> 'Closed' AND closed_at IS NULL)");
+                    table.CheckConstraint("ck_incident_lifecycle_order", "(acknowledged_at IS NULL OR acknowledged_at >= opened_at) AND (resolved_at IS NULL OR (acknowledged_at IS NOT NULL AND resolved_at >= acknowledged_at)) AND (closed_at IS NULL OR (resolved_at IS NOT NULL AND closed_at >= resolved_at))");
                     table.CheckConstraint("ck_incident_recurrence_count", "recurrence_count >= 0");
-                    table.CheckConstraint("ck_incident_resolution_complete", "(status NOT IN ('Resolved', 'Closed') AND resolution_category IS NULL AND resolution_note IS NULL AND resolved_at IS NULL) OR (status IN ('Resolved', 'Closed') AND resolution_category IS NOT NULL AND resolution_note IS NOT NULL AND resolved_at IS NOT NULL)");
+                    table.CheckConstraint("ck_incident_resolution_complete", "(status IN ('Resolved', 'Closed') AND resolution_category IS NOT NULL AND length(resolution_category) > 0 AND resolution_note IS NOT NULL AND length(resolution_note) > 0 AND resolved_at IS NOT NULL) OR (status NOT IN ('Resolved', 'Closed') AND resolution_category IS NULL AND resolution_note IS NULL AND resolved_at IS NULL)");
                     table.CheckConstraint("ck_incident_severity", "severity IN ('Warning', 'Critical')");
                     table.CheckConstraint("ck_incident_status", "status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed')");
                     table.ForeignKey(
@@ -205,6 +206,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_incident_event", x => x.id);
+                    table.CheckConstraint("ck_incident_event_fields", "(event_type = 'Opened' AND to_status IS NOT NULL AND from_status IS NULL AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL) OR (event_type = 'StatusChanged' AND from_status IS NOT NULL AND to_status IS NOT NULL AND from_status <> to_status AND from_status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') AND to_status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed') AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL) OR (event_type = 'Reassigned' AND from_status IS NULL AND to_status IS NULL AND to_owner_subject_id IS NOT NULL AND (from_owner_subject_id IS NULL OR from_owner_subject_id <> to_owner_subject_id)) OR (event_type = 'NoteAdded' AND from_status IS NULL AND to_status IS NULL AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL AND bounded_note IS NOT NULL AND length(bounded_note) > 0)");
                     table.CheckConstraint("ck_incident_event_sequence_number", "sequence_number > 0");
                     table.CheckConstraint("ck_incident_event_type", "event_type IN ('Opened', 'StatusChanged', 'Reassigned', 'NoteAdded')");
                     table.ForeignKey(
@@ -244,6 +246,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     incident_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    endpoint_monitor_id = table.Column<Guid>(type: "uuid", nullable: false),
                     logical_check_id = table.Column<Guid>(type: "uuid", nullable: false),
                     evidence_type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     evidence_role = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
@@ -255,11 +258,18 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     table.PrimaryKey("pk_incident_evidence", x => x.id);
                     table.CheckConstraint("ck_incident_evidence_type", "evidence_type IN ('Opening', 'Failure', 'Recovery')");
                     table.ForeignKey(
-                        name: "fk_incident_evidence_incident_incident_id",
-                        column: x => x.incident_id,
+                        name: "fk_incident_evidence_incident_monitor",
+                        columns: x => new { x.incident_id, x.endpoint_monitor_id },
                         principalSchema: "web_health",
                         principalTable: "incident",
-                        principalColumn: "id",
+                        principalColumns: new[] { "id", "endpoint_monitor_id" },
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_incident_evidence_logical_check_monitor",
+                        columns: x => new { x.logical_check_id, x.endpoint_monitor_id },
+                        principalSchema: "web_health",
+                        principalTable: "logical_check",
+                        principalColumns: new[] { "id", "endpoint_monitor_id" },
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -361,10 +371,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 sql: "(is_maintenance AND maintenance_occurrence_id IS NOT NULL) OR (NOT is_maintenance AND maintenance_occurrence_id IS NULL)");
 
             migrationBuilder.CreateIndex(
-                name: "ix_endpoint_health_evidence_logical_check_id",
+                name: "ix_endpoint_health_evidence_check_monitor",
                 schema: "web_health",
                 table: "endpoint_health",
-                column: "evidence_logical_check_id");
+                columns: new[] { "evidence_logical_check_id", "endpoint_monitor_id" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_incident_endpoint_monitor_id_issue_key",
@@ -418,16 +428,16 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 column: "to_owner_subject_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_incident_evidence_incident_id",
+                name: "ix_incident_evidence_incident_id_endpoint_monitor_id",
                 schema: "web_health",
                 table: "incident_evidence",
-                column: "incident_id");
+                columns: new[] { "incident_id", "endpoint_monitor_id" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_incident_evidence_logical_check_id",
+                name: "ix_incident_evidence_logical_check_id_endpoint_monitor_id",
                 schema: "web_health",
                 table: "incident_evidence",
-                column: "logical_check_id");
+                columns: new[] { "logical_check_id", "endpoint_monitor_id" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_issue_state_endpoint_monitor_id_issue_key",
@@ -542,6 +552,48 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 BEFORE UPDATE OR DELETE ON web_health.incident_evidence
                 FOR EACH ROW
                 EXECUTE FUNCTION web_health.reject_incident_evidence_mutation();
+
+                CREATE FUNCTION web_health.reject_maintenance_occurrence_mutation()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $function$
+                BEGIN
+                    RAISE EXCEPTION 'maintenance_occurrence rows are immutable';
+                END;
+                $function$;
+
+                CREATE TRIGGER trg_maintenance_occurrence_immutable
+                BEFORE UPDATE OR DELETE ON web_health.maintenance_occurrence
+                FOR EACH ROW
+                EXECUTE FUNCTION web_health.reject_maintenance_occurrence_mutation();
+
+                CREATE FUNCTION web_health.enforce_check_result_maintenance_interval()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $function$
+                BEGIN
+                    IF NEW.maintenance_occurrence_id IS NOT NULL
+                       AND NOT EXISTS (
+                           SELECT 1
+                           FROM web_health.maintenance_occurrence occurrence
+                           WHERE occurrence.id = NEW.maintenance_occurrence_id
+                             AND NEW.measured_at >= occurrence.starts_at
+                             AND NEW.measured_at < occurrence.ends_at)
+                    THEN
+                        RAISE EXCEPTION USING
+                            ERRCODE = '23514',
+                            CONSTRAINT = 'ck_check_result_maintenance_interval',
+                            MESSAGE = 'A maintenance-classified result must fall within its occurrence interval.';
+                    END IF;
+                    RETURN NULL;
+                END;
+                $function$;
+
+                CREATE CONSTRAINT TRIGGER ck_check_result_maintenance_interval
+                AFTER INSERT OR UPDATE OF maintenance_occurrence_id, measured_at ON web_health.check_result
+                DEFERRABLE INITIALLY DEFERRED
+                FOR EACH ROW
+                EXECUTE FUNCTION web_health.enforce_check_result_maintenance_interval();
                 """);
         }
 
@@ -550,6 +602,12 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.Sql(
                 """
+                DROP TRIGGER IF EXISTS ck_check_result_maintenance_interval
+                    ON web_health.check_result;
+                DROP FUNCTION IF EXISTS web_health.enforce_check_result_maintenance_interval();
+                DROP TRIGGER IF EXISTS trg_maintenance_occurrence_immutable
+                    ON web_health.maintenance_occurrence;
+                DROP FUNCTION IF EXISTS web_health.reject_maintenance_occurrence_mutation();
                 DROP TRIGGER IF EXISTS trg_incident_evidence_immutable
                     ON web_health.incident_evidence;
                 DROP FUNCTION IF EXISTS web_health.reject_incident_evidence_mutation();

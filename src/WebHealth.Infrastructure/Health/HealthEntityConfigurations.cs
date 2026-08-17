@@ -32,8 +32,12 @@ internal sealed class EndpointHealthConfiguration : IEntityTypeConfiguration<End
         builder.HasOne(health => health.EndpointMonitor).WithOne(monitor => monitor.EndpointHealth)
             .HasForeignKey<EndpointHealth>(health => health.EndpointMonitorId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(health => new { health.EvidenceLogicalCheckId, health.EndpointMonitorId })
+            .HasDatabaseName("ix_endpoint_health_evidence_check_monitor");
         builder.HasOne(health => health.EvidenceLogicalCheck).WithMany()
-            .HasForeignKey(health => health.EvidenceLogicalCheckId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasForeignKey(health => new { health.EvidenceLogicalCheckId, health.EndpointMonitorId })
+            .HasPrincipalKey(check => new { check.Id, check.EndpointMonitorId })
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_endpoint_health_logical_check_monitor");
     }
 }
