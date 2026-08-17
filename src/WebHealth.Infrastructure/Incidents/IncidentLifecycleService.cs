@@ -103,12 +103,17 @@ internal sealed class IncidentLifecycleService(
             return validation;
         }
 
+        if (incident!.Status == IncidentStatuses.Closed)
+        {
+            return Fail(IncidentMutationStatus.ValidationFailed, "A closed incident is immutable.");
+        }
+
         if (!await IsActiveOwnerAsync(command.OwnerSubjectId, cancellationToken))
         {
             return Fail(IncidentMutationStatus.ValidationFailed, "Select an active incident owner.");
         }
 
-        if (incident!.OwnerSubjectId == command.OwnerSubjectId)
+        if (incident.OwnerSubjectId == command.OwnerSubjectId)
         {
             return Fail(IncidentMutationStatus.ValidationFailed, "The incident already has that owner.");
         }

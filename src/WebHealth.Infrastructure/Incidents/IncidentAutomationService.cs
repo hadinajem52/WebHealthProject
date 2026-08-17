@@ -103,8 +103,10 @@ internal sealed class IncidentAutomationService(
         }
         else if (healthDecision.Transition == HealthTransition.RecoveryConfirmed)
         {
-            foreach (var incident in incidents.Where(candidate =>
-                         candidate.Status == IncidentStatuses.MonitoringRecovery))
+            // incidents is already scoped to active statuses (LoadActiveAsync), so every entry here
+            // is eligible: incidents that never reached MonitoringRecovery (RecoveryConfirmationCount == 1,
+            // confirmed in a single pass) resolve directly, same as ones that went through it.
+            foreach (var incident in incidents)
             {
                 await ResolveAsync(incident, check, result, now, cancellationToken);
             }
@@ -118,9 +120,11 @@ internal sealed class IncidentAutomationService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var observed = ObservedIssueKeys(result);
         var interruptedIncidentIds = new HashSet<Guid>();
         foreach (var incident in incidents.Where(candidate =>
-                     candidate.Status == IncidentStatuses.MonitoringRecovery))
+                     candidate.Status == IncidentStatuses.MonitoringRecovery
+                     && observed.Contains(candidate.IssueKey)))
         {
             interruptedIncidentIds.Add(incident.Id);
             var before = IncidentLifecycleService.Snapshot(incident);
@@ -189,9 +193,17 @@ internal sealed class IncidentAutomationService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var decision = IncidentLifecycleEngine.Evaluate(new(
+            incident.Status,
+            IncidentLifecycleAction.BeginRecovery));
+        if (!decision.Succeeded)
+        {
+            return;
+        }
+
         var before = IncidentLifecycleService.Snapshot(incident);
         var previousStatus = incident.Status;
-        incident.Status = IncidentStatuses.MonitoringRecovery;
+        incident.Status = decision.NewStatus!;
         incident.RecoveryStartedAt = result.MeasuredAt;
         incident.Version++;
         AddStatusEvent(incident, previousStatus, incident.Status, now);
@@ -212,11 +224,19 @@ internal sealed class IncidentAutomationService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var decision = IncidentLifecycleEngine.Evaluate(new(
+            incident.Status,
+            IncidentLifecycleAction.ConfirmRecovery));
+        if (!decision.Succeeded)
+        {
+            return;
+        }
+
         var before = IncidentLifecycleService.Snapshot(incident);
         var previousStatus = incident.Status;
-        incident.Status = IncidentStatuses.Resolved;
-        incident.ResolutionCategory = IncidentResolutionCategories.AutomaticRecovery;
-        incident.ResolutionNote = "Recovery was confirmed by scheduled monitoring evidence.";
+        incident.Status = decision.NewStatus!;
+        incident.ResolutionCategory = decision.ResolutionCategory;
+        incident.ResolutionNote = decision.ResolutionNote;
         incident.ResolvedAt = result.MeasuredAt;
         incident.RecoveryDurationMs = IncidentLifecycleEngine.DurationMilliseconds(
             incident.RecoveryStartedAt ?? result.MeasuredAt,
@@ -255,9 +275,14 @@ internal sealed class IncidentAutomationService(
     }
 
     private Task<List<Incident>> LoadActiveAsync(Guid monitorId, CancellationToken cancellationToken) =>
-        dbContext.Incidents.Include(incident => incident.Events)
-            .Where(incident => incident.EndpointMonitorId == monitorId
-                && IncidentStatuses.Active.Contains(incident.Status))
+        dbContext.Incidents
+            .FromSqlInterpolated($"""
+                SELECT * FROM web_health.incident
+                WHERE endpoint_monitor_id = {monitorId}
+                  AND status = ANY({IncidentStatuses.Active.ToArray()})
+                FOR UPDATE
+                """)
+            .Include(incident => incident.Events)
             .ToListAsync(cancellationToken);
 
     private Task<Incident?> FindPreviousAsync(

@@ -83,13 +83,13 @@ public static class IncidentLifecycleEngine
         (long)Math.Clamp(Math.Ceiling((endsAt - startsAt).TotalMilliseconds), 0, long.MaxValue);
 
     private static IncidentTransitionDecision ResolveAutomatically(string status) =>
-        status == IncidentStatuses.MonitoringRecovery
+        IncidentStatuses.Active.Contains(status)
             ? IncidentTransitionDecision.Success(
                 IncidentStatuses.Resolved,
                 IncidentResolutionCategories.AutomaticRecovery,
                 "Recovery was confirmed by scheduled monitoring evidence.")
             : IncidentTransitionDecision.Failure(
-                "Only an incident monitoring recovery can be automatically resolved.");
+                "Only an active incident can be automatically resolved.");
 
     private static IncidentTransitionDecision ResolveManually(EvaluateIncidentTransition input)
     {
