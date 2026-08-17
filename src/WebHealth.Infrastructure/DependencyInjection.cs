@@ -15,6 +15,8 @@ using WebHealth.Infrastructure.Registry;
 using WebHealth.Application.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Hangfire;
+using Hangfire.PostgreSql;
 
 namespace WebHealth.Infrastructure;
 
@@ -26,6 +28,11 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        var schedulingOptions = configuration.GetSection(MonitoringSchedulingOptions.SectionName)
+            .Get<MonitoringSchedulingOptions>() ?? new MonitoringSchedulingOptions();
+        ValidateSchedulingOptions(schedulingOptions);
+        services.AddSingleton(schedulingOptions);
+
         services.AddDbContext<ApplicationDbContext>(options =>
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -78,7 +85,33 @@ public static class DependencyInjection
         services.AddScoped<IExecutionLeaseService, ExecutionLeaseService>();
         services.AddScoped<ILogicalCheckFinalizationService, LogicalCheckFinalizationService>();
         services.AddScoped<ILogicalCheckExecutionService, LogicalCheckExecutionService>();
+        services.AddScoped<IMonitoringSchedulingService, MonitoringSchedulingService>();
         services.AddScoped<LogicalCheckJob>();
+        services.AddScoped<MonitoringDispatchJob>();
+        if (schedulingOptions.Enabled)
+        {
+            var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new InvalidOperationException(
+                    $"ConnectionStrings:{DatabaseConnectionName} is not configured.");
+            }
+
+            services.AddHangfire(configurationBuilder => configurationBuilder
+                .UsePostgreSqlStorage(bootstrapper => bootstrapper.UseNpgsqlConnection(connectionString),
+                    new PostgreSqlStorageOptions
+                    {
+                        SchemaName = "hangfire",
+                        PrepareSchemaIfNecessary = false,
+                        QueuePollInterval = TimeSpan.FromSeconds(1)
+                    }));
+            services.AddHangfireServer(options =>
+            {
+                options.Queues = [MonitoringQueueNames.ShortChecks];
+                options.WorkerCount = Math.Max(1, Math.Min(Environment.ProcessorCount, 4));
+            });
+            services.AddScoped<ILogicalCheckQueue, HangfireLogicalCheckQueue>();
+        }
         var configuredUserAgent = configuration[$"{SafeHttpTransportOptions.SectionName}:UserAgent"];
         var safeHttpOptions = new SafeHttpTransportOptions
         {
@@ -109,5 +142,16 @@ public static class DependencyInjection
             .AddCheck<PostgreSqlReadinessCheck>("postgresql", tags: ["ready"]);
 
         return services;
+    }
+
+    private static void ValidateSchedulingOptions(MonitoringSchedulingOptions options)
+    {
+        if (options.DispatchBatchSize is < 1 or > 500
+            || options.RecoveryBatchSize is < 1 or > 1000
+            || options.RecoveryDelay < TimeSpan.FromMinutes(1)
+            || options.RecoveryDelay > TimeSpan.FromHours(1))
+        {
+            throw new InvalidOperationException("Monitoring scheduling options are outside their safe bounds.");
+        }
     }
 }

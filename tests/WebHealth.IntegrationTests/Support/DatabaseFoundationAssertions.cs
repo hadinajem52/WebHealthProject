@@ -19,6 +19,7 @@ using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Registry;
 using Xunit;
 using System.Text.Json;
+using System.Collections.Concurrent;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -66,7 +67,7 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(6);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(7);
         context.Model.GetEntityTypes().Should().HaveCount(29);
 
         var state = await ReadFoundationState(connectionString);
@@ -80,6 +81,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyMonitoringExecutionFoundationAsync(connectionString);
         await VerifyHttpMonitoringHistoryAsync(connectionString);
         await VerifyLogicalCheckExecutionAsync(connectionString);
+        await VerifyHangfireSchedulingAsync(connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
@@ -1292,6 +1294,128 @@ internal static class DatabaseFoundationAssertions
         await transaction.RollbackAsync();
     }
 
+    private static async Task VerifyHangfireSchedulingAsync(string connectionString)
+    {
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow.AddDays(1));
+        var queue = new RecordingLogicalCheckQueue();
+        await using var services = BuildSchedulingServices(connectionString, clock, queue);
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var scheduling = scope.ServiceProvider.GetRequiredService<IMonitoringSchedulingService>();
+
+        var hangfireTables = await database.Database.SqlQueryRaw<int>("""
+            SELECT count(*)::int AS "Value"
+            FROM information_schema.tables
+            WHERE table_schema = 'hangfire'
+            """).SingleAsync();
+        hangfireTables.Should().BeGreaterThan(0);
+
+        var eligibleEndpointIds = MonitoringEligibility.Apply(
+                database.Endpoints.AsNoTracking(), clock.GetUtcNow())
+            .Select(endpoint => endpoint.Id);
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint)
+                .ThenInclude(endpoint => endpoint.Environment)
+            .Where(candidate => candidate.DeletedAt == null
+                && eligibleEndpointIds.Contains(candidate.EndpointId))
+            .OrderBy(candidate => candidate.Id)
+            .FirstAsync();
+        await database.EndpointMonitors
+            .Where(candidate => candidate.Id != monitor.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                candidate => candidate.NextDueAt, clock.GetUtcNow().AddDays(1)));
+        monitor.ScheduleAnchor = clock.GetUtcNow().AddHours(-1);
+        monitor.NextDueAt = clock.GetUtcNow().AddMinutes(-30);
+        monitor.IntervalSeconds = MonitorCadence.ProductionDefaultIntervalSeconds;
+        monitor.BoundedOverrides = "{}";
+        monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
+            monitor.Endpoint.NormalizedUrl,
+            monitor.Endpoint.Environment.IsProduction,
+            monitor.IntervalSeconds,
+            monitor.TimeoutSeconds,
+            monitor.FailureConfirmationCount,
+            monitor.RecoveryConfirmationCount,
+            monitor.WarningThresholdMs,
+            monitor.CriticalThresholdMs);
+        var catchUpSlot = monitor.NextDueAt;
+        var cadenceKey = MonitorCadence.CreateCadenceKey(monitor.Id, catchUpSlot);
+        await database.SaveChangesAsync();
+
+        var firstDispatch = await scheduling.DispatchDueAsync();
+        firstDispatch.Should().Be(new MonitoringDispatchResult(1, 1));
+        var firstCheck = await database.LogicalChecks
+            .Include(check => check.ConfigurationSnapshot)
+            .Include(check => check.DurableWork)
+            .SingleAsync(check => check.EndpointMonitorId == monitor.Id
+                && check.CadenceKey == cadenceKey);
+        firstCheck.ScheduledFor.Should().BeCloseTo(catchUpSlot, TimeSpan.FromMilliseconds(1));
+        firstCheck.State.Should().Be(LogicalCheckStates.Queued);
+        firstCheck.ConfigurationSnapshot.IntervalSeconds.Should().Be(300);
+        firstCheck.ConfigurationSnapshot.IntervalSource.Should().Be(ConfigurationValueSources.EnvironmentDefault);
+        firstCheck.DurableWork.Single().State.Should().Be(DurableWorkStates.Enqueued);
+        monitor.NextDueAt.Should().Be(clock.GetUtcNow().AddMinutes(5));
+        (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
+
+        firstCheck.DurableWork.Single().State = DurableWorkStates.Completed;
+        monitor.Endpoint.IsEnabled = false;
+        monitor.NextDueAt = clock.GetUtcNow();
+        await database.SaveChangesAsync();
+        (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
+
+        monitor.Endpoint.IsEnabled = true;
+        clock.Advance(TimeSpan.FromMinutes(10));
+        monitor.NextDueAt = clock.GetUtcNow();
+        queue.FailNext = true;
+        await database.SaveChangesAsync();
+        var interrupted = await scheduling.DispatchDueAsync();
+        interrupted.Should().Be(new MonitoringDispatchResult(1, 0));
+        var interruptedWork = await database.DurableWork
+            .OrderByDescending(work => work.CreatedAt)
+            .FirstAsync(work => work.LogicalCheck.EndpointMonitorId == monitor.Id);
+        interruptedWork.State.Should().Be(DurableWorkStates.Dispatching);
+        var checkCount = await database.LogicalChecks.CountAsync(
+            check => check.EndpointMonitorId == monitor.Id);
+
+        clock.Advance(TimeSpan.FromMinutes(3));
+        var recovered = await scheduling.ReconcileAsync();
+        recovered.Should().Be(new MonitoringDispatchResult(1, 1));
+        await database.Entry(interruptedWork).ReloadAsync();
+        interruptedWork.State.Should().Be(DurableWorkStates.Enqueued);
+        (await database.LogicalChecks.CountAsync(
+            check => check.EndpointMonitorId == monitor.Id)).Should().Be(checkCount);
+
+        await database.DurableWork.ExecuteUpdateAsync(setters => setters
+            .SetProperty(work => work.State, DurableWorkStates.Completed));
+        clock.Advance(TimeSpan.FromMinutes(10));
+        monitor.NextDueAt = clock.GetUtcNow();
+        await database.SaveChangesAsync();
+        await using var competingServices = BuildSchedulingServices(connectionString, clock, queue);
+        await using var firstScope = competingServices.CreateAsyncScope();
+        await using var secondScope = competingServices.CreateAsyncScope();
+        var competingResults = await Task.WhenAll(
+            firstScope.ServiceProvider.GetRequiredService<IMonitoringSchedulingService>().DispatchDueAsync(),
+            secondScope.ServiceProvider.GetRequiredService<IMonitoringSchedulingService>().DispatchDueAsync());
+        competingResults.Sum(result => result.ClaimedCount).Should().Be(1);
+        competingResults.Sum(result => result.EnqueuedCount).Should().Be(1);
+    }
+
+    private static ServiceProvider BuildSchedulingServices(
+        string connectionString,
+        TimeProvider clock,
+        ILogicalCheckQueue queue)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        return new ServiceCollection()
+            .AddLogging()
+            .AddInfrastructure(configuration)
+            .AddSingleton(clock)
+            .AddSingleton(queue)
+            .BuildServiceProvider();
+    }
+
     private static async Task VerifyPhaseTwoUpgradeAsync(ApplicationDbContext database)
     {
         database.ChangeTracker.Clear();
@@ -1318,7 +1442,7 @@ internal static class DatabaseFoundationAssertions
 
         await database.Database.MigrateAsync();
         var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Should().HaveCount(6);
+        applied.Should().HaveCount(7);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         var upgraded = await ReadFoundationState(connectionString);
         upgraded.Tables.Should().BeEquivalentTo(
@@ -2309,5 +2433,31 @@ internal static class DatabaseFoundationAssertions
         }
 
         return (tables.Count > 0, tables);
+    }
+
+    private sealed class RecordingLogicalCheckQueue : ILogicalCheckQueue
+    {
+        private readonly ConcurrentQueue<(Guid LogicalCheckId, Guid DurableWorkId)> jobs = new();
+
+        public bool FailNext { get; set; }
+
+        public string Enqueue(Guid logicalCheckId, Guid durableWorkId)
+        {
+            if (FailNext)
+            {
+                FailNext = false;
+                throw new InvalidOperationException("Simulated enqueue interruption.");
+            }
+
+            jobs.Enqueue((logicalCheckId, durableWorkId));
+            return jobs.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+
+        public void Advance(TimeSpan duration) => utcNow += duration;
     }
 }

@@ -33,6 +33,7 @@ public static class DurableWorkKinds
 public static class DurableWorkStates
 {
     public const string Pending = "Pending";
+    public const string Dispatching = "Dispatching";
     public const string Enqueued = "Enqueued";
     public const string Processing = "Processing";
     public const string Completed = "Completed";
@@ -52,6 +53,11 @@ public sealed record MonitorSchedule(DateTimeOffset Anchor, DateTimeOffset NextD
 public static class MonitorCadence
 {
     public const short KeyVersion = 1;
+    public const int ProductionDefaultIntervalSeconds = 5 * 60;
+    public const int NonProductionDefaultIntervalSeconds = 15 * 60;
+
+    public static int GetDefaultIntervalSeconds(bool isProduction) =>
+        isProduction ? ProductionDefaultIntervalSeconds : NonProductionDefaultIntervalSeconds;
 
     public static MonitorSchedule Initialize(DateTimeOffset now)
     {

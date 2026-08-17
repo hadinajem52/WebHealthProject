@@ -10,6 +10,7 @@ using WebHealth.Web.Middleware;
 using WebHealth.Application.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using WebHealth.Web.Authorization;
+using WebHealth.Infrastructure.Monitoring;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,6 +116,8 @@ app.MapControllerRoute(
         name: "default",
         pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
+
+app.UseMonitoringScheduling();
 
 app.Run();
 

@@ -300,12 +300,14 @@ internal sealed class EnvironmentRegistryService(
         var interval = RegistryDefaults.GetHttpIntervalSeconds(environment.IsProduction);
         foreach (var monitor in environment.Endpoints.SelectMany(endpoint => endpoint.Monitors))
         {
-            monitor.IntervalSeconds = interval;
-            monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(monitor.ScheduleAnchor, interval, now);
+            var effectiveInterval = MonitorIntervalOverride.GetSeconds(monitor.BoundedOverrides) ?? interval;
+            monitor.IntervalSeconds = effectiveInterval;
+            monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                monitor.ScheduleAnchor, effectiveInterval, now);
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 monitor.Endpoint.NormalizedUrl,
                 environment.IsProduction,
-                interval,
+                effectiveInterval,
                 monitor.TimeoutSeconds,
                 monitor.FailureConfirmationCount,
                 monitor.RecoveryConfirmationCount,

@@ -1,4 +1,5 @@
 using WebHealth.Application.Monitoring;
+using WebHealth.Domain.Monitoring;
 
 namespace WebHealth.Infrastructure.Registry;
 
@@ -11,7 +12,8 @@ internal static class RegistryDefaults
     public const int HttpTimeoutSeconds = 30;
     public static readonly DateTimeOffset SeedTimestamp = new(2026, 8, 14, 0, 0, 0, TimeSpan.Zero);
 
-    public static int GetHttpIntervalSeconds(bool isProduction) => isProduction ? 300 : 900;
+    public static int GetHttpIntervalSeconds(bool isProduction) =>
+        MonitorCadence.GetDefaultIntervalSeconds(isProduction);
 
     public static string CreateHttpFingerprint(
         string normalizedUrl,

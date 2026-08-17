@@ -84,6 +84,7 @@ public sealed record EndpointDetails(
     long Version,
     string MonitorType,
     int IntervalSeconds,
+    int? IntervalMinutesOverride,
     int TimeoutSeconds,
     bool MonitorEnabled,
     bool IsMonitoringEligible,
@@ -112,7 +113,9 @@ public sealed record CreateEndpoint(
     string? HttpExceptionReason,
     string? TargetAuthorizationKind,
     string? TargetAuthorizationEvidence,
-    DateTimeOffset? TargetAuthorizationExpiresAt);
+    DateTimeOffset? TargetAuthorizationExpiresAt,
+    int? IntervalMinutesOverride = null);
+
 
 public sealed record UpdateEndpoint(
     Guid EndpointId,
@@ -123,4 +126,5 @@ public sealed record UpdateEndpoint(
     string? TargetAuthorizationKind,
     string? TargetAuthorizationEvidence,
     DateTimeOffset? TargetAuthorizationExpiresAt,
-    long Version);
+    long Version,
+    int? IntervalMinutesOverride = null);

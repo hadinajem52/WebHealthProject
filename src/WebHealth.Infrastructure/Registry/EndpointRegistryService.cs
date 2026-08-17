@@ -31,6 +31,12 @@ internal sealed class EndpointRegistryService(
             return Validation(url.Errors);
         }
 
+        var interval = DecideIntervalOverride(command.IntervalMinutesOverride, access, null);
+        if (interval.Error is not null)
+        {
+            return Validation(interval.Error);
+        }
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var environment = await LockEnvironmentAsync(command.EnvironmentId, cancellationToken);
         if (environment is null)
@@ -60,7 +66,8 @@ internal sealed class EndpointRegistryService(
 
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
         dbContext.Endpoints.Add(endpoint);
-        dbContext.EndpointMonitors.Add(CreateMonitor(endpoint, environment.IsProduction, access.UserId, now));
+        dbContext.EndpointMonitors.Add(CreateMonitor(
+            endpoint, environment.IsProduction, interval.Seconds, access.UserId, now));
         await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
 
         try
@@ -112,6 +119,15 @@ internal sealed class EndpointRegistryService(
             return Validation("Restore the endpoint before editing it.");
         }
 
+        var monitor = endpoint.Monitors.Single(candidate => candidate.DeletedAt == null);
+        var currentIntervalOverride = MonitorIntervalOverride.GetSeconds(monitor.BoundedOverrides);
+        var interval = DecideIntervalOverride(
+            command.IntervalMinutesOverride, access, currentIntervalOverride);
+        if (interval.Error is not null)
+        {
+            return Validation(interval.Error);
+        }
+
         if (!await IsValidOwnerAsync(command.OwnerSubjectId, endpoint.OwnerSubjectId, cancellationToken))
         {
             return Validation("Select an enabled user or team owner, or inherit the website owner.");
@@ -152,6 +168,7 @@ internal sealed class EndpointRegistryService(
                 url,
                 exception,
                 endpoint.Environment.IsProduction,
+                interval.Seconds,
                 access.UserId,
                 now);
             await auditTrail.RecordEndpointMutationAsync(
@@ -313,9 +330,14 @@ internal sealed class EndpointRegistryService(
             Version = 1
         };
 
-    private static EndpointMonitor CreateMonitor(Endpoint endpoint, bool isProduction, Guid actorId, DateTimeOffset now)
+    private static EndpointMonitor CreateMonitor(
+        Endpoint endpoint,
+        bool isProduction,
+        int? intervalOverrideSeconds,
+        Guid actorId,
+        DateTimeOffset now)
     {
-        var interval = RegistryDefaults.GetHttpIntervalSeconds(isProduction);
+        var interval = intervalOverrideSeconds ?? RegistryDefaults.GetHttpIntervalSeconds(isProduction);
         var schedule = MonitorCadence.Initialize(now);
         return new EndpointMonitor
         {
@@ -323,7 +345,7 @@ internal sealed class EndpointRegistryService(
             EndpointId = endpoint.Id,
             PolicyProfileId = RegistryDefaults.HttpAvailabilityPolicyProfileId,
             MonitorType = RegistryDefaults.HttpAvailabilityMonitorType,
-            BoundedOverrides = "{}",
+            BoundedOverrides = MonitorIntervalOverride.Serialize(intervalOverrideSeconds),
             ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 endpoint.NormalizedUrl,
                 isProduction,
@@ -356,6 +378,7 @@ internal sealed class EndpointRegistryService(
         EndpointUrlNormalizationResult url,
         HttpExceptionDecision exception,
         bool isProduction,
+        int? intervalOverrideSeconds,
         Guid actorId,
         DateTimeOffset now)
     {
@@ -373,10 +396,19 @@ internal sealed class EndpointRegistryService(
         Touch(endpoint, actorId, now);
         foreach (var monitor in endpoint.Monitors.Where(monitor => monitor.DeletedAt == null))
         {
+            var interval = intervalOverrideSeconds ?? RegistryDefaults.GetHttpIntervalSeconds(isProduction);
+            if (monitor.IntervalSeconds != interval)
+            {
+                monitor.IntervalSeconds = interval;
+                monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                    monitor.ScheduleAnchor, interval, now);
+            }
+
+            monitor.BoundedOverrides = MonitorIntervalOverride.Serialize(intervalOverrideSeconds);
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 endpoint.NormalizedUrl,
                 isProduction,
-                monitor.IntervalSeconds,
+                interval,
                 monitor.TimeoutSeconds,
                 monitor.FailureConfirmationCount,
                 monitor.RecoveryConfirmationCount,
@@ -440,7 +472,30 @@ internal sealed class EndpointRegistryService(
         Convert.ToHexString(endpoint.NormalizedUrlHash).ToLowerInvariant(), endpoint.NormalizationVersion,
         urlChanged, endpoint.IsEnabled, endpoint.HttpExceptionReason is not null,
         httpExceptionChanged, HasCurrentAuthorization(endpoint, now), targetAuthorizationChanged,
+        endpoint.Monitors.Single().IntervalSeconds,
+        MonitorIntervalOverride.HasOverride(endpoint.Monitors.Single().BoundedOverrides),
         endpoint.DeletedAt is not null, endpoint.Version);
+
+    private static IntervalOverrideDecision DecideIntervalOverride(
+        int? intervalMinutes,
+        RegistryAccessContext access,
+        int? currentSeconds)
+    {
+        if (intervalMinutes is < 1 or > 1440)
+        {
+            return new(null, "The monitoring interval must be between 1 minute and 24 hours.");
+        }
+
+        int? submittedSeconds = intervalMinutes * 60;
+
+        if (submittedSeconds != currentSeconds
+            && !access.Roles.Contains(ApplicationRoles.Administrator, StringComparer.Ordinal))
+        {
+            return new(null, "Only an Administrator can change the monitoring interval.");
+        }
+
+        return new(submittedSeconds, null);
+    }
 
     private static bool HasCurrentAuthorization(Endpoint endpoint, DateTimeOffset now) =>
         endpoint.TargetAuthorizations.Any(evidence =>
@@ -591,6 +646,8 @@ internal sealed class EndpointRegistryService(
 
     private sealed record HttpExceptionDecision(
         string? Reason, Guid? ApprovedByUserId, DateTimeOffset? ApprovedAt, string? Error);
+
+    private sealed record IntervalOverrideDecision(int? Seconds, string? Error);
 
     private sealed record TargetAuthorizationDecision(
         TargetAuthorizationEvidence? ToCreate,

@@ -6,6 +6,16 @@ namespace WebHealth.UnitTests;
 
 public sealed class MonitorCadenceTests
 {
+    [Theory]
+    [InlineData(true, 300)]
+    [InlineData(false, 900)]
+    public void GetDefaultIntervalSeconds_UsesEnvironmentDefaults(
+        bool isProduction,
+        int expectedSeconds)
+    {
+        MonitorCadence.GetDefaultIntervalSeconds(isProduction).Should().Be(expectedSeconds);
+    }
+
     [Fact]
     public void Initialize_MakesMonitorImmediatelyDueInUtc()
     {

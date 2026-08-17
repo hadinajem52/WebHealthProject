@@ -65,6 +65,11 @@ public sealed class EndpointFormViewModel
     [Display(Name = "Authorization expires")]
     public DateTimeOffset? TargetAuthorizationExpiresAt { get; set; }
 
+    [Range(1, 1440), Display(Name = "Monitoring interval override (minutes)")]
+    public int? IntervalMinutesOverride { get; set; }
+
+    public bool CanConfigureInterval { get; set; }
+
     public long Version { get; set; }
     public IReadOnlyList<RegistryOwnerOption> Owners { get; set; } = [];
 }

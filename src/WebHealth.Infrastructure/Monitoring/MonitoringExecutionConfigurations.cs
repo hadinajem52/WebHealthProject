@@ -258,7 +258,7 @@ internal sealed class DurableWorkConfiguration : IEntityTypeConfiguration<Durabl
         {
             table.HasCheckConstraint(
                 "ck_durable_work_state",
-                "state IN ('Pending', 'Enqueued', 'Processing', 'Completed', 'Failed')");
+                "state IN ('Pending', 'Dispatching', 'Enqueued', 'Processing', 'Completed', 'Failed')");
             table.HasCheckConstraint("ck_durable_work_attempt_count", "attempt_count >= 0");
             table.HasCheckConstraint(
                 "ck_durable_work_lease_fields",

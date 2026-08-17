@@ -8,7 +8,7 @@ public sealed class LogicalCheckJob(ILogicalCheckExecutionService executionServi
 {
     private const int MaximumRetries = 2;
 
-    [Queue("monitoring")]
+    [Queue(MonitoringQueueNames.ShortChecks)]
     [AutomaticRetry(Attempts = MaximumRetries, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
     public async Task ExecuteAsync(
         Guid logicalCheckId,

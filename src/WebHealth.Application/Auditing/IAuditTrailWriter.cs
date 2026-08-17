@@ -148,5 +148,7 @@ public sealed record EndpointAuditSnapshot(
     bool HttpExceptionChanged,
     bool HasTargetAuthorization,
     bool TargetAuthorizationChanged,
+    int MonitorIntervalSeconds,
+    bool HasIntervalOverride,
     bool IsDeleted,
     long Version);

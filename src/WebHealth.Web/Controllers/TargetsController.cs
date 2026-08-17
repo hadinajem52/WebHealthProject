@@ -150,7 +150,8 @@ public sealed class TargetsController(
 
         var result = await endpointService.CreateAsync(
             new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
-                model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt),
+                model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt,
+                model.IntervalMinutesOverride),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -179,6 +180,7 @@ public sealed class TargetsController(
             TargetAuthorizationKind = endpoint.TargetAuthorizationKind,
             TargetAuthorizationEvidence = endpoint.TargetAuthorizationEvidence,
             TargetAuthorizationExpiresAt = endpoint.TargetAuthorizationExpiresAt,
+            IntervalMinutesOverride = endpoint.IntervalMinutesOverride,
             Version = endpoint.Version
         }, cancellationToken));
     }
@@ -194,7 +196,7 @@ public sealed class TargetsController(
         var result = await endpointService.UpdateAsync(
             new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
-                model.TargetAuthorizationExpiresAt, model.Version),
+                model.TargetAuthorizationExpiresAt, model.Version, model.IntervalMinutesOverride),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -250,6 +252,7 @@ public sealed class TargetsController(
         model.EnvironmentName = environment?.Name ?? model.EnvironmentName;
         model.IsProduction = environment?.IsProduction ?? model.IsProduction;
         model.CanApproveHttp = User.IsInRole(ApplicationRoles.Administrator);
+        model.CanConfigureInterval = User.IsInRole(ApplicationRoles.Administrator);
         model.Owners = await registryReader.ListOwnersAsync(model.OwnerSubjectId, cancellationToken);
         return model;
     }

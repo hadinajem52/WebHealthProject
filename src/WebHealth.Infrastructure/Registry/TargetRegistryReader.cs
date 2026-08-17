@@ -112,6 +112,7 @@ internal sealed class TargetRegistryReader(
             endpoint.Version,
             endpoint.MonitorType,
             endpoint.IntervalSeconds,
+            MonitorIntervalOverride.GetSeconds(endpoint.BoundedOverrides) / 60,
             endpoint.TimeoutSeconds,
             endpoint.MonitorEnabled,
             await monitoringEligibility.IsEndpointEligibleAsync(endpoint.Id, cancellationToken),
@@ -232,6 +233,7 @@ internal sealed class TargetRegistryReader(
                 endpoint.Version,
                 endpoint.Monitors.Select(monitor => monitor.MonitorType).Single(),
                 endpoint.Monitors.Select(monitor => monitor.IntervalSeconds).Single(),
+                endpoint.Monitors.Select(monitor => monitor.BoundedOverrides).Single(),
                 endpoint.Monitors.Select(monitor => monitor.TimeoutSeconds).Single(),
                 endpoint.Monitors.Select(monitor => monitor.IsEnabled).Single()))
             .ToListAsync(cancellationToken);
@@ -278,5 +280,5 @@ internal sealed class TargetRegistryReader(
         Guid EffectiveOwnerSubjectId, bool IsEnabled, bool IsDeleted, string? HttpExceptionReason,
         string? TargetAuthorizationKind, string? TargetAuthorizationEvidence,
         DateTimeOffset? TargetAuthorizationExpiresAt, long Version, string MonitorType,
-        int IntervalSeconds, int TimeoutSeconds, bool MonitorEnabled);
+        int IntervalSeconds, string BoundedOverrides, int TimeoutSeconds, bool MonitorEnabled);
 }
