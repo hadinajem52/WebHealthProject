@@ -279,7 +279,6 @@ public sealed class SafeHttpTransportTests
             new SingleClientFactory(client),
             new DelegateAuthorizer(AuthorizeAll),
             new SafeHttpConcurrencyLimiter(options),
-            options,
             TimeProvider.System);
 
         var result = await transport.SendAsync(
@@ -310,11 +309,14 @@ public sealed class SafeHttpTransportTests
             repeat: true);
         await using var harness = CreateHarness(
             new HostResolver(("slow.test", [IPAddress.Loopback])),
-            AuthorizeAll,
-            options => options with { Timeout = TimeSpan.FromMilliseconds(100) });
+            AuthorizeAll);
 
         var timeout = await harness.Transport.SendAsync(
-            new(Guid.NewGuid(), $"http://slow.test:{server.Port}/", false));
+            new(
+                Guid.NewGuid(),
+                $"http://slow.test:{server.Port}/",
+                false,
+                TimeoutSeconds: 1));
         timeout.Failure.Should().Be(SafeHttpFailureKind.Timeout);
 
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
@@ -349,7 +351,6 @@ public sealed class SafeHttpTransportTests
             factory,
             new DelegateAuthorizer(AuthorizeAll),
             new SafeHttpConcurrencyLimiter(options),
-            options,
             TimeProvider.System);
 
         var result = await transport.SendAsync(

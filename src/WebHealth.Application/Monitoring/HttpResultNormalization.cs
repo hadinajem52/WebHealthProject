@@ -28,6 +28,7 @@ public static class HttpFailureCategories
     public const string InvalidConfiguration = "InvalidConfiguration";
     public const string DestinationPolicy = "DestinationPolicy";
     public const string InvalidRedirect = "InvalidRedirect";
+    public const string ExecutionExhausted = "ExecutionExhausted";
     public const string Protocol = "Protocol";
 }
 
@@ -270,6 +271,7 @@ public static class HttpResultNormalizer
         SafeHttpFailureKind.RedirectMissingLocation or SafeHttpFailureKind.RedirectInvalid =>
             HttpFailureCategories.InvalidRedirect,
         SafeHttpFailureKind.HttpsDowngrade => HttpFailureCategories.HttpsRequired,
+        SafeHttpFailureKind.ExecutionExhausted => HttpFailureCategories.ExecutionExhausted,
         _ => HttpFailureCategories.Protocol
     };
 
@@ -307,6 +309,7 @@ public static class HttpResultNormalizer
         HttpFailureCategories.DestinationPolicy => "The destination policy rejected the target.",
         HttpFailureCategories.InvalidConfiguration => "The target configuration is invalid.",
         HttpFailureCategories.InvalidRedirect => "The redirect target is invalid.",
+        HttpFailureCategories.ExecutionExhausted => "The execution retry limit was exhausted.",
         _ => "The HTTP exchange failed."
     };
 

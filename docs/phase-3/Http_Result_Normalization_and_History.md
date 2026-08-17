@@ -14,7 +14,7 @@
 - the production HTTP rule: an HTTP production target must finish on HTTPS, with snapshotted Warning/Critical severity;
 - `ResponseTooLarge` when the streaming transport observes the configured decoded-body limit plus its sentinel byte;
 - stable DNS, Connection, TLS, Timeout, Cancellation, ClientError, ServerError, RedirectLoop, ExcessiveRedirects, ContentMismatch, and ResponseTooLarge categories;
-- additional fail-closed categories for invalid configuration, destination policy, malformed redirects, HTTPS downgrade, and protocol failures.
+- additional fail-closed categories for invalid configuration, destination policy, malformed redirects, HTTPS downgrade, exhausted execution, and protocol failures.
 
 The normalizer never returns or persists a body, header, cookie, query value, configured marker, or raw exception. Finding identity uses the versioned `v1|monitor-type|rule-key|normalized-discriminator` format and is independent of severity and diagnostics. Primary-category precedence is explicit rather than dependent on finding enumeration order.
 
@@ -50,4 +50,4 @@ Scheduled checks count for uptime; Manual and Urgent checks do not. Maintenance 
 
 ## Explicitly deferred
 
-This increment adds no incidents, issue counters, endpoint-health projection, maintenance records, or notifications. Hangfire scheduling, logical-check creation, attempts/retries, and the history UI remain later Phase 3 work. Phase 4 owns confirmation counters, current health, incidents, maintenance-aware behavior, and notification orchestration.
+This increment adds no incidents, issue counters, endpoint-health projection, maintenance records, or notifications. Logical-check execution and attempt finalization are now covered by [Logical-check execution and idempotency](Logical_Check_Execution_and_Idempotency.md); scheduling, logical-check creation, reconciliation, and the history UI remain later Phase 3 work. Phase 4 owns confirmation counters, current health, incidents, maintenance-aware behavior, and notification orchestration.

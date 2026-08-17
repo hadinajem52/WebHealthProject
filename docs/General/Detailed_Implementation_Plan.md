@@ -353,8 +353,8 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [ ] Queue authorized manual checks with source and initiating user.
 - [ ] Keep manual checks outside scheduled cadence and contractual uptime by default.
 - [x] Implement the PostgreSQL-backed endpoint/monitor execution lease. Evidence: [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
-- [ ] Make every retry reference the same logical-check ID.
-- [ ] Close exhausted work with a terminal normalized result.
+- [x] Make every retry reference the same logical-check ID. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
+- [x] Close exhausted work with a terminal normalized result. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 - [ ] Reconcile committed but unqueued or incomplete work after restart.
 
 ### 10.3 Safe HTTP monitoring
@@ -371,7 +371,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Apply accepted-status and required-content-marker rules.
 - [x] Detect redirect loops and excessive chains.
 - [x] Persist bounded safe diagnostics, never full response bodies by default.
-- [ ] Add structured `CorrelationId`, `LogicalCheckId`, `EndpointId`, and `JobId` properties.
+- [x] Add structured `CorrelationId`, `LogicalCheckId`, `EndpointId`, and `JobId` properties. HTTP correlation is established by middleware; logical-check execution adds the other identifiers through a logging scope.
 
 ### 10.4 Database and migration
 
@@ -390,9 +390,9 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Test redirects into prohibited destinations.
 - [x] Test actual-connection address enforcement and DNS-rebinding defense.
 - [x] Verify proxy configuration cannot bypass policy.
-- [ ] Verify one logical result across retries and duplicate job delivery.
-- [ ] Verify competing workers cannot execute the same endpoint/monitor concurrently.
-- [ ] Verify expired leases recover after worker failure.
+- [x] Verify one logical result across retries and duplicate job delivery. Evidence: isolated PostgreSQL gate in [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
+- [x] Verify competing workers cannot execute the same endpoint/monitor concurrently. Evidence: execution and lease integration tests.
+- [x] Verify expired leases recover after worker failure. Evidence: PostgreSQL lease fencing tests in [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 - [ ] Verify restart reconciliation without duplicate samples.
 - [ ] Verify disabled targets produce no new scheduled work.
 - [x] Verify logs and history exclude sensitive headers and complete bodies.

@@ -53,6 +53,11 @@ internal sealed class HttpCheckHistoryService(
             return HttpCheckHistoryWriteStatus.TargetMismatch;
         }
 
+        if (!MatchesAttempt(logicalCheck, request.Attempt))
+        {
+            return HttpCheckHistoryWriteStatus.InvalidExecutionAttempt;
+        }
+
         var now = timeProvider.GetUtcNow();
         if (!await TryConsumeLeaseAsync(request.Lease, cancellationToken))
         {
@@ -77,7 +82,7 @@ internal sealed class HttpCheckHistoryService(
             request.Transport,
             policy,
             now));
-        AddHistory(logicalCheck, normalized, request.Transport.BodyTruncated, now);
+        AddHistory(logicalCheck, normalized, request.Transport.BodyTruncated, request.Attempt, now);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return HttpCheckHistoryWriteStatus.Recorded;
@@ -89,7 +94,31 @@ internal sealed class HttpCheckHistoryService(
             .Include(check => check.EndpointMonitor)
                 .ThenInclude(monitor => monitor.Endpoint)
                     .ThenInclude(endpoint => endpoint.Environment)
+            .Include(check => check.Attempts)
+            .Include(check => check.DurableWork)
             .SingleOrDefaultAsync(check => check.Id == logicalCheckId, cancellationToken);
+
+    private static bool MatchesAttempt(
+        LogicalCheck logicalCheck,
+        FinalizeExecutionAttempt? finalization)
+    {
+        if (finalization is null)
+        {
+            return true;
+        }
+
+        var attempt = logicalCheck.Attempts.SingleOrDefault(candidate => candidate.Id == finalization.AttemptId);
+        return attempt is
+        {
+            FinishedAt: null,
+            InfrastructureOutcome: ExecutionAttemptOutcomes.Running
+        }
+            && finalization.Outcome is
+                ExecutionAttemptOutcomes.Succeeded
+                or ExecutionAttemptOutcomes.TerminalFailure
+                or ExecutionAttemptOutcomes.Cancelled
+            && finalization.FailureCategory is null or { Length: <= 100 };
+    }
 
     private async Task LockLogicalCheckAsync(Guid logicalCheckId, CancellationToken cancellationToken)
     {
@@ -168,6 +197,7 @@ internal sealed class HttpCheckHistoryService(
             snapshot.MaxRedirects));
         return logicalCheck.PolicyFingerprint == expected
             && snapshot.ConfigurationFingerprint == expected
+            && request.TimeoutSeconds == snapshot.TimeoutSeconds
             && request.MaxRedirects == snapshot.MaxRedirects
             && request.MaxResponseBodyBytes == snapshot.MaxResponseBodyBytes;
     }
@@ -265,6 +295,7 @@ internal sealed class HttpCheckHistoryService(
         LogicalCheck logicalCheck,
         NormalizedHttpResult normalized,
         bool responseTruncated,
+        FinalizeExecutionAttempt? attemptFinalization,
         DateTimeOffset completedAt)
     {
         dbContext.CheckResults.Add(new CheckResult
@@ -279,7 +310,8 @@ internal sealed class HttpCheckHistoryService(
             ResponseTruncated = responseTruncated,
             MonitorSource = normalized.MonitorSource,
             MeasuredAt = normalized.MeasuredAt,
-            CountsForUptime = logicalCheck.Source == LogicalCheckSources.Scheduled,
+            CountsForUptime = logicalCheck.Source == LogicalCheckSources.Scheduled
+                && normalized.Outcome != HttpResultOutcomes.Cancelled,
             SafeDiagnostic = normalized.SafeDiagnostic,
             CompletedAt = completedAt
         });
@@ -305,6 +337,31 @@ internal sealed class HttpCheckHistoryService(
         }));
         logicalCheck.State = LogicalCheckStates.Completed;
         logicalCheck.CompletedAt = completedAt;
+        CompleteAttempt(logicalCheck, attemptFinalization, completedAt);
+        foreach (var work in logicalCheck.DurableWork)
+        {
+            work.State = DurableWorkStates.Completed;
+            work.LeaseOwnerToken = null;
+            work.LeaseAcquiredAt = null;
+            work.LeaseExpiresAt = null;
+            work.UpdatedAt = completedAt;
+        }
+    }
+
+    private static void CompleteAttempt(
+        LogicalCheck logicalCheck,
+        FinalizeExecutionAttempt? finalization,
+        DateTimeOffset completedAt)
+    {
+        if (finalization is null)
+        {
+            return;
+        }
+
+        var attempt = logicalCheck.Attempts.Single(candidate => candidate.Id == finalization.AttemptId);
+        attempt.InfrastructureOutcome = finalization.Outcome;
+        attempt.FailureCategory = finalization.FailureCategory;
+        attempt.FinishedAt = completedAt;
     }
 
     private NpgsqlTransaction? CurrentTransaction() =>

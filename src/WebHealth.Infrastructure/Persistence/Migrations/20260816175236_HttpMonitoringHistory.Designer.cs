@@ -761,7 +761,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_check_result_completed", "completed_at >= measured_at");
 
-                            t.HasCheckConstraint("ck_check_result_failure_category", "failure_category IS NULL OR failure_category IN ('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError','RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge','HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect','Protocol')");
+                            t.HasCheckConstraint("ck_check_result_failure_category", "failure_category IS NULL OR failure_category IN ('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError','RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge','HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect','ExecutionExhausted','Protocol')");
 
                             t.HasCheckConstraint("ck_check_result_http_status", "http_status IS NULL OR http_status BETWEEN 100 AND 599");
 

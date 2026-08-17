@@ -20,7 +20,7 @@ The transport:
 - authorizes the exact endpoint, normalized host, and port against active target-authorization evidence before every hop;
 - rejects production HTTPS-to-HTTP redirects, normalized redirect loops, unsupported redirect targets, and chains beyond ten hops;
 - retains normal platform TLS certificate and hostname validation;
-- applies a 15-second whole-check timeout, 5-second connect timeout, 32 KiB header limit, snapshotted decoded-body and redirect limits capped by hard 2 MiB/10-hop ceilings, a one-byte body sentinel, 16-answer DNS limit, and 20 global / 2 per-host / 4 per-IP concurrency limits;
+- applies the snapshotted whole-check timeout with a hard five-minute ceiling, a 5-second connect timeout, 32 KiB header limit, snapshotted decoded-body and redirect limits capped by hard 2 MiB/10-hop ceilings, a one-byte body sentinel, 16-answer DNS limit, and 20 global / 2 per-host / 4 per-IP concurrency limits;
 - performs no transport-level retry; later durable execution policy owns retry decisions.
 
 Only status, total duration, bytes actually read, truncation state, a query-free final URL and redirect summary, a normalized request-identity hash, and the bounded in-memory body are returned. Redirect hops store one authoritative from/to URL representation. The transport logs and persists none of these values. Result normalization consumes the body in memory and persistence retains zero body bytes.
@@ -47,4 +47,4 @@ Expected transport failures return a stable category: invalid URL, unauthorized 
 
 ## Remaining work
 
-Normalized HTTP results, accepted-status and marker evaluation, terminal result persistence, and zero-body history are implemented in [HTTP Result Normalization and History](Http_Result_Normalization_and_History.md). Detailed phase timing, scheduling, Hangfire execution, durable retries, and monitoring UI remain later Phase 3 increments.
+Normalized HTTP results, terminal persistence, and zero-body history are implemented in [HTTP Result Normalization and History](Http_Result_Normalization_and_History.md). Logical-check orchestration, bounded Hangfire delivery retries, and attempt finalization are implemented in [Logical-check execution and idempotency](Logical_Check_Execution_and_Idempotency.md). Scheduling, reconciliation, detailed phase timing, and monitoring UI remain later Phase 3 increments.

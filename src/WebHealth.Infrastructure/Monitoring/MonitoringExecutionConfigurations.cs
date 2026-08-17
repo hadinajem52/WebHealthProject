@@ -140,7 +140,8 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
                 "failure_category IS NULL OR failure_category IN "
                 + "('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError',"
                 + "'RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge',"
-                + "'HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect','Protocol')");
+                + "'HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect',"
+                + "'ExecutionExhausted','Protocol')");
             table.HasCheckConstraint(
                 "ck_check_result_outcome_category",
                 "(outcome = 'Healthy' AND failure_category IS NULL) OR "

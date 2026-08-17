@@ -36,7 +36,8 @@ public sealed record SafeHttpTransportRequest(
     string Url,
     bool IsProduction,
     int MaxRedirects = SafeHttpTransportDefaults.MaxRedirects,
-    int MaxResponseBodyBytes = SafeHttpTransportDefaults.MaxDecodedBodyBytes);
+    int MaxResponseBodyBytes = SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds);
 
 public sealed record SafeHttpTransportResult(
     SafeHttpFailureKind? Failure,
@@ -76,11 +77,14 @@ public enum SafeHttpFailureKind
     RedirectLoop,
     RedirectLimit,
     HttpsDowngrade,
+    ExecutionExhausted,
     Protocol
 }
 
 public static class SafeHttpTransportDefaults
 {
+    public const int DefaultTimeoutSeconds = 15;
+    public const int MaxTimeoutSeconds = 300;
     public const int MaxRedirects = 10;
     public const int MaxDecodedBodyBytes = 2 * 1024 * 1024;
 }

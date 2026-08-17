@@ -197,7 +197,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("pk_check_result", x => x.logical_check_id);
                     table.CheckConstraint("ck_check_result_completed", "completed_at >= measured_at");
-                    table.CheckConstraint("ck_check_result_failure_category", "failure_category IS NULL OR failure_category IN ('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError','RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge','HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect','Protocol')");
+                    table.CheckConstraint("ck_check_result_failure_category", "failure_category IS NULL OR failure_category IN ('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError','RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge','HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect','ExecutionExhausted','Protocol')");
                     table.CheckConstraint("ck_check_result_http_status", "http_status IS NULL OR http_status BETWEEN 100 AND 599");
                     table.CheckConstraint("ck_check_result_lengths", "(transferred_length IS NULL OR transferred_length >= 0) AND (decoded_length IS NULL OR decoded_length >= 0) AND ((decoded_length IS NULL AND length_source IS NULL) OR (decoded_length IS NOT NULL AND length_source IS NOT NULL))");
                     table.CheckConstraint("ck_check_result_more_timings", "(connect_duration_ms IS NULL OR connect_duration_ms >= 0) AND (tls_duration_ms IS NULL OR tls_duration_ms >= 0) AND (ttfb_duration_ms IS NULL OR ttfb_duration_ms >= 0) AND total_duration_ms >= 0");

@@ -10,10 +10,7 @@ public static class SafeHttpRequestIdentity
     public static string? Create(SafeHttpTransportRequest request)
     {
         var normalized = EndpointUrlNormalizer.Normalize(request.Url);
-        if (!normalized.Succeeded
-            || request.MaxRedirects is < 0 or > SafeHttpTransportDefaults.MaxRedirects
-            || request.MaxResponseBodyBytes <= 0
-            || request.MaxResponseBodyBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes)
+        if (!normalized.Succeeded)
         {
             return null;
         }
@@ -24,6 +21,7 @@ public static class SafeHttpRequestIdentity
         Append(canonical, request.IsProduction ? "1" : "0");
         Append(canonical, request.MaxRedirects.ToString(CultureInfo.InvariantCulture));
         Append(canonical, request.MaxResponseBodyBytes.ToString(CultureInfo.InvariantCulture));
+        Append(canonical, request.TimeoutSeconds.ToString(CultureInfo.InvariantCulture));
         return Hash(canonical);
     }
 

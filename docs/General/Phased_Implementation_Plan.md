@@ -278,10 +278,10 @@ These requirements apply throughout the project:
 
 - [x] Implement a PostgreSQL-backed lease per endpoint and monitor type. Evidence: [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 - [x] Store lease owner, acquisition, expiry, and fencing generation. Evidence: `MonitoringExecutionFoundation`.
-- [ ] Ensure duplicate jobs use the same logical-check ID.
+- [x] Ensure duplicate jobs use the same logical-check ID. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 - [ ] Enforce one terminal result per logical check.
 - [ ] Recover safely after worker failure or expired lease.
-- [ ] Close timed-out or exhausted checks with terminal outcomes.
+- [x] Close timed-out or exhausted checks with terminal outcomes. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 
 ### Safe HTTP transport
 
@@ -305,7 +305,7 @@ These requirements apply throughout the project:
 - [x] Detect redirect loops and excessive chains.
 - [x] Persist bounded diagnostics without full bodies or sensitive headers.
 - [ ] Add check history and details pages.
-- [ ] Add structured check, endpoint, and job identifiers to logs.
+- [x] Add structured check, endpoint, and job identifiers to logs. Evidence: logical-check execution logging scope.
 
 ### Database and verification
 
@@ -314,14 +314,14 @@ These requirements apply throughout the project:
 - [x] Unit-test cadence, status rules, markers, redirects, loops, limits, and timeout classification.
 - [x] Integration-test controlled status, delay, redirect, cancellation, and large-body scenarios.
 - [x] Test IPv4, IPv6, redirects to prohibited ranges, actual connection addresses, DNS rebinding, and proxy policy.
-- [ ] Test duplicate delivery, competing workers, lease expiry, restart, and catch-up.
+- [ ] Test restart reconciliation and scheduler catch-up. Duplicate delivery, competing workers, and lease expiry are complete. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 - [ ] Verify disabled targets produce no new checks.
 
 ### Phase 3 completion gate
 
 - [ ] AC-02 passes for scheduled checks and persisted history.
 - [ ] AC-05 passes for redirect-loop termination and storage.
-- [ ] Duplicate and restart tests produce one logical result.
+- [ ] Restart reconciliation produces one logical result. Duplicate delivery/retry idempotency is complete.
 - [ ] Safe-network tests pass.
 - [ ] Monitoring workflow is demonstrated against controlled targets.
 

@@ -10,7 +10,13 @@ public interface IHttpCheckHistoryService
 public sealed record RecordHttpCheckHistory(
     ExecutionLeaseClaim Lease,
     SafeHttpTransportRequest Request,
-    SafeHttpTransportResult Transport);
+    SafeHttpTransportResult Transport,
+    FinalizeExecutionAttempt? Attempt = null);
+
+public sealed record FinalizeExecutionAttempt(
+    Guid AttemptId,
+    string Outcome,
+    string? FailureCategory = null);
 
 public enum HttpCheckHistoryWriteStatus
 {
@@ -20,5 +26,6 @@ public enum HttpCheckHistoryWriteStatus
     InvalidLogicalCheck,
     TargetMismatch,
     PolicyMismatch,
-    InvalidTransportResult
+    InvalidTransportResult,
+    InvalidExecutionAttempt
 }

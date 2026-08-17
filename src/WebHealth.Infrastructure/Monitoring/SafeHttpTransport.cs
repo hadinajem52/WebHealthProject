@@ -13,7 +13,6 @@ internal sealed class SafeHttpTransport(
     IHttpClientFactory httpClientFactory,
     IMonitoringTargetAuthorizer targetAuthorizer,
     SafeHttpConcurrencyLimiter concurrencyLimiter,
-    SafeHttpTransportOptions options,
     TimeProvider timeProvider) : ISafeHttpTransport
 {
     public async Task<SafeHttpTransportResult> SendAsync(
@@ -25,13 +24,18 @@ internal sealed class SafeHttpTransport(
         var normalized = EndpointUrlNormalizer.Normalize(request.Url);
         var requestIdentity = SafeHttpRequestIdentity.Create(request);
         if (!normalized.Succeeded
-            || requestIdentity is null)
+            || requestIdentity is null
+            || request.MaxRedirects is < 0 or > SafeHttpTransportDefaults.MaxRedirects
+            || request.MaxResponseBodyBytes <= 0
+            || request.MaxResponseBodyBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes
+            || request.TimeoutSeconds <= 0
+            || request.TimeoutSeconds > SafeHttpTransportDefaults.MaxTimeoutSeconds)
         {
             return Failure(SafeHttpFailureKind.InvalidUrl, stopwatch, redirects, requestIdentity);
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(options.Timeout);
+        timeout.CancelAfter(TimeSpan.FromSeconds(request.TimeoutSeconds));
 
         try
         {
