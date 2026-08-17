@@ -12,6 +12,7 @@ internal sealed class ManualCheckService(
     ApplicationDbContext dbContext,
     ITargetAuthorizationService targetAuthorization,
     ILogicalCheckQueue logicalCheckQueue,
+    MonitoringSchedulingOptions schedulingOptions,
     TimeProvider timeProvider,
     ILogger<ManualCheckService> logger) : IManualCheckService
 {
@@ -20,6 +21,11 @@ internal sealed class ManualCheckService(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
+        if (!schedulingOptions.Enabled)
+        {
+            return ManualCheckResult.SchedulingUnavailable();
+        }
+
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             return ManualCheckResult.Forbidden();
@@ -38,6 +44,16 @@ internal sealed class ManualCheckService(
             return ManualCheckResult.MonitorNotAvailable();
         }
 
+        // Re-verify authorization immediately before persisting the request, inside the same
+        // transaction as the monitor read. This narrows (does not eliminate) the window between
+        // the initial check above and commit during which an assignment, evidence grant, or the
+        // endpoint itself could be revoked/disabled.
+        if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return ManualCheckResult.Forbidden();
+        }
+
         var logicalCheckId = Guid.NewGuid();
         var durableWorkId = Guid.NewGuid();
         dbContext.LogicalChecks.Add(new LogicalCheck
@@ -54,7 +70,7 @@ internal sealed class ManualCheckService(
         });
         dbContext.CheckConfigurationSnapshots.Add(
             CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now));
-        var work = new DurableWork
+        dbContext.DurableWork.Add(new DurableWork
         {
             Id = durableWorkId,
             LogicalCheckId = logicalCheckId,
@@ -65,25 +81,14 @@ internal sealed class ManualCheckService(
             AvailableAt = now,
             CreatedAt = now,
             UpdatedAt = now
-        };
-        dbContext.DurableWork.Add(work);
+        });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        try
-        {
-            logicalCheckQueue.Enqueue(logicalCheckId, durableWorkId);
-            work.State = DurableWorkStates.Enqueued;
-            work.UpdatedAt = timeProvider.GetUtcNow();
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                exception,
-                "Manual check enqueue was interrupted for {LogicalCheckId} and will be reconciled.",
-                logicalCheckId);
-        }
+        // The transaction commit above is this operation's success boundary: the check is durably
+        // queued from here on, regardless of what happens next (including caller cancellation).
+        await DurableWorkEnqueueAcknowledgement.TryEnqueueAsync(
+            dbContext, logicalCheckQueue, timeProvider, logger, logicalCheckId, durableWorkId);
 
         return ManualCheckResult.Queued(logicalCheckId);
     }

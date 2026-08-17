@@ -14,7 +14,8 @@ public enum ManualCheckStatus
 {
     Queued,
     Forbidden,
-    MonitorNotAvailable
+    MonitorNotAvailable,
+    SchedulingUnavailable
 }
 
 public sealed record ManualCheckResult(ManualCheckStatus Status, Guid? LogicalCheckId = null)
@@ -22,4 +23,5 @@ public sealed record ManualCheckResult(ManualCheckStatus Status, Guid? LogicalCh
     public static ManualCheckResult Queued(Guid logicalCheckId) => new(ManualCheckStatus.Queued, logicalCheckId);
     public static ManualCheckResult Forbidden() => new(ManualCheckStatus.Forbidden);
     public static ManualCheckResult MonitorNotAvailable() => new(ManualCheckStatus.MonitorNotAvailable);
+    public static ManualCheckResult SchedulingUnavailable() => new(ManualCheckStatus.SchedulingUnavailable);
 }

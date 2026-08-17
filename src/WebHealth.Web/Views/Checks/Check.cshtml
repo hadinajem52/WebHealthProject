@@ -1,7 +1,7 @@
 @model CheckDetailsViewModel
 @{
     ViewData.SetTitle("Check details");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Endpoint", Url.Action("Endpoint", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check history", Url.Action("History", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check details"));
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Endpoint", Url.Action("Endpoint", "Targets", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check history", Url.Action("History", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check details"));
     var check = Model.Check;
     var hasResult = check.Outcome is not null;
     var outcomeStatus = check.Outcome switch

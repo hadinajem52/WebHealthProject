@@ -21,14 +21,14 @@ internal sealed class MonitoringSchedulingService(
         CancellationToken cancellationToken = default)
     {
         var work = await CreateDueWorkAsync(cancellationToken);
-        return await EnqueueAsync(work, cancellationToken);
+        return await EnqueueAsync(work);
     }
 
     public async Task<MonitoringDispatchResult> ReconcileAsync(
         CancellationToken cancellationToken = default)
     {
         var work = await ClaimRecoverableWorkAsync(cancellationToken);
-        return await EnqueueAsync(work, cancellationToken);
+        return await EnqueueAsync(work);
     }
 
     private async Task<IReadOnlyList<DispatchWork>> CreateDueWorkAsync(CancellationToken token)
@@ -138,52 +138,20 @@ internal sealed class MonitoringSchedulingService(
         return work.Select(candidate => new DispatchWork(candidate.LogicalCheckId, candidate.Id)).ToArray();
     }
 
-    private async Task<MonitoringDispatchResult> EnqueueAsync(
-        IReadOnlyList<DispatchWork> work,
-        CancellationToken token)
+    private async Task<MonitoringDispatchResult> EnqueueAsync(IReadOnlyList<DispatchWork> work)
     {
         var enqueued = 0;
         foreach (var candidate in work)
         {
-            try
+            if (await DurableWorkEnqueueAcknowledgement.TryEnqueueAsync(
+                dbContext, logicalCheckQueue, timeProvider, logger,
+                candidate.LogicalCheckId, candidate.DurableWorkId))
             {
-                logicalCheckQueue.Enqueue(candidate.LogicalCheckId, candidate.DurableWorkId);
-                await AcknowledgeEnqueueAsync(candidate.DurableWorkId, token);
                 enqueued++;
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                logger.LogWarning(
-                    exception,
-                    "Logical check enqueue was interrupted for {LogicalCheckId} and will be reconciled.",
-                    candidate.LogicalCheckId);
             }
         }
 
         return new(work.Count, enqueued);
-    }
-
-    private async Task<int> AcknowledgeEnqueueAsync(Guid workId, CancellationToken token)
-    {
-        var now = timeProvider.GetUtcNow();
-        var updated = await dbContext.DurableWork
-            .Where(work => work.Id == workId && work.State == DurableWorkStates.Dispatching)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(work => work.State, DurableWorkStates.Enqueued)
-                .SetProperty(work => work.UpdatedAt, now), token);
-        var tracked = dbContext.DurableWork.Local.SingleOrDefault(work => work.Id == workId);
-        if (updated == 1 && tracked is not null)
-        {
-            tracked.State = DurableWorkStates.Enqueued;
-            tracked.UpdatedAt = now;
-            var entry = dbContext.Entry(tracked);
-            entry.Property(work => work.State).OriginalValue = DurableWorkStates.Enqueued;
-            entry.Property(work => work.State).IsModified = false;
-            entry.Property(work => work.UpdatedAt).OriginalValue = now;
-            entry.Property(work => work.UpdatedAt).IsModified = false;
-        }
-
-        return updated;
     }
 
     private Task<IReadOnlyList<Guid>> ClaimDueMonitorIdsAsync(

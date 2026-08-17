@@ -83,6 +83,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyLogicalCheckExecutionAsync(connectionString);
         await VerifyHangfireSchedulingAsync(connectionString);
         await VerifyManualChecksAndHistoryAsync(connectionString);
+        await VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
@@ -1555,7 +1556,8 @@ internal static class DatabaseFoundationAssertions
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["ConnectionStrings:WebHealth"] = connectionString
+            ["ConnectionStrings:WebHealth"] = connectionString,
+            ["Monitoring:Scheduling:Enabled"] = "true"
         }).Build();
         var queue = new RecordingLogicalCheckQueue();
         await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration)
@@ -1588,7 +1590,7 @@ internal static class DatabaseFoundationAssertions
         var environmentId = environmentResult.EntityId!.Value;
 
         var ownedResult = await endpointService.CreateAsync(
-            new(environmentId, "https://manual-checks.example.test/owned", developerOwnerId, true, null,
+            new(environmentId, "HTTPS://Manual-Checks.EXAMPLE.test/Owned", developerOwnerId, true, null,
                 TargetAuthorizationKinds.Owned, "Manual check integration fixture.", null),
             administratorAccess);
         ownedResult.Succeeded.Should().BeTrue(string.Join(" ", ownedResult.Errors));
@@ -1657,6 +1659,7 @@ internal static class DatabaseFoundationAssertions
         var historyPage = await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess);
         historyPage.Should().NotBeNull();
         historyPage!.TotalCount.Should().Be(2);
+        historyPage.EndpointDisplayUrl.Should().Be("HTTPS://Manual-Checks.EXAMPLE.test/Owned");
         historyPage.Items.Should().Contain(item => item.LogicalCheckId == manualCheckId
             && item.Source == LogicalCheckSources.Manual
             && item.InitiatedByDisplayName == developer.DisplayName
@@ -1670,6 +1673,84 @@ internal static class DatabaseFoundationAssertions
         details.InitiatedByDisplayName.Should().Be(developer.DisplayName);
         details.CountsForUptime.Should().BeFalse();
         details.TotalDurationMs.Should().NotBeNull();
+        details.EndpointDisplayUrl.Should().Be("HTTPS://Manual-Checks.EXAMPLE.test/Owned");
+
+        // Pagination clamps out-of-range requests instead of overflowing or returning nonsense.
+        (await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess, page: 0))!
+            .Page.Should().Be(1);
+        var clampedToLastPage = await historyReader.ListForEndpointAsync(
+            ownedEndpointId, administratorAccess, page: int.MaxValue);
+        clampedToLastPage!.Page.Should().Be(1);
+        clampedToLastPage.Items.Should().HaveCount(2);
+
+        // The enqueue acknowledgement must never regress a durable work row that a racing worker
+        // has already advanced past Dispatching, on a separate connection, before Enqueue returns.
+        foreach (var racedState in new[] { DurableWorkStates.Processing, DurableWorkStates.Completed })
+        {
+            queue.OnEnqueue = (_, workId) =>
+            {
+                using var raceConnection = new NpgsqlConnection(connectionString);
+                raceConnection.Open();
+                using var raceCommand = new NpgsqlCommand(
+                    "UPDATE web_health.durable_work SET state = @state, updated_at = now() WHERE id = @id",
+                    raceConnection);
+                raceCommand.Parameters.AddWithValue("state", racedState);
+                raceCommand.Parameters.AddWithValue("id", workId);
+                raceCommand.ExecuteNonQuery();
+            };
+            var racedRun = await manualCheckService.RunNowAsync(ownedEndpointId, administratorAccess);
+            queue.OnEnqueue = null;
+            racedRun.Status.Should().Be(ManualCheckStatus.Queued);
+            (await database.DurableWork.AsNoTracking()
+                .Where(work => work.LogicalCheckId == racedRun.LogicalCheckId)
+                .Select(work => work.State)
+                .SingleAsync()).Should().Be(racedState);
+        }
+
+        // Archived endpoints follow the same visibility rule as the rest of the registry: hidden
+        // from non-managers, still reachable by Administrator/Operations. This must be last, since
+        // it removes ownedEndpointId from developer/viewer visibility for anything that follows.
+        var ownedEndpointVersion = await database.Endpoints.AsNoTracking()
+            .Where(candidate => candidate.Id == ownedEndpointId)
+            .Select(candidate => candidate.Version)
+            .SingleAsync();
+        (await endpointService.DeleteAsync(new(ownedEndpointId, ownedEndpointVersion), administratorAccess))
+            .Succeeded.Should().BeTrue();
+        (await historyReader.ListForEndpointAsync(ownedEndpointId, developerAccess)).Should().BeNull();
+        (await historyReader.FindCheckAsync(manualCheckId, developerAccess)).Should().BeNull();
+        (await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess)).Should().NotBeNull();
+        (await historyReader.FindCheckAsync(manualCheckId, administratorAccess)).Should().NotBeNull();
+    }
+
+    private static async Task VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString,
+            ["Monitoring:Scheduling:Enabled"] = "false"
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration)
+            .BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+
+        // IManualCheckService (and anything depending on it) must still activate when no Hangfire
+        // queue is configured - the DI graph must not break registry pages that have nothing to do
+        // with manual checks just because scheduling is administratively disabled.
+        var manualCheckService = scope.ServiceProvider.GetRequiredService<IManualCheckService>();
+        var targetReader = scope.ServiceProvider.GetRequiredService<ITargetRegistryReader>();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var endpointId = await database.Endpoints.AsNoTracking().Select(candidate => candidate.Id).FirstAsync();
+
+        (await targetReader.FindEndpointAsync(endpointId, administratorAccess)).Should().NotBeNull();
+
+        var checkCountBefore = await database.LogicalChecks.CountAsync();
+        var result = await manualCheckService.RunNowAsync(endpointId, administratorAccess);
+        result.Status.Should().Be(ManualCheckStatus.SchedulingUnavailable);
+        result.LogicalCheckId.Should().BeNull();
+        (await database.LogicalChecks.CountAsync()).Should().Be(checkCountBefore);
     }
 
     private static ServiceProvider BuildSchedulingServices(
@@ -2714,6 +2795,13 @@ internal static class DatabaseFoundationAssertions
 
         public bool FailNext { get; set; }
 
+        /// <summary>
+        /// Invoked synchronously inside Enqueue, before this method returns, so a test can simulate
+        /// a worker racing ahead of the caller's own enqueue-acknowledgement step (e.g. advancing the
+        /// durable work row to Processing or Completed via a separate connection).
+        /// </summary>
+        public Action<Guid, Guid>? OnEnqueue { get; set; }
+
         public IReadOnlyList<(Guid LogicalCheckId, Guid DurableWorkId)> Jobs => jobs.ToArray();
 
         public string Enqueue(Guid logicalCheckId, Guid durableWorkId)
@@ -2724,6 +2812,7 @@ internal static class DatabaseFoundationAssertions
                 throw new InvalidOperationException("Simulated enqueue interruption.");
             }
 
+            OnEnqueue?.Invoke(logicalCheckId, durableWorkId);
             jobs.Enqueue((logicalCheckId, durableWorkId));
             return jobs.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }

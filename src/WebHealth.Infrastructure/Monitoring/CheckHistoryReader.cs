@@ -19,21 +19,25 @@ internal sealed class CheckHistoryReader(
         CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
+        var canManage = RegistryVisibility.CanManage(access);
         var endpoint = await visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
+            .Where(candidate => canManage || candidate.DeletedAt == null)
             .Where(candidate => candidate.Id == endpointId)
-            .Select(candidate => new { candidate.Id, candidate.NormalizedUrl })
+            .Select(candidate => new { candidate.Id, candidate.DisplayUrl })
             .SingleOrDefaultAsync(cancellationToken);
         if (endpoint is null)
         {
             return null;
         }
 
-        var boundedPage = Math.Max(page, 1);
-        var query = dbContext.LogicalChecks.AsNoTracking()
-            .Where(check => check.EndpointMonitor.EndpointId == endpointId)
-            .OrderByDescending(check => check.CreatedAt);
-        var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
+        var checksForEndpoint = dbContext.LogicalChecks.AsNoTracking()
+            .Where(check => check.EndpointMonitor.EndpointId == endpointId);
+        var totalCount = await checksForEndpoint.CountAsync(cancellationToken);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)PageSize));
+        var boundedPage = Math.Clamp(page, 1, totalPages);
+        var items = await checksForEndpoint
+            .OrderByDescending(check => check.CreatedAt)
+            .ThenByDescending(check => check.Id)
             .Skip((boundedPage - 1) * PageSize)
             .Take(PageSize)
             .Select(check => new CheckHistoryItem(
@@ -51,7 +55,7 @@ internal sealed class CheckHistoryReader(
                 check.Result != null && check.Result.CountsForUptime))
             .ToArrayAsync(cancellationToken);
 
-        return new(endpoint.Id, endpoint.NormalizedUrl, items, boundedPage, PageSize, totalCount);
+        return new(endpoint.Id, endpoint.DisplayUrl, items, boundedPage, PageSize, totalCount);
     }
 
     public async Task<CheckDetails?> FindCheckAsync(
@@ -59,31 +63,37 @@ internal sealed class CheckHistoryReader(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        var check = await dbContext.LogicalChecks.AsNoTracking()
-            .Include(candidate => candidate.EndpointMonitor).ThenInclude(monitor => monitor.Endpoint)
-            .Include(candidate => candidate.InitiatedByUser)
-            .Include(candidate => candidate.Result).ThenInclude(result => result!.Findings)
-            .Include(candidate => candidate.Result).ThenInclude(result => result!.RedirectHops)
-            .SingleOrDefaultAsync(candidate => candidate.Id == logicalCheckId, cancellationToken);
-        if (check is null)
+        var endpointId = await dbContext.LogicalChecks.AsNoTracking()
+            .Where(candidate => candidate.Id == logicalCheckId)
+            .Select(candidate => (Guid?)candidate.EndpointMonitor.EndpointId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (endpointId is null)
         {
             return null;
         }
 
-        var endpointId = check.EndpointMonitor.EndpointId;
         var now = DateTimeOffset.UtcNow;
+        var canManage = RegistryVisibility.CanManage(access);
         var visible = await visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
+            .Where(candidate => canManage || candidate.DeletedAt == null)
             .AnyAsync(candidate => candidate.Id == endpointId, cancellationToken);
         if (!visible)
         {
             return null;
         }
 
+        var check = await dbContext.LogicalChecks.AsNoTracking()
+            .Include(candidate => candidate.EndpointMonitor).ThenInclude(monitor => monitor.Endpoint)
+            .Include(candidate => candidate.InitiatedByUser)
+            .Include(candidate => candidate.Result).ThenInclude(result => result!.Findings)
+            .Include(candidate => candidate.Result).ThenInclude(result => result!.RedirectHops)
+            .SingleAsync(candidate => candidate.Id == logicalCheckId, cancellationToken);
+
         var result = check.Result;
         return new CheckDetails(
             check.Id,
-            endpointId,
-            check.EndpointMonitor.Endpoint.NormalizedUrl,
+            endpointId.Value,
+            check.EndpointMonitor.Endpoint.DisplayUrl,
             check.Source,
             check.State,
             check.ScheduledFor,

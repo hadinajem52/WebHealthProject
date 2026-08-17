@@ -114,6 +114,10 @@ public static class DependencyInjection
             });
             services.AddScoped<ILogicalCheckQueue, HangfireLogicalCheckQueue>();
         }
+        else
+        {
+            services.AddScoped<ILogicalCheckQueue, DisabledLogicalCheckQueue>();
+        }
         var configuredUserAgent = configuration[$"{SafeHttpTransportOptions.SectionName}:UserAgent"];
         var safeHttpOptions = new SafeHttpTransportOptions
         {

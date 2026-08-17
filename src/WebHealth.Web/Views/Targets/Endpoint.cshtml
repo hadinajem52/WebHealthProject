@@ -1,11 +1,11 @@
 @model EndpointDetailsViewModel
 @{ViewData.SetTitle("Endpoint"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.Endpoint.WebsiteName), new BreadcrumbItem(Model.Endpoint.EnvironmentName), new BreadcrumbItem("Endpoint"));}
-<section class="card"><div class="page-intro"><div><h2 class="card__title target-url">@Model.Endpoint.DisplayUrl</h2><p class="card__subtitle">@Model.Endpoint.WebsiteName / @Model.Endpoint.EnvironmentName · Version @Model.Endpoint.Version</p></div><div class="form-actions"><a class="button button--secondary" asp-action="History" asp-route-id="@Model.Endpoint.Id">
+<section class="card"><div class="page-intro"><div><h2 class="card__title target-url">@Model.Endpoint.DisplayUrl</h2><p class="card__subtitle">@Model.Endpoint.WebsiteName / @Model.Endpoint.EnvironmentName · Version @Model.Endpoint.Version</p></div><div class="form-actions"><a class="button button--secondary" asp-controller="Checks" asp-action="History" asp-route-id="@Model.Endpoint.Id">
         @await Html.PartialAsync("_Icon", "clock")
         <span>Check history</span>
     </a>@if(Model.Endpoint.CanTest)
 {
-    <form asp-action="RunCheck" asp-route-id="@Model.Endpoint.Id" method="post">
+    <form asp-controller="Checks" asp-action="RunCheck" asp-route-id="@Model.Endpoint.Id" method="post">
         <button class="button button--primary" type="submit">
             @await Html.PartialAsync("_Icon", "play")
             <span>Run now</span>
