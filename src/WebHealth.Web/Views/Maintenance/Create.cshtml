@@ -1,0 +1,3 @@
+@model MaintenanceWindowFormViewModel
+@{ ViewData.SetTitle("Schedule maintenance"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Maintenance", "/Maintenance"), new BreadcrumbItem("Schedule")); }
+<section class="card form-card"><h2 class="card__title">Schedule maintenance</h2><p class="card__subtitle">One-off maintenance windows are stored as immutable UTC occurrences.</p><form asp-action="Create" method="post" class="form-stack"><partial name="_Form" model="Model" /><div class="form-actions"><button class="button button--primary" type="submit">@await Html.PartialAsync("_Icon", "plus")<span>Schedule window</span></button><a class="button button--secondary" asp-action="Index">Cancel</a></div></form></section>

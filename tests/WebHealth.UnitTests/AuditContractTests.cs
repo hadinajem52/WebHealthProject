@@ -19,7 +19,8 @@ public sealed class AuditContractTests
             nameof(IAuditTrailWriter.RecordClientMutationAsync),
             nameof(IAuditTrailWriter.RecordWebsiteMutationAsync),
             nameof(IAuditTrailWriter.RecordEnvironmentMutationAsync),
-            nameof(IAuditTrailWriter.RecordEndpointMutationAsync));
+            nameof(IAuditTrailWriter.RecordEndpointMutationAsync),
+            nameof(IAuditTrailWriter.RecordMaintenanceMutationAsync));
         methods.SelectMany(method => method.GetParameters())
             .Select(parameter => parameter.ParameterType)
             .Should().OnlyContain(type =>
@@ -34,6 +35,8 @@ public sealed class AuditContractTests
                 || type == typeof(EnvironmentAuditSnapshot)
                 || type == typeof(EndpointAuditAction)
                 || type == typeof(EndpointAuditSnapshot)
+                || type == typeof(MaintenanceAuditAction)
+                || type == typeof(MaintenanceAuditSnapshot)
                 || type == typeof(CancellationToken));
         typeof(UserAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
@@ -97,5 +100,19 @@ public sealed class AuditContractTests
                 nameof(EndpointAuditSnapshot.HasIntervalOverride),
                 nameof(EndpointAuditSnapshot.IsDeleted),
                 nameof(EndpointAuditSnapshot.Version));
+        typeof(MaintenanceAuditSnapshot).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(MaintenanceAuditSnapshot.MaintenanceWindowId),
+                nameof(MaintenanceAuditSnapshot.ScopeKind),
+                nameof(MaintenanceAuditSnapshot.ScopeId),
+                nameof(MaintenanceAuditSnapshot.StartsAt),
+                nameof(MaintenanceAuditSnapshot.EndsAt),
+                nameof(MaintenanceAuditSnapshot.TimezoneId),
+                nameof(MaintenanceAuditSnapshot.SuppressionPolicy),
+                nameof(MaintenanceAuditSnapshot.PauseEscalation),
+                nameof(MaintenanceAuditSnapshot.ContinueFailureCounter),
+                nameof(MaintenanceAuditSnapshot.IsCancelled),
+                nameof(MaintenanceAuditSnapshot.ReasonChanged),
+                nameof(MaintenanceAuditSnapshot.Version));
     }
 }

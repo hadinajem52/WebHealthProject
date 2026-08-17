@@ -335,19 +335,19 @@ These requirements apply throughout the project:
 
 ### Minimum maintenance behavior
 
-- [ ] Implement non-recurring maintenance windows with target scope, start/end, timezone, reason, creator, and suppression policy.
-- [ ] Validate that end is after start and evaluate active windows using stored UTC instants.
-- [ ] Continue checks during maintenance and mark their results.
-- [ ] Suppress notifications while retaining explicit suppression records.
-- [ ] Pause escalation for incidents opened before maintenance according to policy.
-- [ ] Reset post-maintenance failure confirmation by default.
+- [x] Implement non-recurring maintenance windows with target scope, start/end, timezone, reason, creator, and suppression policy. Evidence: [`../phase-4/Minimum_Maintenance_Behavior.md`](../phase-4/Minimum_Maintenance_Behavior.md).
+- [x] Validate that end is after start and evaluate active windows using stored UTC instants.
+- [x] Continue checks during maintenance and mark their results.
+- [ ] Suppress notifications while retaining explicit suppression records. Owned by the notification increment because durable notification records do not exist yet.
+- [ ] Pause escalation for incidents opened before maintenance according to policy. Owned by incident and notification processing.
+- [x] Reset post-maintenance failure confirmation by default. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
 - [ ] Keep recurring windows, DST expansion, and advanced maintenance administration in Phase 6.
 
 ### Health and incident engine
 
-- [ ] Implement stable issue-key generation.
-- [ ] Implement failure and recovery counters.
-- [ ] Reset failure count after a passing result.
+- [x] Implement stable issue-key generation. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
+- [x] Implement failure and recovery counters. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
+- [x] Reset failure count after a passing result.
 - [ ] Open incidents only after confirmation.
 - [ ] Maintain one active incident per endpoint, monitor type, and issue key.
 - [ ] Support separate incidents for materially different issues.
@@ -387,8 +387,8 @@ These requirements apply throughout the project:
 - [ ] Add incident optimistic concurrency and query indexes.
 - [ ] Build incident list, details, timeline, acknowledgement, assignment, resolution, and closure pages.
 - [ ] Authorize incident actions by role and assignment.
-- [ ] Test failure confirmation and recovery boundaries.
-- [ ] Test fail-pass-fail reset behavior.
+- [x] Test failure confirmation and recovery boundaries.
+- [x] Test fail-pass-fail reset behavior.
 - [ ] Test valid and invalid state transitions.
 - [ ] Test distinct issues and recurrence.
 - [ ] Test duplicate job delivery and restart.

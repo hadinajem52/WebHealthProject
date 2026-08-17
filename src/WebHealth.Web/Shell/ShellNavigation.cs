@@ -19,6 +19,7 @@ public static class ShellNavigation
                 "Registry",
                 "Clients",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"]),
+            new NavigationItem("Maintenance", "warning", "Maintenance", "Index", ["Administrator", "Operations"]),
             new NavigationItem("Incidents", "incidents"),
             new NavigationItem("Reports", "reports")
         ]),

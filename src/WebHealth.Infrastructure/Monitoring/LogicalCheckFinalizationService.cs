@@ -3,15 +3,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using NpgsqlTypes;
+using WebHealth.Application.Health;
 using WebHealth.Application.Monitoring;
+using WebHealth.Application.Maintenance;
+using WebHealth.Domain.Health;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Normalization;
+using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
 internal sealed class LogicalCheckFinalizationService(
     ApplicationDbContext dbContext,
+    IMaintenanceEvaluator maintenanceEvaluator,
     TimeProvider timeProvider) : ILogicalCheckFinalizationService
 {
     public async Task<LogicalCheckFinalizationStatus> FinalizeAsync(
@@ -67,7 +72,9 @@ internal sealed class LogicalCheckFinalizationService(
 
         var now = timeProvider.GetUtcNow();
         var normalized = Normalize(check, command.Evidence, now);
-        AddHistory(check, normalized, IsResponseTruncated(command.Evidence), now);
+        var maintenance = await maintenanceEvaluator.FindActiveAsync(check.EndpointMonitorId, normalized.MeasuredAt, cancellationToken);
+        AddHistory(check, normalized, IsResponseTruncated(command.Evidence), maintenance, now);
+        await ApplyHealthAsync(check, normalized, maintenance, now, cancellationToken);
         CompleteAttempt(attempt!, command.Evidence, now);
         CompleteWork(work, now);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -345,6 +352,7 @@ internal sealed class LogicalCheckFinalizationService(
         LogicalCheck check,
         NormalizedHttpResult normalized,
         bool responseTruncated,
+        ActiveMaintenanceOccurrence? maintenance,
         DateTimeOffset completedAt)
     {
         dbContext.CheckResults.Add(new CheckResult
@@ -359,8 +367,11 @@ internal sealed class LogicalCheckFinalizationService(
             ResponseTruncated = responseTruncated,
             MonitorSource = normalized.MonitorSource,
             MeasuredAt = normalized.MeasuredAt,
+            MaintenanceOccurrenceId = maintenance?.OccurrenceId,
+            IsMaintenance = maintenance is not null,
             CountsForUptime = check.Source == LogicalCheckSources.Scheduled
-                && normalized.Outcome != HttpResultOutcomes.Cancelled,
+                && normalized.Outcome != HttpResultOutcomes.Cancelled
+                && maintenance is null,
             SafeDiagnostic = normalized.SafeDiagnostic,
             CompletedAt = completedAt
         });
@@ -386,6 +397,129 @@ internal sealed class LogicalCheckFinalizationService(
         }));
         check.State = LogicalCheckStates.Completed;
         check.CompletedAt = completedAt;
+    }
+
+    private async Task ApplyHealthAsync(
+        LogicalCheck check,
+        NormalizedHttpResult result,
+        ActiveMaintenanceOccurrence? maintenance,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await LockEndpointMonitorAsync(check.EndpointMonitorId, cancellationToken);
+        var states = await dbContext.IssueStates
+            .FromSqlInterpolated($"""
+                SELECT * FROM web_health.issue_state
+                WHERE endpoint_monitor_id = {check.EndpointMonitorId}
+                FOR UPDATE
+                """)
+            .ToListAsync(cancellationToken);
+        var health = await dbContext.EndpointHealth.SingleOrDefaultAsync(
+            candidate => candidate.EndpointMonitorId == check.EndpointMonitorId,
+            cancellationToken);
+        var decision = HealthConfirmationEngine.Evaluate(new(
+            health?.ConfirmedStatus ?? EndpointHealthStatuses.Unknown,
+            states.Select(ToCounter).ToArray(),
+            ObservedIssueKeys(result),
+            result.Outcome == HttpResultOutcomes.Healthy,
+            check.ConfigurationSnapshot.FailureConfirmationCount,
+            check.ConfigurationSnapshot.RecoveryConfirmationCount,
+            HealthConfirmationEngine.SelectCounterMode(
+                check.Source,
+                result.Outcome,
+                result.FailureCategory,
+                maintenance is not null,
+                maintenance?.ContinueFailureCounter ?? false)));
+
+        ApplyIssueCounters(check.EndpointMonitorId, states, decision.Issues, now);
+        ApplyConfirmedHealth(check, health, decision.ConfirmedStatus, now);
+    }
+
+    private void ApplyIssueCounters(
+        Guid endpointMonitorId,
+        IReadOnlyCollection<IssueState> currentStates,
+        IReadOnlyCollection<HealthIssueCounter> decisions,
+        DateTimeOffset now)
+    {
+        var current = currentStates.ToDictionary(state => state.IssueKey, StringComparer.Ordinal);
+        foreach (var decision in decisions)
+        {
+            if (!current.TryGetValue(decision.IssueKey, out var state))
+            {
+                dbContext.IssueStates.Add(new IssueState
+                {
+                    Id = Guid.NewGuid(),
+                    EndpointMonitorId = endpointMonitorId,
+                    IssueKey = decision.IssueKey,
+                    ConsecutiveFailures = decision.ConsecutiveFailures,
+                    ConsecutiveRecoveries = decision.ConsecutiveRecoveries,
+                    UpdatedAt = now,
+                    Version = 1
+                });
+                continue;
+            }
+
+            if (state.ConsecutiveFailures == decision.ConsecutiveFailures
+                && state.ConsecutiveRecoveries == decision.ConsecutiveRecoveries)
+            {
+                continue;
+            }
+
+            state.ConsecutiveFailures = decision.ConsecutiveFailures;
+            state.ConsecutiveRecoveries = decision.ConsecutiveRecoveries;
+            state.UpdatedAt = now;
+            state.Version++;
+        }
+    }
+
+    private void ApplyConfirmedHealth(
+        LogicalCheck check,
+        EndpointHealth? health,
+        string? confirmedStatus,
+        DateTimeOffset now)
+    {
+        if (confirmedStatus is null || health?.ConfirmedStatus == confirmedStatus)
+        {
+            return;
+        }
+
+        if (health is null)
+        {
+            dbContext.EndpointHealth.Add(new EndpointHealth
+            {
+                EndpointMonitorId = check.EndpointMonitorId,
+                EvidenceLogicalCheckId = check.Id,
+                ConfirmedStatus = confirmedStatus,
+                ConfirmedAt = now,
+                Version = 1
+            });
+            return;
+        }
+
+        health.ConfirmedStatus = confirmedStatus;
+        health.EvidenceLogicalCheckId = check.Id;
+        health.ConfirmedAt = now;
+        health.Version++;
+    }
+
+    private static HealthIssueCounter ToCounter(IssueState state) => new(
+        state.IssueKey,
+        state.ConsecutiveFailures,
+        state.ConsecutiveRecoveries);
+
+    private static IReadOnlyCollection<string> ObservedIssueKeys(NormalizedHttpResult result)
+    {
+        if (result.Outcome == HttpResultOutcomes.Healthy)
+        {
+            return [];
+        }
+
+        var issueKeys = result.Findings.Select(finding => finding.IssueKey)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return issueKeys.Length > 0
+            ? issueKeys
+            : [HttpIssueIdentity.Create($"Http.{result.FailureCategory ?? "Unknown"}")];
     }
 
     private static void CompleteAttempt(
@@ -470,6 +604,14 @@ internal sealed class LogicalCheckFinalizationService(
         await using var command = CreateCommand(
             "SELECT id FROM web_health.logical_check WHERE id = @id FOR UPDATE");
         command.Parameters.AddWithValue("id", NpgsqlDbType.Uuid, logicalCheckId);
+        await command.ExecuteScalarAsync(cancellationToken);
+    }
+
+    private async Task LockEndpointMonitorAsync(Guid endpointMonitorId, CancellationToken cancellationToken)
+    {
+        await using var command = CreateCommand(
+            "SELECT id FROM web_health.endpoint_monitor WHERE id = @id FOR UPDATE");
+        command.Parameters.AddWithValue("id", NpgsqlDbType.Uuid, endpointMonitorId);
         await command.ExecuteScalarAsync(cancellationToken);
     }
 

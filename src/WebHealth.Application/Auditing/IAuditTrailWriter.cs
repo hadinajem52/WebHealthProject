@@ -51,6 +51,13 @@ public interface IAuditTrailWriter
         EndpointAuditSnapshot? before,
         EndpointAuditSnapshot after,
         CancellationToken cancellationToken = default);
+
+    Task RecordMaintenanceMutationAsync(
+        AuditWriteContext context,
+        MaintenanceAuditAction action,
+        MaintenanceAuditSnapshot? before,
+        MaintenanceAuditSnapshot after,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record AuditWriteContext(Guid ActorUserId, DateTimeOffset OccurredAt);
@@ -151,4 +158,20 @@ public sealed record EndpointAuditSnapshot(
     int MonitorIntervalSeconds,
     bool HasIntervalOverride,
     bool IsDeleted,
+    long Version);
+
+public enum MaintenanceAuditAction { Created, Updated, Cancelled }
+
+public sealed record MaintenanceAuditSnapshot(
+    Guid MaintenanceWindowId,
+    string ScopeKind,
+    Guid ScopeId,
+    DateTimeOffset StartsAt,
+    DateTimeOffset EndsAt,
+    string TimezoneId,
+    string SuppressionPolicy,
+    bool PauseEscalation,
+    bool ContinueFailureCounter,
+    bool IsCancelled,
+    bool ReasonChanged,
     long Version);

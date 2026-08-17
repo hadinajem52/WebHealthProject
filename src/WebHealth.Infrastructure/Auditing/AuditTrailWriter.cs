@@ -110,6 +110,20 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             after,
             cancellationToken);
 
+    public Task RecordMaintenanceMutationAsync(
+        AuditWriteContext context,
+        MaintenanceAuditAction action,
+        MaintenanceAuditSnapshot? before,
+        MaintenanceAuditSnapshot after,
+        CancellationToken cancellationToken) =>
+        RecordAsync(context, action switch
+        {
+            MaintenanceAuditAction.Created => "maintenance.created",
+            MaintenanceAuditAction.Updated => "maintenance.updated",
+            MaintenanceAuditAction.Cancelled => "maintenance.cancelled",
+            _ => throw new ArgumentOutOfRangeException(nameof(action))
+        }, "maintenance_window", after.MaintenanceWindowId, before, after, cancellationToken);
+
     private static string ToAction(string entityType, string action) =>
         $"{entityType}.{action.ToLowerInvariant()}";
 

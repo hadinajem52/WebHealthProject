@@ -417,18 +417,18 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 11.2 Minimum maintenance behavior
 
-- [ ] Implement non-recurring maintenance windows with target scope, start/end, timezone, reason, creator, and suppression policy.
-- [ ] Reject invalid windows and evaluate active windows using stored UTC instants.
-- [ ] Continue checks during maintenance and mark their results.
+- [x] Implement non-recurring maintenance windows with target scope, start/end, timezone, reason, creator, and suppression policy. Evidence: [`../phase-4/Minimum_Maintenance_Behavior.md`](../phase-4/Minimum_Maintenance_Behavior.md).
+- [x] Reject invalid windows and evaluate active windows using stored UTC instants.
+- [x] Continue checks during maintenance and mark their results.
 - [ ] Suppress notifications while preserving explicit suppression records.
 - [ ] Pause escalation for incidents opened before maintenance according to policy.
-- [ ] Reset post-maintenance failure confirmation by default.
+- [x] Reset post-maintenance failure confirmation by default. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
 - [ ] Leave recurring-window expansion, daylight-saving handling, and advanced administration to Phase 6.
 
 ### 11.3 Health and incident rules
 
-- [ ] Implement failure and recovery counters.
-- [ ] Reset the failure counter after a passing result.
+- [x] Implement failure and recovery counters. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
+- [x] Reset the failure counter after a passing result.
 - [ ] Open an incident at the configured confirmation threshold.
 - [ ] Maintain one active incident per endpoint, monitor type, and issue key.
 - [ ] Allow materially different issues to create separate incidents.
