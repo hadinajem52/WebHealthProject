@@ -49,7 +49,26 @@ internal sealed class MonitoringSchedulingService(
             .OrderBy(monitor => monitor.NextDueAt)
             .ThenBy(monitor => monitor.Id)
             .ToArrayAsync(token);
-        var work = monitors.Select(monitor => CreateScheduledCheck(monitor, now)).ToArray();
+        var claimedEndpointIds = monitors.Select(monitor => monitor.EndpointId).Distinct().ToArray();
+        var eligibleEndpointIds = (await MonitoringEligibility.Apply(dbContext.Endpoints.AsNoTracking(), now)
+            .Where(endpoint => claimedEndpointIds.Contains(endpoint.Id))
+            .Select(endpoint => endpoint.Id)
+            .ToArrayAsync(token)).ToHashSet();
+
+        var work = new List<DispatchWork>();
+        foreach (var monitor in monitors)
+        {
+            if (eligibleEndpointIds.Contains(monitor.EndpointId))
+            {
+                work.Add(CreateScheduledCheck(monitor, now));
+            }
+            else
+            {
+                monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                    monitor.ScheduleAnchor, monitor.IntervalSeconds, now);
+            }
+        }
+
         await dbContext.SaveChangesAsync(token);
         await transaction.CommitAsync(token);
         return work;
@@ -180,7 +199,11 @@ internal sealed class MonitoringSchedulingService(
         {
             tracked.State = DurableWorkStates.Enqueued;
             tracked.UpdatedAt = now;
-            dbContext.Entry(tracked).State = EntityState.Unchanged;
+            var entry = dbContext.Entry(tracked);
+            entry.Property(work => work.State).OriginalValue = DurableWorkStates.Enqueued;
+            entry.Property(work => work.State).IsModified = false;
+            entry.Property(work => work.UpdatedAt).OriginalValue = now;
+            entry.Property(work => work.UpdatedAt).IsModified = false;
         }
 
         return updated;
@@ -199,20 +222,8 @@ internal sealed class MonitoringSchedulingService(
         WHERE monitor.monitor_type = 'HttpAvailability'
           AND monitor.deleted_at IS NULL AND monitor.is_enabled
           AND monitor.next_due_at <= @now
-          AND endpoint.deleted_at IS NULL AND endpoint.is_enabled
-          AND environment.deleted_at IS NULL AND environment.is_active
-          AND website.deleted_at IS NULL AND website.is_enabled
-          AND client.deleted_at IS NULL AND client.is_active
-          AND EXISTS (
-              SELECT 1 FROM web_health.target_authorization AS evidence
-              WHERE evidence.endpoint_id = endpoint.id
-                AND evidence.revoked_at IS NULL
-                AND evidence.effective_from <= @now
-                AND (evidence.expires_at IS NULL OR evidence.expires_at > @now)
-                AND evidence.normalized_host = endpoint.normalized_host
-                AND evidence.port = endpoint.effective_port)
         ORDER BY monitor.next_due_at, monitor.id
-        FOR UPDATE OF monitor SKIP LOCKED
+        FOR UPDATE OF monitor, endpoint, environment, website, client SKIP LOCKED
         LIMIT @limit
         """, now, limit, token);
 

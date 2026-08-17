@@ -11,8 +11,7 @@ public sealed record ExecuteLogicalCheck(
     Guid LogicalCheckId,
     Guid DurableWorkId,
     string JobId,
-    string WorkerId,
-    bool IsFinalAttempt);
+    string WorkerId);
 
 public enum LogicalCheckExecutionStatus
 {

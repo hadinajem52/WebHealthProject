@@ -301,6 +301,11 @@ internal sealed class EnvironmentRegistryService(
         foreach (var monitor in environment.Endpoints.SelectMany(endpoint => endpoint.Monitors))
         {
             var effectiveInterval = MonitorIntervalOverride.GetSeconds(monitor.BoundedOverrides) ?? interval;
+            if (monitor.IntervalSeconds == effectiveInterval)
+            {
+                continue;
+            }
+
             monitor.IntervalSeconds = effectiveInterval;
             monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
                 monitor.ScheduleAnchor, effectiveInterval, now);

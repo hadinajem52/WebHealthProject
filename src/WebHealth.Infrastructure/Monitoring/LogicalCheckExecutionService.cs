@@ -16,6 +16,7 @@ internal sealed class LogicalCheckExecutionService(
     TimeProvider timeProvider,
     ILogger<LogicalCheckExecutionService> logger) : ILogicalCheckExecutionService
 {
+    private const int MaximumTotalAttempts = 3;
     private static readonly TimeSpan LeaseBuffer = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaximumLeaseDuration = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan CancellationCleanupTimeout = TimeSpan.FromSeconds(5);
@@ -37,10 +38,12 @@ internal sealed class LogicalCheckExecutionService(
         var request = CreateRequest(check);
         var isEligible = await eligibilityService.IsEndpointEligibleAsync(
             check.EndpointMonitor.EndpointId, cancellationToken);
+        var attemptNumber = await CountAttemptsAsync(check.Id, cancellationToken) + 1;
+        var isFinalAttempt = attemptNumber >= MaximumTotalAttempts;
         var claim = await AcquireLeaseAsync(check, cancellationToken);
         if (claim is null)
         {
-            return command.IsFinalAttempt
+            return isFinalAttempt
                 ? LogicalCheckExecutionStatus.ReconciliationRequired
                 : LogicalCheckExecutionStatus.RetryRequired;
         }
@@ -48,7 +51,7 @@ internal sealed class LogicalCheckExecutionService(
         ExecutionAttempt? attempt;
         try
         {
-            attempt = await StartAttemptAsync(check, command, cancellationToken);
+            attempt = await StartAttemptAsync(check, command, attemptNumber, cancellationToken);
         }
         catch
         {
@@ -67,10 +70,29 @@ internal sealed class LogicalCheckExecutionService(
             return await FinalizeAsync(
                 claim, attempt.Id, command.DurableWorkId,
                 new ExecutionTerminalEvidence(ExecutionTerminalReason.TargetIneligible),
-                command.IsFinalAttempt, cancellationToken);
+                isFinalAttempt, cancellationToken);
         }
 
-        var result = await transport.SendAsync(request, cancellationToken);
+        SafeHttpTransportResult result;
+        try
+        {
+            result = await transport.SendAsync(request, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(exception, "Logical check transport execution faulted.");
+            if (isFinalAttempt)
+            {
+                return await FinalizeAsync(
+                    claim, attempt.Id, command.DurableWorkId,
+                    new ExecutionTerminalEvidence(ExecutionTerminalReason.RetriesExhausted),
+                    isFinalAttempt, cancellationToken);
+            }
+
+            await PrepareFaultedRetryAsync(claim, attempt.Id, command.DurableWorkId, cancellationToken);
+            return LogicalCheckExecutionStatus.RetryRequired;
+        }
+
         if (cancellationToken.IsCancellationRequested)
         {
             await PrepareCancelledRetryAsync(claim, attempt.Id, command.DurableWorkId);
@@ -80,7 +102,7 @@ internal sealed class LogicalCheckExecutionService(
         return await FinalizeAsync(
             claim, attempt.Id, command.DurableWorkId,
             new HttpTransportEvidence(request, result),
-            command.IsFinalAttempt, cancellationToken);
+            isFinalAttempt, cancellationToken);
     }
 
     private Task<LogicalCheck?> LoadCheckAsync(Guid checkId, CancellationToken token) =>
@@ -102,6 +124,7 @@ internal sealed class LogicalCheckExecutionService(
     private async Task<ExecutionAttempt?> StartAttemptAsync(
         LogicalCheck check,
         ExecuteLogicalCheck command,
+        int attemptNumber,
         CancellationToken token)
     {
         await dbContext.Entry(check).ReloadAsync(token);
@@ -123,7 +146,7 @@ internal sealed class LogicalCheckExecutionService(
         {
             Id = Guid.NewGuid(),
             LogicalCheckId = check.Id,
-            AttemptNumber = await NextAttemptNumberAsync(check.Id, token),
+            AttemptNumber = attemptNumber,
             JobId = command.JobId,
             WorkerId = command.WorkerId,
             StartedAt = now,
@@ -184,15 +207,19 @@ internal sealed class LogicalCheckExecutionService(
         logger.LogInformation("Worker cancellation cleanup completed with {RetryStatus}.", status);
     }
 
-    private async Task<int> NextAttemptNumberAsync(Guid checkId, CancellationToken token)
+    private async Task PrepareFaultedRetryAsync(
+        ExecutionLeaseClaim claim,
+        Guid attemptId,
+        Guid workId,
+        CancellationToken token)
     {
-        var current = await dbContext.ExecutionAttempts
-            .Where(attempt => attempt.LogicalCheckId == checkId)
-            .Select(attempt => attempt.AttemptNumber)
-            .DefaultIfEmpty()
-            .MaxAsync(token);
-        return current + 1;
+        var status = await finalizationService.PrepareRetryAsync(new(
+            claim, attemptId, workId, "InfrastructureFault"), token);
+        logger.LogInformation("Infrastructure fault retry preparation completed with {RetryStatus}.", status);
     }
+
+    private Task<int> CountAttemptsAsync(Guid checkId, CancellationToken token) =>
+        dbContext.ExecutionAttempts.CountAsync(attempt => attempt.LogicalCheckId == checkId, token);
 
     private static SafeHttpTransportRequest CreateRequest(LogicalCheck check)
     {

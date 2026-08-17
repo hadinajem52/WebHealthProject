@@ -23,4 +23,7 @@
     <ProjectReference Include="..\WebHealth.Application\WebHealth.Application.csproj" />
     <ProjectReference Include="..\WebHealth.Domain\WebHealth.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Persistence\Migrations\HangfireSchema\*.sql" />
+  </ItemGroup>
 </Project>

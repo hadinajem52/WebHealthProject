@@ -48,10 +48,15 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
         private static IEnumerable<string> LoadHangfireInstallScripts()
         {
-            var assembly = typeof(Hangfire.PostgreSql.PostgreSqlStorage).Assembly;
+            // These scripts are our own project-owned copies of Hangfire.PostgreSql's
+            // Install.v3.sql through Install.v23.sql (captured verbatim from the 1.21.1
+            // package). Reading them from this assembly, rather than from whichever
+            // Hangfire.PostgreSql version happens to be installed, keeps this already-applied
+            // migration reproducible even after the package is upgraded later.
+            var assembly = typeof(HangfireSchedulingAndRecovery).Assembly;
             for (var version = 3; version <= 23; version++)
             {
-                var resourceName = $"Hangfire.PostgreSql.Scripts.Install.v{version}.sql";
+                var resourceName = $"WebHealth.Infrastructure.Persistence.Migrations.HangfireSchema.Install.v{version}.sql";
                 using var stream = assembly.GetManifestResourceStream(resourceName)
                     ?? throw new InvalidOperationException($"Missing Hangfire schema resource {resourceName}.");
                 using var reader = new StreamReader(stream);

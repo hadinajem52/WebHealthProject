@@ -16,13 +16,11 @@ public sealed class LogicalCheckJob(ILogicalCheckExecutionService executionServi
         PerformContext context,
         CancellationToken cancellationToken)
     {
-        var retryCount = context.GetJobParameter<int>("RetryCount");
         var status = await executionService.ExecuteAsync(new(
             logicalCheckId,
             durableWorkId,
             context.BackgroundJob.Id,
-            context.ServerId,
-            retryCount >= MaximumRetries), cancellationToken);
+            context.ServerId), cancellationToken);
         if (status is LogicalCheckExecutionStatus.RetryRequired
             or LogicalCheckExecutionStatus.ReconciliationRequired)
         {

@@ -22,7 +22,7 @@ Retry transitions use the same conditional lease token and fencing generation as
 
 The forward-only `LogicalCheckExecutionLifecycle` migration adds the `Superseded` attempt outcome and `TargetIneligible` result category. It upgrades databases that already contain the monitoring foundation and also applies cleanly from an empty database.
 
-`LogicalCheckJob` is a thin Hangfire adapter on the isolated `monitoring` queue. It passes the logical-check and durable-work identities plus Hangfire job/server identity and final-attempt state to the orchestration service. Retry-required and reconciliation-required dispositions are surfaced as explicit job failures. Lease-expiry reconciliation and terminal retry-exhaustion dispatch remain part of the next scheduling/recovery increment.
+`LogicalCheckJob` is a thin Hangfire adapter on the isolated `monitoring` queue. It passes the logical-check and durable-work identities plus Hangfire job/server identity and final-attempt state to the orchestration service. Retry-required and reconciliation-required dispositions are surfaced as explicit job failures. Stale enqueued/processing work and expired leases are reclaimed by [Hangfire scheduling and recovery](Hangfire_Scheduling_and_Recovery.md).
 
 ## Verification
 
@@ -43,4 +43,4 @@ The isolated PostgreSQL 18 gate proves:
 
 ## Deferred
 
-The next increment owns due-monitor claiming, Hangfire PostgreSQL server registration, enqueue/lease-expiry reconciliation, terminal retry-exhaustion dispatch, cadence advancement, catch-up behavior, and restart recovery. Until that recovery path is implemented, this increment is intentionally tracked as partial rather than claiming final-delivery terminalization. Manual-check authorization and history pages remain separate later Phase 3 increments. No Phase 4 health, incident, maintenance, or notification behavior is introduced here.
+Manual-check authorization and history pages remain separate later Phase 3 increments. No Phase 4 health, incident, maintenance, or notification behavior is introduced here.

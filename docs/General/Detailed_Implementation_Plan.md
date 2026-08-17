@@ -345,17 +345,17 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 10.2 Scheduling and logical checks
 
-- [ ] Select due, enabled endpoints using UTC.
-- [ ] Atomically claim due endpoint/monitor work.
-- [ ] Create a stable logical-check record before execution.
-- [ ] Advance cadence independently from infrastructure retries.
-- [ ] Create one catch-up check after scheduler downtime, not every missed interval.
+- [x] Select due, enabled endpoints using UTC. Evidence: [`../phase-3/Hangfire_Scheduling_and_Recovery.md`](../phase-3/Hangfire_Scheduling_and_Recovery.md).
+- [x] Atomically claim due endpoint/monitor work.
+- [x] Create a stable logical-check record before execution.
+- [x] Advance cadence independently from infrastructure retries.
+- [x] Create one catch-up check after scheduler downtime, not every missed interval.
 - [ ] Queue authorized manual checks with source and initiating user.
 - [ ] Keep manual checks outside scheduled cadence and contractual uptime by default.
 - [x] Implement the PostgreSQL-backed endpoint/monitor execution lease. Evidence: [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 - [x] Make every retry reference the same logical-check ID. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 - [x] Close exhausted work with a terminal normalized result. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
-- [ ] Reconcile committed but unqueued or incomplete work after restart.
+- [x] Reconcile committed but unqueued or incomplete work after restart.
 
 ### 10.3 Safe HTTP monitoring
 
@@ -384,7 +384,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 
 ### 10.5 Verification gate
 
-- [ ] Unit-test cadence and catch-up behavior. Status classification, markers, timeouts, redirect loops, and hop limits are complete.
+- [x] Unit-test cadence and catch-up behavior. Evidence: `MonitorCadenceTests` and the PostgreSQL scheduling gate.
 - [x] Integration-test controlled statuses, redirects, delays, malformed redirects, large responses, and cancellation. Evidence: `SafeHttpTransportTests`.
 - [x] Test prohibited IPv4 and IPv6 destinations. Evidence: `DestinationAddressPolicyTests` and the controlled Phase 0 IPv4/IPv6 fixture.
 - [x] Test redirects into prohibited destinations.
@@ -393,8 +393,8 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Verify one logical result across retries and duplicate job delivery. Evidence: isolated PostgreSQL gate in [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 - [x] Verify competing workers cannot execute the same endpoint/monitor concurrently. Evidence: execution and lease integration tests.
 - [x] Verify expired leases recover after worker failure. Evidence: PostgreSQL lease fencing tests in [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
-- [ ] Verify restart reconciliation without duplicate samples.
-- [ ] Verify disabled targets produce no new scheduled work.
+- [x] Verify restart reconciliation without duplicate samples.
+- [x] Verify disabled targets produce no new scheduled work.
 - [x] Verify logs and history exclude sensitive headers and complete bodies.
 
 ### 10.6 Phase exit evidence

@@ -263,24 +263,24 @@ These requirements apply throughout the project:
 
 ### Hangfire and scheduling
 
-- [ ] Configure Hangfire with PostgreSQL storage.
-- [ ] Create queues for short checks, notifications, crawls, and maintenance work.
-- [ ] Select due enabled endpoints using UTC.
-- [ ] Create stable logical-check records.
-- [ ] Queue scheduled checks without blocking web requests.
+- [x] Configure Hangfire with PostgreSQL storage. Evidence: [`../phase-3/Hangfire_Scheduling_and_Recovery.md`](../phase-3/Hangfire_Scheduling_and_Recovery.md).
+- [x] Activate the isolated short-check queue; notification, crawl, and maintenance queues remain inactive until their owning phases.
+- [x] Select due enabled endpoints using UTC. Evidence: `FOR UPDATE SKIP LOCKED` scheduling gate.
+- [x] Create stable logical-check records.
+- [x] Queue scheduled checks without blocking web requests.
 - [ ] Implement authorized manual checks with initiator and source.
 - [ ] Keep manual checks outside scheduled cadence and contractual uptime by default.
-- [ ] Advance schedules independently from retry attempts.
-- [ ] Implement one-check catch-up after scheduler downtime.
-- [ ] Implement reconciliation for committed but unqueued work.
+- [x] Advance schedules independently from retry attempts.
+- [x] Implement one-check catch-up after scheduler downtime.
+- [x] Implement reconciliation for committed but unqueued work.
 
 ### Concurrency and idempotency
 
 - [x] Implement a PostgreSQL-backed lease per endpoint and monitor type. Evidence: [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 - [x] Store lease owner, acquisition, expiry, and fencing generation. Evidence: `MonitoringExecutionFoundation`.
 - [x] Ensure duplicate jobs use the same logical-check ID. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
-- [ ] Enforce one terminal result per logical check.
-- [ ] Recover safely after worker failure or expired lease.
+- [x] Enforce one terminal result per logical check.
+- [x] Recover safely after worker failure or expired lease. Evidence: [`../phase-3/Hangfire_Scheduling_and_Recovery.md`](../phase-3/Hangfire_Scheduling_and_Recovery.md).
 - [x] Close timed-out or exhausted checks with terminal outcomes. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 
 ### Safe HTTP transport
@@ -314,8 +314,8 @@ These requirements apply throughout the project:
 - [x] Unit-test cadence, status rules, markers, redirects, loops, limits, and timeout classification.
 - [x] Integration-test controlled status, delay, redirect, cancellation, and large-body scenarios.
 - [x] Test IPv4, IPv6, redirects to prohibited ranges, actual connection addresses, DNS rebinding, and proxy policy.
-- [ ] Test restart reconciliation and scheduler catch-up. Duplicate delivery, competing workers, and lease expiry are complete. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
-- [ ] Verify disabled targets produce no new checks.
+- [x] Test restart reconciliation and scheduler catch-up. Evidence: [`../phase-3/Hangfire_Scheduling_and_Recovery.md`](../phase-3/Hangfire_Scheduling_and_Recovery.md).
+- [x] Verify disabled targets produce no new checks.
 
 ### Phase 3 completion gate
 

@@ -260,10 +260,18 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         var overriddenEndpoint = await endpointService.CreateAsync(
             new(stagingId, "https://override.example.test/", administratorOwnerId, true, null,
-                TargetAuthorizationKinds.Owned, "Administrator-owned integration fixture.", null),
+                TargetAuthorizationKinds.Owned, "Administrator-owned integration fixture.", null, 7),
             administratorAccess);
         overriddenEndpoint.Succeeded.Should().BeTrue();
         var overriddenEndpointId = overriddenEndpoint.EntityId!.Value;
+        var overriddenMonitor = await database.EndpointMonitors.AsNoTracking()
+            .SingleAsync(candidate => candidate.EndpointId == overriddenEndpointId);
+        overriddenMonitor.IntervalSeconds.Should().Be(420);
+        MonitorIntervalOverride.GetSeconds(overriddenMonitor.BoundedOverrides).Should().Be(420);
+        (await endpointService.CreateAsync(
+            new(stagingId, "https://operations-override.example.test/", null, false, null,
+                null, null, null, 7), operationsAccess))
+            .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         (await targetReader.ListEndpointsAsync(stagingId,
             new(developer.Id, [ApplicationRoles.DeveloperSupport])))
             .Should().NotContain(item => item.Id == overriddenEndpointId);
@@ -306,9 +314,20 @@ internal static class DatabaseFoundationAssertions
 
         database.ChangeTracker.Clear();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
+        var renamedMonitor = await database.EndpointMonitors.SingleAsync(candidate => candidate.EndpointId == endpointId);
+        var overdueSlot = DateTimeOffset.UtcNow.AddMinutes(-30);
+        renamedMonitor.NextDueAt = overdueSlot;
+        var intervalBeforeRename = renamedMonitor.IntervalSeconds;
+        var versionBeforeRename = renamedMonitor.Version;
+        await database.SaveChangesAsync();
         (await environmentService.UpdateAsync(
             new(staging.Id, "Staging Updated", EnvironmentTypes.Staging, staging.BaseUrl, true, staging.Version),
             administratorAccess)).Succeeded.Should().BeTrue();
+        var monitorAfterRename = await database.EndpointMonitors.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == renamedMonitor.Id);
+        monitorAfterRename.NextDueAt.Should().Be(overdueSlot);
+        monitorAfterRename.IntervalSeconds.Should().Be(intervalBeforeRename);
+        monitorAfterRename.Version.Should().Be(versionBeforeRename);
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
         (await environmentService.DisableAsync(new(staging.Id, staging.Version), administratorAccess)).Succeeded.Should().BeTrue();
         (await targetAuthorization.CanTestEndpointAsync(endpointId,
@@ -782,11 +801,11 @@ internal static class DatabaseFoundationAssertions
         var successfulExecution = CreateExecutionService(database, successfulTransport, true);
         (await successfulExecution.ExecuteAsync(new(
             successfulCheck.Id, successfulHttpWork.Id,
-            "job-success", "worker-a", false)))
+            "job-success", "worker-a")))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         (await successfulExecution.ExecuteAsync(new(
             successfulCheck.Id, successfulHttpWork.Id,
-            "job-duplicate", "worker-b", false)))
+            "job-duplicate", "worker-b")))
             .Should().Be(LogicalCheckExecutionStatus.AlreadyCompleted);
         successfulTransport.CallCount.Should().Be(1);
         successfulTransport.LastRequest!.TimeoutSeconds.Should()
@@ -805,21 +824,18 @@ internal static class DatabaseFoundationAssertions
         var retryTransport = new RecordingSafeHttpTransport((request, call) =>
             call == 1 ? throw new HttpRequestException() : Success(request, call));
         var retryExecution = CreateExecutionService(database, retryTransport, true);
-        await Assert.ThrowsAsync<HttpRequestException>(() => retryExecution.ExecuteAsync(new(
-            retryCheck.Id, retryCheck.DurableWork.Single().Id,
-            "job-retry-1", "worker-a", false)));
-        (await database.CheckResults.AnyAsync(result => result.LogicalCheckId == retryCheck.Id))
-            .Should().BeFalse();
-        var retryLease = await database.ExecutionLeases.AsNoTracking().SingleAsync(lease =>
-            lease.LogicalCheckId == retryCheck.Id);
-        await new ExecutionLeaseService(database).ReleaseAsync(new(
-            retryLease.EndpointMonitorId,
-            retryLease.LogicalCheckId,
-            retryLease.OwnerToken,
-            retryLease.FencingGeneration));
         (await retryExecution.ExecuteAsync(new(
             retryCheck.Id, retryCheck.DurableWork.Single().Id,
-            "job-retry-2", "worker-a", false)))
+            "job-retry-1", "worker-a")))
+            .Should().Be(LogicalCheckExecutionStatus.RetryRequired);
+        (await database.CheckResults.AnyAsync(result => result.LogicalCheckId == retryCheck.Id))
+            .Should().BeFalse();
+        (await database.DurableWork.AsNoTracking()
+            .SingleAsync(work => work.Id == retryCheck.DurableWork.Single().Id))
+            .State.Should().Be(DurableWorkStates.Enqueued);
+        (await retryExecution.ExecuteAsync(new(
+            retryCheck.Id, retryCheck.DurableWork.Single().Id,
+            "job-retry-2", "worker-a")))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         retryTransport.CallCount.Should().Be(2);
         (await database.CheckResults.CountAsync(result => result.LogicalCheckId == retryCheck.Id))
@@ -830,7 +846,7 @@ internal static class DatabaseFoundationAssertions
             .ToArrayAsync();
         retryAttempts.Select(attempt => attempt.AttemptNumber).Should().Equal(1, 2);
         retryAttempts.Select(attempt => attempt.InfrastructureOutcome).Should()
-            .Equal(ExecutionAttemptOutcomes.Superseded, ExecutionAttemptOutcomes.Succeeded);
+            .Equal(ExecutionAttemptOutcomes.RetryableFailure, ExecutionAttemptOutcomes.Succeeded);
 
         var timeoutCheck = await CreateQueuedCheckAsync(database, monitor, 4);
         var timeoutTransport = new RecordingSafeHttpTransport((request, _) => Failure(
@@ -838,7 +854,7 @@ internal static class DatabaseFoundationAssertions
         var timeoutExecution = CreateExecutionService(database, timeoutTransport, true);
         (await timeoutExecution.ExecuteAsync(new(
             timeoutCheck.Id, timeoutCheck.DurableWork.Single().Id,
-            "job-timeout", "worker-a", false)))
+            "job-timeout", "worker-a")))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         (await database.CheckResults.SingleAsync(result => result.LogicalCheckId == timeoutCheck.Id))
             .FailureCategory.Should().Be(HttpFailureCategories.Timeout);
@@ -848,7 +864,7 @@ internal static class DatabaseFoundationAssertions
         var ineligibleExecution = CreateExecutionService(database, ineligibleTransport, false);
         (await ineligibleExecution.ExecuteAsync(new(
             ineligibleCheck.Id, ineligibleCheck.DurableWork.Single().Id,
-            "job-ineligible", "worker-a", false)))
+            "job-ineligible", "worker-a")))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         ineligibleTransport.CallCount.Should().Be(0);
         var ineligibleResult = await database.CheckResults.SingleAsync(result =>
@@ -867,7 +883,7 @@ internal static class DatabaseFoundationAssertions
         var cancelledExecution = CreateExecutionService(database, cancelledTransport, true);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelledExecution.ExecuteAsync(new(
             cancelledCheck.Id, cancelledCheck.DurableWork.Single().Id,
-            "job-cancelled", "worker-a", false), workerCancellation.Token));
+            "job-cancelled", "worker-a"), workerCancellation.Token));
         (await database.CheckResults.AnyAsync(result => result.LogicalCheckId == cancelledCheck.Id))
             .Should().BeFalse();
         (await database.ExecutionAttempts.SingleAsync(attempt =>
@@ -889,7 +905,7 @@ internal static class DatabaseFoundationAssertions
         var blockedExecution = CreateExecutionService(database, blockedTransport, true);
         (await blockedExecution.ExecuteAsync(new(
             leasedCheck.Id, leasedCheck.DurableWork.Single().Id,
-            "job-competing", "worker-b", false)))
+            "job-competing", "worker-b")))
             .Should().Be(LogicalCheckExecutionStatus.RetryRequired);
         blockedTransport.CallCount.Should().Be(0);
         (await database.ExecutionAttempts.AnyAsync(attempt =>
@@ -898,6 +914,46 @@ internal static class DatabaseFoundationAssertions
 
         await VerifyFencedRetryAsync(database, monitor);
         await VerifyExecutionExhaustionAsync(database, monitor);
+        await VerifyRetryBudgetExhaustionAsync(database, monitor);
+    }
+
+    private static async Task VerifyRetryBudgetExhaustionAsync(
+        ApplicationDbContext database,
+        EndpointMonitor monitor)
+    {
+        var exhaustedCheck = await CreateQueuedCheckAsync(database, monitor, 10);
+        var exhaustedWork = exhaustedCheck.DurableWork.Single();
+        var exhaustedTransport = new RecordingSafeHttpTransport(
+            (_, _) => throw new HttpRequestException("Simulated persistent transport fault."));
+        var exhaustedExecution = CreateExecutionService(database, exhaustedTransport, true);
+
+        (await exhaustedExecution.ExecuteAsync(new(
+            exhaustedCheck.Id, exhaustedWork.Id, "job-exhaust-1", "worker-a")))
+            .Should().Be(LogicalCheckExecutionStatus.RetryRequired);
+        (await exhaustedExecution.ExecuteAsync(new(
+            exhaustedCheck.Id, exhaustedWork.Id, "job-exhaust-2", "worker-a")))
+            .Should().Be(LogicalCheckExecutionStatus.RetryRequired);
+        (await exhaustedExecution.ExecuteAsync(new(
+            exhaustedCheck.Id, exhaustedWork.Id, "job-exhaust-3", "worker-a")))
+            .Should().Be(LogicalCheckExecutionStatus.Completed);
+        exhaustedTransport.CallCount.Should().Be(3);
+
+        var exhaustedResult = await database.CheckResults.AsNoTracking()
+            .SingleAsync(result => result.LogicalCheckId == exhaustedCheck.Id);
+        exhaustedResult.FailureCategory.Should().Be(HttpFailureCategories.ExecutionExhausted);
+        exhaustedResult.Outcome.Should().Be(HttpResultOutcomes.Critical);
+        (await database.DurableWork.AsNoTracking().SingleAsync(work => work.Id == exhaustedWork.Id))
+            .State.Should().Be(DurableWorkStates.Completed);
+        (await database.LogicalChecks.AsNoTracking().SingleAsync(check => check.Id == exhaustedCheck.Id))
+            .State.Should().Be(LogicalCheckStates.Completed);
+
+        // A stray duplicate job (e.g. from reconciliation racing the terminal finalize) must be a safe no-op.
+        (await exhaustedExecution.ExecuteAsync(new(
+            exhaustedCheck.Id, exhaustedWork.Id, "job-exhaust-4", "worker-a")))
+            .Should().Be(LogicalCheckExecutionStatus.AlreadyCompleted);
+        exhaustedTransport.CallCount.Should().Be(3);
+        (await database.ExecutionAttempts.CountAsync(attempt => attempt.LogicalCheckId == exhaustedCheck.Id))
+            .Should().Be(3);
     }
 
     private static async Task VerifyExecutionExhaustionAsync(
@@ -1303,6 +1359,11 @@ internal static class DatabaseFoundationAssertions
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var scheduling = scope.ServiceProvider.GetRequiredService<IMonitoringSchedulingService>();
 
+        await database.DurableWork
+            .Where(work => work.State != DurableWorkStates.Completed)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                work => work.State, DurableWorkStates.Completed));
+
         var hangfireTables = await database.Database.SqlQueryRaw<int>("""
             SELECT count(*)::int AS "Value"
             FROM information_schema.tables
@@ -1320,10 +1381,15 @@ internal static class DatabaseFoundationAssertions
                 && eligibleEndpointIds.Contains(candidate.EndpointId))
             .OrderBy(candidate => candidate.Id)
             .FirstAsync();
+        var otherEnabledMonitorIds = await database.EndpointMonitors.AsNoTracking()
+            .Where(candidate => candidate.Id != monitor.Id && candidate.IsEnabled)
+            .Select(candidate => candidate.Id)
+            .ToArrayAsync();
         await database.EndpointMonitors
-            .Where(candidate => candidate.Id != monitor.Id)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(
-                candidate => candidate.NextDueAt, clock.GetUtcNow().AddDays(1)));
+            .Where(candidate => otherEnabledMonitorIds.Contains(candidate.Id))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(candidate => candidate.IsEnabled, false)
+                .SetProperty(candidate => candidate.NextDueAt, clock.GetUtcNow().AddDays(1)));
         monitor.ScheduleAnchor = clock.GetUtcNow().AddHours(-1);
         monitor.NextDueAt = clock.GetUtcNow().AddMinutes(-30);
         monitor.IntervalSeconds = MonitorCadence.ProductionDefaultIntervalSeconds;
@@ -1337,30 +1403,41 @@ internal static class DatabaseFoundationAssertions
             monitor.RecoveryConfirmationCount,
             monitor.WarningThresholdMs,
             monitor.CriticalThresholdMs);
-        var catchUpSlot = monitor.NextDueAt;
-        var cadenceKey = MonitorCadence.CreateCadenceKey(monitor.Id, catchUpSlot);
         await database.SaveChangesAsync();
 
         var firstDispatch = await scheduling.DispatchDueAsync();
         firstDispatch.Should().Be(new MonitoringDispatchResult(1, 1));
+        database.ChangeTracker.Clear();
+        monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint)
+            .SingleAsync(candidate => candidate.Id == monitor.Id);
         var firstCheck = await database.LogicalChecks
             .Include(check => check.ConfigurationSnapshot)
             .Include(check => check.DurableWork)
-            .SingleAsync(check => check.EndpointMonitorId == monitor.Id
-                && check.CadenceKey == cadenceKey);
-        firstCheck.ScheduledFor.Should().BeCloseTo(catchUpSlot, TimeSpan.FromMilliseconds(1));
+            .SingleAsync(check => check.Id == queue.Jobs.Single().LogicalCheckId);
+        firstCheck.ScheduledFor.Should().BeOnOrBefore(clock.GetUtcNow());
         firstCheck.State.Should().Be(LogicalCheckStates.Queued);
         firstCheck.ConfigurationSnapshot.IntervalSeconds.Should().Be(300);
         firstCheck.ConfigurationSnapshot.IntervalSource.Should().Be(ConfigurationValueSources.EnvironmentDefault);
         firstCheck.DurableWork.Single().State.Should().Be(DurableWorkStates.Enqueued);
-        monitor.NextDueAt.Should().Be(clock.GetUtcNow().AddMinutes(5));
+        monitor.NextDueAt.Should().BeAfter(clock.GetUtcNow());
         (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
 
         firstCheck.DurableWork.Single().State = DurableWorkStates.Completed;
         monitor.Endpoint.IsEnabled = false;
-        monitor.NextDueAt = clock.GetUtcNow();
+        var disabledEndpointDueAt = clock.GetUtcNow();
+        monitor.NextDueAt = disabledEndpointDueAt;
         await database.SaveChangesAsync();
+        var checksBeforeDisabledDispatch = await database.LogicalChecks.CountAsync(
+            check => check.EndpointMonitorId == monitor.Id);
         (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
+        // Claimed-but-ineligible monitors still advance cadence so they aren't re-claimed every tick.
+        (await database.EndpointMonitors.AsNoTracking()
+            .Where(candidate => candidate.Id == monitor.Id)
+            .Select(candidate => candidate.NextDueAt)
+            .SingleAsync()).Should().BeAfter(disabledEndpointDueAt);
+        (await database.LogicalChecks.CountAsync(check => check.EndpointMonitorId == monitor.Id))
+            .Should().Be(checksBeforeDisabledDispatch);
 
         monitor.Endpoint.IsEnabled = true;
         clock.Advance(TimeSpan.FromMinutes(10));
@@ -1369,6 +1446,7 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         var interrupted = await scheduling.DispatchDueAsync();
         interrupted.Should().Be(new MonitoringDispatchResult(1, 0));
+        database.ChangeTracker.Clear();
         var interruptedWork = await database.DurableWork
             .OrderByDescending(work => work.CreatedAt)
             .FirstAsync(work => work.LogicalCheck.EndpointMonitorId == monitor.Id);
@@ -1379,8 +1457,10 @@ internal static class DatabaseFoundationAssertions
         clock.Advance(TimeSpan.FromMinutes(3));
         var recovered = await scheduling.ReconcileAsync();
         recovered.Should().Be(new MonitoringDispatchResult(1, 1));
-        await database.Entry(interruptedWork).ReloadAsync();
-        interruptedWork.State.Should().Be(DurableWorkStates.Enqueued);
+        (await database.DurableWork.AsNoTracking()
+            .Where(work => work.Id == interruptedWork.Id)
+            .Select(work => work.State)
+            .SingleAsync()).Should().Be(DurableWorkStates.Enqueued);
         (await database.LogicalChecks.CountAsync(
             check => check.EndpointMonitorId == monitor.Id)).Should().Be(checkCount);
 
@@ -1397,6 +1477,77 @@ internal static class DatabaseFoundationAssertions
             secondScope.ServiceProvider.GetRequiredService<IMonitoringSchedulingService>().DispatchDueAsync());
         competingResults.Sum(result => result.ClaimedCount).Should().Be(1);
         competingResults.Sum(result => result.EnqueuedCount).Should().Be(1);
+        await database.EndpointMonitors
+            .Where(candidate => otherEnabledMonitorIds.Contains(candidate.Id))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(candidate => candidate.IsEnabled, true));
+
+        var environmentId = await database.Endpoints.AsNoTracking()
+            .Where(candidate => candidate.Id == monitor.EndpointId)
+            .Select(candidate => candidate.EnvironmentId)
+            .SingleAsync();
+        await VerifyClaimQueryLocksHierarchyAsync(connectionString, monitor.Id, environmentId);
+    }
+
+    private static async Task VerifyClaimQueryLocksHierarchyAsync(
+        string connectionString,
+        Guid monitorId,
+        Guid environmentId)
+    {
+        await using var claimConnection = new NpgsqlConnection(connectionString);
+        await claimConnection.OpenAsync();
+        await using var claimTransaction = await claimConnection.BeginTransactionAsync();
+        await using (var claimCommand = new NpgsqlCommand(
+            """
+            SELECT monitor.id
+            FROM web_health.endpoint_monitor AS monitor
+            JOIN web_health.endpoint AS endpoint ON endpoint.id = monitor.endpoint_id
+            JOIN web_health.environment AS environment ON environment.id = endpoint.environment_id
+            JOIN web_health.website AS website ON website.id = environment.website_id
+            JOIN web_health.client AS client ON client.id = website.client_id
+            WHERE monitor.id = @monitor_id
+            FOR UPDATE OF monitor, endpoint, environment, website, client SKIP LOCKED
+            """,
+            claimConnection,
+            claimTransaction))
+        {
+            claimCommand.Parameters.AddWithValue("monitor_id", monitorId);
+            await using var reader = await claimCommand.ExecuteReaderAsync();
+            (await reader.ReadAsync()).Should().BeTrue(
+                "the claim query must lock the monitor row before a concurrent disable can race it");
+        }
+
+        await using var disableConnection = new NpgsqlConnection(connectionString);
+        await disableConnection.OpenAsync();
+        try
+        {
+            var disableTask = Task.Run(async () =>
+            {
+                await using var disableCommand = new NpgsqlCommand(
+                    "UPDATE web_health.environment SET is_active = false WHERE id = @environment_id",
+                    disableConnection);
+                disableCommand.Parameters.AddWithValue("environment_id", environmentId);
+                await disableCommand.ExecuteNonQueryAsync();
+            });
+
+            var raced = await Task.WhenAny(disableTask, Task.Delay(TimeSpan.FromMilliseconds(500)));
+            raced.Should().NotBe(disableTask,
+                "the concurrent environment disable must block behind the claim query's row lock");
+
+            await claimTransaction.CommitAsync();
+            await disableTask;
+
+            await using var verifyCommand = new NpgsqlCommand(
+                "SELECT is_active FROM web_health.environment WHERE id = @id", disableConnection);
+            verifyCommand.Parameters.AddWithValue("id", environmentId);
+            (await verifyCommand.ExecuteScalarAsync()).Should().Be(false);
+        }
+        finally
+        {
+            await using var restoreCommand = new NpgsqlCommand(
+                "UPDATE web_health.environment SET is_active = true WHERE id = @id", disableConnection);
+            restoreCommand.Parameters.AddWithValue("id", environmentId);
+            await restoreCommand.ExecuteNonQueryAsync();
+        }
     }
 
     private static ServiceProvider BuildSchedulingServices(
@@ -2440,6 +2591,8 @@ internal static class DatabaseFoundationAssertions
         private readonly ConcurrentQueue<(Guid LogicalCheckId, Guid DurableWorkId)> jobs = new();
 
         public bool FailNext { get; set; }
+
+        public IReadOnlyList<(Guid LogicalCheckId, Guid DurableWorkId)> Jobs => jobs.ToArray();
 
         public string Enqueue(Guid logicalCheckId, Guid durableWorkId)
         {
