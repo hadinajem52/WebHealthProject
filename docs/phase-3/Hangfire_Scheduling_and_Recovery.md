@@ -44,7 +44,7 @@ The PostgreSQL 18 foundation gate proves:
 - administrator endpoint overrides persist as the effective interval;
 - one overdue monitor creates one logical check, snapshot, and durable-work row;
 - `NextDueAt` moves to a future anchored slot and an immediate second dispatch creates no backlog;
-- a disabled endpoint creates no scheduled work;
+- disabled client, website, environment, endpoint, or monitor, and expired target authorization, create no scheduled work;
 - an interrupted enqueue remains `Dispatching` and restart reconciliation enqueues the same logical-check ID without creating another check;
 - two competing dispatchers claim a due monitor once.
 

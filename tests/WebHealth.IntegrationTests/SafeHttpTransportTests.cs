@@ -68,6 +68,27 @@ public sealed class SafeHttpTransportTests
     }
 
     [Fact]
+    public async Task SendAsync_BoundsChunkedResponseBodies()
+    {
+        await using var server = await HttpFixture.Start(
+            "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+            + "5\r\nHello\r\n6\r\n world\r\n0\r\n\r\n");
+        await using var harness = CreateHarness(
+            new HostResolver(("chunked.test", [IPAddress.Loopback])), AuthorizeAll);
+
+        var result = await harness.Transport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://chunked.test:{server.Port}/",
+            false,
+            MaxResponseBodyBytes: 8));
+
+        result.Succeeded.Should().BeTrue();
+        result.BodyTruncated.Should().BeTrue();
+        result.ResponseBytesRead.Should().Be(9);
+        Encoding.UTF8.GetString(result.Body.Span).Should().Be("Hello wo");
+    }
+
+    [Fact]
     public async Task SendAsync_RejectsMixedDnsAnswersBeforeContactingTarget()
     {
         await using var server = await HttpFixture.Start(

@@ -377,6 +377,10 @@ internal static class DatabaseFoundationAssertions
         var monitor = await database.EndpointMonitors
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
+                    .ThenInclude(environment => environment.Website)
+                        .ThenInclude(website => website.Client)
+            .Include(candidate => candidate.Endpoint)
+                .ThenInclude(endpoint => endpoint.TargetAuthorizations)
             .OrderBy(candidate => candidate.CreatedAt)
             .FirstAsync();
         monitor.ConfigurationFingerprint.Should().Be(HttpPolicyFingerprint.Create(new(
@@ -1442,6 +1446,33 @@ internal static class DatabaseFoundationAssertions
             .Should().Be(checksBeforeDisabledDispatch);
 
         monitor.Endpoint.IsEnabled = true;
+        await database.SaveChangesAsync();
+        await VerifySuppressedSchedulingAsync(
+            database, scheduling, clock, monitor.Id,
+            candidate => candidate.Endpoint.Environment.Website.Client.IsActive = false,
+            candidate => candidate.Endpoint.Environment.Website.Client.IsActive = true);
+        await VerifySuppressedSchedulingAsync(
+            database, scheduling, clock, monitor.Id,
+            candidate => candidate.Endpoint.Environment.Website.IsEnabled = false,
+            candidate => candidate.Endpoint.Environment.Website.IsEnabled = true);
+        await VerifySuppressedSchedulingAsync(
+            database, scheduling, clock, monitor.Id,
+            candidate => candidate.Endpoint.Environment.IsActive = false,
+            candidate => candidate.Endpoint.Environment.IsActive = true);
+        await VerifySuppressedSchedulingAsync(
+            database, scheduling, clock, monitor.Id,
+            candidate => candidate.IsEnabled = false,
+            candidate => candidate.IsEnabled = true,
+            advancesCadence: false);
+        await VerifySuppressedSchedulingAsync(
+            database, scheduling, clock, monitor.Id,
+            candidate => candidate.Endpoint.TargetAuthorizations.Single(
+                evidence => evidence.RevokedAt == null).ExpiresAt = clock.GetUtcNow(),
+            candidate => candidate.Endpoint.TargetAuthorizations.Single(
+                evidence => evidence.RevokedAt == null).ExpiresAt = null);
+
+        database.ChangeTracker.Clear();
+        monitor = await database.EndpointMonitors.SingleAsync(candidate => candidate.Id == monitor.Id);
         clock.Advance(TimeSpan.FromMinutes(10));
         monitor.NextDueAt = clock.GetUtcNow();
         queue.FailNext = true;
@@ -1488,6 +1519,47 @@ internal static class DatabaseFoundationAssertions
             .Select(candidate => candidate.EnvironmentId)
             .SingleAsync();
         await VerifyClaimQueryLocksHierarchyAsync(connectionString, monitor.Id, environmentId);
+    }
+
+    private static async Task VerifySuppressedSchedulingAsync(
+        ApplicationDbContext database,
+        IMonitoringSchedulingService scheduling,
+        MutableTimeProvider clock,
+        Guid monitorId,
+        Action<EndpointMonitor> suppress,
+        Action<EndpointMonitor> restore,
+        bool advancesCadence = true)
+    {
+        database.ChangeTracker.Clear();
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint)
+                .ThenInclude(endpoint => endpoint.Environment)
+                    .ThenInclude(environment => environment.Website)
+                        .ThenInclude(website => website.Client)
+            .Include(candidate => candidate.Endpoint)
+                .ThenInclude(endpoint => endpoint.TargetAuthorizations)
+            .SingleAsync(candidate => candidate.Id == monitorId);
+        var dueAt = clock.GetUtcNow();
+        monitor.NextDueAt = dueAt;
+        suppress(monitor);
+        await database.SaveChangesAsync();
+
+        var checksBeforeDispatch = await database.LogicalChecks.CountAsync(
+            check => check.EndpointMonitorId == monitor.Id);
+        (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
+        (await database.LogicalChecks.CountAsync(check => check.EndpointMonitorId == monitor.Id))
+            .Should().Be(checksBeforeDispatch);
+        if (advancesCadence)
+        {
+            (await database.EndpointMonitors.AsNoTracking()
+                .Where(candidate => candidate.Id == monitor.Id)
+                .Select(candidate => candidate.NextDueAt)
+                .SingleAsync()).Should().BeAfter(dueAt);
+        }
+
+        restore(monitor);
+        monitor.NextDueAt = clock.GetUtcNow().AddDays(1);
+        await database.SaveChangesAsync();
     }
 
     private static async Task VerifyClaimQueryLocksHierarchyAsync(

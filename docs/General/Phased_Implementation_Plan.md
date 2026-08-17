@@ -268,8 +268,8 @@ These requirements apply throughout the project:
 - [x] Select due enabled endpoints using UTC. Evidence: `FOR UPDATE SKIP LOCKED` scheduling gate.
 - [x] Create stable logical-check records.
 - [x] Queue scheduled checks without blocking web requests.
-- [ ] Implement authorized manual checks with initiator and source.
-- [ ] Keep manual checks outside scheduled cadence and contractual uptime by default.
+- [x] Implement authorized manual checks with initiator and source.
+- [x] Keep manual checks outside scheduled cadence and contractual uptime by default.
 - [x] Advance schedules independently from retry attempts.
 - [x] Implement one-check catch-up after scheduler downtime.
 - [x] Implement reconciliation for committed but unqueued work.
@@ -304,7 +304,7 @@ These requirements apply throughout the project:
 - [x] Implement accepted-status and content-marker evaluation.
 - [x] Detect redirect loops and excessive chains.
 - [x] Persist bounded diagnostics without full bodies or sensitive headers.
-- [ ] Add check history and details pages.
+- [x] Add check history and details pages.
 - [x] Add structured check, endpoint, and job identifiers to logs. Evidence: logical-check execution logging scope.
 
 ### Database and verification
@@ -319,11 +319,11 @@ These requirements apply throughout the project:
 
 ### Phase 3 completion gate
 
-- [ ] AC-02 passes for scheduled checks and persisted history.
-- [ ] AC-05 passes for redirect-loop termination and storage.
-- [ ] Restart reconciliation produces one logical result. Duplicate delivery/retry idempotency is complete.
-- [ ] Safe-network tests pass.
-- [ ] Monitoring workflow is demonstrated against controlled targets.
+- [x] AC-02 passes for scheduled checks and persisted history. Evidence: [`../phase-3/Database_and_Completion_Gate.md`](../phase-3/Database_and_Completion_Gate.md).
+- [x] AC-05 passes for redirect-loop termination and storage.
+- [x] Restart reconciliation produces one logical result. Duplicate delivery/retry idempotency is complete.
+- [x] Safe-network tests pass.
+- [x] Monitoring workflow is demonstrated against controlled targets.
 
 ---
 

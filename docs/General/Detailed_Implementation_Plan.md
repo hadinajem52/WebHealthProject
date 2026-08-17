@@ -350,8 +350,8 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Create a stable logical-check record before execution.
 - [x] Advance cadence independently from infrastructure retries.
 - [x] Create one catch-up check after scheduler downtime, not every missed interval.
-- [ ] Queue authorized manual checks with source and initiating user.
-- [ ] Keep manual checks outside scheduled cadence and contractual uptime by default.
+- [x] Queue authorized manual checks with source and initiating user.
+- [x] Keep manual checks outside scheduled cadence and contractual uptime by default.
 - [x] Implement the PostgreSQL-backed endpoint/monitor execution lease. Evidence: [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 - [x] Make every retry reference the same logical-check ID. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
 - [x] Close exhausted work with a terminal normalized result. Evidence: [`../phase-3/Logical_Check_Execution_and_Idempotency.md`](../phase-3/Logical_Check_Execution_and_Idempotency.md).
@@ -394,14 +394,14 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Verify competing workers cannot execute the same endpoint/monitor concurrently. Evidence: execution and lease integration tests.
 - [x] Verify expired leases recover after worker failure. Evidence: PostgreSQL lease fencing tests in [`../phase-3/Monitoring_Persistence_Foundation.md`](../phase-3/Monitoring_Persistence_Foundation.md).
 - [x] Verify restart reconciliation without duplicate samples.
-- [x] Verify disabled targets produce no new scheduled work.
+- [x] Verify disabled client, website, environment, endpoint, or monitor, and expired target authorization produce no new scheduled work.
 - [x] Verify logs and history exclude sensitive headers and complete bodies.
 
 ### 10.6 Phase exit evidence
 
 - **AC-02:** An enabled production endpoint runs on schedule and history records status, duration, and timestamp.
 - **AC-05:** A redirect loop produces a terminal result without hanging the worker.
-- Retry, duplicate-delivery, restart, lease-expiry, and catch-up behavior are demonstrated.
+- Retry, duplicate-delivery, restart, lease-expiry, and catch-up behavior are demonstrated. See [`../phase-3/Database_and_Completion_Gate.md`](../phase-3/Database_and_Completion_Gate.md).
 
 ## 11. Phase 4 — Minimum Maintenance, Health, Incidents, and Email Notifications
 
