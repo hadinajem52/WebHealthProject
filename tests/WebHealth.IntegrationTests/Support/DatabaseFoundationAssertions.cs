@@ -82,6 +82,16 @@ internal static class DatabaseFoundationAssertions
         ,"notification_attempt"
     ];
 
+    // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
+    // IncidentLifecycle's table-shape is a superset of the same tables, DurableNotifications) —
+    // used to compute the expected table set at the Phase 3 boundary checkpoint.
+    private static readonly string[] PhaseFourOnlyTables =
+    [
+        "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
+        "maintenance_occurrence", "incident", "incident_event", "incident_evidence",
+        "notification_event", "notification_delivery", "notification_attempt"
+    ];
+
     public static async Task VerifyAsync(string connectionString)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
@@ -111,6 +121,11 @@ internal static class DatabaseFoundationAssertions
         await VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(connectionString);
         await VerifyHealthMaintenanceAndIncidentsAsync(connectionString);
         await VerifyDurableNotificationsAsync(connectionString);
+        await VerifyCompetingFinalizationOpensExactlyOneIncidentAsync(connectionString);
+        await VerifyDistinctIssueKeysCreateDistinctIncidentsAsync(connectionString);
+        await VerifyReminderEscalationSweepBoundariesAsync(connectionString);
+        await VerifyMaintenanceClassifiedResultRetentionAsync(connectionString);
+        await VerifyPhaseThreeToPhaseFourUpgradeAsync(context, connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
@@ -1063,6 +1078,16 @@ internal static class DatabaseFoundationAssertions
             && evidence.LogicalCheckId == confirmedFailure);
         incident.Events.Should().Contain(eventRecord => eventRecord.EventType == IncidentEventTypes.Opened);
 
+        // AC-03 / item 7: exactly one opening notification_event, with exactly one delivery, was
+        // written by the automatic pipeline — no duplicates from the two failure-confirmation steps.
+        var openedNotification = await database.NotificationEvents.AsNoTracking()
+            .Include(notificationEvent => notificationEvent.Deliveries)
+            .SingleAsync(notificationEvent => notificationEvent.IncidentId == incident.Id
+                && notificationEvent.EventType == NotificationEventTypes.Opened);
+        openedNotification.SourceKind.Should().Be(NotificationSourceKinds.IncidentEvent);
+        openedNotification.IsSuppressed.Should().BeFalse();
+        openedNotification.Deliveries.Should().ContainSingle();
+
         clock.Advance(TimeSpan.FromMinutes(1));
         await FinalizeScheduledResultAsync(database, monitor, 24, 200, clock);
         healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
@@ -1077,6 +1102,12 @@ internal static class DatabaseFoundationAssertions
         incident.Evidence.Should().Contain(evidence =>
             evidence.EvidenceType == IncidentEvidenceTypes.Recovery
             && evidence.EvidenceRole == "RecoveryStarted");
+
+        // Item 5's "no recovery notification after only one passing check": the first pass must
+        // not have created a Recovered notification_event yet.
+        (await database.NotificationEvents.AnyAsync(notificationEvent =>
+            notificationEvent.IncidentId == incident.Id
+            && notificationEvent.EventType == NotificationEventTypes.Recovered)).Should().BeFalse();
 
         clock.Advance(TimeSpan.FromMinutes(1));
         var confirmedRecovery = await FinalizeScheduledResultAsync(database, monitor, 25, 200, clock);
@@ -1095,6 +1126,239 @@ internal static class DatabaseFoundationAssertions
             && evidence.LogicalCheckId == confirmedRecovery);
         (await database.AuditEvents.AnyAsync(audit => audit.EntityIdentifier == incident.Id.ToString()
             && audit.Action == "incident.resolved")).Should().BeTrue();
+
+        // AC-04 / item 7: exactly one recovery notification_event, with exactly one delivery —
+        // confirmed only on the second consecutive pass, never duplicated by the earlier pass.
+        var recoveredNotification = await database.NotificationEvents.AsNoTracking()
+            .Include(notificationEvent => notificationEvent.Deliveries)
+            .SingleAsync(notificationEvent => notificationEvent.IncidentId == incident.Id
+                && notificationEvent.EventType == NotificationEventTypes.Recovered);
+        recoveredNotification.Deliveries.Should().ContainSingle();
+
+        // Item 19: every automatic state-changing action (Opened, RecoveryStarted, Resolved — one
+        // per call into IncidentAutomationService, each of which writes exactly one audit_event
+        // alongside its timeline event(s)) has a matching audit_event with actor and timestamp.
+        // Evidence-trail entries (EvidenceRecorded) are supplementary detail on the same audit
+        // write, not separate auditable actions, so the two counts are not expected to match 1:1.
+        var automaticTimelineEventTypes = await database.IncidentEvents.AsNoTracking()
+            .Where(eventRecord => eventRecord.IncidentId == incident.Id)
+            .Select(eventRecord => eventRecord.EventType)
+            .ToArrayAsync();
+        automaticTimelineEventTypes.Should().Contain(IncidentEventTypes.Opened);
+        automaticTimelineEventTypes.Count(eventType => eventType == IncidentEventTypes.StatusChanged)
+            .Should().Be(2);
+        var automaticAuditActions = await database.AuditEvents.AsNoTracking()
+            .Where(audit => audit.EntityIdentifier == incident.Id.ToString() && audit.Action.StartsWith("incident."))
+            .Select(audit => new { audit.Action, audit.ActorUserId, audit.OccurredAt })
+            .ToArrayAsync();
+        automaticAuditActions.Select(audit => audit.Action).Should().BeEquivalentTo(
+            ["incident.opened", "incident.recoverystarted", "incident.resolved"]);
+        automaticAuditActions.Should().OnlyContain(audit => audit.OccurredAt != default);
+
+        // This test never dispatches its notification deliveries — mark them Sent directly so
+        // they cannot be batch-claimed by a later test's own NotificationDispatchService.DispatchDueAsync()
+        // call (which claims any due delivery system-wide, with no per-test/incident scoping).
+        await database.NotificationDeliveries
+            .Where(delivery => delivery.NotificationEvent.IncidentId == incident.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(delivery => delivery.State, NotificationDeliveryStates.Sent)
+                .SetProperty(delivery => delivery.NextAttemptAt, (DateTimeOffset?)null)
+                .SetProperty(delivery => delivery.SentAt, clock.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// Items 3 and 8: duplicate delivery of the same background job is modeled as two concurrent
+    /// FinalizeAsync calls sharing the same lease claim/attempt/work IDs — exactly what a stray
+    /// Hangfire retry or duplicate dispatch produces. The confirming (second) failure is finalized
+    /// twice at once; the check-level lock already proves one Finalized/one AlreadyFinalized, and
+    /// this extends that same race to prove it also yields exactly one incident, one Opened
+    /// timeline event and one Opened notification — not two.
+    /// </summary>
+    private static async Task VerifyCompetingFinalizationOpensExactlyOneIncidentAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
+            .OrderBy(candidate => candidate.CreatedAt)
+            .Skip(1)
+            .FirstAsync();
+
+        database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
+        database.EndpointHealth.RemoveRange(database.EndpointHealth.Where(health => health.EndpointMonitorId == monitor.Id));
+        await database.SaveChangesAsync();
+        await database.ExecutionLeases.Where(lease => lease.EndpointMonitorId == monitor.Id).ExecuteDeleteAsync();
+
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        var raceIssueKey = HttpIssueIdentity.Create("Http.ServerError");
+        await FinalizeScheduledResultAsync(database, monitor, 30, 500, clock);
+        (await database.IssueStates.SingleAsync(state =>
+                state.EndpointMonitorId == monitor.Id && state.IssueKey == raceIssueKey))
+            .ConsecutiveFailures.Should().Be(1);
+
+        var check = await CreateQueuedCheckAsync(database, monitor, 31);
+        var work = check.DurableWork.Single();
+        var now = clock.GetUtcNow();
+        check.State = LogicalCheckStates.Running;
+        check.StartedAt = now;
+        work.State = DurableWorkStates.Processing;
+        work.AttemptCount = 1;
+        work.UpdatedAt = now;
+        var attempt = new ExecutionAttempt
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = check.Id,
+            AttemptNumber = 1,
+            JobId = "race-confirming-failure",
+            WorkerId = "race-verification",
+            StartedAt = now,
+            InfrastructureOutcome = ExecutionAttemptOutcomes.Running
+        };
+        database.ExecutionAttempts.Add(attempt);
+        await database.SaveChangesAsync();
+
+        var claim = await new ExecutionLeaseService(database).TryAcquireAsync(new(
+            monitor.Id, check.Id, Guid.NewGuid(), TimeSpan.FromMinutes(1)));
+        claim.Should().NotBeNull();
+        var request = new SafeHttpTransportRequest(
+            monitor.EndpointId,
+            monitor.Endpoint.NormalizedUrl,
+            monitor.Endpoint.Environment.IsProduction,
+            check.ConfigurationSnapshot.MaxRedirects,
+            check.ConfigurationSnapshot.MaxResponseBodyBytes,
+            check.ConfigurationSnapshot.TimeoutSeconds);
+        var result = new SafeHttpTransportResult(
+            null, 500, new(new Uri(request.Url).GetLeftPart(UriPartial.Path)),
+            TimeSpan.FromMilliseconds(25), 5, false, "error"u8.ToArray(), [],
+            SafeHttpRequestIdentity.Create(request));
+        var evidence = new HttpTransportEvidence(request, result);
+
+        var competingOptions = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(competingOptions, connectionString);
+        await using var competingDatabase = new ApplicationDbContext(competingOptions.Options);
+        var finalizationA = CreateFinalizationService(database, clock);
+        var finalizationB = CreateFinalizationService(competingDatabase, clock);
+
+        var outcomes = await Task.WhenAll(
+            finalizationA.FinalizeAsync(new(claim!, attempt.Id, work.Id, evidence)),
+            finalizationB.FinalizeAsync(new(claim!, attempt.Id, work.Id, evidence)));
+        outcomes.Should().BeEquivalentTo(
+            [LogicalCheckFinalizationStatus.Finalized, LogicalCheckFinalizationStatus.AlreadyFinalized]);
+
+        database.ChangeTracker.Clear();
+        var issueKey = HttpIssueIdentity.Create("Http.ServerError");
+        (await database.Incidents.CountAsync(incident => incident.EndpointMonitorId == monitor.Id
+            && incident.IssueKey == issueKey)).Should().Be(1);
+        var openedIncident = await database.Incidents.AsNoTracking()
+            .SingleAsync(incident => incident.EndpointMonitorId == monitor.Id && incident.IssueKey == issueKey);
+        (await database.IncidentEvents.CountAsync(eventRecord =>
+            eventRecord.IncidentId == openedIncident.Id && eventRecord.EventType == IncidentEventTypes.Opened))
+            .Should().Be(1);
+        (await database.NotificationEvents.CountAsync(notificationEvent =>
+            notificationEvent.IncidentId == openedIncident.Id
+            && notificationEvent.EventType == NotificationEventTypes.Opened))
+            .Should().Be(1);
+
+        // Leaves nothing open/unacknowledged behind for the reminder/escalation sweep test to
+        // accidentally pick up — that test asserts exact system-wide counts.
+        await AcknowledgeAndResolveAsync(database, openedIncident.Id);
+    }
+
+    private static async Task CloseAllActiveIncidentsAsync(ApplicationDbContext database)
+    {
+        var activeIncidentIds = await database.Incidents.AsNoTracking()
+            .Where(candidate => IncidentStatuses.Active.Contains(candidate.Status))
+            .Select(candidate => candidate.Id)
+            .ToArrayAsync();
+        foreach (var incidentId in activeIncidentIds)
+        {
+            await AcknowledgeAndResolveAsync(database, incidentId);
+        }
+    }
+
+    private static async Task AcknowledgeAndResolveAsync(
+        ApplicationDbContext database, Guid incidentId, TimeProvider? timeProvider = null)
+    {
+        var lifecycle = new IncidentLifecycleService(
+            database,
+            new AlwaysAssignedAccessEvaluator(),
+            new AuditTrailWriter(database),
+            timeProvider ?? TimeProvider.System);
+        var administratorId = await database.Users.AsNoTracking()
+            .Where(user => user.Email == "bootstrap@example.test")
+            .Select(user => user.Id)
+            .SingleAsync();
+        var access = new RegistryAccessContext(administratorId, [ApplicationRoles.Administrator]);
+        var incident = await database.Incidents.AsNoTracking().SingleAsync(candidate => candidate.Id == incidentId);
+        (await lifecycle.ResolveAsync(new(incidentId, incident.Version, "Cleanup", "Controlled test cleanup."), access))
+            .Succeeded.Should().BeTrue();
+        var resolved = await database.Incidents.AsNoTracking().SingleAsync(candidate => candidate.Id == incidentId);
+        (await lifecycle.CloseAsync(new(incidentId, resolved.Version), access)).Succeeded.Should().BeTrue();
+    }
+
+    private sealed class AlwaysAssignedAccessEvaluator : IAssignmentAccessEvaluator
+    {
+        public Task<bool> IsAssignedAsync(
+            Guid userId, Guid ownerSubjectId, DateTimeOffset at, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+    }
+
+    /// <summary>
+    /// Item 4: two structurally different failure categories on the same monitor produce two
+    /// separate incident rows, each keeping its own stable issue key, rather than one incident
+    /// being reused or the second write colliding with the first. Confirmed sequentially (the
+    /// first is resolved before the second opens) because the two categories otherwise reset each
+    /// other's confirmation counters — see HealthConfirmationEngine.EvaluateFailure, which zeroes
+    /// any tracked issue key not observed by the current check. The active-incident uniqueness
+    /// index (VerifyDuplicateActiveIncidentRejectedAsync) already proves the constraint is scoped
+    /// per issue key, not per monitor, so together these show distinct keys neither merge nor
+    /// collide even though this test does not hold them open at the same instant.
+    /// </summary>
+    private static async Task VerifyDistinctIssueKeysCreateDistinctIncidentsAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
+            .OrderBy(candidate => candidate.CreatedAt)
+            .Skip(2)
+            .FirstAsync();
+
+        database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
+        database.EndpointHealth.RemoveRange(database.EndpointHealth.Where(health => health.EndpointMonitorId == monitor.Id));
+        await database.SaveChangesAsync();
+        await database.ExecutionLeases.Where(lease => lease.EndpointMonitorId == monitor.Id).ExecuteDeleteAsync();
+
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        await FinalizeScheduledResultAsync(database, monitor, 32, 500, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 33, 500, clock);
+        var serverErrorKey = HttpIssueIdentity.Create("Http.ServerError");
+        var serverErrorIncident = await database.Incidents.AsNoTracking().SingleAsync(incident =>
+            incident.EndpointMonitorId == monitor.Id && incident.IssueKey == serverErrorKey);
+        serverErrorIncident.Status.Should().Be(IncidentStatuses.Open);
+
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await FinalizeScheduledResultAsync(database, monitor, 34, 200, clock);
+        clock.Advance(TimeSpan.FromMinutes(1));
+        await FinalizeScheduledResultAsync(database, monitor, 35, 200, clock);
+        (await database.Incidents.AsNoTracking().SingleAsync(incident => incident.Id == serverErrorIncident.Id))
+            .Status.Should().Be(IncidentStatuses.Resolved);
+
+        await FinalizeScheduledResultAsync(database, monitor, 36, 404, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 37, 404, clock);
+        var clientErrorKey = HttpIssueIdentity.Create("Http.ClientError");
+        var clientErrorIncident = await database.Incidents.AsNoTracking().SingleAsync(incident =>
+            incident.EndpointMonitorId == monitor.Id && incident.IssueKey == clientErrorKey);
+        clientErrorIncident.Status.Should().Be(IncidentStatuses.Open);
+        clientErrorIncident.Id.Should().NotBe(serverErrorIncident.Id);
+        clientErrorIncident.IssueKey.Should().NotBe(serverErrorIncident.IssueKey);
+
+        // Leaves nothing open/unacknowledged behind for the reminder/escalation sweep test. Uses
+        // the same clock this incident was opened with — it was advanced ahead of real time, and
+        // TimeProvider.System would otherwise resolve it before its own OpenedAt.
+        await AcknowledgeAndResolveAsync(database, clientErrorIncident.Id, clock);
     }
 
     private static async Task<Guid> FinalizeScheduledResultAsync(
@@ -2043,6 +2307,24 @@ internal static class DatabaseFoundationAssertions
             .BuildServiceProvider();
     }
 
+    /// <summary>Item 22: migrating from the exact Phase 3 boundary applies the three Phase 4
+    /// migrations cleanly on top of a database that already has real Phase 3 data in it.</summary>
+    private static async Task VerifyPhaseThreeToPhaseFourUpgradeAsync(
+        ApplicationDbContext database, string connectionString)
+    {
+        database.ChangeTracker.Clear();
+        await database.Database.MigrateAsync("HangfireSchedulingAndRecovery");
+        (await database.Database.GetAppliedMigrationsAsync()).Should().HaveCount(7);
+        var phaseThreeState = await ReadFoundationState(connectionString);
+        phaseThreeState.Tables.Should().BeEquivalentTo(
+            ExpectedTables.Except(PhaseFourOnlyTables).Append(DatabaseConventions.MigrationsHistoryTable));
+
+        await database.Database.MigrateAsync();
+        (await database.Database.GetAppliedMigrationsAsync()).Should().HaveCount(10);
+        var upgradedState = await ReadFoundationState(connectionString);
+        upgradedState.Tables.Should().BeEquivalentTo(ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
+    }
+
     private static async Task VerifyPhaseTwoUpgradeAsync(ApplicationDbContext database)
     {
         database.ChangeTracker.Clear();
@@ -2354,6 +2636,21 @@ internal static class DatabaseFoundationAssertions
         (await lifecycle.CloseAsync(new(incidentId, 1), developerAccess)).Status
             .Should().Be(IncidentMutationStatus.ValidationFailed);
         (await lifecycle.StartProgressAsync(new(incidentId, 1), developerAccess)).Succeeded.Should().BeTrue();
+
+        // Role/assignment matrix: Viewer is read-only and an unassigned Developer/Support user
+        // has no claim on this incident's owner subject — both must be rejected, and rejection
+        // must not consume the optimistic-concurrency version (the next call still uses version 2).
+        var viewerAccess = new RegistryAccessContext(Guid.NewGuid(), [ApplicationRoles.Viewer]);
+        (await lifecycle.AcknowledgeAsync(new(incidentId, 2), viewerAccess)).Status
+            .Should().Be(IncidentMutationStatus.Forbidden);
+        (await lifecycle.AddNoteAsync(new(incidentId, 2, "A viewer must never manage an incident."), viewerAccess)).Status
+            .Should().Be(IncidentMutationStatus.Forbidden);
+        var unassignedDeveloperAccess = new RegistryAccessContext(Guid.NewGuid(), [ApplicationRoles.DeveloperSupport]);
+        (await lifecycle.AddNoteAsync(
+            new(incidentId, 2, "An unassigned Developer/Support user must not manage this incident."),
+            unassignedDeveloperAccess)).Status
+            .Should().Be(IncidentMutationStatus.Forbidden);
+
         (await lifecycle.ResolveAsync(new(incidentId, 2, "", ""), developerAccess)).Status
             .Should().Be(IncidentMutationStatus.ValidationFailed);
         (await lifecycle.ResolveAsync(new(incidentId, 2, "Remediated", "The assigned developer confirmed the fix."), developerAccess))
@@ -2484,7 +2781,10 @@ internal static class DatabaseFoundationAssertions
         var transport = (RecordingEmailTransport)scope.ServiceProvider.GetRequiredService<IEmailTransport>();
         var dispatchService = scope.ServiceProvider.GetRequiredService<NotificationDispatchService>();
 
-        var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).FirstAsync();
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint)
+            .OrderBy(candidate => candidate.CreatedAt)
+            .FirstAsync();
         var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
         var ownerSubjectId = await database.OwnerSubjects
             .Where(subject => subject.UserId == developer.Id)
@@ -2515,7 +2815,8 @@ internal static class DatabaseFoundationAssertions
         delivery.NormalizedRecipient.Should().Be("registry-developer@example.test");
         delivery.State.Should().Be(NotificationDeliveryStates.Pending);
 
-        await VerifyDuplicateNotificationEventRejectedAsync(connectionString, incident.Id, notificationEvent.OccurrenceKey);
+        await VerifyDuplicateNotificationEventRejectedAsync(
+            connectionString, incident.Id, openedEvent.Id, notificationEvent.OccurrenceKey);
 
         var dispatchResult = await dispatchService.DispatchDueAsync();
         dispatchResult.Sent.Should().BeGreaterThanOrEqualTo(1);
@@ -2527,10 +2828,51 @@ internal static class DatabaseFoundationAssertions
             .SingleAsync(candidate => candidate.Id == delivery.Id);
         sentDelivery.State.Should().Be(NotificationDeliveryStates.Sent);
         sentDelivery.SentAt.Should().NotBeNull();
+        var sentAttempt = await database.NotificationAttempts.AsNoTracking()
+            .SingleAsync(attempt => attempt.NotificationDeliveryId == delivery.Id);
+        sentAttempt.TransportOutcome.Should().Be(NotificationTransportOutcomes.Sent);
+
+        // Item 20: the persisted transport-response text must never carry the recipient address
+        // or any other sensitive value, regardless of what a real transport might return.
+        sentAttempt.SafeResponse.Should().NotContain("@");
+        sentAttempt.SafeResponse.Should().NotContain(delivery.NormalizedRecipient);
+
+        // Item 10: a delivery left mid-dispatch by a crashed worker (Processing, lease expired)
+        // must be reclaimed by the next tick and sent exactly once — no duplicate attempt, no
+        // permanent loss. The claim query unions this case with ordinary due deliveries, so a
+        // second DispatchDueAsync call is the entire restart-reconciliation mechanism.
+        var (staleIncident, staleEvent) = await CreateOpenIncidentAsync(
+            database, monitor.Id, ownerSubjectId, $"v1|HttpAvailability|notification-stale-lease|{Guid.NewGuid():N}", now);
+        await writer.WriteAsync(
+            staleIncident, staleEvent.Id, NotificationSourceKinds.IncidentEvent, NotificationEventTypes.Opened,
+            NotificationOccurrenceKeys.Opening(staleIncident.Id), isMaintenance: false, now, default);
+        await database.SaveChangesAsync();
+        var staleDeliveryId = await database.NotificationDeliveries.AsNoTracking()
+            .Where(candidate => candidate.NotificationEvent.IncidentId == staleIncident.Id)
+            .Select(candidate => candidate.Id)
+            .SingleAsync();
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                """
+                UPDATE web_health.notification_delivery
+                SET state = 'Processing', lease_owner = 'crashed-worker', lease_expires_at = now() - interval '1 minute'
+                WHERE id = @id
+                """,
+                connection);
+            command.Parameters.AddWithValue("id", staleDeliveryId);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var reconciliationResult = await dispatchService.DispatchDueAsync();
+        reconciliationResult.Claimed.Should().BeGreaterThanOrEqualTo(1);
+        database.ChangeTracker.Clear();
+        var reclaimedDelivery = await database.NotificationDeliveries.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == staleDeliveryId);
+        reclaimedDelivery.State.Should().Be(NotificationDeliveryStates.Sent);
         (await database.NotificationAttempts.AsNoTracking()
-            .Where(attempt => attempt.NotificationDeliveryId == delivery.Id)
-            .Select(attempt => attempt.TransportOutcome)
-            .SingleAsync()).Should().Be(NotificationTransportOutcomes.Sent);
+            .CountAsync(attempt => attempt.NotificationDeliveryId == staleDeliveryId)).Should().Be(1);
 
         var (maintenanceIncident, maintenanceEvent) = await CreateOpenIncidentAsync(
             database, monitor.Id, ownerSubjectId, $"v1|HttpAvailability|notification-suppressed|{Guid.NewGuid():N}", now);
@@ -2554,6 +2896,172 @@ internal static class DatabaseFoundationAssertions
             .SingleAsync()).Should().Be("ActiveMaintenanceWindow");
 
         await VerifyTransientFailureRetriesThenFailsPermanentlyAsync(connectionString, database, monitor.Id, ownerSubjectId);
+
+        // These incidents stay Open/Critical/unacknowledged by design (that's what each assertion
+        // above needed); leaving them that way would make them look like unacknowledged critical
+        // incidents to the reminder/escalation sweep test that runs later and asserts exact
+        // system-wide counts, so close them out here rather than leaking test-fixture state.
+        await AcknowledgeAndResolveAsync(database, incident.Id);
+        await AcknowledgeAndResolveAsync(database, staleIncident.Id);
+        await AcknowledgeAndResolveAsync(database, maintenanceIncident.Id);
+    }
+
+    /// <summary>
+    /// Items 11, 12 and 14. The candidate pool assumes no other Critical/active/unacknowledged
+    /// incidents exist system-wide at the moment this runs — every earlier test that leaves one
+    /// behind acknowledges/resolves it before returning (see AcknowledgeAndResolveAsync), so this
+    /// can assert exact counts without an unrelated incident's own timer crossing a boundary too.
+    /// </summary>
+    private static async Task VerifyReminderEscalationSweepBoundariesAsync(string connectionString)
+    {
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddSingleton<TimeProvider>(clock)
+            .AddInfrastructure(configuration)
+            .BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var reminderService = scope.ServiceProvider.GetRequiredService<NotificationReminderService>();
+        var maintenanceService = scope.ServiceProvider.GetRequiredService<IMaintenanceWindowService>();
+        var lifecycle = scope.ServiceProvider.GetRequiredService<IIncidentLifecycleService>();
+
+        var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).Skip(3).FirstAsync();
+
+        // Earlier finalize calls run against production/HTTP monitors incidentally accumulate an
+        // unrelated "Http.HttpsRequired" issue-state counter alongside whichever issue key each
+        // test intended to exercise (RequiresHttpsFinding fires for every successful transport
+        // result on a production endpoint whose final destination isn't HTTPS). That can silently
+        // open its own incident that no earlier test's targeted cleanup ever touches. This sweep
+        // is the last thing that runs before the exact-count assertions below, so it closes out
+        // every straggler regardless of source rather than chasing each origin individually.
+        await CloseAllActiveIncidentsAsync(database);
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
+        var ownerSubjectId = await database.OwnerSubjects
+            .Where(subject => subject.UserId == developer.Id)
+            .Select(subject => subject.Id)
+            .SingleAsync();
+        var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var developerAccess = new RegistryAccessContext(developer.Id, [ApplicationRoles.DeveloperSupport]);
+
+        var (incident, _) = await CreateOpenIncidentAsync(
+            database, monitor.Id, ownerSubjectId, $"v1|HttpAvailability|reminder-sweep|{Guid.NewGuid():N}", clock.GetUtcNow());
+
+        (await reminderService.SweepAsync()).Should().Be(new NotificationReminderSweepResult(0, 0));
+
+        // Item 14: an active maintenance window pauses both, even once the incident is well past
+        // the escalation boundary.
+        clock.Advance(TimeSpan.FromMinutes(31));
+        var maintenanceWindow = await maintenanceService.CreateAsync(new(
+            new(MaintenanceScopeKind.Monitor, monitor.Id),
+            clock.GetUtcNow().AddMinutes(-1),
+            clock.GetUtcNow().AddHours(1),
+            "UTC",
+            "Reminder sweep pause verification",
+            MaintenanceSuppressionPolicies.SuppressAll,
+            true,
+            false), administratorAccess);
+        maintenanceWindow.Succeeded.Should().BeTrue();
+        (await reminderService.SweepAsync()).Should().Be(new NotificationReminderSweepResult(0, 0));
+        (await maintenanceService.CancelAsync(new(maintenanceWindow.MaintenanceWindowId!.Value, 1), administratorAccess))
+            .Succeeded.Should().BeTrue();
+
+        // Item 11 (escalation boundary): 31 minutes unacknowledged crosses the 30-minute escalation
+        // delay but not the 60-minute reminder interval.
+        var escalationResult = await reminderService.SweepAsync();
+        escalationResult.EscalationsWritten.Should().Be(1);
+        escalationResult.RemindersWritten.Should().Be(0);
+        (await database.NotificationEvents.CountAsync(notificationEvent =>
+            notificationEvent.IncidentId == incident.Id && notificationEvent.EventType == NotificationEventTypes.Escalated))
+            .Should().Be(1);
+
+        // Same elapsed time again: the deterministic single-level occurrence key makes a second
+        // escalation attempt an idempotent no-op, not a duplicate.
+        (await reminderService.SweepAsync()).EscalationsWritten.Should().Be(0);
+
+        // Item 11 (reminder boundary): advancing past 60 minutes total fires exactly one reminder.
+        clock.Advance(TimeSpan.FromMinutes(30));
+        var reminderResult = await reminderService.SweepAsync();
+        reminderResult.RemindersWritten.Should().Be(1);
+        (await database.NotificationEvents.CountAsync(notificationEvent =>
+            notificationEvent.IncidentId == incident.Id && notificationEvent.EventType == NotificationEventTypes.Reminder))
+            .Should().Be(1);
+
+        // Item 12: acknowledging stops both, permanently, regardless of how much further time passes.
+        var trackedIncident = await database.Incidents.SingleAsync(candidate => candidate.Id == incident.Id);
+        (await lifecycle.AcknowledgeAsync(new(incident.Id, trackedIncident.Version), developerAccess))
+            .Succeeded.Should().BeTrue();
+        clock.Advance(TimeSpan.FromHours(2));
+        (await reminderService.SweepAsync()).Should().Be(new NotificationReminderSweepResult(0, 0));
+    }
+
+    /// <summary>
+    /// Item 13 (retention half): a check finalized during an active maintenance window is marked
+    /// and kept, not dropped, through the real FinalizeAsync pipeline — not a hand-built row.
+    /// </summary>
+    private static async Task VerifyMaintenanceClassifiedResultRetentionAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var maintenanceService = scope.ServiceProvider.GetRequiredService<IMaintenanceWindowService>();
+
+        // VerifyEnvironmentEndpointRegistryAsync soft-deletes one of the earliest-created endpoints
+        // (cascading to its monitor), and VerifyHangfireSchedulingAsync disables every monitor
+        // besides the one it needs without ever re-enabling them. Excluding deleted monitors here
+        // and restoring IsEnabled keeps this test independent of exactly what earlier tests left
+        // behind, since MaintenanceWindowService.CreateAsync's scope check requires both.
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
+            .Where(candidate => candidate.DeletedAt == null)
+            .OrderBy(candidate => candidate.CreatedAt)
+            .Skip(4)
+            .FirstAsync();
+        database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
+        database.EndpointHealth.RemoveRange(database.EndpointHealth.Where(health => health.EndpointMonitorId == monitor.Id));
+        await database.SaveChangesAsync();
+        await database.ExecutionLeases.Where(lease => lease.EndpointMonitorId == monitor.Id).ExecuteDeleteAsync();
+
+        monitor.IsEnabled = true;
+        await database.SaveChangesAsync();
+
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        var maintenanceWindow = await maintenanceService.CreateAsync(new(
+            new(MaintenanceScopeKind.Monitor, monitor.Id),
+            clock.GetUtcNow().AddMinutes(-5),
+            clock.GetUtcNow().AddHours(1),
+            "UTC",
+            "Retention verification",
+            MaintenanceSuppressionPolicies.SuppressAll,
+            true,
+            false), administratorAccess);
+        maintenanceWindow.Succeeded.Should().BeTrue(string.Join(" ", maintenanceWindow.Errors));
+
+        var checkId = await FinalizeScheduledResultAsync(database, monitor, 38, 500, clock);
+
+        database.ChangeTracker.Clear();
+        var result = await database.CheckResults.AsNoTracking().SingleAsync(candidate => candidate.LogicalCheckId == checkId);
+        result.IsMaintenance.Should().BeTrue();
+        result.MaintenanceOccurrenceId.Should().NotBeNull();
+        result.CountsForUptime.Should().BeFalse();
+
+        // BR-M04 default: the failure-confirmation counter resets during maintenance, so this
+        // single failure neither creates an issue_state row nor opens an incident.
+        (await database.IssueStates.AnyAsync(state => state.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+        (await database.Incidents.AnyAsync(incident => incident.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+
+        (await maintenanceService.CancelAsync(new(maintenanceWindow.MaintenanceWindowId!.Value, 1), administratorAccess))
+            .Succeeded.Should().BeTrue();
     }
 
     private static async Task<(Incident Incident, IncidentEvent OpenedEvent)> CreateOpenIncidentAsync(
@@ -2590,25 +3098,47 @@ internal static class DatabaseFoundationAssertions
     }
 
     private static async Task VerifyDuplicateNotificationEventRejectedAsync(
-        string connectionString, Guid incidentId, string occurrenceKey)
+        string connectionString, Guid incidentId, Guid incidentEventId, string occurrenceKey)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        const string sql = """
+
+        // Same (incident_id, source_kind, event_type, occurrence_key) as the row already written
+        // for this incident, and otherwise a fully valid row (real incident_event_id) — isolates
+        // the uniqueness index from the field-group check constraint exercised below.
+        const string duplicateSql = """
             INSERT INTO web_health.notification_event
                 (id, incident_event_id, incident_id, source_kind, event_type, occurrence_key,
                  template_version, is_suppressed, occurred_at)
-            VALUES (@id, NULL, @incident_id, 'Reminder', 'Reminder', @occurrence_key, 'v1', FALSE, now());
+            VALUES (@id, @incident_event_id, @incident_id, 'IncidentEvent', 'Opened', @occurrence_key, 'v1', FALSE, now());
             """;
-        await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddWithValue("id", Guid.NewGuid());
-        command.Parameters.AddWithValue("incident_id", incidentId);
-        command.Parameters.AddWithValue("occurrence_key", occurrenceKey);
+        await using (var duplicateCommand = new NpgsqlCommand(duplicateSql, connection))
+        {
+            duplicateCommand.Parameters.AddWithValue("id", Guid.NewGuid());
+            duplicateCommand.Parameters.AddWithValue("incident_event_id", incidentEventId);
+            duplicateCommand.Parameters.AddWithValue("incident_id", incidentId);
+            duplicateCommand.Parameters.AddWithValue("occurrence_key", occurrenceKey);
+            var duplicateException = await Assert.ThrowsAsync<PostgresException>(
+                () => duplicateCommand.ExecuteNonQueryAsync());
+            duplicateException.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+            duplicateException.ConstraintName.Should().Be("ux_notification_event_occurrence");
+        }
 
-        // Different source_kind/event_type than the existing row, so this exercises the check
-        // constraint pairing source_kind to a null incident_event_id, not the uniqueness index.
-        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
-        exception.ConstraintName.Should().Be("ck_notification_event_type");
+        // source_kind = 'IncidentEvent' requires a non-null incident_event_id; a null one must be
+        // rejected by the field-group check constraint, independent of the uniqueness index above.
+        const string missingLinkSql = """
+            INSERT INTO web_health.notification_event
+                (id, incident_event_id, incident_id, source_kind, event_type, occurrence_key,
+                 template_version, is_suppressed, occurred_at)
+            VALUES (@id, NULL, @incident_id, 'IncidentEvent', 'Opened', @new_occurrence_key, 'v1', FALSE, now());
+            """;
+        await using var missingLinkCommand = new NpgsqlCommand(missingLinkSql, connection);
+        missingLinkCommand.Parameters.AddWithValue("id", Guid.NewGuid());
+        missingLinkCommand.Parameters.AddWithValue("incident_id", incidentId);
+        missingLinkCommand.Parameters.AddWithValue("new_occurrence_key", $"{occurrenceKey}|missing-link");
+        var missingLinkException = await Assert.ThrowsAsync<PostgresException>(
+            () => missingLinkCommand.ExecuteNonQueryAsync());
+        missingLinkException.ConstraintName.Should().Be("ck_notification_event_incident_event_required");
     }
 
     private static async Task VerifyTransientFailureRetriesThenFailsPermanentlyAsync(
@@ -2669,6 +3199,16 @@ internal static class DatabaseFoundationAssertions
         finalState.NextAttemptAt.Should().BeNull();
         (await failingDatabase.NotificationAttempts.AsNoTracking()
             .CountAsync(attempt => attempt.NotificationDeliveryId == deliveryId)).Should().Be(maxAttempts);
+
+        // Item 9: dispatch runs in its own transaction, entirely outside the one that opened the
+        // incident. A permanently-failed SMTP delivery must leave the incident row completely
+        // untouched — same Version, same Status, no rollback of already-committed state.
+        var incidentAfterPermanentFailure = await failingDatabase.Incidents.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == incident.Id);
+        incidentAfterPermanentFailure.Version.Should().Be(incident.Version);
+        incidentAfterPermanentFailure.Status.Should().Be(incident.Status);
+
+        await AcknowledgeAndResolveAsync(failingDatabase, incident.Id);
     }
 
     private sealed class AlwaysTransientFailureEmailTransport : IEmailTransport

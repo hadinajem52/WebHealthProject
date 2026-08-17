@@ -30,6 +30,13 @@ internal sealed class NotificationDispatchService(
 {
     public async Task<NotificationDispatchResult> DispatchDueAsync(CancellationToken cancellationToken = default)
     {
+        // Guards against a stale-entity trap if this instance is ever invoked more than once on
+        // the same scope: without this, a tracked NotificationDelivery from a prior call would be
+        // returned by SendAsync's identity-resolved query instead of the row's true current state
+        // (which a raw SQL claim in ClaimDueDeliveriesAsync may have just changed), and EF's
+        // snapshot-based change detection would then silently drop state/lease columns from the
+        // next UPDATE because they compare equal to the stale baseline.
+        dbContext.ChangeTracker.Clear();
         var now = timeProvider.GetUtcNow();
         var leaseOwner = Guid.NewGuid().ToString("N");
         var leaseExpiresAt = now.Add(options.LeaseDuration);

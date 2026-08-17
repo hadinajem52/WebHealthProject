@@ -39,4 +39,12 @@ public sealed class TestAuthorizationController : ControllerBase
     [HttpGet("target-test")]
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets)]
     public IActionResult TargetTest() => Ok();
+
+    // No [IgnoreAntiforgeryToken]: this proves the global AutoValidateAntiforgeryTokenAttribute
+    // filter (registered once in Program.cs and covering every controller, including
+    // IncidentsController/MaintenanceController) rejects a token-less POST from any authenticated
+    // role, without needing a database-backed request to reach a real mutation action.
+    [HttpPost("antiforgery-probe")]
+    [Authorize(Policy = AuthorizationPolicies.ReadRegistry)]
+    public IActionResult AntiforgeryProbe() => Ok();
 }

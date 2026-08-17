@@ -173,6 +173,16 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
     }
 
     [Fact]
+    public async Task TokenlessPost_IsRejectedByTheGlobalAntiforgeryFilter()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+
+        var response = await client.PostAsync("/test/authorization/antiforgery-probe", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task UserNavigation_IsVisibleOnlyToAdministrators()
     {
         using var administrator = factory.CreateHttpsClient(ApplicationRoles.Administrator);
