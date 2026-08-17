@@ -66,7 +66,7 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(5);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(6);
         context.Model.GetEntityTypes().Should().HaveCount(29);
 
         var state = await ReadFoundationState(connectionString);
@@ -500,7 +500,7 @@ internal static class DatabaseFoundationAssertions
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
-        var historyService = scope.ServiceProvider.GetRequiredService<IHttpCheckHistoryService>();
+        var finalizationService = scope.ServiceProvider.GetRequiredService<ILogicalCheckFinalizationService>();
         var monitor = await database.EndpointMonitors
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
@@ -523,6 +523,8 @@ internal static class DatabaseFoundationAssertions
             FindingSeverities.Warning,
             8,
             10));
+        var attemptId = Guid.NewGuid();
+        var workId = Guid.NewGuid();
         database.LogicalChecks.Add(new LogicalCheck
         {
             Id = logicalCheckId,
@@ -559,6 +561,29 @@ internal static class DatabaseFoundationAssertions
             MaxResponseBodyBytes = 8,
             MaxRedirects = 10,
             CreatedAt = now
+        });
+        database.ExecutionAttempts.Add(new ExecutionAttempt
+        {
+            Id = attemptId,
+            LogicalCheckId = logicalCheckId,
+            AttemptNumber = 1,
+            JobId = "history-test",
+            WorkerId = "history-worker",
+            StartedAt = now,
+            InfrastructureOutcome = ExecutionAttemptOutcomes.Running
+        });
+        database.DurableWork.Add(new DurableWork
+        {
+            Id = workId,
+            LogicalCheckId = logicalCheckId,
+            WorkKind = DurableWorkKinds.HttpCheck,
+            DedupeKey = $"v1|{logicalCheckId:N}|http-history",
+            QueueName = "monitoring",
+            State = DurableWorkStates.Processing,
+            AvailableAt = now,
+            AttemptCount = 1,
+            CreatedAt = now,
+            UpdatedAt = now
         });
         await database.SaveChangesAsync();
 
@@ -598,40 +623,44 @@ internal static class DatabaseFoundationAssertions
             Url = "https://other-endpoint.test/"
         };
         var otherResult = transport with { RequestIdentity = SafeHttpRequestIdentity.Create(otherRequest) };
-        (await historyService.RecordAsync(new(activeClaim, request, otherResult)))
-            .Should().Be(HttpCheckHistoryWriteStatus.TargetMismatch);
+        (await finalizationService.FinalizeAsync(new(
+            activeClaim, attemptId, workId, new HttpTransportEvidence(request, otherResult))))
+            .Should().Be(LogicalCheckFinalizationStatus.TargetMismatch);
 
         var policyMismatchRequest = request with { MaxRedirects = 9 };
         var policyMismatchResult = transport with
         {
             RequestIdentity = SafeHttpRequestIdentity.Create(policyMismatchRequest)
         };
-        (await historyService.RecordAsync(new(activeClaim, policyMismatchRequest, policyMismatchResult)))
-            .Should().Be(HttpCheckHistoryWriteStatus.PolicyMismatch);
+        (await finalizationService.FinalizeAsync(new(
+            activeClaim, attemptId, workId,
+            new HttpTransportEvidence(policyMismatchRequest, policyMismatchResult))))
+            .Should().Be(LogicalCheckFinalizationStatus.PolicyMismatch);
 
         var invalidResult = transport with
         {
             Redirects = [transport.Redirects[0] with { FromUrl = "https://other.test/" }]
         };
-        (await historyService.RecordAsync(new(activeClaim, request, invalidResult)))
-            .Should().Be(HttpCheckHistoryWriteStatus.InvalidTransportResult);
+        (await finalizationService.FinalizeAsync(new(
+            activeClaim, attemptId, workId, new HttpTransportEvidence(request, invalidResult))))
+            .Should().Be(LogicalCheckFinalizationStatus.InvalidTransportResult);
         (await database.CheckResults.AnyAsync(result => result.LogicalCheckId == logicalCheckId))
             .Should().BeFalse();
 
-        var staleClaim = activeClaim with { OwnerToken = Guid.NewGuid() };
-        (await historyService.RecordAsync(new(staleClaim, request, transport)))
-            .Should().Be(HttpCheckHistoryWriteStatus.LeaseLost);
         await using var competingScope = services.CreateAsyncScope();
-        var competingHistoryService = competingScope.ServiceProvider
-            .GetRequiredService<IHttpCheckHistoryService>();
+        var competingFinalizationService = competingScope.ServiceProvider
+            .GetRequiredService<ILogicalCheckFinalizationService>();
         var concurrentWrites = await Task.WhenAll(
-            historyService.RecordAsync(new(activeClaim, request, transport)),
-            competingHistoryService.RecordAsync(new(activeClaim, request, transport)));
+            finalizationService.FinalizeAsync(new(
+                activeClaim, attemptId, workId, new HttpTransportEvidence(request, transport))),
+            competingFinalizationService.FinalizeAsync(new(
+                activeClaim, attemptId, workId, new HttpTransportEvidence(request, transport))));
         concurrentWrites.Should().BeEquivalentTo([
-            HttpCheckHistoryWriteStatus.Recorded,
-            HttpCheckHistoryWriteStatus.AlreadyRecorded]);
-        (await historyService.RecordAsync(new(activeClaim, request, transport)))
-            .Should().Be(HttpCheckHistoryWriteStatus.AlreadyRecorded);
+            LogicalCheckFinalizationStatus.Finalized,
+            LogicalCheckFinalizationStatus.AlreadyFinalized]);
+        (await finalizationService.FinalizeAsync(new(
+            activeClaim, attemptId, workId, new HttpTransportEvidence(request, transport))))
+            .Should().Be(LogicalCheckFinalizationStatus.AlreadyFinalized);
 
         database.ChangeTracker.Clear();
         var result = await database.CheckResults.SingleAsync(candidate =>
@@ -731,13 +760,31 @@ internal static class DatabaseFoundationAssertions
             .FirstAsync(candidate => !candidate.Endpoint.Environment.IsProduction);
 
         var successfulCheck = await CreateQueuedCheckAsync(database, monitor, 1);
+        var successfulHttpWork = successfulCheck.DurableWork.Single(work =>
+            work.WorkKind == DurableWorkKinds.HttpCheck);
+        var unrelatedWork = new DurableWork
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = successfulCheck.Id,
+            WorkKind = "IncidentEvaluation",
+            DedupeKey = $"v1|{successfulCheck.Id:N}|incident-evaluation",
+            QueueName = "incidents",
+            State = DurableWorkStates.Enqueued,
+            AvailableAt = successfulCheck.CreatedAt,
+            CreatedAt = successfulCheck.CreatedAt,
+            UpdatedAt = successfulCheck.CreatedAt
+        };
+        database.DurableWork.Add(unrelatedWork);
+        await database.SaveChangesAsync();
         var successfulTransport = new RecordingSafeHttpTransport(Success);
         var successfulExecution = CreateExecutionService(database, successfulTransport, true);
         (await successfulExecution.ExecuteAsync(new(
-            successfulCheck.Id, "job-success", "worker-a", false)))
+            successfulCheck.Id, successfulHttpWork.Id,
+            "job-success", "worker-a", false)))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         (await successfulExecution.ExecuteAsync(new(
-            successfulCheck.Id, "job-duplicate", "worker-b", false)))
+            successfulCheck.Id, successfulHttpWork.Id,
+            "job-duplicate", "worker-b", false)))
             .Should().Be(LogicalCheckExecutionStatus.AlreadyCompleted);
         successfulTransport.CallCount.Should().Be(1);
         successfulTransport.LastRequest!.TimeoutSeconds.Should()
@@ -749,16 +796,28 @@ internal static class DatabaseFoundationAssertions
             .ToArrayAsync();
         successfulAttempts.Should().ContainSingle();
         successfulAttempts[0].InfrastructureOutcome.Should().Be(ExecutionAttemptOutcomes.Succeeded);
+        (await database.DurableWork.AsNoTracking().SingleAsync(work => work.Id == unrelatedWork.Id))
+            .State.Should().Be(DurableWorkStates.Enqueued);
 
         var retryCheck = await CreateQueuedCheckAsync(database, monitor, 2);
         var retryTransport = new RecordingSafeHttpTransport((request, call) =>
             call == 1 ? throw new HttpRequestException() : Success(request, call));
         var retryExecution = CreateExecutionService(database, retryTransport, true);
-        (await retryExecution.ExecuteAsync(new(retryCheck.Id, "job-retry-1", "worker-a", false)))
-            .Should().Be(LogicalCheckExecutionStatus.RetryRequired);
+        await Assert.ThrowsAsync<HttpRequestException>(() => retryExecution.ExecuteAsync(new(
+            retryCheck.Id, retryCheck.DurableWork.Single().Id,
+            "job-retry-1", "worker-a", false)));
         (await database.CheckResults.AnyAsync(result => result.LogicalCheckId == retryCheck.Id))
             .Should().BeFalse();
-        (await retryExecution.ExecuteAsync(new(retryCheck.Id, "job-retry-2", "worker-a", false)))
+        var retryLease = await database.ExecutionLeases.AsNoTracking().SingleAsync(lease =>
+            lease.LogicalCheckId == retryCheck.Id);
+        await new ExecutionLeaseService(database).ReleaseAsync(new(
+            retryLease.EndpointMonitorId,
+            retryLease.LogicalCheckId,
+            retryLease.OwnerToken,
+            retryLease.FencingGeneration));
+        (await retryExecution.ExecuteAsync(new(
+            retryCheck.Id, retryCheck.DurableWork.Single().Id,
+            "job-retry-2", "worker-a", false)))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         retryTransport.CallCount.Should().Be(2);
         (await database.CheckResults.CountAsync(result => result.LogicalCheckId == retryCheck.Id))
@@ -769,26 +828,15 @@ internal static class DatabaseFoundationAssertions
             .ToArrayAsync();
         retryAttempts.Select(attempt => attempt.AttemptNumber).Should().Equal(1, 2);
         retryAttempts.Select(attempt => attempt.InfrastructureOutcome).Should()
-            .Equal(ExecutionAttemptOutcomes.RetryableFailure, ExecutionAttemptOutcomes.Succeeded);
-
-        var exhaustedCheck = await CreateQueuedCheckAsync(database, monitor, 3);
-        var exhaustedTransport = new RecordingSafeHttpTransport((_, _) => throw new HttpRequestException());
-        var exhaustedExecution = CreateExecutionService(database, exhaustedTransport, true);
-        (await exhaustedExecution.ExecuteAsync(new(
-            exhaustedCheck.Id, "job-exhausted", "worker-a", true)))
-            .Should().Be(LogicalCheckExecutionStatus.Completed);
-        var exhaustedResult = await database.CheckResults.SingleAsync(result =>
-            result.LogicalCheckId == exhaustedCheck.Id);
-        exhaustedResult.FailureCategory.Should().Be(HttpFailureCategories.ExecutionExhausted);
-        (await database.ExecutionAttempts.SingleAsync(attempt =>
-            attempt.LogicalCheckId == exhaustedCheck.Id)).InfrastructureOutcome.Should()
-            .Be(ExecutionAttemptOutcomes.TerminalFailure);
+            .Equal(ExecutionAttemptOutcomes.Superseded, ExecutionAttemptOutcomes.Succeeded);
 
         var timeoutCheck = await CreateQueuedCheckAsync(database, monitor, 4);
         var timeoutTransport = new RecordingSafeHttpTransport((request, _) => Failure(
             request, SafeHttpFailureKind.Timeout));
         var timeoutExecution = CreateExecutionService(database, timeoutTransport, true);
-        (await timeoutExecution.ExecuteAsync(new(timeoutCheck.Id, "job-timeout", "worker-a", false)))
+        (await timeoutExecution.ExecuteAsync(new(
+            timeoutCheck.Id, timeoutCheck.DurableWork.Single().Id,
+            "job-timeout", "worker-a", false)))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         (await database.CheckResults.SingleAsync(result => result.LogicalCheckId == timeoutCheck.Id))
             .FailureCategory.Should().Be(HttpFailureCategories.Timeout);
@@ -797,13 +845,35 @@ internal static class DatabaseFoundationAssertions
         var ineligibleTransport = new RecordingSafeHttpTransport(Success);
         var ineligibleExecution = CreateExecutionService(database, ineligibleTransport, false);
         (await ineligibleExecution.ExecuteAsync(new(
-            ineligibleCheck.Id, "job-ineligible", "worker-a", false)))
+            ineligibleCheck.Id, ineligibleCheck.DurableWork.Single().Id,
+            "job-ineligible", "worker-a", false)))
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         ineligibleTransport.CallCount.Should().Be(0);
         var ineligibleResult = await database.CheckResults.SingleAsync(result =>
             result.LogicalCheckId == ineligibleCheck.Id);
         ineligibleResult.Outcome.Should().Be(HttpResultOutcomes.Cancelled);
+        ineligibleResult.FailureCategory.Should().Be(HttpFailureCategories.TargetIneligible);
         ineligibleResult.CountsForUptime.Should().BeFalse();
+
+        var cancelledCheck = await CreateQueuedCheckAsync(database, monitor, 7);
+        using var workerCancellation = new CancellationTokenSource();
+        var cancelledTransport = new RecordingSafeHttpTransport((request, _) =>
+        {
+            workerCancellation.Cancel();
+            return Failure(request, SafeHttpFailureKind.Cancelled);
+        });
+        var cancelledExecution = CreateExecutionService(database, cancelledTransport, true);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cancelledExecution.ExecuteAsync(new(
+            cancelledCheck.Id, cancelledCheck.DurableWork.Single().Id,
+            "job-cancelled", "worker-a", false), workerCancellation.Token));
+        (await database.CheckResults.AnyAsync(result => result.LogicalCheckId == cancelledCheck.Id))
+            .Should().BeFalse();
+        (await database.ExecutionAttempts.SingleAsync(attempt =>
+            attempt.LogicalCheckId == cancelledCheck.Id)).InfrastructureOutcome.Should()
+            .Be(ExecutionAttemptOutcomes.RetryableFailure);
+        (await database.DurableWork.SingleAsync(work =>
+            work.Id == cancelledCheck.DurableWork.Single().Id)).State.Should()
+            .Be(DurableWorkStates.Enqueued);
 
         var leasedCheck = await CreateQueuedCheckAsync(database, monitor, 6);
         var competingLeaseService = new ExecutionLeaseService(database);
@@ -816,12 +886,133 @@ internal static class DatabaseFoundationAssertions
         var blockedTransport = new RecordingSafeHttpTransport(Success);
         var blockedExecution = CreateExecutionService(database, blockedTransport, true);
         (await blockedExecution.ExecuteAsync(new(
-            leasedCheck.Id, "job-competing", "worker-b", false)))
-            .Should().Be(LogicalCheckExecutionStatus.LeaseUnavailable);
+            leasedCheck.Id, leasedCheck.DurableWork.Single().Id,
+            "job-competing", "worker-b", false)))
+            .Should().Be(LogicalCheckExecutionStatus.RetryRequired);
         blockedTransport.CallCount.Should().Be(0);
         (await database.ExecutionAttempts.AnyAsync(attempt =>
             attempt.LogicalCheckId == leasedCheck.Id)).Should().BeFalse();
         await competingLeaseService.ReleaseAsync(competingClaim!);
+
+        await VerifyFencedRetryAsync(database, monitor);
+        await VerifyExecutionExhaustionAsync(database, monitor);
+    }
+
+    private static async Task VerifyExecutionExhaustionAsync(
+        ApplicationDbContext database,
+        EndpointMonitor monitor)
+    {
+        var check = await CreateQueuedCheckAsync(database, monitor, 9);
+        var work = check.DurableWork.Single();
+        var now = DateTimeOffset.UtcNow;
+        check.State = LogicalCheckStates.Running;
+        check.StartedAt = now;
+        work.State = DurableWorkStates.Processing;
+        work.AttemptCount = 1;
+        work.UpdatedAt = now;
+        var attempt = new ExecutionAttempt
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = check.Id,
+            AttemptNumber = 1,
+            JobId = "exhausted-job",
+            WorkerId = "worker-a",
+            StartedAt = now,
+            InfrastructureOutcome = ExecutionAttemptOutcomes.Running
+        };
+        database.ExecutionAttempts.Add(attempt);
+        await database.SaveChangesAsync();
+        var claim = await new ExecutionLeaseService(database).TryAcquireAsync(new(
+            monitor.Id, check.Id, Guid.NewGuid(), TimeSpan.FromMinutes(1)));
+        claim.Should().NotBeNull();
+
+        var finalization = new LogicalCheckFinalizationService(database, TimeProvider.System);
+        (await finalization.FinalizeAsync(new(
+            claim!, attempt.Id, work.Id,
+            new ExecutionTerminalEvidence(ExecutionTerminalReason.RetriesExhausted))))
+            .Should().Be(LogicalCheckFinalizationStatus.Finalized);
+        (await database.CheckResults.AsNoTracking().SingleAsync(result =>
+            result.LogicalCheckId == check.Id)).FailureCategory.Should()
+            .Be(HttpFailureCategories.ExecutionExhausted);
+        (await database.ExecutionAttempts.AsNoTracking().SingleAsync(candidate =>
+            candidate.Id == attempt.Id)).InfrastructureOutcome.Should()
+            .Be(ExecutionAttemptOutcomes.TerminalFailure);
+    }
+
+    private static async Task VerifyFencedRetryAsync(
+        ApplicationDbContext database,
+        EndpointMonitor monitor)
+    {
+        var check = await CreateQueuedCheckAsync(database, monitor, 8);
+        var work = check.DurableWork.Single();
+        var leaseService = new ExecutionLeaseService(database);
+        var staleClaim = await leaseService.TryAcquireAsync(new(
+            monitor.Id, check.Id, Guid.NewGuid(), TimeSpan.FromMinutes(1)));
+        staleClaim.Should().NotBeNull();
+
+        var now = DateTimeOffset.UtcNow;
+        check.State = LogicalCheckStates.Running;
+        check.StartedAt = now;
+        work.State = DurableWorkStates.Processing;
+        work.AttemptCount = 1;
+        work.UpdatedAt = now;
+        var staleAttempt = new ExecutionAttempt
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = check.Id,
+            AttemptNumber = 1,
+            JobId = "stale-job",
+            WorkerId = "worker-a",
+            StartedAt = now,
+            InfrastructureOutcome = ExecutionAttemptOutcomes.Running
+        };
+        database.ExecutionAttempts.Add(staleAttempt);
+        await database.SaveChangesAsync();
+        await leaseService.ReleaseAsync(staleClaim!);
+
+        var winningClaim = await leaseService.TryAcquireAsync(new(
+            monitor.Id, check.Id, Guid.NewGuid(), TimeSpan.FromMinutes(1)));
+        winningClaim.Should().NotBeNull();
+        var winningAttempt = new ExecutionAttempt
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = check.Id,
+            AttemptNumber = 2,
+            JobId = "winning-job",
+            WorkerId = "worker-b",
+            StartedAt = now.AddMilliseconds(1),
+            InfrastructureOutcome = ExecutionAttemptOutcomes.Running
+        };
+        database.ExecutionAttempts.Add(winningAttempt);
+        await database.SaveChangesAsync();
+
+        var finalization = new LogicalCheckFinalizationService(database, TimeProvider.System);
+        (await finalization.PrepareRetryAsync(new(
+            staleClaim!, staleAttempt.Id, work.Id, "Infrastructure")))
+            .Should().Be(LogicalCheckRetryStatus.Superseded);
+        (await database.DurableWork.AsNoTracking().SingleAsync(candidate => candidate.Id == work.Id))
+            .State.Should().Be(DurableWorkStates.Processing);
+
+        var request = new SafeHttpTransportRequest(
+            monitor.EndpointId,
+            monitor.Endpoint.NormalizedUrl,
+            monitor.Endpoint.Environment.IsProduction,
+            check.ConfigurationSnapshot.MaxRedirects,
+            check.ConfigurationSnapshot.MaxResponseBodyBytes,
+            check.ConfigurationSnapshot.TimeoutSeconds);
+        (await finalization.FinalizeAsync(new(
+            winningClaim!, winningAttempt.Id, work.Id,
+            new HttpTransportEvidence(request, Success(request, 1)))))
+            .Should().Be(LogicalCheckFinalizationStatus.Finalized);
+        (await database.ExecutionAttempts.AsNoTracking()
+            .Where(attempt => attempt.LogicalCheckId == check.Id)
+            .OrderBy(attempt => attempt.AttemptNumber)
+            .Select(attempt => attempt.InfrastructureOutcome)
+            .ToArrayAsync()).Should().Equal(
+                ExecutionAttemptOutcomes.Superseded,
+                ExecutionAttemptOutcomes.Succeeded);
+        (await database.CheckResults.CountAsync(result => result.LogicalCheckId == check.Id))
+            .Should().Be(1);
     }
 
     private static LogicalCheckExecutionService CreateExecutionService(
@@ -831,13 +1022,13 @@ internal static class DatabaseFoundationAssertions
     {
         var timeProvider = TimeProvider.System;
         var leaseService = new ExecutionLeaseService(database);
-        var historyService = new HttpCheckHistoryService(database, timeProvider);
+        var finalizationService = new LogicalCheckFinalizationService(database, timeProvider);
         return new(
             database,
             new FixedEligibilityService(isEligible),
             leaseService,
             transport,
-            historyService,
+            finalizationService,
             timeProvider,
             NullLogger<LogicalCheckExecutionService>.Instance);
     }
@@ -882,7 +1073,7 @@ internal static class DatabaseFoundationAssertions
         {
             Id = Guid.NewGuid(),
             LogicalCheckId = check.Id,
-            WorkKind = "HttpCheck",
+            WorkKind = DurableWorkKinds.HttpCheck,
             DedupeKey = $"v1|{check.Id:N}|http-check",
             QueueName = "monitoring",
             State = DurableWorkStates.Enqueued,
@@ -1127,7 +1318,7 @@ internal static class DatabaseFoundationAssertions
 
         await database.Database.MigrateAsync();
         var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Should().HaveCount(5);
+        applied.Should().HaveCount(6);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         var upgraded = await ReadFoundationState(connectionString);
         upgraded.Tables.Should().BeEquivalentTo(

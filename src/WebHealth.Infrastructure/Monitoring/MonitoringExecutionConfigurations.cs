@@ -141,11 +141,11 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
                 + "('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError',"
                 + "'RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge',"
                 + "'HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect',"
-                + "'ExecutionExhausted','Protocol')");
+                + "'ExecutionExhausted','TargetIneligible','Protocol')");
             table.HasCheckConstraint(
                 "ck_check_result_outcome_category",
                 "(outcome = 'Healthy' AND failure_category IS NULL) OR "
-                + "(outcome = 'Cancelled' AND failure_category = 'Cancellation') OR "
+                + "(outcome = 'Cancelled' AND failure_category IN ('Cancellation','TargetIneligible')) OR "
                 + "(outcome IN ('Warning','Critical') AND failure_category IS NOT NULL)");
             table.HasCheckConstraint(
                 "ck_check_result_truncation",
@@ -213,7 +213,7 @@ internal sealed class ExecutionAttemptConfiguration : IEntityTypeConfiguration<E
             table.HasCheckConstraint("ck_execution_attempt_number", "attempt_number > 0");
             table.HasCheckConstraint(
                 "ck_execution_attempt_outcome",
-                "infrastructure_outcome IN ('Running', 'Succeeded', 'RetryableFailure', 'TerminalFailure', 'Cancelled')");
+                "infrastructure_outcome IN ('Running', 'Succeeded', 'RetryableFailure', 'TerminalFailure', 'Cancelled', 'Superseded')");
             table.HasCheckConstraint(
                 "ck_execution_attempt_finished",
                 "finished_at IS NULL OR finished_at >= started_at");

@@ -9,6 +9,7 @@ public interface ILogicalCheckExecutionService
 
 public sealed record ExecuteLogicalCheck(
     Guid LogicalCheckId,
+    Guid DurableWorkId,
     string JobId,
     string WorkerId,
     bool IsFinalAttempt);
@@ -17,6 +18,6 @@ public enum LogicalCheckExecutionStatus
 {
     Completed,
     AlreadyCompleted,
-    LeaseUnavailable,
-    RetryRequired
+    RetryRequired,
+    ReconciliationRequired
 }

@@ -129,7 +129,6 @@ public sealed class HttpResultNormalizerTests
     [InlineData(SafeHttpFailureKind.Cancelled, "Cancellation", "Cancelled")]
     [InlineData(SafeHttpFailureKind.RedirectLoop, "RedirectLoop", "Critical")]
     [InlineData(SafeHttpFailureKind.RedirectLimit, "ExcessiveRedirects", "Critical")]
-    [InlineData(SafeHttpFailureKind.ExecutionExhausted, "ExecutionExhausted", "Critical")]
     public void Normalize_MapsSafeTransportFailures(
         SafeHttpFailureKind transportFailure,
         string failureCategory,

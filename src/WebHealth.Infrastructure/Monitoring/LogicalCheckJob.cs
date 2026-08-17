@@ -12,21 +12,26 @@ public sealed class LogicalCheckJob(ILogicalCheckExecutionService executionServi
     [AutomaticRetry(Attempts = MaximumRetries, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
     public async Task ExecuteAsync(
         Guid logicalCheckId,
+        Guid durableWorkId,
         PerformContext context,
         CancellationToken cancellationToken)
     {
         var retryCount = context.GetJobParameter<int>("RetryCount");
         var status = await executionService.ExecuteAsync(new(
             logicalCheckId,
+            durableWorkId,
             context.BackgroundJob.Id,
             context.ServerId,
             retryCount >= MaximumRetries), cancellationToken);
-        if (status == LogicalCheckExecutionStatus.RetryRequired)
+        if (status is LogicalCheckExecutionStatus.RetryRequired
+            or LogicalCheckExecutionStatus.ReconciliationRequired)
         {
-            throw new LogicalCheckRetryRequiredException();
+            throw new LogicalCheckRetryRequiredException(status);
         }
     }
 }
 
-internal sealed class LogicalCheckRetryRequiredException()
-    : Exception("The logical check requires another infrastructure attempt.");
+internal sealed class LogicalCheckRetryRequiredException(LogicalCheckExecutionStatus status)
+    : Exception(status == LogicalCheckExecutionStatus.ReconciliationRequired
+        ? "The logical check requires lease reconciliation."
+        : "The logical check requires another infrastructure attempt.");

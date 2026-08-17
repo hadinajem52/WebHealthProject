@@ -22,6 +22,12 @@ public static class ExecutionAttemptOutcomes
     public const string RetryableFailure = "RetryableFailure";
     public const string TerminalFailure = "TerminalFailure";
     public const string Cancelled = "Cancelled";
+    public const string Superseded = "Superseded";
+}
+
+public static class DurableWorkKinds
+{
+    public const string HttpCheck = "HttpCheck";
 }
 
 public static class DurableWorkStates

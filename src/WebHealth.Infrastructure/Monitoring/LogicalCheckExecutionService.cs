@@ -12,39 +12,37 @@ internal sealed class LogicalCheckExecutionService(
     IMonitoringEligibilityService eligibilityService,
     IExecutionLeaseService leaseService,
     ISafeHttpTransport transport,
-    IHttpCheckHistoryService historyService,
+    ILogicalCheckFinalizationService finalizationService,
     TimeProvider timeProvider,
     ILogger<LogicalCheckExecutionService> logger) : ILogicalCheckExecutionService
 {
     private static readonly TimeSpan LeaseBuffer = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaximumLeaseDuration = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan CancellationCleanupTimeout = TimeSpan.FromSeconds(5);
 
     public async Task<LogicalCheckExecutionStatus> ExecuteAsync(
         ExecuteLogicalCheck command,
         CancellationToken cancellationToken = default)
     {
         Validate(command);
-        var check = await LoadCheckAsync(command.LogicalCheckId, cancellationToken);
-        if (check is null)
-        {
-            throw new InvalidOperationException("The logical check does not exist.");
-        }
-
+        var check = await LoadCheckAsync(command.LogicalCheckId, cancellationToken)
+            ?? throw new InvalidOperationException("The logical check does not exist.");
         using var scope = BeginLogScope(check, command);
         if (check.State == LogicalCheckStates.Completed)
         {
             return LogicalCheckExecutionStatus.AlreadyCompleted;
         }
 
-        EnsureExecutable(check);
+        EnsureExecutable(check, command.DurableWorkId);
         var request = CreateRequest(check);
         var isEligible = await eligibilityService.IsEndpointEligibleAsync(
-            check.EndpointMonitor.EndpointId,
-            cancellationToken);
+            check.EndpointMonitor.EndpointId, cancellationToken);
         var claim = await AcquireLeaseAsync(check, cancellationToken);
         if (claim is null)
         {
-            return LogicalCheckExecutionStatus.LeaseUnavailable;
+            return command.IsFinalAttempt
+                ? LogicalCheckExecutionStatus.ReconciliationRequired
+                : LogicalCheckExecutionStatus.RetryRequired;
         }
 
         ExecutionAttempt? attempt;
@@ -57,48 +55,62 @@ internal sealed class LogicalCheckExecutionService(
             await leaseService.ReleaseAsync(claim, CancellationToken.None);
             throw;
         }
+
         if (attempt is null)
         {
-            await leaseService.ReleaseAsync(claim, cancellationToken);
+            await leaseService.ReleaseAsync(claim, CancellationToken.None);
             return LogicalCheckExecutionStatus.AlreadyCompleted;
         }
 
-        return isEligible
-            ? await ExecuteTransportAsync(check, request, claim, attempt, command, cancellationToken)
-            : await CompleteIneligibleAsync(request, claim, attempt, cancellationToken);
+        if (!isEligible)
+        {
+            return await FinalizeAsync(
+                claim, attempt.Id, command.DurableWorkId,
+                new ExecutionTerminalEvidence(ExecutionTerminalReason.TargetIneligible),
+                command.IsFinalAttempt, cancellationToken);
+        }
+
+        var result = await transport.SendAsync(request, cancellationToken);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            await PrepareCancelledRetryAsync(claim, attempt.Id, command.DurableWorkId);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        return await FinalizeAsync(
+            claim, attempt.Id, command.DurableWorkId,
+            new HttpTransportEvidence(request, result),
+            command.IsFinalAttempt, cancellationToken);
     }
 
-    private Task<LogicalCheck?> LoadCheckAsync(Guid logicalCheckId, CancellationToken cancellationToken) =>
+    private Task<LogicalCheck?> LoadCheckAsync(Guid checkId, CancellationToken token) =>
         dbContext.LogicalChecks
             .Include(check => check.ConfigurationSnapshot)
             .Include(check => check.EndpointMonitor)
                 .ThenInclude(monitor => monitor.Endpoint)
                     .ThenInclude(endpoint => endpoint.Environment)
             .Include(check => check.DurableWork)
-            .SingleOrDefaultAsync(check => check.Id == logicalCheckId, cancellationToken);
+            .SingleOrDefaultAsync(check => check.Id == checkId, token);
 
-    private async Task<ExecutionLeaseClaim?> AcquireLeaseAsync(
+    private Task<ExecutionLeaseClaim?> AcquireLeaseAsync(
         LogicalCheck check,
-        CancellationToken cancellationToken) =>
-        await leaseService.TryAcquireAsync(new(
-            check.EndpointMonitorId,
-            check.Id,
-            Guid.NewGuid(),
-            LeaseDuration(check.ConfigurationSnapshot.TimeoutSeconds)),
-            cancellationToken);
+        CancellationToken token) =>
+        leaseService.TryAcquireAsync(new(
+            check.EndpointMonitorId, check.Id, Guid.NewGuid(),
+            LeaseDuration(check.ConfigurationSnapshot.TimeoutSeconds)), token);
 
     private async Task<ExecutionAttempt?> StartAttemptAsync(
         LogicalCheck check,
         ExecuteLogicalCheck command,
-        CancellationToken cancellationToken)
+        CancellationToken token)
     {
-        await dbContext.Entry(check).ReloadAsync(cancellationToken);
+        await dbContext.Entry(check).ReloadAsync(token);
         if (check.State == LogicalCheckStates.Completed)
         {
             return null;
         }
 
-        EnsureExecutable(check);
+        EnsureExecutable(check, command.DurableWorkId);
         var now = timeProvider.GetUtcNow();
         if (check.State == LogicalCheckStates.Queued)
         {
@@ -106,144 +118,79 @@ internal sealed class LogicalCheckExecutionService(
             check.StartedAt = now;
         }
 
+        await SupersedeAbandonedAttemptsAsync(check.Id, now, token);
         var attempt = new ExecutionAttempt
         {
             Id = Guid.NewGuid(),
             LogicalCheckId = check.Id,
-            AttemptNumber = await NextAttemptNumberAsync(check.Id, cancellationToken),
+            AttemptNumber = await NextAttemptNumberAsync(check.Id, token),
             JobId = command.JobId,
             WorkerId = command.WorkerId,
             StartedAt = now,
             InfrastructureOutcome = ExecutionAttemptOutcomes.Running
         };
         dbContext.ExecutionAttempts.Add(attempt);
-        MarkWorkProcessing(check, now);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        MarkWorkProcessing(check, command.DurableWorkId, now);
+        await dbContext.SaveChangesAsync(token);
         return attempt;
     }
 
-    private async Task<LogicalCheckExecutionStatus> ExecuteTransportAsync(
-        LogicalCheck check,
-        SafeHttpTransportRequest request,
-        ExecutionLeaseClaim claim,
-        ExecutionAttempt attempt,
-        ExecuteLogicalCheck command,
-        CancellationToken cancellationToken)
+    private async Task SupersedeAbandonedAttemptsAsync(
+        Guid checkId,
+        DateTimeOffset now,
+        CancellationToken token)
     {
-        SafeHttpTransportResult result;
-        try
+        var abandoned = await dbContext.ExecutionAttempts
+            .Where(attempt => attempt.LogicalCheckId == checkId
+                && attempt.InfrastructureOutcome == ExecutionAttemptOutcomes.Running)
+            .ToArrayAsync(token);
+        foreach (var attempt in abandoned)
         {
-            result = await transport.SendAsync(request, cancellationToken);
+            attempt.InfrastructureOutcome = ExecutionAttemptOutcomes.Superseded;
+            attempt.FailureCategory = "LeaseSuperseded";
+            attempt.FinishedAt = now;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(
-                "Logical check transport attempt failed with {FailureType}.",
-                exception.GetType().Name);
-            return command.IsFinalAttempt
-                ? await CompleteExhaustedAsync(request, claim, attempt, cancellationToken)
-                : await PrepareRetryAsync(check, claim, attempt, cancellationToken);
-        }
-
-        var outcome = result.Failure == SafeHttpFailureKind.Cancelled
-            ? ExecutionAttemptOutcomes.Cancelled
-            : ExecutionAttemptOutcomes.Succeeded;
-        return await PersistResultAsync(
-            request,
-            result,
-            claim,
-            attempt,
-            outcome,
-            outcome == ExecutionAttemptOutcomes.Succeeded ? null : result.Failure?.ToString(),
-            cancellationToken);
     }
 
-    private Task<LogicalCheckExecutionStatus> CompleteIneligibleAsync(
-        SafeHttpTransportRequest request,
+    private async Task<LogicalCheckExecutionStatus> FinalizeAsync(
         ExecutionLeaseClaim claim,
-        ExecutionAttempt attempt,
-        CancellationToken cancellationToken) =>
-        PersistResultAsync(
-            request,
-            Failure(request, SafeHttpFailureKind.Cancelled),
-            claim,
-            attempt,
-            ExecutionAttemptOutcomes.Cancelled,
-            "TargetIneligible",
-            cancellationToken);
-
-    private Task<LogicalCheckExecutionStatus> CompleteExhaustedAsync(
-        SafeHttpTransportRequest request,
-        ExecutionLeaseClaim claim,
-        ExecutionAttempt attempt,
-        CancellationToken cancellationToken) =>
-        PersistResultAsync(
-            request,
-            Failure(request, SafeHttpFailureKind.ExecutionExhausted),
-            claim,
-            attempt,
-            ExecutionAttemptOutcomes.TerminalFailure,
-            "RetriesExhausted",
-            cancellationToken);
-
-    private async Task<LogicalCheckExecutionStatus> PersistResultAsync(
-        SafeHttpTransportRequest request,
-        SafeHttpTransportResult result,
-        ExecutionLeaseClaim claim,
-        ExecutionAttempt attempt,
-        string attemptOutcome,
-        string? failureCategory,
-        CancellationToken cancellationToken)
+        Guid attemptId,
+        Guid workId,
+        LogicalCheckTerminalEvidence evidence,
+        bool isFinalAttempt,
+        CancellationToken token)
     {
-        var status = await historyService.RecordAsync(new(
-            claim,
-            request,
-            result,
-            new(attempt.Id, attemptOutcome, failureCategory)), cancellationToken);
+        var status = await finalizationService.FinalizeAsync(new(
+            claim, attemptId, workId, evidence), token);
         return status switch
         {
-            HttpCheckHistoryWriteStatus.Recorded => LogicalCheckExecutionStatus.Completed,
-            HttpCheckHistoryWriteStatus.AlreadyRecorded => LogicalCheckExecutionStatus.AlreadyCompleted,
-            HttpCheckHistoryWriteStatus.LeaseLost => LogicalCheckExecutionStatus.RetryRequired,
+            LogicalCheckFinalizationStatus.Finalized => LogicalCheckExecutionStatus.Completed,
+            LogicalCheckFinalizationStatus.AlreadyFinalized => LogicalCheckExecutionStatus.AlreadyCompleted,
+            LogicalCheckFinalizationStatus.LeaseLost when isFinalAttempt =>
+                LogicalCheckExecutionStatus.ReconciliationRequired,
+            LogicalCheckFinalizationStatus.LeaseLost => LogicalCheckExecutionStatus.RetryRequired,
             _ => throw new InvalidOperationException($"Logical check finalization failed with {status}.")
         };
     }
 
-    private async Task<LogicalCheckExecutionStatus> PrepareRetryAsync(
-        LogicalCheck check,
+    private async Task PrepareCancelledRetryAsync(
         ExecutionLeaseClaim claim,
-        ExecutionAttempt attempt,
-        CancellationToken cancellationToken)
+        Guid attemptId,
+        Guid workId)
     {
-        var now = timeProvider.GetUtcNow();
-        attempt.InfrastructureOutcome = ExecutionAttemptOutcomes.RetryableFailure;
-        attempt.FailureCategory = "Infrastructure";
-        attempt.FinishedAt = now;
-        foreach (var work in check.DurableWork)
-        {
-            work.State = DurableWorkStates.Enqueued;
-            work.LastFailureCategory = "Infrastructure";
-            work.LastFailureAt = now;
-            work.UpdatedAt = now;
-        }
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await leaseService.ReleaseAsync(claim, cancellationToken);
-        return LogicalCheckExecutionStatus.RetryRequired;
+        using var cleanup = new CancellationTokenSource(CancellationCleanupTimeout);
+        var status = await finalizationService.PrepareRetryAsync(new(
+            claim, attemptId, workId, "WorkerCancellation"), cleanup.Token);
+        logger.LogInformation("Worker cancellation cleanup completed with {RetryStatus}.", status);
     }
 
-    private async Task<int> NextAttemptNumberAsync(
-        Guid logicalCheckId,
-        CancellationToken cancellationToken)
+    private async Task<int> NextAttemptNumberAsync(Guid checkId, CancellationToken token)
     {
         var current = await dbContext.ExecutionAttempts
-            .Where(attempt => attempt.LogicalCheckId == logicalCheckId)
+            .Where(attempt => attempt.LogicalCheckId == checkId)
             .Select(attempt => attempt.AttemptNumber)
             .DefaultIfEmpty()
-            .MaxAsync(cancellationToken);
+            .MaxAsync(token);
         return current + 1;
     }
 
@@ -252,64 +199,50 @@ internal sealed class LogicalCheckExecutionService(
         var snapshot = check.ConfigurationSnapshot;
         var endpoint = check.EndpointMonitor.Endpoint;
         return new(
-            endpoint.Id,
-            endpoint.NormalizedUrl,
-            endpoint.Environment.IsProduction,
-            snapshot.MaxRedirects,
-            snapshot.MaxResponseBodyBytes,
-            snapshot.TimeoutSeconds);
+            endpoint.Id, endpoint.NormalizedUrl, endpoint.Environment.IsProduction,
+            snapshot.MaxRedirects, snapshot.MaxResponseBodyBytes, snapshot.TimeoutSeconds);
     }
-
-    private static SafeHttpTransportResult Failure(
-        SafeHttpTransportRequest request,
-        SafeHttpFailureKind failure) => new(
-            failure,
-            null,
-            null,
-            TimeSpan.Zero,
-            0,
-            false,
-            ReadOnlyMemory<byte>.Empty,
-            [],
-            SafeHttpRequestIdentity.Create(request));
 
     private static TimeSpan LeaseDuration(int timeoutSeconds) =>
         TimeSpan.FromTicks(Math.Min(
             TimeSpan.FromSeconds(timeoutSeconds).Add(LeaseBuffer).Ticks,
             MaximumLeaseDuration.Ticks));
 
-    private static void MarkWorkProcessing(LogicalCheck check, DateTimeOffset now)
+    private static void MarkWorkProcessing(LogicalCheck check, Guid workId, DateTimeOffset now)
     {
-        foreach (var work in check.DurableWork)
-        {
-            work.State = DurableWorkStates.Processing;
-            work.AttemptCount++;
-            work.LastFailureCategory = null;
-            work.LastFailureAt = null;
-            work.UpdatedAt = now;
-        }
+        var work = check.DurableWork.Single(candidate =>
+            candidate.Id == workId && candidate.WorkKind == DurableWorkKinds.HttpCheck);
+        work.State = DurableWorkStates.Processing;
+        work.AttemptCount++;
+        work.LastFailureCategory = null;
+        work.LastFailureAt = null;
+        work.UpdatedAt = now;
     }
 
     private IDisposable? BeginLogScope(LogicalCheck check, ExecuteLogicalCheck command) =>
         logger.BeginScope(new Dictionary<string, object>
         {
             ["LogicalCheckId"] = check.Id,
+            ["DurableWorkId"] = command.DurableWorkId,
             ["EndpointId"] = check.EndpointMonitor.EndpointId,
             ["JobId"] = command.JobId
         });
 
-    private static void EnsureExecutable(LogicalCheck check)
+    private static void EnsureExecutable(LogicalCheck check, Guid workId)
     {
         if (check.ConfigurationSnapshot is null
-            || check.State is not (LogicalCheckStates.Queued or LogicalCheckStates.Running))
+            || check.State is not (LogicalCheckStates.Queued or LogicalCheckStates.Running)
+            || !check.DurableWork.Any(work =>
+                work.Id == workId && work.WorkKind == DurableWorkKinds.HttpCheck))
         {
-            throw new InvalidOperationException("The logical check is not ready for execution.");
+            throw new InvalidOperationException("The logical check is not ready for HTTP execution.");
         }
     }
 
     private static void Validate(ExecuteLogicalCheck command)
     {
         if (command.LogicalCheckId == Guid.Empty
+            || command.DurableWorkId == Guid.Empty
             || string.IsNullOrWhiteSpace(command.JobId)
             || command.JobId.Length > 100
             || string.IsNullOrWhiteSpace(command.WorkerId)

@@ -77,7 +77,6 @@ public enum SafeHttpFailureKind
     RedirectLoop,
     RedirectLimit,
     HttpsDowngrade,
-    ExecutionExhausted,
     Protocol
 }
 

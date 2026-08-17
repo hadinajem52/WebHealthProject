@@ -13,7 +13,9 @@ public sealed class LogicalCheckJobContractTests
         var method = typeof(LogicalCheckJob).GetMethod(nameof(LogicalCheckJob.ExecuteAsync));
 
         method.Should().NotBeNull();
-        method!.GetCustomAttributes(typeof(QueueAttribute), false)
+        method!.GetParameters().Select(parameter => parameter.Name).Should().ContainInOrder(
+            "logicalCheckId", "durableWorkId", "context", "cancellationToken");
+        method.GetCustomAttributes(typeof(QueueAttribute), false)
             .Cast<QueueAttribute>().Single().Queue.Should().Be("monitoring");
         var retry = method.GetCustomAttributes(typeof(AutomaticRetryAttribute), false)
             .Cast<AutomaticRetryAttribute>().Single();

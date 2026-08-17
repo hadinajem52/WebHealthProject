@@ -38,7 +38,7 @@ The second Phase 3 migration is `HttpMonitoringHistory`. It adds:
 
 The result primary key is also the logical-check foreign key. PostgreSQL enforces valid outcomes/categories, nonnegative measurements, result-owned findings/hops, unique hop order, and unique `(logical_check_id, issue_key, rule_key)` findings. No response-body column exists.
 
-`IHttpCheckHistoryService` locks the logical check, treats an existing result as an idempotent no-op, verifies the running state, exact target, canonical policy fingerprint, and request-owned transport identity, then validates redirect continuity and the final destination. Target, policy, and malformed-result failures have distinct statuses. The current lease token and fencing generation are consumed with one conditional PostgreSQL update. Result, hops, findings, logical-check completion, and lease expiry commit atomically. Concurrent duplicate writers converge on one result.
+`ILogicalCheckFinalizationService` locks the logical check, treats an existing result as an idempotent no-op, verifies the required running attempt and exact durable-work identity, exact target, canonical policy fingerprint, and request-owned transport identity, then validates redirect continuity and the final destination. Target, policy, and malformed-result failures have distinct statuses. The current lease token and fencing generation are consumed with one conditional PostgreSQL update. Result, hops, findings, attempt completion, logical-check completion, targeted work completion, and lease expiry commit atomically. Concurrent duplicate writers converge on one result.
 
 Scheduled checks count for uptime; Manual and Urgent checks do not. Maintenance classification is deliberately absent until Phase 4.
 
