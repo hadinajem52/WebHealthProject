@@ -5,6 +5,9 @@ using WebHealth.Infrastructure.Auditing;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Registry;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.Health;
+using WebHealth.Infrastructure.Maintenance;
+using WebHealth.Infrastructure.Incidents;
 
 namespace WebHealth.Infrastructure.Persistence;
 
@@ -54,6 +57,22 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<RedirectHop> RedirectHops => Set<RedirectHop>();
 
     public DbSet<Finding> Findings => Set<Finding>();
+
+    public DbSet<IssueState> IssueStates => Set<IssueState>();
+
+    public DbSet<EndpointHealth> EndpointHealth => Set<EndpointHealth>();
+
+    public DbSet<MaintenanceWindow> MaintenanceWindows => Set<MaintenanceWindow>();
+
+    public DbSet<MaintenanceTarget> MaintenanceTargets => Set<MaintenanceTarget>();
+
+    public DbSet<MaintenanceOccurrence> MaintenanceOccurrences => Set<MaintenanceOccurrence>();
+
+    public DbSet<Incident> Incidents => Set<Incident>();
+
+    public DbSet<IncidentEvent> IncidentEvents => Set<IncidentEvent>();
+
+    public DbSet<IncidentEvidence> IncidentEvidence => Set<IncidentEvidence>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

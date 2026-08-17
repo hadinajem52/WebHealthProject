@@ -173,6 +173,7 @@ public sealed class EndpointMonitor
     public PolicyProfile PolicyProfile { get; set; } = null!;
     public ICollection<LogicalCheck> LogicalChecks { get; } = [];
     public ExecutionLease? ExecutionLease { get; set; }
+    public Health.EndpointHealth? EndpointHealth { get; set; }
 }
 
 public sealed class AccessGrant

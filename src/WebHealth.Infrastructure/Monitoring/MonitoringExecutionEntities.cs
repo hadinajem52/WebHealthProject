@@ -1,4 +1,5 @@
 using WebHealth.Infrastructure.Identity;
+using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Monitoring;
@@ -115,10 +116,13 @@ public sealed class CheckResult
     public bool ResponseTruncated { get; set; }
     public required string MonitorSource { get; set; }
     public DateTimeOffset MeasuredAt { get; set; }
+    public Guid? MaintenanceOccurrenceId { get; set; }
+    public bool IsMaintenance { get; set; }
     public bool CountsForUptime { get; set; }
     public string? SafeDiagnostic { get; set; }
     public DateTimeOffset CompletedAt { get; set; }
     public LogicalCheck LogicalCheck { get; set; } = null!;
+    public MaintenanceOccurrence? MaintenanceOccurrence { get; set; }
     public ICollection<RedirectHop> RedirectHops { get; } = [];
     public ICollection<Finding> Findings { get; } = [];
 }

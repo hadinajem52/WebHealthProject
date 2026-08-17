@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using WebHealth.Infrastructure.Maintenance;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
@@ -150,6 +151,10 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
             table.HasCheckConstraint(
                 "ck_check_result_truncation",
                 "NOT response_truncated OR failure_category = 'ResponseTooLarge'");
+            table.HasCheckConstraint(
+                "ck_check_result_maintenance",
+                "(is_maintenance AND maintenance_occurrence_id IS NOT NULL) OR "
+                + "(NOT is_maintenance AND maintenance_occurrence_id IS NULL)");
         });
         builder.HasKey(result => result.LogicalCheckId);
         builder.Property(result => result.Outcome).HasMaxLength(20).IsRequired();
@@ -158,9 +163,14 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
         builder.Property(result => result.MonitorSource).HasMaxLength(50).IsRequired();
         builder.Property(result => result.SafeDiagnostic).HasMaxLength(200);
         builder.HasIndex(result => new { result.MeasuredAt, result.LogicalCheckId });
+        builder.HasIndex(result => result.MaintenanceOccurrenceId);
         builder.HasOne(result => result.LogicalCheck).WithOne(check => check.Result)
             .HasForeignKey<CheckResult>(result => result.LogicalCheckId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(result => result.MaintenanceOccurrence).WithMany()
+            .HasForeignKey(result => result.MaintenanceOccurrenceId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_check_result_maintenance_occurrence_id");
     }
 }
 
