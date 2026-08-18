@@ -27,7 +27,7 @@
             <div><dt>@(check.ScheduledFor is not null ? "Scheduled for" : "Requested at")</dt><dd>@((check.ScheduledFor ?? check.RequestedAt)?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
             <div><dt>Started</dt><dd>@(check.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not started")</dd></div>
             <div><dt>Completed</dt><dd>@(check.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not completed")</dd></div>
-            <div><dt>Outcome</dt><dd><span class="badge" data-status="@outcomeStatus">@(check.Outcome ?? "Pending")</span></dd></div>
+            <div><dt>Outcome</dt><dd>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? "Pending"))</dd></div>
             <div><dt>Failure category</dt><dd>@(check.FailureCategory ?? "None")</dd></div>
             <div><dt>HTTP status</dt><dd>@(check.HttpStatus?.ToString() ?? "—")</dd></div>
             <div><dt>Duration</dt><dd>@(check.TotalDurationMs is { } total ? $"{total} ms" : "—")</dd></div>
@@ -79,7 +79,7 @@
                         {
                             <tr>
                                 <td data-label="Rule">@finding.RuleKey</td>
-                                <td data-label="Severity"><span class="badge" data-status="@StatusBadges.ForSeverity(finding.Severity)">@finding.Severity</span></td>
+                                <td data-label="Severity">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(finding.Severity), finding.Severity))</td>
                                 <td data-label="Observed">@(finding.ObservedValue ?? "—")</td>
                                 <td data-label="Expected">@(finding.ExpectedValue ?? "—")</td>
                                 <td data-label="Issue key" class="code">@finding.IssueKey</td>

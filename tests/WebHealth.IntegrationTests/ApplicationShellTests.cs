@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.IntegrationTests.Support;
+using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Shell;
 using WebHealth.Web.Models;
 using WebHealth.Application.Registry;
@@ -12,10 +13,25 @@ namespace WebHealth.IntegrationTests;
 public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
+    /// <summary>
+    /// The dashboard is a registry read surface, so it states its policy at the boundary. A
+    /// signed-in account with no application role must be denied rather than shown an empty
+    /// dashboard, which would hide the authorization decision inside query behaviour.
+    /// </summary>
     [Fact]
-    public async Task PlaceholderDashboard_RendersTheSharedShellLandmarks()
+    public async Task Dashboard_DeniesASignedInUserWithNoApplicationRole()
     {
         using var client = factory.CreateHttpsClient();
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Dashboard_RendersTheSharedShellLandmarks()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var response = await client.GetAsync("/");
         var content = await response.Content.ReadAsStringAsync();
@@ -34,7 +50,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task Navigation_MarksTheCurrentPageAndDoesNotLinkPlannedDestinations()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/");
 
@@ -47,7 +63,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task Shell_ReferencesOnlyAssetsTheApplicationServes()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/");
         var assets = AssetReference()
@@ -67,7 +83,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task SidebarSupportArtwork_IsServed()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         using var response = await client.GetAsync("/images/sidebar-support.png");
 
@@ -78,7 +94,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task FlashMessage_IsShownOnceAfterARedirect()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var afterRedirect = await client.GetStringAsync("/__tests/shell/flash");
         var afterReload = await client.GetStringAsync("/");
@@ -91,7 +107,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task ValidationSummary_ReportsModelErrorsAboveThePageContent()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/__tests/shell/validation");
 
@@ -106,18 +122,96 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task EmptyState_DescribesMissingDataWithText()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/");
 
         Assert.Contains("class=\"empty-state\"", content, StringComparison.Ordinal);
-        Assert.Contains("No monitored endpoints yet", content, StringComparison.Ordinal);
+        Assert.Contains("No monitors match these filters", content, StringComparison.Ordinal);
+        Assert.Contains("No open incidents", content, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// BR-R01. A dashboard that does not say what it was filtered to, and when it was read,
+    /// cannot be compared against another view of the same page.
+    /// </summary>
+    [Fact]
+    public async Task Dashboard_DisclosesTheAppliedFiltersAndTheAsOfInstant()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var content = await client.GetStringAsync("/?HealthStatus=Critical");
+
+        Assert.Contains("aria-label=\"Applied filters and data freshness\"", content, StringComparison.Ordinal);
+        Assert.Contains("<dt>Health status</dt>", content, StringComparison.Ordinal);
+        Assert.Contains("<dt>As of</dt>", content, StringComparison.Ordinal);
+        Assert.Contains("<dt>Window</dt>", content, StringComparison.Ordinal);
+        Assert.Contains("UTC (exclusive)", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dashboard_SaysSoWhenNoFilterIsApplied()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var content = await client.GetStringAsync("/");
+
+        Assert.Contains("everything you have access to", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dashboard_RejectsAnOutOfBoundsWindowInsteadOfServingIt()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var content = await client.GetStringAsync("/?WindowStart=2000-01-01&WindowEnd=2030-01-01");
+
+        Assert.Contains("Filter not applied", content, StringComparison.Ordinal);
+        Assert.Contains("cannot be longer than", content, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The Phase 2 accessibility box: status must not be carried by colour alone. The shape is
+    /// applied to <c>.badge</c> itself, so every badge in the application inherits it rather
+    /// than each view having to remember.
+    /// </summary>
+    [Fact]
+    public async Task StatusBadges_CarryANonColourCue()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var stylesheet = await client.GetStringAsync("/css/components.css");
+
+        Assert.Contains(".badge::before", stylesheet, StringComparison.Ordinal);
+        Assert.Contains("[data-status=\"success\"]::before", stylesheet, StringComparison.Ordinal);
+        Assert.Contains("[data-status=\"warning\"]::before", stylesheet, StringComparison.Ordinal);
+        Assert.Contains("[data-status=\"high\"]::before", stylesheet, StringComparison.Ordinal);
+        Assert.Contains("[data-status=\"danger\"]::before", stylesheet, StringComparison.Ordinal);
+        Assert.Contains("forced-colors: active", stylesheet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The chart is an enhancement. Its numbers are always available as a table, and the
+    /// library behind it is served by this application rather than fetched from a CDN.
+    /// </summary>
+    [Fact]
+    public async Task TrendChart_IsVendoredLocallyAndHasATableEquivalent()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var content = await client.GetStringAsync("/");
+
+        Assert.DoesNotContain("cdn.jsdelivr.net", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("//cdn.", content, StringComparison.Ordinal);
+
+        using var script = await client.GetAsync("/lib/chartjs/dist/chart.umd.js");
+        Assert.Equal(HttpStatusCode.OK, script.StatusCode);
     }
 
     [Fact]
     public async Task RegistryLabelsTagsAndNotes_AreHtmlEncoded()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/__tests/shell/encoded-registry");
 
@@ -128,7 +222,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task ErrorPage_UsesTheSharedShellAndTheErrorStateComponent()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var response = await client.GetAsync("/Home/HttpStatusCode?code=404");
         var content = await response.Content.ReadAsStringAsync();
@@ -143,7 +237,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [Fact]
     public async Task DependencyUnavailable_HasADedicatedStateWithARetryAction()
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var response = await client.GetAsync("/__tests/shell/unavailable");
         var content = await response.Content.ReadAsStringAsync();
@@ -161,7 +255,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     [InlineData(500)]
     public async Task RetryIsNotOfferedForOtherErrorStates(int statusCode)
     {
-        using var client = factory.CreateHttpsClient();
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         using var response = await client.GetAsync($"/Home/HttpStatusCode?code={statusCode}");
         var content = await response.Content.ReadAsStringAsync();
@@ -192,7 +286,7 @@ public sealed class ShellProbeController : Controller
     public IActionResult Validation()
     {
         ModelState.AddModelError("Probe", ValidationText);
-        return View("~/Views/Home/Index.cshtml");
+        return View("~/Views/Home/Index.cshtml", EmptyDashboard.ViewModel(DateTimeOffset.UtcNow));
     }
 
     [HttpGet("encoded-registry")]

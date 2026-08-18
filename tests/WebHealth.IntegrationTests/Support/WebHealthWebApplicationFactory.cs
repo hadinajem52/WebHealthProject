@@ -5,7 +5,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebHealth.Application.Auditing;
+using WebHealth.Application.Incidents;
 using WebHealth.Application.Notifications;
+using WebHealth.Application.Registry;
+using WebHealth.Application.Reporting;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -28,6 +31,17 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             // database, so the feed is stubbed rather than reaching for a DbContext.
             services.RemoveAll<INotificationFeedReader>();
             services.AddScoped<INotificationFeedReader, EmptyNotificationFeedReader>();
+
+            // The dashboard is a real read surface as of increment 5.6, so its readers are
+            // stubbed for the same reason: these tests exercise the shell, not the data.
+            services.RemoveAll<IReportingReader>();
+            services.AddScoped<IReportingReader, EmptyReportingReader>();
+            services.RemoveAll<IRegistryReader>();
+            services.AddScoped<IRegistryReader, EmptyRegistryReader>();
+            services.RemoveAll<IIncidentReader>();
+            services.AddScoped<IIncidentReader, EmptyIncidentReader>();
+            services.RemoveAll<ITargetRegistryReader>();
+            services.AddScoped<ITargetRegistryReader, EmptyTargetRegistryReader>();
 
             services.RemoveAll<IAuthorizationDenialAuditWriter>();
             services.AddSingleton<RecordingAuthorizationDenialAuditWriter>();

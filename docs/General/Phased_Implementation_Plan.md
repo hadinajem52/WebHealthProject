@@ -229,8 +229,8 @@ These requirements apply throughout the project:
 - [x] Store actor, timestamp, action, entity, and safe before/after values for current administration and assignment changes. Evidence: [`../phase-2/Assignment_and_Audit_Foundation.md`](../phase-2/Assignment_and_Audit_Foundation.md).
 - [x] Implement an authorized audit search view. Evidence: [`../../src/WebHealth.Web/Controllers/AuditController.cs`](../../src/WebHealth.Web/Controllers/AuditController.cs).
 - [x] Build current registry pages using the Purity UI Dashboard shell, reusable Razor components, and application-owned overrides.
-- [ ] Support keyboard navigation, visible focus, labels, validation summaries, and responsive layouts.
-- [ ] Ensure status and validation do not rely only on color.
+- [x] Support keyboard navigation, visible focus, labels, validation summaries, and responsive layouts. Closed in increment 5.6; see `docs/phase-5/Dashboard_Trends_And_Reports_Ui.md`.
+- [x] Ensure status and validation do not rely only on color. Closed in increment 5.6; every badge carries a shape cue.
 
 ### Database and verification
 

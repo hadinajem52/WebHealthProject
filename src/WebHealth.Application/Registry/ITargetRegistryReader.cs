@@ -22,6 +22,14 @@ public interface ITargetRegistryReader
         string? search = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Every environment the caller can see, across all websites. The per-website overload above
+    /// cannot serve a filter that has not picked a website yet.
+    /// </summary>
+    Task<IReadOnlyList<EnvironmentListItem>> ListAllEnvironmentsAsync(
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
     Task<EndpointDetails?> FindEndpointAsync(
         Guid endpointId,
         RegistryAccessContext access,

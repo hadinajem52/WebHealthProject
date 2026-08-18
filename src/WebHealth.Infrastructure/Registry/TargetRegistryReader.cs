@@ -18,6 +18,11 @@ internal sealed class TargetRegistryReader(
         CancellationToken cancellationToken = default) =>
         ListEnvironmentsAsync(access, environment => environment.WebsiteId == websiteId && environment.DeletedAt == null, cancellationToken);
 
+    public Task<IReadOnlyList<EnvironmentListItem>> ListAllEnvironmentsAsync(
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        ListEnvironmentsAsync(access, environment => environment.DeletedAt == null, cancellationToken);
+
     public async Task<EnvironmentDetails?> FindEnvironmentAsync(
         Guid environmentId,
         RegistryAccessContext access,

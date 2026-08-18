@@ -71,7 +71,7 @@
             <div>
                 <dt>Validation</dt>
                 <dd>
-                    <span class="badge" data-status="@(valid ? "success" : "danger")">@certificate.ValidationCategory</span>
+                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(valid ? StatusBadges.Success : StatusBadges.Danger, certificate.ValidationCategory))
                 </dd>
             </div>
             <div><dt>Subject</dt><dd>@certificate.Subject</dd></div>
@@ -84,7 +84,7 @@
                        badge would read as a contradiction. *@
                     @if (valid)
                     {
-                        <span class="badge" data-status="@StatusBadges.ForExpirySeverity(certificate.ExpirySeverity)">@StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)</span>
+                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForExpirySeverity(certificate.ExpirySeverity), StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)))
                     }
                     else
                     {

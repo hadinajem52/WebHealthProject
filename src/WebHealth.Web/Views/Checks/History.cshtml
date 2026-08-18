@@ -20,6 +20,9 @@
             <span class="tag">@history.TotalCount check@(history.TotalCount == 1 ? null : "s")</span>
         </div>
 
+        @* BR-R01: the applied scope and the read instant, stated above the results. *@
+        @await Html.PartialAsync("_FilterSummary", Model.Summary)
+
         @if (history.Items.Count == 0)
         {
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
@@ -64,7 +67,7 @@
                                 <td data-label="Source"><span class="tag">@item.Source</span></td>
                                 <td data-label="Initiator">@(item.InitiatedByDisplayName ?? "—")</td>
                                 <td data-label="Outcome">
-                                    <span class="badge" data-status="@StatusBadges.ForOutcome(item.Outcome)">@(item.Outcome ?? "Pending")</span>
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForOutcome(item.Outcome), item.Outcome ?? "Pending"))
                                     @if (item.FailureCategory is not null)
                                     {
                                         <span class="data-table__secondary">@item.FailureCategory</span>

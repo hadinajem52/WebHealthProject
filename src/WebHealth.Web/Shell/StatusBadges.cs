@@ -1,4 +1,5 @@
 using WebHealth.Application.Monitoring;
+using WebHealth.Domain.Health;
 using WebHealth.Domain.Monitoring;
 
 namespace WebHealth.Web.Shell;
@@ -14,12 +15,25 @@ public static class StatusBadges
     public const string Warning = "warning";
     public const string High = "high";
     public const string Danger = "danger";
+    public const string Info = "info";
 
     public static string ForSeverity(string? severity) => severity switch
     {
         FindingSeverities.Critical => Danger,
         FindingSeverities.High => High,
         _ => Warning
+    };
+
+    /// <summary>
+    /// The badge style for a confirmed endpoint health state. <c>Unknown</c> is informational
+    /// rather than a warning: an endpoint that has not reported yet is not a problem.
+    /// </summary>
+    public static string ForHealthStatus(string? status) => status switch
+    {
+        EndpointHealthStatuses.Healthy => Success,
+        EndpointHealthStatuses.Critical => Danger,
+        EndpointHealthStatuses.Warning => Warning,
+        _ => Info
     };
 
     public static string ForOutcome(string? outcome) => outcome switch

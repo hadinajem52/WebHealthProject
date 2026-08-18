@@ -126,7 +126,17 @@ internal static class DatabaseFoundationAssertions
         "Team",
         "TeamMember",
         "AuditEvent",
+        // Registry
+        "Client",
+        "Website",
+        "Tag",
+        "WebsiteTag",
+        "WebsiteEnvironment",
         "AccessGrant",
+        "Endpoint",
+        "TargetAuthorizationEvidence",
+        "EndpointMonitor",
+        "PolicyProfile",
         // Monitoring
         "EndpointHealth",
         "IssueState",
@@ -189,6 +199,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyReminderEscalationSweepBoundariesAsync(connectionString);
         await VerifyMaintenanceClassifiedResultRetentionAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
+        await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(context, connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);

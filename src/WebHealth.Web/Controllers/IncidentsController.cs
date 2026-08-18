@@ -14,7 +14,8 @@ namespace WebHealth.Web.Controllers;
 public sealed class IncidentsController(
     IIncidentReader incidentReader,
     IIncidentLifecycleService incidentLifecycle,
-    IRegistryReader registryReader) : Controller
+    IRegistryReader registryReader,
+    TimeProvider timeProvider) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Index(
@@ -26,7 +27,13 @@ public sealed class IncidentsController(
     {
         var result = await incidentReader.ListAsync(
             new(status, severity, unacknowledgedOnly), GetAccess(), page, cancellationToken);
-        return View(new IncidentListViewModel(result, status, severity, unacknowledgedOnly));
+        return View(new IncidentListViewModel(
+            result,
+            status,
+            severity,
+            unacknowledgedOnly,
+            IncidentListViewModel.Describe(
+                timeProvider.GetUtcNow(), status, severity, unacknowledgedOnly)));
     }
 
     [HttpGet]

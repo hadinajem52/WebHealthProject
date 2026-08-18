@@ -11,7 +11,9 @@ using WebHealth.Infrastructure.Auditing;
 using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Application.Registry;
+using WebHealth.Application.Reporting;
 using WebHealth.Infrastructure.Registry;
+using WebHealth.Infrastructure.Reporting;
 using WebHealth.Application.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Application.Maintenance;
@@ -109,6 +111,8 @@ public static class DependencyInjection
         services.AddScoped<IMonitoringSchedulingService, MonitoringSchedulingService>();
         services.AddScoped<IManualCheckService, ManualCheckService>();
         services.AddScoped<ICheckHistoryReader, CheckHistoryReader>();
+        services.AddScoped<OwnerSubjectNames>();
+        services.AddScoped<IReportingReader, ReportingReader>();
         services.AddScoped<IMaintenanceWindowService, MaintenanceWindowService>();
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();

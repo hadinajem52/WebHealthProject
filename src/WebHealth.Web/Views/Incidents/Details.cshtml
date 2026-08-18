@@ -32,7 +32,7 @@
                 <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName · @incident.IssueKey</p>
             </div>
             <div class="form-actions">
-                <span class="badge" data-status="@StatusBadges.ForSeverity(incident.Severity)">@incident.Severity</span>
+                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(incident.Severity), incident.Severity))
                 <span class="badge" data-status="@StatusBadge(incident.Status)">@incident.Status</span>
             </div>
         </div>
@@ -82,8 +82,8 @@
                 <form asp-action="Resolve" method="post" class="lifecycle-action-form">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
-                    <div class="form-field"><label>Resolution category</label><input type="text" name="category" maxlength="@IncidentLifecycleEngine.MaximumCategoryLength" required /></div>
-                    <div class="form-field"><label>Resolution note</label><textarea name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
+                    <div class="form-field"><label for="resolve-category">Resolution category</label><input id="resolve-category" type="text" name="category" maxlength="@IncidentLifecycleEngine.MaximumCategoryLength" required /></div>
+                    <div class="form-field"><label for="resolve-note">Resolution note</label><textarea id="resolve-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
                     <button class="button button--primary" type="submit">Resolve incident</button>
                 </form>
             }
@@ -92,7 +92,7 @@
                 <form asp-action="AddNote" method="post" class="lifecycle-action-form">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
-                    <div class="form-field"><label>Note</label><textarea name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
+                    <div class="form-field"><label for="add-note">Note</label><textarea id="add-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
                     <button class="button button--secondary" type="submit">Add note</button>
                 </form>
             }
@@ -102,8 +102,8 @@
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field">
-                        <label>New owner</label>
-                        <select name="ownerSubjectId" required>
+                        <label for="reassign-owner">New owner</label>
+                        <select id="reassign-owner" name="ownerSubjectId" required>
                             @foreach (var owner in Model.OwnerOptions)
                             {
                                 <option value="@owner.OwnerSubjectId">@owner.DisplayName</option>
@@ -119,7 +119,7 @@
             <form asp-action="ForceClose" method="post" class="lifecycle-action-form">
                 <input type="hidden" name="id" value="@incident.Id" />
                 <input type="hidden" name="version" value="@incident.Version" />
-                <div class="form-field"><label>Administrator reason</label><textarea name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                <div class="form-field"><label for="force-close-reason">Administrator reason</label><textarea id="force-close-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
                 <button class="button button--danger" type="submit">Force close</button>
             </form>
         }
@@ -128,7 +128,7 @@
             <form asp-action="Reopen" method="post" class="lifecycle-action-form">
                 <input type="hidden" name="id" value="@incident.Id" />
                 <input type="hidden" name="version" value="@incident.Version" />
-                <div class="form-field"><label>Administrator reason</label><textarea name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                <div class="form-field"><label for="reopen-reason">Administrator reason</label><textarea id="reopen-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
                 <button class="button button--secondary" type="submit">Reopen</button>
             </form>
         }

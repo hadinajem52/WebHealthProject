@@ -6,22 +6,32 @@ This folder records Phase 5 implementation evidence. The phase gate and its chec
 |---|---|---|
 | 5.1 Certificate capture in the safe transport | Complete | [Evidence](Certificate_Capture_and_Safe_Tls_Inspection.md) |
 | 5.2 SSL monitor type, persistence, and scheduling | Complete | [Evidence](Ssl_Monitor_Type_and_Scheduling.md) |
-| 5.3 SSL severity, deduplication, and renewal | Planned | — |
-| 5.4 Performance rules (BR-P01–BR-P05) | Planned | — |
-| 5.5 Shared reporting query core and CSV export | Planned | — |
-| 5.6 Dashboard, trends, and reports UI | Planned | — |
+| 5.3 SSL severity, deduplication, and renewal | Complete | [Evidence](Ssl_Severity_Deduplication_and_Renewal.md) |
+| 5.4 Performance rules (BR-P01–BR-P05) | Complete | [Evidence](Performance_Rules.md) |
+| 5.5 Shared reporting query core and CSV export | Complete | [Evidence](Shared_Reporting_Query_Core.md) |
+| 5.6 Dashboard, trends, and reports UI | Complete | [Evidence](Dashboard_Trends_And_Reports_Ui.md) |
 | 5.7 Query plans, performance baseline, and completion gate | Planned | — |
 
 ## Decisions recorded in this phase
 
 | Decision | Where |
 |---|---|
-| SSL is a second monitor type on the existing scheduling/lease/incident pipeline, not a parallel one | [5.2](Ssl_Monitor_Type_and_Scheduling.md) |
 | The certificate probe records and rejects: a validation callback that always returns `false`, so invalid-certificate evidence exists without ever accepting one | [5.1](Certificate_Capture_and_Safe_Tls_Inspection.md) |
 | Validation-category precedence, and an inclusive RFC 5280 validity window | [5.1](Certificate_Capture_and_Safe_Tls_Inspection.md) |
+| SSL is a second monitor type on the existing scheduling/lease/incident pipeline, not a parallel one | [5.2](Ssl_Monitor_Type_and_Scheduling.md) |
 | Certificate results never count toward uptime | [5.2](Ssl_Monitor_Type_and_Scheduling.md) |
 | The migration backfills certificate monitors, with SQL/application fingerprint parity pinned by a test | [5.2](Ssl_Monitor_Type_and_Scheduling.md) |
-| Exact severity semantics at the 30/15/7-day boundaries | 5.3 |
-| `percentile_cont` for response-time P50/P95 | 5.5 |
-| CSV encoding, quoting, and formula-injection handling | 5.5 |
+| Exact severity semantics at the 30/15/7-day boundaries, inclusive on the unhealthy side | [5.3](Ssl_Severity_Deduplication_and_Renewal.md) |
+| One expiry rule covers approaching and reached expiry, keyed by fingerprint | [5.3](Ssl_Severity_Deduplication_and_Renewal.md) |
+| `High` is a finding and incident severity, not an endpoint health state | [5.3](Ssl_Severity_Deduplication_and_Renewal.md) |
+| Threshold boundaries are inclusive on the unhealthy side, matching the certificate bands | [5.4](Performance_Rules.md) |
+| Slow response confirms on its own three-breach count; recovery is counted per issue | [5.4](Performance_Rules.md) |
+| Page size prefers the advertised transferred length, and the measurement is labelled | [5.4](Performance_Rules.md) |
+| Existing 1,000 ms monitors are not backfilled; the new override surface is the remedy | [5.4](Performance_Rules.md) |
+| One filter object and one query layer, so AC-11 holds by construction | [5.5](Shared_Reporting_Query_Core.md) |
+| A sample counts as up unless its outcome is Critical; warnings are reported separately | [5.5](Shared_Reporting_Query_Core.md) |
+| `percentile_cont` for response-time P50/P95 | [5.5](Shared_Reporting_Query_Core.md) |
+| CSV encoding, quoting, and formula-injection handling on user text only | [5.5](Shared_Reporting_Query_Core.md) |
+| Chart.js vendored locally; the chart always has a table equivalent | [5.6](Dashboard_Trends_And_Reports_Ui.md) |
+| Non-colour status cues are a shape on `.badge` itself, not on a partial | [5.6](Dashboard_Trends_And_Reports_Ui.md) |
 | Daily aggregates deferred to Phase 7 unless query-plan evidence requires them earlier | 5.7 |

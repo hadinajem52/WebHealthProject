@@ -1,90 +1,525 @@
+@model DashboardViewModel
 @{
     ViewData.SetTitle("Dashboard");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Pages"), new BreadcrumbItem("Dashboard"));
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Dashboard"));
+    var dataset = Model.Dataset;
+    var uptime = dataset.Summary.Uptime;
+    var options = Model.Options;
+    var routeValues = Model.Filter.ToRouteValues();
+    var trendJson = System.Text.Json.JsonSerializer.Serialize(dataset.Trend.Select(point => new
+    {
+        day = point.Day.ToString("yyyy-MM-dd"),
+        uptime = point.UptimePercentage,
+        p50 = point.P50Ms,
+        p95 = point.P95Ms
+    }));
+
+    static string Percent(double? value) => value is null ? "—" : $"{value.Value:0.##}%";
+    static string Milliseconds(double? value) => value is null ? "—" : $"{value.Value:0} ms";
 }
 
 <div class="stack">
-    <section class="card card--feature">
-        <div class="card--feature__text">
-            <p class="card__eyebrow">Built in Phase 1</p>
-            <h2 class="card__title">Application shell</h2>
-            <p class="card__subtitle">
-                From tokens, cards and navigation to error and empty states, the reusable
-                shell is in place and every later page is built on it.
-            </p>
-            <a class="card__action" href="/health/ready">
-                <span>Check readiness</span>
-                @await Html.PartialAsync("_Icon", "arrow-right")
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Monitoring overview</h2>
+                <p class="card__subtitle">Availability, performance and certificate health across the targets you can see.</p>
+            </div>
+            <a class="button button--secondary"
+               asp-controller="Reports"
+               asp-action="Export"
+               asp-all-route-data="routeValues">
+                @await Html.PartialAsync("_Icon", "reports")
+                <span>Download CSV</span>
             </a>
         </div>
-        <div class="card--feature__panel">
-            @await Html.PartialAsync("_Icon", "brand")
+
+        @if (Model.HasFilterErrors)
+        {
+            <div class="flash" data-level="error" role="alert">
+                <span class="flash__icon">@await Html.PartialAsync("_Icon", "error")</span>
+                <div>
+                    <p class="flash__label">Filter not applied</p>
+                    @foreach (var error in Model.Errors)
+                    {
+                        <p class="flash__text">@error</p>
+                    }
+                </div>
+            </div>
+        }
+
+        @* Every control is labelled, and the group has an accessible name so a screen reader
+           announces what the fieldset is for before reading its controls. *@
+        <form method="get" class="filter-grid" aria-labelledby="dashboard-filter-heading">
+            <h3 class="visually-hidden" id="dashboard-filter-heading">Dashboard filters</h3>
+            <div class="form-field">
+                <label asp-for="Filter.ClientId"></label>
+                <select asp-for="Filter.ClientId" name="ClientId">
+                    <option value="">All clients</option>
+                    @foreach (var client in options.Clients)
+                    {
+                        <option value="@client.Id" selected="@(Model.Filter.ClientId == client.Id)">@client.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Filter.WebsiteId"></label>
+                <select asp-for="Filter.WebsiteId" name="WebsiteId">
+                    <option value="">All websites</option>
+                    @foreach (var website in options.Websites)
+                    {
+                        <option value="@website.Id" selected="@(Model.Filter.WebsiteId == website.Id)">@website.ClientName &mdash; @website.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Filter.EnvironmentId"></label>
+                <select asp-for="Filter.EnvironmentId" name="EnvironmentId">
+                    <option value="">All environments</option>
+                    @foreach (var environment in options.Environments)
+                    {
+                        <option value="@environment.Id" selected="@(Model.Filter.EnvironmentId == environment.Id)">@environment.WebsiteName &mdash; @environment.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Filter.OwnerSubjectId"></label>
+                <select asp-for="Filter.OwnerSubjectId" name="OwnerSubjectId">
+                    <option value="">All owners</option>
+                    @foreach (var owner in options.Owners)
+                    {
+                        <option value="@owner.OwnerSubjectId" selected="@(Model.Filter.OwnerSubjectId == owner.OwnerSubjectId)">@owner.DisplayName</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Filter.HealthStatus"></label>
+                <select asp-for="Filter.HealthStatus" name="HealthStatus">
+                    <option value="">Any status</option>
+                    @foreach (var status in ReportQueryNormalizer.SelectableHealthStatuses)
+                    {
+                        <option value="@status" selected="@(Model.Filter.HealthStatus == status)">@status</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Filter.MonitorType"></label>
+                <select asp-for="Filter.MonitorType" name="MonitorType">
+                    <option value="">Any monitor</option>
+                    @foreach (var monitorType in ReportMonitorTypes.All)
+                    {
+                        <option value="@monitorType" selected="@(Model.Filter.MonitorType == monitorType)">@monitorType</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Filter.WindowStart"></label>
+                <input asp-for="Filter.WindowStart" name="WindowStart" type="date" />
+            </div>
+            <div class="form-field">
+                <label asp-for="Filter.WindowEnd"></label>
+                <input asp-for="Filter.WindowEnd" name="WindowEnd" type="date" />
+                <span class="form-field__hint">The end date is excluded, so a check at midnight belongs to the next day.</span>
+            </div>
+            <div class="filter-grid__actions">
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>Apply filters</span>
+                </button>
+                <a class="button button--secondary" asp-action="Index">
+                    @await Html.PartialAsync("_Icon", "close")
+                    <span>Clear</span>
+                </a>
+            </div>
+        </form>
+
+        @* BR-R01: what these numbers were filtered to, and when they were read. *@
+        @await Html.PartialAsync("_FilterSummary", Model.Summary)
+    </section>
+
+    <section class="card" aria-labelledby="dashboard-totals-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="dashboard-totals-heading">Totals</h2>
+                <p class="card__subtitle">Every card is computed from the same filtered dataset.</p>
+            </div>
         </div>
+
+        <div class="stat-grid">
+            <div class="stat">
+                <p class="stat__label">Uptime</p>
+                <p class="stat__value">@Percent(uptime.Percentage)</p>
+                <p class="stat__detail">@uptime.HealthySamples.ToString("N0") healthy of @uptime.EligibleSamples.ToString("N0") eligible samples</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Reachable</p>
+                <p class="stat__value">@Percent(uptime.ReachablePercentage)</p>
+                <p class="stat__detail">Includes @uptime.WarningSamples.ToString("N0") sample@(uptime.WarningSamples == 1 ? null : "s") that answered with a warning</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Response time P50</p>
+                <p class="stat__value">@Milliseconds(dataset.Summary.ResponseTimes.P50Ms)</p>
+                <p class="stat__detail">Across @dataset.Summary.ResponseTimes.MeasuredSamples.ToString("N0") samples that answered</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Response time P95</p>
+                <p class="stat__value">@Milliseconds(dataset.Summary.ResponseTimes.P95Ms)</p>
+                <p class="stat__detail">Timeouts and failures are excluded</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Active incidents</p>
+                <p class="stat__value">@dataset.Summary.ActiveIncidentCount.ToString("N0")</p>
+                <p class="stat__detail">@dataset.Summary.MonitorCount.ToString("N0") monitors on @dataset.Summary.EndpointCount.ToString("N0") endpoints</p>
+            </div>
+        </div>
+
+        <h3 class="card__subtitle">Confirmed health</h3>
+        <ul class="badge-legend">
+            <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("success", $"{dataset.Summary.HealthyMonitorCount} healthy"))</li>
+            <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("warning", $"{dataset.Summary.WarningMonitorCount} warning"))</li>
+            <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("danger", $"{dataset.Summary.CriticalMonitorCount} critical"))</li>
+            <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("info", $"{dataset.Summary.UnknownMonitorCount} not yet checked"))</li>
+        </ul>
+
+        @if (uptime.ExcludedSamples > 0)
+        {
+            <p class="card__subtitle">
+                @uptime.ExcludedSamples.ToString("N0") sample@(uptime.ExcludedSamples == 1 ? null : "s")
+                were excluded from uptime: manual runs, maintenance windows and certificate checks.
+            </p>
+        }
+    </section>
+
+    <section class="card" aria-labelledby="dashboard-trend-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="dashboard-trend-heading">Daily trend</h2>
+                <p class="card__subtitle">Uptime and response-time percentiles, bucketed by UTC day.</p>
+            </div>
+        </div>
+
+        @if (dataset.Trend.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No samples in this window",
+                "Widen the window or clear a filter to see a trend.",
+                "clock"))
+        }
+        else
+        {
+            @* The canvas is hidden from assistive technology entirely. The table below is the
+               accessible presentation of the same numbers, and it is always rendered rather than
+               folded behind a disclosure — data a screen reader has to go looking for is data it
+               has effectively not been given. *@
+            <div class="chart-frame" aria-hidden="true">
+                <canvas id="dashboard-trend" data-dashboard-trend="@trendJson"></canvas>
+            </div>
+
+            <div class="table-scroll">
+                <table class="data-table">
+                    <caption>Daily uptime and response-time percentiles &mdash; the same values the chart above plots</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Day (UTC)</th>
+                            <th scope="col">Eligible samples</th>
+                            <th scope="col">Uptime</th>
+                            <th scope="col">P50</th>
+                            <th scope="col">P95</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var point in dataset.Trend)
+                        {
+                            <tr>
+                                <th scope="row" data-label="Day (UTC)">@point.Day.ToString("yyyy-MM-dd")</th>
+                                <td data-label="Eligible samples">@point.EligibleSamples.ToString("N0")</td>
+                                <td data-label="Uptime">@Percent(point.UptimePercentage)</td>
+                                <td data-label="P50">@Milliseconds(point.P50Ms)</td>
+                                <td data-label="P95">@Milliseconds(point.P95Ms)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="card" aria-labelledby="dashboard-health-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="dashboard-health-heading">Current health</h2>
+                <p class="card__subtitle">Latest confirmed state per monitor, with uptime for the selected window.</p>
+            </div>
+            <span class="tag">@dataset.TotalCount monitor@(dataset.TotalCount == 1 ? null : "s")</span>
+        </div>
+
+        @if (dataset.Rows.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No monitors match these filters",
+                "Clear a filter, or add an endpoint in the registry.",
+                "empty"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Monitors and their confirmed health</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Endpoint</th>
+                            <th scope="col">Environment</th>
+                            <th scope="col">Owner</th>
+                            <th scope="col">Monitor</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Uptime</th>
+                            <th scope="col">P95</th>
+                            <th scope="col">Last checked</th>
+                            <th scope="col">Incidents</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in dataset.Rows)
+                        {
+                            <tr>
+                                <th scope="row" data-label="Endpoint">
+                                    <a asp-controller="Targets" asp-action="Endpoint" asp-route-id="@row.EndpointId" class="target-url">@row.EndpointDisplayUrl</a>
+                                    <span class="data-table__secondary">@row.ClientName &mdash; @row.WebsiteName</span>
+                                </th>
+                                <td data-label="Environment">
+                                    @row.EnvironmentName
+                                    @if (row.IsProduction)
+                                    {
+                                        <span class="tag">Production</span>
+                                    }
+                                </td>
+                                <td data-label="Owner">@row.OwnerName</td>
+                                <td data-label="Monitor">@row.MonitorType</td>
+                                <td data-label="Status">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        StatusBadges.ForHealthStatus(row.ConfirmedStatus), row.ConfirmedStatus))
+                                </td>
+                                <td data-label="Uptime">
+                                    @Percent(row.Uptime.Percentage)
+                                    <span class="data-table__secondary">@row.Uptime.EligibleSamples.ToString("N0") samples</span>
+                                </td>
+                                <td data-label="P95">@Milliseconds(row.ResponseTimes.P95Ms)</td>
+                                <td data-label="Last checked">@(row.LastMeasuredAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                <td data-label="Incidents">@row.ActiveIncidentCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (dataset.TotalPages > 1)
+            {
+                <nav class="pagination" aria-label="Current health pages">
+                    <span>Page @dataset.Query.Page of @dataset.TotalPages</span>
+                    <span class="pagination__actions">
+                        @if (dataset.Query.Page > 1)
+                        {
+                            <a class="button button--secondary" asp-action="Index" asp-all-route-data="routeValues" asp-route-Page="@(dataset.Query.Page - 1)">
+                                @await Html.PartialAsync("_Icon", "arrow-left")
+                                <span>Previous</span>
+                            </a>
+                        }
+                        @if (dataset.Query.Page < dataset.TotalPages)
+                        {
+                            <a class="button button--secondary" asp-action="Index" asp-all-route-data="routeValues" asp-route-Page="@(dataset.Query.Page + 1)">
+                                <span>Next</span>
+                                @await Html.PartialAsync("_Icon", "arrow-right")
+                            </a>
+                        }
+                    </span>
+                </nav>
+            }
+        }
     </section>
 
     <div class="card-grid">
-        <section class="card">
-            <h2 class="card__title">Shell</h2>
-            <p class="card__subtitle">Reusable layout delivered in Phase 1.</p>
-            <hr class="card__divider" />
-            <dl class="data-list">
-                <div class="data-list__row">
-                    <dt>Layout</dt>
-                    <dd>Sidebar, header, breadcrumbs and footer</dd>
+        <section class="card" aria-labelledby="dashboard-certificates-heading">
+            <div class="page-intro">
+                <div>
+                    <h2 class="card__title" id="dashboard-certificates-heading">Certificate expiry</h2>
+                    <p class="card__subtitle">Warning at 30 days, high at 15, critical at 7 or expired.</p>
                 </div>
-                <div class="data-list__row">
-                    <dt>Messages</dt>
-                    <dd>Flash messages and a validation summary</dd>
+            </div>
+
+            <ul class="badge-legend">
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("success", $"{Model.Certificates.HealthyCount} healthy", "valid and outside every expiry band"))</li>
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("warning", $"{Model.Certificates.WarningCount} warning", "30 days or fewer remaining"))</li>
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("high", $"{Model.Certificates.HighCount} high", "15 days or fewer remaining"))</li>
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("danger", $"{Model.Certificates.CriticalCount} critical", "7 days or fewer remaining, or already expired"))</li>
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("danger", $"{Model.Certificates.InvalidCount} invalid", "not trusted, hostname mismatch, not yet valid, or expired"))</li>
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("info", $"{Model.Certificates.UnknownCount} not yet checked"))</li>
+            </ul>
+
+            @if (Model.Certificates.NeedingAttention.Count == 0)
+            {
+                <p class="card__subtitle">No certificate in this selection needs attention.</p>
+            }
+            else
+            {
+                <div class="table-scroll">
+                    <table class="data-table">
+                        <caption class="visually-hidden">Certificates needing attention</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Endpoint</th>
+                                <th scope="col">State</th>
+                                <th scope="col">Days left</th>
+                                <th scope="col">Expires</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var certificate in Model.Certificates.NeedingAttention)
+                            {
+                                <tr>
+                                    <th scope="row" data-label="Endpoint">
+                                        <a asp-controller="Targets" asp-action="Endpoint" asp-route-id="@certificate.EndpointId" class="target-url">@certificate.EndpointDisplayUrl</a>
+                                    </th>
+                                    <td data-label="State">
+                                        @if (certificate.IsValid)
+                                        {
+                                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                                StatusBadges.ForExpirySeverity(certificate.Severity),
+                                                StatusBadges.DescribeExpirySeverity(certificate.Severity)))
+                                        }
+                                        else
+                                        {
+                                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                                StatusBadges.Danger, certificate.ValidationCategory))
+                                        }
+                                    </td>
+                                    <td data-label="Days left">@certificate.DaysRemaining</td>
+                                    <td data-label="Expires">@certificate.NotAfter.UtcDateTime.ToString("yyyy-MM-dd")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
                 </div>
-                <div class="data-list__row">
-                    <dt>States</dt>
-                    <dd>Accessible error and empty states</dd>
-                </div>
-            </dl>
+            }
         </section>
 
-        <section class="card">
-            <h2 class="card__title">Accessibility</h2>
-            <p class="card__subtitle">Behavior verified for every page using this shell.</p>
-            <hr class="card__divider" />
-            <dl class="data-list">
-                <div class="data-list__row">
-                    <dt>Landmarks</dt>
-                    <dd>Skip link, navigation, banner and main</dd>
+        <section class="card" aria-labelledby="dashboard-diagnostics-heading">
+            <div class="page-intro">
+                <div>
+                    <h2 class="card__title" id="dashboard-diagnostics-heading">Diagnostics</h2>
+                    <p class="card__subtitle">Whether checks are running, not whether sites are healthy.</p>
                 </div>
-                <div class="data-list__row">
-                    <dt>Keyboard</dt>
-                    <dd>Visible focus and drawer focus containment</dd>
-                </div>
-                <div class="data-list__row">
-                    <dt>Motion</dt>
-                    <dd>Transitions removed when reduced motion is set</dd>
-                </div>
-            </dl>
-        </section>
+            </div>
 
-        <section class="card">
-            <h2 class="card__title">Foundation</h2>
-            <p class="card__subtitle">Runtime endpoints available in this build.</p>
-            <hr class="card__divider" />
             <dl class="data-list">
                 <div class="data-list__row">
-                    <dt>Liveness</dt>
-                    <dd><a href="/health/live">/health/live</a></dd>
+                    <dt>Scheduled monitors</dt>
+                    <dd>@Model.Diagnostics.ScheduledMonitorCount.ToString("N0")</dd>
                 </div>
                 <div class="data-list__row">
-                    <dt>Readiness</dt>
-                    <dd><a href="/health/ready">/health/ready</a></dd>
+                    <dt>Paused monitors</dt>
+                    <dd>@Model.Diagnostics.PausedMonitorCount.ToString("N0")</dd>
                 </div>
                 <div class="data-list__row">
-                    <dt>Database</dt>
-                    <dd>PostgreSQL, migrated explicitly</dd>
+                    <dt>Overdue monitors</dt>
+                    <dd>
+                        @Model.Diagnostics.OverdueMonitorCount.ToString("N0")
+                        @if (Model.Diagnostics.OverdueMonitorCount > 0)
+                        {
+                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("warning", "Behind schedule"))
+                        }
+                    </dd>
+                </div>
+                <div class="data-list__row">
+                    <dt>Checks in flight</dt>
+                    <dd>@Model.Diagnostics.WorkInFlightCount.ToString("N0")</dd>
+                </div>
+                <div class="data-list__row">
+                    <dt>Failed work items</dt>
+                    <dd>
+                        @Model.Diagnostics.FailedWorkCount.ToString("N0")
+                        @if (Model.Diagnostics.FailedWorkCount > 0)
+                        {
+                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("danger", "Needs attention"))
+                        }
+                    </dd>
+                </div>
+                <div class="data-list__row">
+                    <dt>Last completed check</dt>
+                    <dd>@(Model.Diagnostics.LastCompletedCheckAt is { } lastCheck ? $"{lastCheck.UtcDateTime:yyyy-MM-dd HH:mm:ss} UTC" : "Never")</dd>
+                </div>
+                <div class="data-list__row">
+                    <dt>Runtime</dt>
+                    <dd><a href="/health/ready">Readiness</a> &middot; <a href="/health/live">Liveness</a></dd>
                 </div>
             </dl>
         </section>
     </div>
 
-    @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
-        "No monitored endpoints yet",
-        "Clients, websites, environments and endpoints are added in Phase 2. Dashboard summaries, health tables and charts follow in later phases."))
+    <section class="card" aria-labelledby="dashboard-incidents-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="dashboard-incidents-heading">Active incidents</h2>
+                <p class="card__subtitle">Confirmed failures on the monitors this filter selects.</p>
+            </div>
+            <a class="button button--secondary" asp-controller="Incidents" asp-action="Index">
+                <span>All incidents</span>
+                @await Html.PartialAsync("_Icon", "arrow-right")
+            </a>
+        </div>
+
+        @if (Model.ActiveIncidents.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No open incidents",
+                "Incidents open automatically when a monitored endpoint confirms a failure.",
+                "success"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Incidents currently active</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Endpoint</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Opened</th>
+                            <th scope="col">Owner</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var incident in Model.ActiveIncidents)
+                        {
+                            <tr>
+                                <th scope="row" data-label="Endpoint">
+                                    <a asp-controller="Targets" asp-action="Endpoint" asp-route-id="@incident.EndpointId" class="target-url">@incident.EndpointDisplayUrl</a>
+                                    <span class="data-table__secondary">@incident.ClientName &mdash; @incident.EnvironmentName</span>
+                                </th>
+                                <td data-label="Severity">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        StatusBadges.ForSeverity(incident.Severity), incident.Severity))
+                                </td>
+                                <td data-label="Status">@incident.Status</td>
+                                <td data-label="Opened">@incident.OpenedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td data-label="Owner">@incident.OwnerName</td>
+                                <td data-label="Details">
+                                    <a class="button button--secondary" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.Id">
+                                        <span>View</span>
+                                        <span class="visually-hidden">incident for @incident.EndpointDisplayUrl</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 </div>
+
+@section Scripts {
+    <script src="~/lib/chartjs/dist/chart.umd.js" asp-append-version="true"></script>
+    <script src="~/js/dashboard.js" asp-append-version="true"></script>
+}

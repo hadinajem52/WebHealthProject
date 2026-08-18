@@ -620,9 +620,10 @@ code,
 .badge {
     display: inline-flex;
     min-width: 4.0625rem; /* 65px */
-    height: 1.5625rem; /* 25px */
+    min-height: 1.5625rem; /* 25px */
     align-items: center;
     justify-content: center;
+    gap: var(--space-1);
     padding: 0 var(--space-2);
     border-radius: 8px;
     background-color: var(--color-gray-600);
@@ -650,6 +651,69 @@ code,
 
 .badge[data-status="high"] {
     background-color: var(--color-orange-700);
+}
+
+.badge[data-status="info"] {
+    background-color: var(--status-info-text);
+}
+
+/*
+ * The non-colour cue. Each status gets its own silhouette, so a pill still reads
+ * correctly in greyscale, with a colour-vision deficiency, or in a forced-colours
+ * theme where every fill collapses to the same value. It is drawn with clip-path
+ * rather than with generated text, so a screen reader never announces it: the
+ * label beside it already says the same thing and is the primary cue.
+ *
+ * The rule targets .badge itself, so every badge in the application carries the
+ * shape whether or not it was written through the _StatusBadge partial.
+ */
+.badge::before {
+    display: inline-block;
+    width: 0.625rem;
+    height: 0.625rem;
+    flex: 0 0 auto;
+    background-color: currentcolor;
+    content: "";
+}
+
+/* Circle: settled, nothing to act on. */
+.badge[data-status="success"]::before {
+    border-radius: 50%;
+}
+
+/* Triangle: the conventional caution silhouette. */
+.badge[data-status="warning"]::before {
+    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+}
+
+/* Diamond: a triangle turned up a notch, distinct at a glance from both neighbours. */
+.badge[data-status="high"]::before {
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+/* Octagon: the stop silhouette. */
+.badge[data-status="danger"]::before {
+    clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+}
+
+/* A bar, deliberately unlike the four states above: this is information, not a verdict. */
+.badge[data-status="info"]::before {
+    width: 0.1875rem;
+    height: 0.75rem;
+}
+
+.badge__label {
+    white-space: nowrap;
+}
+
+/*
+ * In a forced-colours theme the fills are replaced by the system palette, so the
+ * shape becomes the only remaining distinction and has to keep its contrast.
+ */
+@media (forced-colors: active) {
+    .badge::before {
+        background-color: CanvasText;
+    }
 }
 
 .tag-list {
@@ -1224,7 +1288,8 @@ code,
     .data-table,
     .data-table tbody,
     .data-table tr,
-    .data-table td {
+    .data-table td,
+    .data-table tbody th {
         display: block;
     }
 
@@ -1233,12 +1298,15 @@ code,
         border-bottom: 1px solid var(--divider-line);
     }
 
-    .data-table td {
+    .data-table td,
+    .data-table tbody th {
         padding: var(--space-2) 0;
         border: 0;
+        text-align: left;
     }
 
-    .data-table td::before {
+    .data-table td::before,
+    .data-table tbody th::before {
         display: block;
         margin-bottom: var(--space-1);
         color: var(--text-secondary);
@@ -1250,5 +1318,145 @@ code,
 
     .data-table__action {
         text-align: left !important;
+    }
+}
+
+/* Filter summary --------------------------------------------------------- */
+
+/*
+ * BR-R01's disclosure strip. It sits above the numbers it describes and stays
+ * legible at every width: the items wrap rather than scroll, because a reader
+ * must never have to pan sideways to find out what a figure was filtered to.
+ */
+.filter-summary {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-tile);
+    background-color: var(--surface-sunken);
+}
+
+.filter-summary__list {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0;
+    gap: var(--space-2) var(--space-5);
+}
+
+.filter-summary__item {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+}
+
+.filter-summary__item dt {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.filter-summary__item dd {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.filter-summary__note {
+    margin: var(--space-2) 0 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+/* Dashboard -------------------------------------------------------------- */
+
+/*
+ * Stat tiles. The grid collapses to one column on a narrow viewport rather than
+ * shrinking the numerals, because a headline figure that has to be squinted at
+ * has stopped being a headline figure.
+ */
+.stat-grid {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+}
+
+.stat {
+    padding: var(--space-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-tile);
+    background-color: var(--surface-raised);
+}
+
+.stat__label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.stat__value {
+    margin: var(--space-1) 0 0;
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.stat__detail {
+    margin: var(--space-1) 0 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+/*
+ * A legend is a list, not a row of loose spans: assistive technology announces
+ * how many states there are before reading them.
+ */
+.badge-legend {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0;
+    margin: var(--space-4) 0 0;
+    gap: var(--space-2);
+    list-style: none;
+}
+
+/*
+ * The canvas needs a sized box because Chart.js draws to the element's own
+ * dimensions. The height is fixed and the width fluid, so the chart reflows
+ * with the card instead of forcing the page to scroll sideways.
+ */
+.chart-frame {
+    position: relative;
+    height: 20rem;
+    margin-top: var(--space-4);
+}
+
+.chart-frame canvas {
+    max-width: 100%;
+}
+
+.chart-table {
+    margin-top: var(--space-4);
+}
+
+.chart-table > summary {
+    padding: var(--space-2) 0;
+    color: var(--text-link);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.chart-table > summary:focus-visible {
+    outline: 2px solid var(--text-link);
+    outline-offset: 2px;
+}
+
+@media (max-width: 48rem) {
+    .chart-frame {
+        height: 16rem;
     }
 }
