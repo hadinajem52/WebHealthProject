@@ -48,10 +48,22 @@ public sealed record SafeHttpTransportResult(
     bool BodyTruncated,
     ReadOnlyMemory<byte> Body,
     IReadOnlyList<SafeHttpRedirectHop> Redirects,
-    string? RequestIdentity = null)
+    string? RequestIdentity = null,
+    SafeHttpPhaseTiming? Timing = null)
 {
     public bool Succeeded => Failure is null;
 }
+
+/// <summary>
+/// Best-effort per-phase timing for the final network attempt of a check. Any phase the
+/// attempt never reached (for example TLS on a plain HTTP target, or a phase lost to an
+/// execution-context correlation miss) is left null rather than reported as zero.
+/// </summary>
+public sealed record SafeHttpPhaseTiming(
+    int? DnsDurationMs,
+    int? ConnectDurationMs,
+    int? TlsDurationMs,
+    int? TtfbDurationMs);
 
 public sealed record SafeHttpRedirectHop(
     int StatusCode,

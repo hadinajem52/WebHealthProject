@@ -1,5 +1,20 @@
 @model EndpointDetailsViewModel
-@{ViewData.SetTitle("Endpoint"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.Endpoint.WebsiteName), new BreadcrumbItem(Model.Endpoint.EnvironmentName), new BreadcrumbItem("Endpoint"));}
+@{
+    ViewData.SetTitle("Endpoint");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry", Url.Action("Websites", "Registry")), new BreadcrumbItem(Model.Endpoint.WebsiteName, Url.Action("Website", "Registry", new { id = Model.Endpoint.WebsiteId })), new BreadcrumbItem(Model.Endpoint.EnvironmentName, Url.Action("Environment", "Targets", new { id = Model.Endpoint.EnvironmentId })), new BreadcrumbItem("Endpoint"));
+    string? notTestableReason = Model.Endpoint.CanTest ? null
+        : Model.Endpoint.IsDeleted ? "endpoint is archived"
+        : !Model.Endpoint.IsEnabled ? "endpoint is disabled"
+        : !Model.Endpoint.MonitorEnabled ? "monitor is disabled"
+        : !Model.Endpoint.IsMonitoringEligible ? "not eligible for monitoring"
+        : "you are not authorized to test this target";
+    static string OutcomeStatus(string? outcome) => outcome switch
+    {
+        "Healthy" => "success",
+        "Critical" => "danger",
+        _ => "warning"
+    };
+}
 <section class="card"><div class="page-intro"><div><h2 class="card__title target-url">@Model.Endpoint.DisplayUrl</h2><p class="card__subtitle">@Model.Endpoint.WebsiteName / @Model.Endpoint.EnvironmentName · Version @Model.Endpoint.Version</p></div><div class="form-actions"><a class="button button--secondary" asp-controller="Checks" asp-action="History" asp-route-id="@Model.Endpoint.Id">
         @await Html.PartialAsync("_Icon", "clock")
         <span>Check history</span>
@@ -18,5 +33,59 @@
         <span>Edit endpoint</span>
     </a>
 }</div></div>
-<dl class="registry-facts"><div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Endpoint.IsDeleted ? "danger" : Model.Endpoint.IsEnabled ? "success" : "warning")">@(Model.Endpoint.IsDeleted ? "Deleted" : Model.Endpoint.IsEnabled ? "Enabled" : "Disabled")</span></dd></div><div><dt>Owner</dt><dd>@Model.Endpoint.OwnerName @(Model.Endpoint.InheritsWebsiteOwner ? "(website inherited)" : "")</dd></div><div><dt>Monitor configuration</dt><dd>@Model.Endpoint.MonitorType · every @(Model.Endpoint.IntervalSeconds / 60) min @(Model.Endpoint.IntervalMinutesOverride is null ? "(environment default)" : "(endpoint override)") · @(Model.Endpoint.TimeoutSeconds)s timeout · @(Model.Endpoint.MonitorEnabled ? "enabled" : "disabled")</dd></div><div><dt>Effective monitoring</dt><dd>@(Model.Endpoint.IsMonitoringEligible ? "Eligible" : "Not eligible")</dd></div><div><dt>Testing authorization</dt><dd>@(Model.Endpoint.CanTest ? "Authorized" : "Not authorized")</dd></div><div><dt>Target evidence</dt><dd>@(Model.CanManage ? Model.Endpoint.TargetAuthorizationEvidence ?? "Not recorded" : Model.Endpoint.HasTargetAuthorization ? "Recorded" : "Not recorded")</dd></div><div><dt>Canonical URL v@Model.Endpoint.NormalizationVersion</dt><dd class="target-url">@Model.Endpoint.NormalizedUrl</dd></div><div><dt>Production HTTP exception</dt><dd>@(Model.CanManage ? Model.Endpoint.HttpExceptionReason ?? "Not required" : Model.Endpoint.HasHttpException ? "Recorded" : "Not required")</dd></div></dl>
+<dl class="registry-facts"><div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Endpoint.IsDeleted ? "danger" : Model.Endpoint.IsEnabled ? "success" : "warning")">@(Model.Endpoint.IsDeleted ? "Deleted" : Model.Endpoint.IsEnabled ? "Enabled" : "Disabled")</span></dd></div><div><dt>Owner</dt><dd>@Model.Endpoint.OwnerName @(Model.Endpoint.InheritsWebsiteOwner ? "(website inherited)" : "")</dd></div><div><dt>Monitor configuration</dt><dd>@Model.Endpoint.MonitorType · every @(Model.Endpoint.IntervalSeconds / 60) min @(Model.Endpoint.IntervalMinutesOverride is null ? "(environment default)" : "(endpoint override)") · @(Model.Endpoint.TimeoutSeconds)s timeout · @(Model.Endpoint.MonitorEnabled ? "enabled" : "disabled")</dd></div><div><dt>Effective monitoring</dt><dd>@(Model.Endpoint.IsMonitoringEligible ? "Eligible" : "Not eligible")</dd></div><div><dt>Testing authorization</dt><dd><span class="badge" data-status="@(Model.Endpoint.CanTest ? "success" : "warning")">@(Model.Endpoint.CanTest ? "Authorized" : "Not authorized")</span>@if(notTestableReason is not null)
+{
+    <span class="data-table__secondary">Reason: @notTestableReason</span>
+}</dd></div><div><dt>Target evidence</dt><dd>@(Model.CanManage ? Model.Endpoint.TargetAuthorizationEvidence ?? "Not recorded" : Model.Endpoint.HasTargetAuthorization ? "Recorded" : "Not recorded")</dd></div><div><dt>Canonical URL v@(Model.Endpoint.NormalizationVersion)</dt><dd class="target-url">@Model.Endpoint.NormalizedUrl</dd></div><div><dt>Production HTTP exception</dt><dd>@(Model.CanManage ? Model.Endpoint.HttpExceptionReason ?? "Not required" : Model.Endpoint.HasHttpException ? "Recorded" : "Not required")</dd></div></dl>
 @if(Model.CanManage){<div class="registry-lifecycle">@if(Model.Endpoint.IsDeleted){<form asp-action="RestoreEndpoint" method="post"><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--primary">Restore endpoint</button></form>}else{@if(Model.Endpoint.IsEnabled){<form asp-action="DisableEndpoint" method="post"><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--secondary">Disable</button></form>}<form asp-action="DeleteEndpoint" method="post"><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--danger">Archive endpoint</button></form>}</div>}</section>
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Latest check</h2>
+            <p class="card__subtitle">The most recent scheduled or manual result for this endpoint.</p>
+        </div>
+        <a class="button button--secondary" asp-controller="Checks" asp-action="History" asp-route-id="@Model.Endpoint.Id">
+            @await Html.PartialAsync("_Icon", "clock")
+            <span>Check history</span>
+        </a>
+    </div>
+    @{ var latest = Model.LatestCheck; }
+    @if (latest is null)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "No checks yet",
+            "Click Run now above, or wait for the next scheduled run.",
+            "clock"))
+    }
+    else
+    {
+        <dl class="registry-facts">
+            <div>
+                <dt>Outcome</dt>
+                <dd>
+                    <span class="badge" data-status="@OutcomeStatus(latest.Outcome)">@(latest.Outcome ?? latest.State)</span>
+                    @if (latest.FailureCategory is not null)
+                    {
+                        <span class="data-table__secondary">@latest.FailureCategory</span>
+                    }
+                </dd>
+            </div>
+            <div><dt>Time</dt><dd>@((latest.CompletedAt ?? latest.ScheduledFor ?? latest.RequestedAt)?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+            <div><dt>Source</dt><dd>@latest.Source @(latest.InitiatedByDisplayName is not null ? $"({latest.InitiatedByDisplayName})" : "")</dd></div>
+            <div><dt>HTTP status</dt><dd>@(latest.HttpStatus?.ToString() ?? "—")</dd></div>
+            <div><dt>Duration</dt><dd>@(latest.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</dd></div>
+            <div><dt>Uptime</dt><dd>@(latest.CountsForUptime ? "Counts" : "Excluded")</dd></div>
+        </dl>
+        <div class="form-actions">
+            <a class="button button--secondary" asp-controller="Checks" asp-action="Check" asp-route-id="@latest.LogicalCheckId">
+                <span>View details</span>
+            </a>
+        </div>
+    }
+</section>
+@section Scripts {
+    @if (Model.LatestCheck is not null && Model.LatestCheck.State != WebHealth.Domain.Monitoring.LogicalCheckStates.Completed)
+    {
+        <script>setTimeout(function () { window.location.reload(); }, 4000);</script>
+    }
+}

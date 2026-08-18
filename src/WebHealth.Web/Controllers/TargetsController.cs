@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Authorization;
+using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
@@ -14,7 +15,8 @@ public sealed class TargetsController(
     IRegistryReader registryReader,
     ITargetRegistryReader targetReader,
     IEnvironmentRegistryService environmentService,
-    IEndpointRegistryService endpointService) : Controller
+    IEndpointRegistryService endpointService,
+    ICheckHistoryReader checkHistoryReader) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Environments(Guid websiteId, CancellationToken cancellationToken)
@@ -46,7 +48,13 @@ public sealed class TargetsController(
     {
         var access = GetAccess();
         var endpoint = await targetReader.FindEndpointAsync(id, access, cancellationToken);
-        return endpoint is null ? NotFound() : View(new EndpointDetailsViewModel(endpoint, CanManage(access)));
+        if (endpoint is null)
+        {
+            return NotFound();
+        }
+
+        var history = await checkHistoryReader.ListForEndpointAsync(id, access, page: 1, cancellationToken);
+        return View(new EndpointDetailsViewModel(endpoint, CanManage(access), history?.Items.FirstOrDefault()));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]

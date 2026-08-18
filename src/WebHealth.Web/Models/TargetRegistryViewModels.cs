@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 
 namespace WebHealth.Web.Models;
@@ -10,7 +11,7 @@ public sealed record EnvironmentListViewModel(
     bool CanManage);
 
 public sealed record EnvironmentDetailsViewModel(EnvironmentDetails Environment, bool CanManage);
-public sealed record EndpointDetailsViewModel(EndpointDetails Endpoint, bool CanManage);
+public sealed record EndpointDetailsViewModel(EndpointDetails Endpoint, bool CanManage, CheckHistoryItem? LatestCheck);
 public sealed record TargetArchiveViewModel(
     IReadOnlyList<EnvironmentListItem> Environments,
     IReadOnlyList<EndpointListItem> Endpoints);

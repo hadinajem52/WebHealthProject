@@ -1,0 +1,976 @@
+Using launch settings from src\WebHealth.Web\Properties\launchSettings.json...
+Building...
+[23:54:29 INF] Now listening on: https://localhost:7144
+[23:54:29 INF] Now listening on: http://localhost:5158
+[23:54:29 INF] Starting Hangfire Server using job storage: 'PostgreSQL Server: Host: 127.0.0.1, DB: webhealth, Schema: hangfire'
+[23:54:29 INF] Using the following options for PostgreSQL job storage:
+[23:54:29 INF]     Queue poll interval: 00:00:01.
+[23:54:29 INF]     Invisibility timeout: 00:30:00.
+[23:54:29 INF]     Use sliding invisibility timeout: False.
+[23:54:29 INF] Using the following options for Hangfire Server:
+    Worker count: 4
+    Listening queues: 'monitoring'
+    Shutdown timeout: 00:00:15
+    Schedule polling interval: 00:00:15
+[23:54:29 DBG] Execution loop BackgroundServerProcess:54eaa82f has started in 11.2979 ms
+[23:54:29 INF] Application started. Press Ctrl+C to shut down.
+[23:54:29 INF] Hosting environment: Development
+[23:54:29 INF] Content root path: C:\projects\WebHealthProject\src\WebHealth.Web
+[23:54:29 INF] Server desktop-40ser7o:30120:5e45544c successfully announced in 28.8706 ms
+[23:54:29 DBG] Execution loop ServerHeartbeatProcess:ca30966d has started in 1.3436 ms
+[23:54:29 INF] Server desktop-40ser7o:30120:5e45544c is starting the registered dispatchers: ServerWatchdog, ServerJobCancellationWatcher, ExpirationManager, CountersAggregator, Worker, DelayedJobScheduler, RecurringJobScheduler...
+[23:54:29 DBG] Execution loop ServerWatchdog:599ba0fc has started in 0.4495 ms
+[23:54:29 DBG] Execution loop ServerJobCancellationWatcher:dae45281 has started in 0.2902 ms
+[23:54:29 DBG] Execution loop ExpirationManager:a5e5a1e1 has started in 1.1615 ms
+[23:54:29 DBG] Execution loop CountersAggregator:71e3d4ac has started in 0.6934 ms
+[23:54:29 DBG] Execution loop Worker:9c271843 has started in 0.6834 ms
+[23:54:29 DBG] Aggregating records in 'Counter' table...
+[23:54:29 DBG] Execution loop Worker:d06d6a0c has started in 1.2585 ms
+[23:54:29 DBG] Removing outdated records from table 'aggregatedcounter'...
+[23:54:29 DBG] Execution loop Worker:794d4e17 has started in 1.7769 ms
+[23:54:29 DBG] Execution loop Worker:5554f245 has started in 2.2437 ms
+[23:54:29 DBG] Execution loop DelayedJobScheduler:6c04832d has started in 0.5452 ms
+[23:54:29 INF] Server desktop-40ser7o:30120:5e45544c all the dispatchers started
+[23:54:29 DBG] Execution loop RecurringJobScheduler:d322bb30 has started in 0.6224 ms
+[23:54:29 DBG] Removing outdated records from table 'counter'...
+[23:54:29 DBG] Removing outdated records from table 'job'...
+[23:54:29 DBG] Removing outdated records from table 'list'...
+[23:54:29 DBG] Removing outdated records from table 'set'...
+[23:54:29 DBG] Removing outdated records from table 'hash'...
+[23:54:29 DBG] 2 recurring job(s) processed by scheduler.
+[23:54:33 INF] Executed DbCommand (15ms) [Parameters=[@monitorIds='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.bounded_overrides, e.configuration_fingerprint, e.created_at, e.created_by_user_id, e.critical_threshold_ms, e.deleted_at, e.deleted_by_user_id, e.endpoint_id, e.failure_confirmation_count, e.interval_seconds, e.is_enabled, e.monitor_type, e.next_due_at, e.policy_profile_id, e.recovery_confirmation_count, e.schedule_anchor, e.timeout_seconds, e.updated_at, e.updated_by_user_id, e.version, e.warning_threshold_ms, e0.id, e0.created_at, e0.created_by_user_id, e0.deleted_at, e0.deleted_by_user_id, e0.display_url, e0.effective_port, e0.environment_id, e0.http_exception_approved_at, e0.http_exception_approved_by_user_id, e0.http_exception_reason, e0.is_enabled, e0.normalization_version, e0.normalized_host, e0.normalized_url, e0.normalized_url_hash, e0.owner_subject_id, e0.updated_at, e0.updated_by_user_id, e0.version, e1.id, e1.base_url, e1.created_at, e1.created_by_user_id, e1.deleted_at, e1.deleted_by_user_id, e1.environment_type, e1.is_active, e1.is_production, e1.name, e1.normalization_version, e1.normalized_name, e1.updated_at, e1.updated_by_user_id, e1.version, e1.website_id
+FROM web_health.endpoint_monitor AS e
+INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+INNER JOIN web_health.environment AS e1 ON e0.environment_id = e1.id
+WHERE e.id = ANY (@monitorIds)
+ORDER BY e.next_due_at, e.id
+[23:54:33 INF] Executed DbCommand (9ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @claimedEndpointIds='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT e.id
+FROM web_health.endpoint AS e
+INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+INNER JOIN web_health.website AS w ON e0.website_id = w.id
+INNER JOIN web_health.client AS c ON w.client_id = c.id
+WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+    SELECT 1
+    FROM web_health.endpoint_monitor AS e1
+    WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+    SELECT 1
+    FROM web_health.target_authorization AS t
+    WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = ANY (@claimedEndpointIds)
+[23:54:34 INF] Executed DbCommand (44ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTime), @p2='?' (DbType = Int64), @p3='?' (DbType = Guid), @p4='?', @p5='?' (DbType = DateTime), @p6='?' (DbType = DateTime), @p7='?' (DbType = Guid), @p8='?' (DbType = Guid), @p9='?', @p10='?' (DbType = DateTime), @p11='?' (DbType = DateTime), @p12='?' (DbType = DateTime), @p13='?', @p14='?' (DbType = DateTime), @p15='?', @p16='?' (DbType = Guid), @p17='?', @p18='?', @p19='?', @p20='?', @p21='?' (DbType = DateTime), @p22='?' (DbType = Int32), @p23='?' (DbType = Int32), @p24='?' (DbType = Int32), @p25='?', @p26='?' (DbType = Int32), @p27='?' (DbType = Int32), @p28='?', @p29='?', @p30='?' (DbType = Int32), @p31='?', @p32='?' (DbType = Int16), @p33='?', @p34='?' (DbType = Int32), @p35='?', @p36='?' (DbType = Int32), @p37='?' (DbType = Guid), @p38='?' (DbType = Int32), @p39='?' (DbType = DateTime), @p40='?' (DbType = DateTime), @p41='?', @p42='?' (DbType = DateTime), @p43='?', @p44='?' (DbType = DateTime), @p45='?' (DbType = DateTime), @p46='?' (DbType = Guid), @p47='?' (DbType = Guid), @p48='?', @p49='?', @p50='?' (DbType = DateTime), @p51='?'], CommandType='Text', CommandTimeout='30']
+UPDATE web_health.endpoint_monitor SET next_due_at = @p0
+WHERE id = @p1 AND version = @p2;
+INSERT INTO web_health.logical_check (id, cadence_key, completed_at, created_at, endpoint_monitor_id, initiated_by_user_id, policy_fingerprint, queued_at, requested_at, scheduled_for, source, started_at, state)
+VALUES (@p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15);
+INSERT INTO web_health.check_configuration_snapshot (logical_check_id, accepted_status_codes, configuration_fingerprint, confirmation_source, content_marker_comparison, created_at, critical_threshold_ms, failure_confirmation_count, interval_seconds, interval_source, max_redirects, max_response_body_bytes, monitor_type, production_http_severity, recovery_confirmation_count, required_content_marker, schema_version, threshold_source, timeout_seconds, timeout_source, warning_threshold_ms)
+VALUES (@p16, @p17, @p18, @p19, @p20, @p21, @p22, @p23, @p24, @p25, @p26, @p27, @p28, @p29, @p30, @p31, @p32, @p33, @p34, @p35, @p36);
+INSERT INTO web_health.durable_work (id, attempt_count, available_at, created_at, dedupe_key, last_failure_at, last_failure_category, lease_acquired_at, lease_expires_at, lease_owner_token, logical_check_id, queue_name, state, updated_at, work_kind)
+VALUES (@p37, @p38, @p39, @p40, @p41, @p42, @p43, @p44, @p45, @p46, @p47, @p48, @p49, @p50, @p51);
+[23:54:34 INF] Executed DbCommand (8ms) [Parameters=[@p='?', @p2='?' (DbType = DateTime), @workId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+UPDATE web_health.durable_work AS d
+SET state = @p,
+    updated_at = @p2
+WHERE d.id = @workId AND d.state = 'Dispatching'
+[23:54:34 INF] Executed DbCommand (33ms) [Parameters=[@checkId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.cadence_key, s.completed_at, s.created_at, s.endpoint_monitor_id, s.initiated_by_user_id, s.policy_fingerprint, s.queued_at, s.requested_at, s.scheduled_for, s.source, s.started_at, s.state, s.logical_check_id, s.accepted_status_codes, s.configuration_fingerprint, s.confirmation_source, s.content_marker_comparison, s.created_at0, s.critical_threshold_ms, s.failure_confirmation_count, s.interval_seconds, s.interval_source, s.max_redirects, s.max_response_body_bytes, s.monitor_type, s.production_http_severity, s.recovery_confirmation_count, s.required_content_marker, s.schema_version, s.threshold_source, s.timeout_seconds, s.timeout_source, s.warning_threshold_ms, s.id0, s.bounded_overrides, s.configuration_fingerprint0, s.created_at1, s.created_by_user_id, s.critical_threshold_ms0, s.deleted_at, s.deleted_by_user_id, s.endpoint_id, s.failure_confirmation_count0, s.interval_seconds0, s.is_enabled, s.monitor_type0, s.next_due_at, s.policy_profile_id, s.recovery_confirmation_count0, s.schedule_anchor, s.timeout_seconds0, s.updated_at, s.updated_by_user_id, s.version, s.warning_threshold_ms0, s.id1, s.created_at2, s.created_by_user_id0, s.deleted_at0, s.deleted_by_user_id0, s.display_url, s.effective_port, s.environment_id, s.http_exception_approved_at, s.http_exception_approved_by_user_id, s.http_exception_reason, s.is_enabled0, s.normalization_version, s.normalized_host, s.normalized_url, s.normalized_url_hash, s.owner_subject_id, s.updated_at0, s.updated_by_user_id0, s.version0, s.id2, s.base_url, s.created_at3, s.created_by_user_id1, s.deleted_at1, s.deleted_by_user_id1, s.environment_type, s.is_active, s.is_production, s.name, s.normalization_version0, s.normalized_name, s.updated_at1, s.updated_by_user_id1, s.version1, s.website_id, d.id, d.attempt_count, d.available_at, d.created_at, d.dedupe_key, d.last_failure_at, d.last_failure_category, d.lease_acquired_at, d.lease_expires_at, d.lease_owner_token, d.logical_check_id, d.queue_name, d.state, d.updated_at, d.work_kind
+FROM (
+    SELECT l.id, l.cadence_key, l.completed_at, l.created_at, l.endpoint_monitor_id, l.initiated_by_user_id, l.policy_fingerprint, l.queued_at, l.requested_at, l.scheduled_for, l.source, l.started_at, l.state, c.logical_check_id, c.accepted_status_codes, c.configuration_fingerprint, c.confirmation_source, c.content_marker_comparison, c.created_at AS created_at0, c.critical_threshold_ms, c.failure_confirmation_count, c.interval_seconds, c.interval_source, c.max_redirects, c.max_response_body_bytes, c.monitor_type, c.production_http_severity, c.recovery_confirmation_count, c.required_content_marker, c.schema_version, c.threshold_source, c.timeout_seconds, c.timeout_source, c.warning_threshold_ms, e.id AS id0, e.bounded_overrides, e.configuration_fingerprint AS configuration_fingerprint0, e.created_at AS created_at1, e.created_by_user_id, e.critical_threshold_ms AS critical_threshold_ms0, e.deleted_at, e.deleted_by_user_id, e.endpoint_id, e.failure_confirmation_count AS failure_confirmation_count0, e.interval_seconds AS interval_seconds0, e.is_enabled, e.monitor_type AS monitor_type0, e.next_due_at, e.policy_profile_id, e.recovery_confirmation_count AS recovery_confirmation_count0, e.schedule_anchor, e.timeout_seconds AS timeout_seconds0, e.updated_at, e.updated_by_user_id, e.version, e.warning_threshold_ms AS warning_threshold_ms0, e0.id AS id1, e0.created_at AS created_at2, e0.created_by_user_id AS created_by_user_id0, e0.deleted_at AS deleted_at0, e0.deleted_by_user_id AS deleted_by_user_id0, e0.display_url, e0.effective_port, e0.environment_id, e0.http_exception_approved_at, e0.http_exception_approved_by_user_id, e0.http_exception_reason, e0.is_enabled AS is_enabled0, e0.normalization_version, e0.normalized_host, e0.normalized_url, e0.normalized_url_hash, e0.owner_subject_id, e0.updated_at AS updated_at0, e0.updated_by_user_id AS updated_by_user_id0, e0.version AS version0, e1.id AS id2, e1.base_url, e1.created_at AS created_at3, e1.created_by_user_id AS created_by_user_id1, e1.deleted_at AS deleted_at1, e1.deleted_by_user_id AS deleted_by_user_id1, e1.environment_type, e1.is_active, e1.is_production, e1.name, e1.normalization_version AS normalization_version0, e1.normalized_name, e1.updated_at AS updated_at1, e1.updated_by_user_id AS updated_by_user_id1, e1.version AS version1, e1.website_id
+    FROM web_health.logical_check AS l
+    LEFT JOIN web_health.check_configuration_snapshot AS c ON l.id = c.logical_check_id
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+    INNER JOIN web_health.environment AS e1 ON e0.environment_id = e1.id
+    WHERE l.id = @checkId
+    LIMIT 2
+) AS s
+LEFT JOIN web_health.durable_work AS d ON s.id = d.logical_check_id
+ORDER BY s.id, s.logical_check_id, s.id0, s.id1, s.id2
+[23:54:34 INF] Executed DbCommand (40ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId)
+[23:54:34 INF] Executed DbCommand (5ms) [Parameters=[@checkId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM web_health.execution_attempt AS e
+WHERE e.logical_check_id = @checkId
+[23:54:34 INF] Executed DbCommand (9ms) [Parameters=[@p='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT l.id, l.cadence_key, l.completed_at, l.created_at, l.endpoint_monitor_id, l.initiated_by_user_id, l.policy_fingerprint, l.queued_at, l.requested_at, l.scheduled_for, l.source, l.started_at, l.state
+FROM web_health.logical_check AS l
+WHERE l.id = @p
+LIMIT 1
+[23:54:34 INF] Executed DbCommand (4ms) [Parameters=[@checkId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.attempt_number, e.failure_category, e.finished_at, e.infrastructure_outcome, e.job_id, e.logical_check_id, e.started_at, e.worker_id
+FROM web_health.execution_attempt AS e
+WHERE e.logical_check_id = @checkId AND e.infrastructure_outcome = 'Running'
+[23:54:34 INF] Executed DbCommand (5ms) [Parameters=[@p3='?' (DbType = Guid), @p0='?' (DbType = Int32), @p1='?', @p2='?' (DbType = DateTime), @p4='?' (DbType = Guid), @p5='?' (DbType = Int32), @p6='?', @p7='?' (DbType = DateTime), @p8='?', @p9='?', @p10='?' (DbType = Guid), @p11='?' (DbType = DateTime), @p12='?', @p15='?' (DbType = Guid), @p13='?' (DbType = DateTime), @p14='?'], CommandType='Text', CommandTimeout='30']
+UPDATE web_health.durable_work SET attempt_count = @p0, state = @p1, updated_at = @p2
+WHERE id = @p3;
+INSERT INTO web_health.execution_attempt (id, attempt_number, failure_category, finished_at, infrastructure_outcome, job_id, logical_check_id, started_at, worker_id)
+VALUES (@p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12);
+UPDATE web_health.logical_check SET started_at = @p13, state = @p14
+WHERE id = @p15;
+[23:54:34 INF] Executed DbCommand (2ms) [Parameters=[@endpointId='?' (DbType = Guid), @normalizedHost='?', @port='?' (DbType = Int32), @at='?' (DbType = DateTime), @at4='?' (DbType = DateTime)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.target_authorization AS t
+    WHERE t.endpoint_id = @endpointId AND t.normalized_host = @normalizedHost AND t.port = @port AND t.revoked_at IS NULL AND t.effective_from <= @at AND (t.expires_at IS NULL OR t.expires_at > @at4))
+[23:54:34 INF] Start processing HTTP request GET https://example.com/
+[23:54:34 INF] Sending HTTP request GET https://example.com/
+[23:54:35 INF] Received HTTP response headers after 286.3566ms - 200
+[23:54:35 INF] End processing HTTP request after 299.1048ms - 200
+[23:54:35 WRN] Compiling a query which loads related collections for more than one collection navigation, either via 'Include' or through projection, but no 'QuerySplittingBehavior' has been configured. By default, Entity Framework will use 'QuerySplittingBehavior.SingleQuery', which can potentially result in slow query performance. See https://go.microsoft.com/fwlink/?linkid=2134277 for more information. To identify the query that's triggering this warning call 'ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning))'.
+[23:54:35 INF] Executed DbCommand (72ms) [Parameters=[@logicalCheckId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.cadence_key, s.completed_at, s.created_at, s.endpoint_monitor_id, s.initiated_by_user_id, s.policy_fingerprint, s.queued_at, s.requested_at, s.scheduled_for, s.source, s.started_at, s.state, s.logical_check_id, s.accepted_status_codes, s.configuration_fingerprint, s.confirmation_source, s.content_marker_comparison, s.created_at0, s.critical_threshold_ms, s.failure_confirmation_count, s.interval_seconds, s.interval_source, s.max_redirects, s.max_response_body_bytes, s.monitor_type, s.production_http_severity, s.recovery_confirmation_count, s.required_content_marker, s.schema_version, s.threshold_source, s.timeout_seconds, s.timeout_source, s.warning_threshold_ms, s.id0, s.bounded_overrides, s.configuration_fingerprint0, s.created_at1, s.created_by_user_id, s.critical_threshold_ms0, s.deleted_at, s.deleted_by_user_id, s.endpoint_id, s.failure_confirmation_count0, s.interval_seconds0, s.is_enabled, s.monitor_type0, s.next_due_at, s.policy_profile_id, s.recovery_confirmation_count0, s.schedule_anchor, s.timeout_seconds0, s.updated_at, s.updated_by_user_id, s.version, s.warning_threshold_ms0, s.id1, s.created_at2, s.created_by_user_id0, s.deleted_at0, s.deleted_by_user_id0, s.display_url, s.effective_port, s.environment_id, s.http_exception_approved_at, s.http_exception_approved_by_user_id, s.http_exception_reason, s.is_enabled0, s.normalization_version, s.normalized_host, s.normalized_url, s.normalized_url_hash, s.owner_subject_id, s.updated_at0, s.updated_by_user_id0, s.version0, s.id2, s.base_url, s.created_at3, s.created_by_user_id1, s.deleted_at1, s.deleted_by_user_id1, s.environment_type, s.is_active, s.is_production, s.name, s.normalization_version0, s.normalized_name, s.updated_at1, s.updated_by_user_id1, s.version1, s.website_id, s.id3, s.client_id, s.created_at4, s.created_by_user_id2, s.deleted_at2, s.deleted_by_user_id2, s.is_enabled1, s.name0, s.normalization_version1, s.normalized_name0, s.owner_subject_id0, s.technology_cms, s.updated_at2, s.updated_by_user_id2, s.version2, s.id4, s.created_at5, s.created_by_user_id3, s.deleted_at3, s.deleted_by_user_id3, s.is_active0, s.name1, s.normalization_version2, s.normalized_name1, s.notes, s.owner_subject_id1, s.updated_at3, s.updated_by_user_id3, s.version3, s.logical_check_id0, s.completed_at0, s.connect_duration_ms, s.counts_for_uptime, s.decoded_length, s.dns_duration_ms, s.failure_category, s.http_status, s.is_maintenance, s.length_source, s.maintenance_occurrence_id, s.measured_at, s.monitor_source, s.outcome, s.response_truncated, s.safe_diagnostic, s.tls_duration_ms, s.total_duration_ms, s.transferred_length, s.ttfb_duration_ms, e2.id, e2.attempt_number, e2.failure_category, e2.finished_at, e2.infrastructure_outcome, e2.job_id, e2.logical_check_id, e2.started_at, e2.worker_id, d.id, d.attempt_count, d.available_at, d.created_at, d.dedupe_key, d.last_failure_at, d.last_failure_category, d.lease_acquired_at, d.lease_expires_at, d.lease_owner_token, d.logical_check_id, d.queue_name, d.state, d.updated_at, d.work_kind
+FROM (
+    SELECT l.id, l.cadence_key, l.completed_at, l.created_at, l.endpoint_monitor_id, l.initiated_by_user_id, l.policy_fingerprint, l.queued_at, l.requested_at, l.scheduled_for, l.source, l.started_at, l.state, c.logical_check_id, c.accepted_status_codes, c.configuration_fingerprint, c.confirmation_source, c.content_marker_comparison, c.created_at AS created_at0, c.critical_threshold_ms, c.failure_confirmation_count, c.interval_seconds, c.interval_source, c.max_redirects, c.max_response_body_bytes, c.monitor_type, c.production_http_severity, c.recovery_confirmation_count, c.required_content_marker, c.schema_version, c.threshold_source, c.timeout_seconds, c.timeout_source, c.warning_threshold_ms, e.id AS id0, e.bounded_overrides, e.configuration_fingerprint AS configuration_fingerprint0, e.created_at AS created_at1, e.created_by_user_id, e.critical_threshold_ms AS critical_threshold_ms0, e.deleted_at, e.deleted_by_user_id, e.endpoint_id, e.failure_confirmation_count AS failure_confirmation_count0, e.interval_seconds AS interval_seconds0, e.is_enabled, e.monitor_type AS monitor_type0, e.next_due_at, e.policy_profile_id, e.recovery_confirmation_count AS recovery_confirmation_count0, e.schedule_anchor, e.timeout_seconds AS timeout_seconds0, e.updated_at, e.updated_by_user_id, e.version, e.warning_threshold_ms AS warning_threshold_ms0, e0.id AS id1, e0.created_at AS created_at2, e0.created_by_user_id AS created_by_user_id0, e0.deleted_at AS deleted_at0, e0.deleted_by_user_id AS deleted_by_user_id0, e0.display_url, e0.effective_port, e0.environment_id, e0.http_exception_approved_at, e0.http_exception_approved_by_user_id, e0.http_exception_reason, e0.is_enabled AS is_enabled0, e0.normalization_version, e0.normalized_host, e0.normalized_url, e0.normalized_url_hash, e0.owner_subject_id, e0.updated_at AS updated_at0, e0.updated_by_user_id AS updated_by_user_id0, e0.version AS version0, e1.id AS id2, e1.base_url, e1.created_at AS created_at3, e1.created_by_user_id AS created_by_user_id1, e1.deleted_at AS deleted_at1, e1.deleted_by_user_id AS deleted_by_user_id1, e1.environment_type, e1.is_active, e1.is_production, e1.name, e1.normalization_version AS normalization_version0, e1.normalized_name, e1.updated_at AS updated_at1, e1.updated_by_user_id AS updated_by_user_id1, e1.version AS version1, e1.website_id, w.id AS id3, w.client_id, w.created_at AS created_at4, w.created_by_user_id AS created_by_user_id2, w.deleted_at AS deleted_at2, w.deleted_by_user_id AS deleted_by_user_id2, w.is_enabled AS is_enabled1, w.name AS name0, w.normalization_version AS normalization_version1, w.normalized_name AS normalized_name0, w.owner_subject_id AS owner_subject_id0, w.technology_cms, w.updated_at AS updated_at2, w.updated_by_user_id AS updated_by_user_id2, w.version AS version2, c0.id AS id4, c0.created_at AS created_at5, c0.created_by_user_id AS created_by_user_id3, c0.deleted_at AS deleted_at3, c0.deleted_by_user_id AS deleted_by_user_id3, c0.is_active AS is_active0, c0.name AS name1, c0.normalization_version AS normalization_version2, c0.normalized_name AS normalized_name1, c0.notes, c0.owner_subject_id AS owner_subject_id1, c0.updated_at AS updated_at3, c0.updated_by_user_id AS updated_by_user_id3, c0.version AS version3, c1.logical_check_id AS logical_check_id0, c1.completed_at AS completed_at0, c1.connect_duration_ms, c1.counts_for_uptime, c1.decoded_length, c1.dns_duration_ms, c1.failure_category, c1.http_status, c1.is_maintenance, c1.length_source, c1.maintenance_occurrence_id, c1.measured_at, c1.monitor_source, c1.outcome, c1.response_truncated, c1.safe_diagnostic, c1.tls_duration_ms, c1.total_duration_ms, c1.transferred_length, c1.ttfb_duration_ms
+    FROM web_health.logical_check AS l
+    LEFT JOIN web_health.check_configuration_snapshot AS c ON l.id = c.logical_check_id
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+    INNER JOIN web_health.environment AS e1 ON e0.environment_id = e1.id
+    INNER JOIN web_health.website AS w ON e1.website_id = w.id
+    INNER JOIN web_health.client AS c0 ON w.client_id = c0.id
+    LEFT JOIN web_health.check_result AS c1 ON l.id = c1.logical_check_id
+    WHERE l.id = @logicalCheckId
+    LIMIT 2
+) AS s
+LEFT JOIN web_health.execution_attempt AS e2 ON s.id = e2.logical_check_id
+LEFT JOIN web_health.durable_work AS d ON s.id = d.logical_check_id
+ORDER BY s.id, s.logical_check_id, s.id0, s.id1, s.id2, s.id3, s.id4, s.logical_check_id0, e2.id
+[23:54:35 INF] Executed DbCommand (2ms) [Parameters=[@endpointMonitorId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id AS "Id", e.endpoint_id AS "EndpointId", e0.environment_id AS "EnvironmentId", e1.website_id AS "WebsiteId", w.client_id AS "ClientId"
+FROM web_health.endpoint_monitor AS e
+INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+INNER JOIN web_health.environment AS e1 ON e0.environment_id = e1.id
+INNER JOIN web_health.website AS w ON e1.website_id = w.id
+WHERE e.id = @endpointMonitorId
+LIMIT 2
+[23:54:35 INF] Executed DbCommand (19ms) [Parameters=[@at='?' (DbType = DateTime), @monitor_Id='?' (DbType = Guid), @monitor_EndpointId='?' (DbType = Guid), @monitor_EnvironmentId='?' (DbType = Guid), @monitor_WebsiteId='?' (DbType = Guid), @monitor_ClientId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT m.id, m0.suppression_policy, m0.pause_escalation, m0.continue_failure_counter
+FROM web_health.maintenance_occurrence AS m
+INNER JOIN web_health.maintenance_window AS m0 ON m.maintenance_window_id = m0.id
+WHERE m.starts_at <= @at AND m.ends_at > @at AND m0.deleted_at IS NULL AND EXISTS (
+    SELECT 1
+    FROM web_health.maintenance_target AS m1
+    WHERE m0.id = m1.maintenance_window_id AND (m1.endpoint_monitor_id = @monitor_Id OR m1.endpoint_id = @monitor_EndpointId OR m1.environment_id = @monitor_EnvironmentId OR m1.website_id = @monitor_WebsiteId OR m1.client_id = @monitor_ClientId))
+ORDER BY m.starts_at
+LIMIT 1
+[23:54:35 INF] Executed DbCommand (4ms) [Parameters=[p0='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT * FROM web_health.issue_state
+WHERE endpoint_monitor_id = @p0
+FOR UPDATE
+[23:54:35 INF] Executed DbCommand (5ms) [Parameters=[@check_EndpointMonitorId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.endpoint_monitor_id, e.confirmed_at, e.confirmed_status, e.evidence_logical_check_id, e.version
+FROM web_health.endpoint_health AS e
+WHERE e.endpoint_monitor_id = @check_EndpointMonitorId
+LIMIT 2
+[23:54:35 INF] Executed DbCommand (15ms) [Parameters=[p0='?' (DbType = Guid), p1='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT w.id, w.acknowledged_at, w.closed_at, w.endpoint_monitor_id, w.issue_key, w.opened_at, w.outage_duration_ms, w.owner_subject_id, w.previous_incident_id, w.recovery_duration_ms, w.recovery_started_at, w.recurrence_count, w.resolution_category, w.resolution_note, w.resolved_at, w.severity, w.status, w.version, i.id, i.actor_user_id, i.bounded_note, i.event_type, i.from_owner_subject_id, i.from_status, i.incident_id, i.occurred_at, i.sequence_number, i.to_owner_subject_id, i.to_status
+FROM (
+    SELECT * FROM web_health.incident
+    WHERE endpoint_monitor_id = @p0
+      AND status = ANY(@p1)
+    FOR UPDATE
+) AS w
+LEFT JOIN web_health.incident_event AS i ON w.id = i.incident_id
+ORDER BY w.id
+[23:54:36 INF] Executed DbCommand (6ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?' (DbType = Int32), @p3='?' (DbType = Boolean), @p4='?' (DbType = Int64), @p5='?' (DbType = Int32), @p6='?', @p7='?' (DbType = Int32), @p8='?' (DbType = Boolean), @p9='?', @p10='?' (DbType = Guid), @p11='?' (DbType = DateTime), @p12='?', @p13='?', @p14='?' (DbType = Boolean), @p15='?', @p16='?' (DbType = Int32), @p17='?' (DbType = Int32), @p18='?' (DbType = Int64), @p19='?' (DbType = Int32), @p22='?' (DbType = Guid), @p20='?', @p21='?' (DbType = DateTime), @p25='?' (DbType = Guid), @p23='?' (DbType = DateTime), @p24='?', @p28='?' (DbType = Guid), @p26='?' (DbType = DateTime), @p27='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO web_health.check_result (logical_check_id, completed_at, connect_duration_ms, counts_for_uptime, decoded_length, dns_duration_ms, failure_category, http_status, is_maintenance, length_source, maintenance_occurrence_id, measured_at, monitor_source, outcome, response_truncated, safe_diagnostic, tls_duration_ms, total_duration_ms, transferred_length, ttfb_duration_ms)
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19);
+UPDATE web_health.durable_work SET state = @p20, updated_at = @p21
+WHERE id = @p22;
+UPDATE web_health.execution_attempt SET finished_at = @p23, infrastructure_outcome = @p24
+WHERE id = @p25;
+UPDATE web_health.logical_check SET completed_at = @p26, state = @p27
+WHERE id = @p28;
+[23:54:59 DBG] Server desktop-40ser7o:30120:5e45544c heartbeat successfully sent
+[23:55:15 DBG] 2 recurring job(s) processed by scheduler.
+[23:55:23 INF] HTTP GET / responded 302 in 423.8760 ms
+[23:55:23 INF] HTTP GET /Account/Login responded 200 in 485.3104 ms
+[23:55:24 INF] HTTP GET /css/tokens.css responded 200 in 122.9861 ms
+[23:55:24 INF] HTTP GET /css/components.css responded 200 in 122.7958 ms
+[23:55:24 INF] HTTP GET /css/auth.css responded 200 in 117.1217 ms
+[23:55:24 INF] HTTP GET /css/shell.css responded 200 in 121.0324 ms
+[23:55:24 INF] HTTP GET /images/login-panel.png responded 304 in 2.4671 ms
+[23:55:24 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 2.2684 ms
+[23:55:25 INF] Executed DbCommand (16ms) [Parameters=[@normalizedEmail='?'], CommandType='Text', CommandTimeout='30']
+SELECT a.id, a.access_failed_count, a.concurrency_stamp, a.created_at, a.display_name, a.email, a.email_confirmed, a.is_disabled, a.lockout_enabled, a.lockout_end, a.normalized_email, a.normalized_user_name, a.password_hash, a.phone_number, a.phone_number_confirmed, a.security_stamp, a.two_factor_enabled, a.updated_at, a.user_name
+FROM web_health.app_user AS a
+WHERE a.normalized_email = @normalizedEmail
+LIMIT 2
+[23:55:26 INF] Executed DbCommand (9ms) [Parameters=[@user_Id='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT a.id, a.claim_type, a.claim_value, a.user_id
+FROM web_health.app_user_claim AS a
+WHERE a.user_id = @user_Id
+[23:55:26 INF] Executed DbCommand (12ms) [Parameters=[@userId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT a0.name
+FROM web_health.app_user_role AS a
+INNER JOIN web_health.app_role AS a0 ON a.role_id = a0.id
+WHERE a.user_id = @userId
+[23:55:26 INF] Executed DbCommand (5ms) [Parameters=[@normalizedName='?'], CommandType='Text', CommandTimeout='30']
+SELECT a.id, a.concurrency_stamp, a.name, a.normalized_name, a.version
+FROM web_health.app_role AS a
+WHERE a.normalized_name = @normalizedName
+LIMIT 1
+[23:55:26 INF] Executed DbCommand (7ms) [Parameters=[@role_Id='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT a.claim_type, a.claim_value
+FROM web_health.app_role_claim AS a
+WHERE a.role_id = @role_Id
+[23:55:26 INF] HTTP POST /Account/Login responded 302 in 949.9654 ms
+[23:55:26 INF] HTTP GET / responded 200 in 293.0938 ms
+[23:55:26 INF] HTTP GET /js/shell.js responded 200 in 20.7845 ms
+[23:55:26 INF] HTTP GET /css/components.css responded 200 in 21.9201 ms
+[23:55:26 INF] HTTP GET /css/tokens.css responded 200 in 25.6936 ms
+[23:55:26 INF] HTTP GET /css/shell.css responded 200 in 26.2862 ms
+[23:55:27 INF] HTTP GET /images/sidebar-support.png responded 304 in 64.7464 ms
+[23:55:27 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 62.0181 ms
+[23:55:29 DBG] Server desktop-40ser7o:30120:5e45544c heartbeat successfully sent
+[23:55:33 INF] Executed DbCommand (23ms) [Parameters=[@isDeleted='?' (DbType = Boolean)], CommandType='Text', CommandTimeout='30']
+SELECT c.id AS "Id", c.name AS "Name", c.owner_subject_id AS "OwnerSubjectId", c.is_active AS "IsActive", c.deleted_at IS NOT NULL AS "IsDeleted", c.version AS "Version"
+FROM web_health.client AS c
+WHERE (c.deleted_at IS NOT NULL) = @isDeleted
+ORDER BY c.name
+[23:55:33 INF] Executed DbCommand (3ms) [Parameters=[@clientIds='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT w.client_id AS "ClientId", count(*)::int AS "Count"
+FROM web_health.website AS w
+WHERE w.deleted_at IS NULL AND w.client_id = ANY (@clientIds)
+GROUP BY w.client_id
+[23:55:34 INF] Executed DbCommand (32ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:55:34 INF] Executed DbCommand (29ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:55:34 INF] HTTP GET /Registry/Clients responded 200 in 862.6062 ms
+[23:55:34 INF] HTTP GET /css/tokens.css responded 200 in 43.3797 ms
+[23:55:34 INF] HTTP GET /css/shell.css responded 200 in 34.8038 ms
+[23:55:34 INF] HTTP GET /css/components.css responded 200 in 41.1434 ms
+[23:55:34 INF] HTTP GET /js/shell.js responded 200 in 59.5672 ms
+[23:55:34 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 13.6728 ms
+[23:55:34 INF] HTTP GET /images/sidebar-support.png responded 304 in 14.7080 ms
+[23:55:42 INF] Executed DbCommand (26ms) [Parameters=[@clientId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT c.id AS "Id", c.name AS "Name", c.owner_subject_id AS "OwnerSubjectId", c.notes AS "Notes", c.is_active AS "IsActive", c.deleted_at IS NOT NULL AS "IsDeleted", c.version AS "Version"
+FROM web_health.client AS c
+WHERE c.id = @clientId
+LIMIT 2
+[23:55:42 INF] Executed DbCommand (58ms) [Parameters=[@clientId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT w.id, w.client_id, c.name, w.name, w.owner_subject_id, w.technology_cms, w.is_enabled, w.deleted_at IS NOT NULL, w.version, (
+    SELECT count(*)::int
+    FROM web_health.environment AS e
+    WHERE w.id = e.website_id AND e.deleted_at IS NULL AND e.is_active)
+FROM web_health.website AS w
+INNER JOIN web_health.client AS c ON w.client_id = c.id
+WHERE w.client_id = @clientId AND w.deleted_at IS NULL
+ORDER BY c.name, w.name
+[23:55:42 INF] Executed DbCommand (28ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:55:42 INF] Executed DbCommand (26ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:55:42 INF] Executed DbCommand (30ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT w.website_id AS "WebsiteId", t.name AS "Name"
+FROM web_health.website_tag AS w
+INNER JOIN web_health.tag AS t ON w.tag_id = t.id
+WHERE w.website_id = ANY (@ids)
+ORDER BY t.name
+[23:55:43 INF] HTTP GET /Registry/Client/227fb76b-79e9-4a24-96bf-0281d0e1b390 responded 200 in 1561.6703 ms
+[23:55:43 INF] HTTP GET /css/tokens.css responded 200 in 50.3182 ms
+[23:55:43 INF] HTTP GET /css/shell.css responded 200 in 36.9612 ms
+[23:55:43 INF] HTTP GET /js/shell.js responded 200 in 63.8705 ms
+[23:55:43 INF] HTTP GET /css/components.css responded 200 in 47.9388 ms
+[23:55:44 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 78.3293 ms
+[23:55:44 INF] HTTP GET /images/sidebar-support.png responded 304 in 153.6346 ms
+[23:55:58 INF] Executed DbCommand (2ms) [Parameters=[@websiteId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT w.id, w.client_id, c.name, w.name, w.owner_subject_id, w.technology_cms, w.is_enabled, w.deleted_at IS NOT NULL, w.version, (
+    SELECT count(*)::int
+    FROM web_health.environment AS e
+    WHERE w.id = e.website_id AND e.deleted_at IS NULL AND e.is_active)
+FROM web_health.website AS w
+INNER JOIN web_health.client AS c ON w.client_id = c.id
+WHERE w.id = @websiteId
+ORDER BY c.name, w.name
+[23:55:58 INF] Executed DbCommand (9ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:55:58 INF] Executed DbCommand (18ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:55:58 INF] Executed DbCommand (17ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT w.website_id AS "WebsiteId", t.name AS "Name"
+FROM web_health.website_tag AS w
+INNER JOIN web_health.tag AS t ON w.tag_id = t.id
+WHERE w.website_id = ANY (@ids)
+ORDER BY t.name
+[23:55:58 INF] HTTP GET /Registry/Website/0a92e5fc-7e2b-433b-88bc-adf776938a78 responded 200 in 153.3719 ms
+[23:55:58 INF] HTTP GET /js/shell.js responded 200 in 5.0061 ms
+[23:55:58 INF] HTTP GET /css/shell.css responded 200 in 4.8737 ms
+[23:55:58 INF] HTTP GET /css/components.css responded 200 in 4.4512 ms
+[23:55:58 INF] HTTP GET /css/tokens.css responded 200 in 4.7488 ms
+[23:55:58 INF] HTTP GET /images/sidebar-support.png responded 304 in 1.6767 ms
+[23:55:58 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 1.0425 ms
+[23:55:59 DBG] Server desktop-40ser7o:30120:5e45544c heartbeat successfully sent
+[23:56:00 DBG] 2 recurring job(s) processed by scheduler.
+[23:56:07 INF] Executed DbCommand (2ms) [Parameters=[@websiteId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT w.id, w.client_id, c.name, w.name, w.owner_subject_id, w.technology_cms, w.is_enabled, w.deleted_at IS NOT NULL, w.version, (
+    SELECT count(*)::int
+    FROM web_health.environment AS e
+    WHERE w.id = e.website_id AND e.deleted_at IS NULL AND e.is_active)
+FROM web_health.website AS w
+INNER JOIN web_health.client AS c ON w.client_id = c.id
+WHERE w.id = @websiteId
+ORDER BY c.name, w.name
+[23:56:07 INF] Executed DbCommand (1ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:56:07 INF] Executed DbCommand (12ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:56:07 INF] Executed DbCommand (9ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT w.website_id AS "WebsiteId", t.name AS "Name"
+FROM web_health.website_tag AS w
+INNER JOIN web_health.tag AS t ON w.tag_id = t.id
+WHERE w.website_id = ANY (@ids)
+ORDER BY t.name
+[23:56:07 INF] Executed DbCommand (15ms) [Parameters=[@websiteId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.website_id, w.name, e.name, e.environment_type, e.is_production, e.base_url, e.is_active, e.deleted_at IS NOT NULL, e.version, (
+    SELECT count(*)::int
+    FROM web_health.endpoint AS e0
+    WHERE e.id = e0.environment_id AND e0.deleted_at IS NULL AND e0.is_enabled)
+FROM web_health.environment AS e
+INNER JOIN web_health.website AS w ON e.website_id = w.id
+WHERE e.website_id = @websiteId AND e.deleted_at IS NULL
+ORDER BY w.name, e.name
+[23:56:07 INF] HTTP GET /Targets/Environments responded 200 in 116.4296 ms
+[23:56:07 INF] HTTP GET /js/shell.js responded 200 in 4.3646 ms
+[23:56:07 INF] HTTP GET /css/shell.css responded 200 in 5.9725 ms
+[23:56:07 INF] HTTP GET /css/tokens.css responded 200 in 4.2451 ms
+[23:56:07 INF] HTTP GET /css/components.css responded 200 in 4.8757 ms
+[23:56:07 INF] HTTP GET /images/sidebar-support.png responded 304 in 2.7591 ms
+[23:56:07 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 2.1528 ms
+[23:56:14 INF] Executed DbCommand (2ms) [Parameters=[@environmentId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.website_id, w.name, e.name, e.environment_type, e.is_production, e.base_url, e.is_active, e.deleted_at IS NOT NULL, e.version, (
+    SELECT count(*)::int
+    FROM web_health.endpoint AS e0
+    WHERE e.id = e0.environment_id AND e0.deleted_at IS NULL AND e0.is_enabled)
+FROM web_health.environment AS e
+INNER JOIN web_health.website AS w ON e.website_id = w.id
+WHERE e.id = @environmentId
+LIMIT 2
+[23:56:14 INF] Executed DbCommand (11ms) [Parameters=[@environmentId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.environment_id, e0.name, e0.is_production, e0.website_id, w.name, e.display_url, e.normalized_url, e.normalization_version, e.owner_subject_id, COALESCE(e.owner_subject_id, w.owner_subject_id), e.is_enabled, e.deleted_at IS NOT NULL, e.http_exception_reason, (
+    SELECT t.authorization_kind
+    FROM web_health.target_authorization AS t
+    WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.normalized_host = e.normalized_host AND t.port = e.effective_port
+    ORDER BY t.effective_from DESC
+    LIMIT 1), (
+    SELECT t0.evidence_reference
+    FROM web_health.target_authorization AS t0
+    WHERE e.id = t0.endpoint_id AND t0.revoked_at IS NULL AND t0.normalized_host = e.normalized_host AND t0.port = e.effective_port
+    ORDER BY t0.effective_from DESC
+    LIMIT 1), (
+    SELECT t1.expires_at
+    FROM web_health.target_authorization AS t1
+    WHERE e.id = t1.endpoint_id AND t1.revoked_at IS NULL AND t1.normalized_host = e.normalized_host AND t1.port = e.effective_port
+    ORDER BY t1.effective_from DESC
+    LIMIT 1), e.version, (
+    SELECT e1.monitor_type
+    FROM web_health.endpoint_monitor AS e1
+    WHERE e.id = e1.endpoint_id
+    LIMIT 1), (
+    SELECT e2.interval_seconds
+    FROM web_health.endpoint_monitor AS e2
+    WHERE e.id = e2.endpoint_id
+    LIMIT 1), (
+    SELECT e3.bounded_overrides
+    FROM web_health.endpoint_monitor AS e3
+    WHERE e.id = e3.endpoint_id
+    LIMIT 1), (
+    SELECT e4.timeout_seconds
+    FROM web_health.endpoint_monitor AS e4
+    WHERE e.id = e4.endpoint_id
+    LIMIT 1), (
+    SELECT e5.is_enabled
+    FROM web_health.endpoint_monitor AS e5
+    WHERE e.id = e5.endpoint_id
+    LIMIT 1)
+FROM web_health.endpoint AS e
+INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+INNER JOIN web_health.website AS w ON e0.website_id = w.id
+WHERE e.environment_id = @environmentId AND e.deleted_at IS NULL
+ORDER BY w.name, e0.name, e.display_url
+[23:56:14 INF] Executed DbCommand (11ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:56:14 INF] Executed DbCommand (2ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:56:14 INF] HTTP GET /Targets/Environment/34598f20-b533-40d7-a48b-ef1ccb6d0f72 responded 200 in 138.1086 ms
+[23:56:14 INF] HTTP GET /css/tokens.css responded 200 in 4.7952 ms
+[23:56:14 INF] HTTP GET /css/shell.css responded 200 in 5.7847 ms
+[23:56:14 INF] HTTP GET /css/components.css responded 200 in 5.3238 ms
+[23:56:14 INF] HTTP GET /js/shell.js responded 200 in 3.1479 ms
+[23:56:14 INF] HTTP GET /images/sidebar-support.png responded 304 in 2.0020 ms
+[23:56:14 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 1.6776 ms
+[23:56:20 INF] Executed DbCommand (40ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.environment_id, e0.name, e0.is_production, e0.website_id, w.name, e.display_url, e.normalized_url, e.normalization_version, e.owner_subject_id, COALESCE(e.owner_subject_id, w.owner_subject_id), e.is_enabled, e.deleted_at IS NOT NULL, e.http_exception_reason, (
+    SELECT t.authorization_kind
+    FROM web_health.target_authorization AS t
+    WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.normalized_host = e.normalized_host AND t.port = e.effective_port
+    ORDER BY t.effective_from DESC
+    LIMIT 1), (
+    SELECT t0.evidence_reference
+    FROM web_health.target_authorization AS t0
+    WHERE e.id = t0.endpoint_id AND t0.revoked_at IS NULL AND t0.normalized_host = e.normalized_host AND t0.port = e.effective_port
+    ORDER BY t0.effective_from DESC
+    LIMIT 1), (
+    SELECT t1.expires_at
+    FROM web_health.target_authorization AS t1
+    WHERE e.id = t1.endpoint_id AND t1.revoked_at IS NULL AND t1.normalized_host = e.normalized_host AND t1.port = e.effective_port
+    ORDER BY t1.effective_from DESC
+    LIMIT 1), e.version, (
+    SELECT e1.monitor_type
+    FROM web_health.endpoint_monitor AS e1
+    WHERE e.id = e1.endpoint_id
+    LIMIT 1), (
+    SELECT e2.interval_seconds
+    FROM web_health.endpoint_monitor AS e2
+    WHERE e.id = e2.endpoint_id
+    LIMIT 1), (
+    SELECT e3.bounded_overrides
+    FROM web_health.endpoint_monitor AS e3
+    WHERE e.id = e3.endpoint_id
+    LIMIT 1), (
+    SELECT e4.timeout_seconds
+    FROM web_health.endpoint_monitor AS e4
+    WHERE e.id = e4.endpoint_id
+    LIMIT 1), (
+    SELECT e5.is_enabled
+    FROM web_health.endpoint_monitor AS e5
+    WHERE e.id = e5.endpoint_id
+    LIMIT 1)
+FROM web_health.endpoint AS e
+INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+INNER JOIN web_health.website AS w ON e0.website_id = w.id
+WHERE e.id = @endpointId
+ORDER BY w.name, e0.name, e.display_url
+[23:56:20 INF] Executed DbCommand (3ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:56:20 INF] Executed DbCommand (23ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:56:20 INF] Executed DbCommand (82ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId)
+[23:56:20 INF] Executed DbCommand (76ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId AND e.deleted_at IS NULL)
+[23:56:20 INF] Executed DbCommand (2ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id AS "Id", e.display_url AS "DisplayUrl"
+FROM web_health.endpoint AS e
+WHERE e.id = @endpointId
+LIMIT 2
+[23:56:20 INF] Executed DbCommand (17ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM web_health.logical_check AS l
+INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+WHERE e.endpoint_id = @endpointId
+[23:56:20 INF] Executed DbCommand (17ms) [Parameters=[@endpointId='?' (DbType = Guid), @p2='?' (DbType = Int32), @p='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.source, s.state, s.scheduled_for, s.requested_at, a.display_name, s.completed_at, c.outcome, c.failure_category, c.http_status, c.total_duration_ms, c.logical_check_id IS NOT NULL AND c.counts_for_uptime
+FROM (
+    SELECT l.id, l.completed_at, l.created_at, l.initiated_by_user_id, l.requested_at, l.scheduled_for, l.source, l.state
+    FROM web_health.logical_check AS l
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    WHERE e.endpoint_id = @endpointId
+    ORDER BY l.created_at DESC, l.id DESC
+    LIMIT @p2 OFFSET @p
+) AS s
+LEFT JOIN web_health.app_user AS a ON s.initiated_by_user_id = a.id
+LEFT JOIN web_health.check_result AS c ON s.id = c.logical_check_id
+ORDER BY s.created_at DESC, s.id DESC
+[23:56:20 INF] HTTP GET /Targets/Endpoint/b1a8ee92-3d71-43e5-8587-d94da6035eee responded 200 in 787.8263 ms
+[23:56:20 INF] HTTP GET /css/components.css responded 200 in 13.9356 ms
+[23:56:20 INF] HTTP GET /js/shell.js responded 200 in 9.0217 ms
+[23:56:20 INF] HTTP GET /css/shell.css responded 200 in 8.0472 ms
+[23:56:20 INF] HTTP GET /css/tokens.css responded 200 in 28.4218 ms
+[23:56:20 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 12.1385 ms
+[23:56:20 INF] HTTP GET /images/sidebar-support.png responded 304 in 14.4739 ms
+[23:56:29 DBG] Server desktop-40ser7o:30120:5e45544c heartbeat successfully sent
+[23:56:37 INF] Executed DbCommand (8ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId AND e.deleted_at IS NULL)
+[23:56:37 INF] Executed DbCommand (1ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.bounded_overrides, e.configuration_fingerprint, e.created_at, e.created_by_user_id, e.critical_threshold_ms, e.deleted_at, e.deleted_by_user_id, e.endpoint_id, e.failure_confirmation_count, e.interval_seconds, e.is_enabled, e.monitor_type, e.next_due_at, e.policy_profile_id, e.recovery_confirmation_count, e.schedule_anchor, e.timeout_seconds, e.updated_at, e.updated_by_user_id, e.version, e.warning_threshold_ms
+FROM web_health.endpoint_monitor AS e
+WHERE e.endpoint_id = @endpointId AND e.monitor_type = 'HttpAvailability' AND e.deleted_at IS NULL AND e.is_enabled
+LIMIT 2
+[23:56:37 INF] Executed DbCommand (3ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId AND e.deleted_at IS NULL)
+[23:56:37 INF] Executed DbCommand (2ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?', @p2='?' (DbType = DateTime), @p3='?' (DbType = DateTime), @p4='?' (DbType = Guid), @p5='?' (DbType = Guid), @p6='?', @p7='?' (DbType = DateTime), @p8='?' (DbType = DateTime), @p9='?' (DbType = DateTime), @p10='?', @p11='?' (DbType = DateTime), @p12='?', @p13='?' (DbType = Guid), @p14='?', @p15='?', @p16='?', @p17='?', @p18='?' (DbType = DateTime), @p19='?' (DbType = Int32), @p20='?' (DbType = Int32), @p21='?' (DbType = Int32), @p22='?', @p23='?' (DbType = Int32), @p24='?' (DbType = Int32), @p25='?', @p26='?', @p27='?' (DbType = Int32), @p28='?', @p29='?' (DbType = Int16), @p30='?', @p31='?' (DbType = Int32), @p32='?', @p33='?' (DbType = Int32), @p34='?' (DbType = Guid), @p35='?' (DbType = Int32), @p36='?' (DbType = DateTime), @p37='?' (DbType = DateTime), @p38='?', @p39='?' (DbType = DateTime), @p40='?', @p41='?' (DbType = DateTime), @p42='?' (DbType = DateTime), @p43='?' (DbType = Guid), @p44='?' (DbType = Guid), @p45='?', @p46='?', @p47='?' (DbType = DateTime), @p48='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO web_health.logical_check (id, cadence_key, completed_at, created_at, endpoint_monitor_id, initiated_by_user_id, policy_fingerprint, queued_at, requested_at, scheduled_for, source, started_at, state)
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12);
+INSERT INTO web_health.check_configuration_snapshot (logical_check_id, accepted_status_codes, configuration_fingerprint, confirmation_source, content_marker_comparison, created_at, critical_threshold_ms, failure_confirmation_count, interval_seconds, interval_source, max_redirects, max_response_body_bytes, monitor_type, production_http_severity, recovery_confirmation_count, required_content_marker, schema_version, threshold_source, timeout_seconds, timeout_source, warning_threshold_ms)
+VALUES (@p13, @p14, @p15, @p16, @p17, @p18, @p19, @p20, @p21, @p22, @p23, @p24, @p25, @p26, @p27, @p28, @p29, @p30, @p31, @p32, @p33);
+INSERT INTO web_health.durable_work (id, attempt_count, available_at, created_at, dedupe_key, last_failure_at, last_failure_category, lease_acquired_at, lease_expires_at, lease_owner_token, logical_check_id, queue_name, state, updated_at, work_kind)
+VALUES (@p34, @p35, @p36, @p37, @p38, @p39, @p40, @p41, @p42, @p43, @p44, @p45, @p46, @p47, @p48);
+[23:56:37 INF] Executed DbCommand (23ms) [Parameters=[@p='?', @p2='?' (DbType = DateTime), @workId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+UPDATE web_health.durable_work AS d
+SET state = @p,
+    updated_at = @p2
+WHERE d.id = @workId AND d.state = 'Dispatching'
+[23:56:37 INF] Executed DbCommand (7ms) [Parameters=[@checkId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.cadence_key, s.completed_at, s.created_at, s.endpoint_monitor_id, s.initiated_by_user_id, s.policy_fingerprint, s.queued_at, s.requested_at, s.scheduled_for, s.source, s.started_at, s.state, s.logical_check_id, s.accepted_status_codes, s.configuration_fingerprint, s.confirmation_source, s.content_marker_comparison, s.created_at0, s.critical_threshold_ms, s.failure_confirmation_count, s.interval_seconds, s.interval_source, s.max_redirects, s.max_response_body_bytes, s.monitor_type, s.production_http_severity, s.recovery_confirmation_count, s.required_content_marker, s.schema_version, s.threshold_source, s.timeout_seconds, s.timeout_source, s.warning_threshold_ms, s.id0, s.bounded_overrides, s.configuration_fingerprint0, s.created_at1, s.created_by_user_id, s.critical_threshold_ms0, s.deleted_at, s.deleted_by_user_id, s.endpoint_id, s.failure_confirmation_count0, s.interval_seconds0, s.is_enabled, s.monitor_type0, s.next_due_at, s.policy_profile_id, s.recovery_confirmation_count0, s.schedule_anchor, s.timeout_seconds0, s.updated_at, s.updated_by_user_id, s.version, s.warning_threshold_ms0, s.id1, s.created_at2, s.created_by_user_id0, s.deleted_at0, s.deleted_by_user_id0, s.display_url, s.effective_port, s.environment_id, s.http_exception_approved_at, s.http_exception_approved_by_user_id, s.http_exception_reason, s.is_enabled0, s.normalization_version, s.normalized_host, s.normalized_url, s.normalized_url_hash, s.owner_subject_id, s.updated_at0, s.updated_by_user_id0, s.version0, s.id2, s.base_url, s.created_at3, s.created_by_user_id1, s.deleted_at1, s.deleted_by_user_id1, s.environment_type, s.is_active, s.is_production, s.name, s.normalization_version0, s.normalized_name, s.updated_at1, s.updated_by_user_id1, s.version1, s.website_id, d.id, d.attempt_count, d.available_at, d.created_at, d.dedupe_key, d.last_failure_at, d.last_failure_category, d.lease_acquired_at, d.lease_expires_at, d.lease_owner_token, d.logical_check_id, d.queue_name, d.state, d.updated_at, d.work_kind
+FROM (
+    SELECT l.id, l.cadence_key, l.completed_at, l.created_at, l.endpoint_monitor_id, l.initiated_by_user_id, l.policy_fingerprint, l.queued_at, l.requested_at, l.scheduled_for, l.source, l.started_at, l.state, c.logical_check_id, c.accepted_status_codes, c.configuration_fingerprint, c.confirmation_source, c.content_marker_comparison, c.created_at AS created_at0, c.critical_threshold_ms, c.failure_confirmation_count, c.interval_seconds, c.interval_source, c.max_redirects, c.max_response_body_bytes, c.monitor_type, c.production_http_severity, c.recovery_confirmation_count, c.required_content_marker, c.schema_version, c.threshold_source, c.timeout_seconds, c.timeout_source, c.warning_threshold_ms, e.id AS id0, e.bounded_overrides, e.configuration_fingerprint AS configuration_fingerprint0, e.created_at AS created_at1, e.created_by_user_id, e.critical_threshold_ms AS critical_threshold_ms0, e.deleted_at, e.deleted_by_user_id, e.endpoint_id, e.failure_confirmation_count AS failure_confirmation_count0, e.interval_seconds AS interval_seconds0, e.is_enabled, e.monitor_type AS monitor_type0, e.next_due_at, e.policy_profile_id, e.recovery_confirmation_count AS recovery_confirmation_count0, e.schedule_anchor, e.timeout_seconds AS timeout_seconds0, e.updated_at, e.updated_by_user_id, e.version, e.warning_threshold_ms AS warning_threshold_ms0, e0.id AS id1, e0.created_at AS created_at2, e0.created_by_user_id AS created_by_user_id0, e0.deleted_at AS deleted_at0, e0.deleted_by_user_id AS deleted_by_user_id0, e0.display_url, e0.effective_port, e0.environment_id, e0.http_exception_approved_at, e0.http_exception_approved_by_user_id, e0.http_exception_reason, e0.is_enabled AS is_enabled0, e0.normalization_version, e0.normalized_host, e0.normalized_url, e0.normalized_url_hash, e0.owner_subject_id, e0.updated_at AS updated_at0, e0.updated_by_user_id AS updated_by_user_id0, e0.version AS version0, e1.id AS id2, e1.base_url, e1.created_at AS created_at3, e1.created_by_user_id AS created_by_user_id1, e1.deleted_at AS deleted_at1, e1.deleted_by_user_id AS deleted_by_user_id1, e1.environment_type, e1.is_active, e1.is_production, e1.name, e1.normalization_version AS normalization_version0, e1.normalized_name, e1.updated_at AS updated_at1, e1.updated_by_user_id AS updated_by_user_id1, e1.version AS version1, e1.website_id
+    FROM web_health.logical_check AS l
+    LEFT JOIN web_health.check_configuration_snapshot AS c ON l.id = c.logical_check_id
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+    INNER JOIN web_health.environment AS e1 ON e0.environment_id = e1.id
+    WHERE l.id = @checkId
+    LIMIT 2
+) AS s
+LEFT JOIN web_health.durable_work AS d ON s.id = d.logical_check_id
+ORDER BY s.id, s.logical_check_id, s.id0, s.id1, s.id2
+[23:56:37 INF] Executed DbCommand (3ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId)
+[23:56:37 INF] Executed DbCommand (1ms) [Parameters=[@checkId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM web_health.execution_attempt AS e
+WHERE e.logical_check_id = @checkId
+[23:56:37 INF] Executed DbCommand (13ms) [Parameters=[@p='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT l.id, l.cadence_key, l.completed_at, l.created_at, l.endpoint_monitor_id, l.initiated_by_user_id, l.policy_fingerprint, l.queued_at, l.requested_at, l.scheduled_for, l.source, l.started_at, l.state
+FROM web_health.logical_check AS l
+WHERE l.id = @p
+LIMIT 1
+[23:56:37 INF] Executed DbCommand (1ms) [Parameters=[@checkId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.attempt_number, e.failure_category, e.finished_at, e.infrastructure_outcome, e.job_id, e.logical_check_id, e.started_at, e.worker_id
+FROM web_health.execution_attempt AS e
+WHERE e.logical_check_id = @checkId AND e.infrastructure_outcome = 'Running'
+[23:56:37 INF] Executed DbCommand (11ms) [Parameters=[@p3='?' (DbType = Guid), @p0='?' (DbType = Int32), @p1='?', @p2='?' (DbType = DateTime), @p4='?' (DbType = Guid), @p5='?' (DbType = Int32), @p6='?', @p7='?' (DbType = DateTime), @p8='?', @p9='?', @p10='?' (DbType = Guid), @p11='?' (DbType = DateTime), @p12='?', @p15='?' (DbType = Guid), @p13='?' (DbType = DateTime), @p14='?'], CommandType='Text', CommandTimeout='30']
+UPDATE web_health.durable_work SET attempt_count = @p0, state = @p1, updated_at = @p2
+WHERE id = @p3;
+INSERT INTO web_health.execution_attempt (id, attempt_number, failure_category, finished_at, infrastructure_outcome, job_id, logical_check_id, started_at, worker_id)
+VALUES (@p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12);
+UPDATE web_health.logical_check SET started_at = @p13, state = @p14
+WHERE id = @p15;
+[23:56:37 INF] HTTP POST /Checks/RunCheck/b1a8ee92-3d71-43e5-8587-d94da6035eee responded 302 in 293.9092 ms
+[23:56:37 INF] Executed DbCommand (1ms) [Parameters=[@endpointId='?' (DbType = Guid), @normalizedHost='?', @port='?' (DbType = Int32), @at='?' (DbType = DateTime), @at4='?' (DbType = DateTime)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.target_authorization AS t
+    WHERE t.endpoint_id = @endpointId AND t.normalized_host = @normalizedHost AND t.port = @port AND t.revoked_at IS NULL AND t.effective_from <= @at AND (t.expires_at IS NULL OR t.expires_at > @at4))
+[23:56:37 INF] Start processing HTTP request GET https://example.com/
+[23:56:37 INF] Sending HTTP request GET https://example.com/
+[23:56:37 INF] Executed DbCommand (5ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.environment_id, e0.name, e0.is_production, e0.website_id, w.name, e.display_url, e.normalized_url, e.normalization_version, e.owner_subject_id, COALESCE(e.owner_subject_id, w.owner_subject_id), e.is_enabled, e.deleted_at IS NOT NULL, e.http_exception_reason, (
+    SELECT t.authorization_kind
+    FROM web_health.target_authorization AS t
+    WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.normalized_host = e.normalized_host AND t.port = e.effective_port
+    ORDER BY t.effective_from DESC
+    LIMIT 1), (
+    SELECT t0.evidence_reference
+    FROM web_health.target_authorization AS t0
+    WHERE e.id = t0.endpoint_id AND t0.revoked_at IS NULL AND t0.normalized_host = e.normalized_host AND t0.port = e.effective_port
+    ORDER BY t0.effective_from DESC
+    LIMIT 1), (
+    SELECT t1.expires_at
+    FROM web_health.target_authorization AS t1
+    WHERE e.id = t1.endpoint_id AND t1.revoked_at IS NULL AND t1.normalized_host = e.normalized_host AND t1.port = e.effective_port
+    ORDER BY t1.effective_from DESC
+    LIMIT 1), e.version, (
+    SELECT e1.monitor_type
+    FROM web_health.endpoint_monitor AS e1
+    WHERE e.id = e1.endpoint_id
+    LIMIT 1), (
+    SELECT e2.interval_seconds
+    FROM web_health.endpoint_monitor AS e2
+    WHERE e.id = e2.endpoint_id
+    LIMIT 1), (
+    SELECT e3.bounded_overrides
+    FROM web_health.endpoint_monitor AS e3
+    WHERE e.id = e3.endpoint_id
+    LIMIT 1), (
+    SELECT e4.timeout_seconds
+    FROM web_health.endpoint_monitor AS e4
+    WHERE e.id = e4.endpoint_id
+    LIMIT 1), (
+    SELECT e5.is_enabled
+    FROM web_health.endpoint_monitor AS e5
+    WHERE e.id = e5.endpoint_id
+    LIMIT 1)
+FROM web_health.endpoint AS e
+INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+INNER JOIN web_health.website AS w ON e0.website_id = w.id
+WHERE e.id = @endpointId
+ORDER BY w.name, e0.name, e.display_url
+[23:56:37 INF] Executed DbCommand (8ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:56:37 INF] Executed DbCommand (3ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:56:37 INF] Executed DbCommand (145ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId)
+[23:56:37 INF] Executed DbCommand (8ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId AND e.deleted_at IS NULL)
+[23:56:37 INF] Executed DbCommand (2ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id AS "Id", e.display_url AS "DisplayUrl"
+FROM web_health.endpoint AS e
+WHERE e.id = @endpointId
+LIMIT 2
+[23:56:37 INF] Executed DbCommand (4ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM web_health.logical_check AS l
+INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+WHERE e.endpoint_id = @endpointId
+[23:56:37 INF] Executed DbCommand (20ms) [Parameters=[@endpointId='?' (DbType = Guid), @p2='?' (DbType = Int32), @p='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.source, s.state, s.scheduled_for, s.requested_at, a.display_name, s.completed_at, c.outcome, c.failure_category, c.http_status, c.total_duration_ms, c.logical_check_id IS NOT NULL AND c.counts_for_uptime
+FROM (
+    SELECT l.id, l.completed_at, l.created_at, l.initiated_by_user_id, l.requested_at, l.scheduled_for, l.source, l.state
+    FROM web_health.logical_check AS l
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    WHERE e.endpoint_id = @endpointId
+    ORDER BY l.created_at DESC, l.id DESC
+    LIMIT @p2 OFFSET @p
+) AS s
+LEFT JOIN web_health.app_user AS a ON s.initiated_by_user_id = a.id
+LEFT JOIN web_health.check_result AS c ON s.id = c.logical_check_id
+ORDER BY s.created_at DESC, s.id DESC
+[23:56:38 INF] HTTP GET /Targets/Endpoint/b1a8ee92-3d71-43e5-8587-d94da6035eee responded 200 in 251.5687 ms
+[23:56:38 INF] HTTP GET /js/shell.js responded 200 in 1.5269 ms
+[23:56:38 INF] HTTP GET /css/components.css responded 200 in 1.5224 ms
+[23:56:38 INF] HTTP GET /css/tokens.css responded 200 in 1.6819 ms
+[23:56:38 INF] HTTP GET /css/shell.css responded 200 in 3.3445 ms
+[23:56:38 INF] Received HTTP response headers after 446.2773ms - 200
+[23:56:38 INF] End processing HTTP request after 447.1464ms - 200
+[23:56:38 INF] HTTP GET /images/sidebar-support.png responded 304 in 1.0705 ms
+[23:56:38 INF] Executed DbCommand (13ms) [Parameters=[@logicalCheckId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.cadence_key, s.completed_at, s.created_at, s.endpoint_monitor_id, s.initiated_by_user_id, s.policy_fingerprint, s.queued_at, s.requested_at, s.scheduled_for, s.source, s.started_at, s.state, s.logical_check_id, s.accepted_status_codes, s.configuration_fingerprint, s.confirmation_source, s.content_marker_comparison, s.created_at0, s.critical_threshold_ms, s.failure_confirmation_count, s.interval_seconds, s.interval_source, s.max_redirects, s.max_response_body_bytes, s.monitor_type, s.production_http_severity, s.recovery_confirmation_count, s.required_content_marker, s.schema_version, s.threshold_source, s.timeout_seconds, s.timeout_source, s.warning_threshold_ms, s.id0, s.bounded_overrides, s.configuration_fingerprint0, s.created_at1, s.created_by_user_id, s.critical_threshold_ms0, s.deleted_at, s.deleted_by_user_id, s.endpoint_id, s.failure_confirmation_count0, s.interval_seconds0, s.is_enabled, s.monitor_type0, s.next_due_at, s.policy_profile_id, s.recovery_confirmation_count0, s.schedule_anchor, s.timeout_seconds0, s.updated_at, s.updated_by_user_id, s.version, s.warning_threshold_ms0, s.id1, s.created_at2, s.created_by_user_id0, s.deleted_at0, s.deleted_by_user_id0, s.display_url, s.effective_port, s.environment_id, s.http_exception_approved_at, s.http_exception_approved_by_user_id, s.http_exception_reason, s.is_enabled0, s.normalization_version, s.normalized_host, s.normalized_url, s.normalized_url_hash, s.owner_subject_id, s.updated_at0, s.updated_by_user_id0, s.version0, s.id2, s.base_url, s.created_at3, s.created_by_user_id1, s.deleted_at1, s.deleted_by_user_id1, s.environment_type, s.is_active, s.is_production, s.name, s.normalization_version0, s.normalized_name, s.updated_at1, s.updated_by_user_id1, s.version1, s.website_id, s.id3, s.client_id, s.created_at4, s.created_by_user_id2, s.deleted_at2, s.deleted_by_user_id2, s.is_enabled1, s.name0, s.normalization_version1, s.normalized_name0, s.owner_subject_id0, s.technology_cms, s.updated_at2, s.updated_by_user_id2, s.version2, s.id4, s.created_at5, s.created_by_user_id3, s.deleted_at3, s.deleted_by_user_id3, s.is_active0, s.name1, s.normalization_version2, s.normalized_name1, s.notes, s.owner_subject_id1, s.updated_at3, s.updated_by_user_id3, s.version3, s.logical_check_id0, s.completed_at0, s.connect_duration_ms, s.counts_for_uptime, s.decoded_length, s.dns_duration_ms, s.failure_category, s.http_status, s.is_maintenance, s.length_source, s.maintenance_occurrence_id, s.measured_at, s.monitor_source, s.outcome, s.response_truncated, s.safe_diagnostic, s.tls_duration_ms, s.total_duration_ms, s.transferred_length, s.ttfb_duration_ms, e2.id, e2.attempt_number, e2.failure_category, e2.finished_at, e2.infrastructure_outcome, e2.job_id, e2.logical_check_id, e2.started_at, e2.worker_id, d.id, d.attempt_count, d.available_at, d.created_at, d.dedupe_key, d.last_failure_at, d.last_failure_category, d.lease_acquired_at, d.lease_expires_at, d.lease_owner_token, d.logical_check_id, d.queue_name, d.state, d.updated_at, d.work_kind
+FROM (
+    SELECT l.id, l.cadence_key, l.completed_at, l.created_at, l.endpoint_monitor_id, l.initiated_by_user_id, l.policy_fingerprint, l.queued_at, l.requested_at, l.scheduled_for, l.source, l.started_at, l.state, c.logical_check_id, c.accepted_status_codes, c.configuration_fingerprint, c.confirmation_source, c.content_marker_comparison, c.created_at AS created_at0, c.critical_threshold_ms, c.failure_confirmation_count, c.interval_seconds, c.interval_source, c.max_redirects, c.max_response_body_bytes, c.monitor_type, c.production_http_severity, c.recovery_confirmation_count, c.required_content_marker, c.schema_version, c.threshold_source, c.timeout_seconds, c.timeout_source, c.warning_threshold_ms, e.id AS id0, e.bounded_overrides, e.configuration_fingerprint AS configuration_fingerprint0, e.created_at AS created_at1, e.created_by_user_id, e.critical_threshold_ms AS critical_threshold_ms0, e.deleted_at, e.deleted_by_user_id, e.endpoint_id, e.failure_confirmation_count AS failure_confirmation_count0, e.interval_seconds AS interval_seconds0, e.is_enabled, e.monitor_type AS monitor_type0, e.next_due_at, e.policy_profile_id, e.recovery_confirmation_count AS recovery_confirmation_count0, e.schedule_anchor, e.timeout_seconds AS timeout_seconds0, e.updated_at, e.updated_by_user_id, e.version, e.warning_threshold_ms AS warning_threshold_ms0, e0.id AS id1, e0.created_at AS created_at2, e0.created_by_user_id AS created_by_user_id0, e0.deleted_at AS deleted_at0, e0.deleted_by_user_id AS deleted_by_user_id0, e0.display_url, e0.effective_port, e0.environment_id, e0.http_exception_approved_at, e0.http_exception_approved_by_user_id, e0.http_exception_reason, e0.is_enabled AS is_enabled0, e0.normalization_version, e0.normalized_host, e0.normalized_url, e0.normalized_url_hash, e0.owner_subject_id, e0.updated_at AS updated_at0, e0.updated_by_user_id AS updated_by_user_id0, e0.version AS version0, e1.id AS id2, e1.base_url, e1.created_at AS created_at3, e1.created_by_user_id AS created_by_user_id1, e1.deleted_at AS deleted_at1, e1.deleted_by_user_id AS deleted_by_user_id1, e1.environment_type, e1.is_active, e1.is_production, e1.name, e1.normalization_version AS normalization_version0, e1.normalized_name, e1.updated_at AS updated_at1, e1.updated_by_user_id AS updated_by_user_id1, e1.version AS version1, e1.website_id, w.id AS id3, w.client_id, w.created_at AS created_at4, w.created_by_user_id AS created_by_user_id2, w.deleted_at AS deleted_at2, w.deleted_by_user_id AS deleted_by_user_id2, w.is_enabled AS is_enabled1, w.name AS name0, w.normalization_version AS normalization_version1, w.normalized_name AS normalized_name0, w.owner_subject_id AS owner_subject_id0, w.technology_cms, w.updated_at AS updated_at2, w.updated_by_user_id AS updated_by_user_id2, w.version AS version2, c0.id AS id4, c0.created_at AS created_at5, c0.created_by_user_id AS created_by_user_id3, c0.deleted_at AS deleted_at3, c0.deleted_by_user_id AS deleted_by_user_id3, c0.is_active AS is_active0, c0.name AS name1, c0.normalization_version AS normalization_version2, c0.normalized_name AS normalized_name1, c0.notes, c0.owner_subject_id AS owner_subject_id1, c0.updated_at AS updated_at3, c0.updated_by_user_id AS updated_by_user_id3, c0.version AS version3, c1.logical_check_id AS logical_check_id0, c1.completed_at AS completed_at0, c1.connect_duration_ms, c1.counts_for_uptime, c1.decoded_length, c1.dns_duration_ms, c1.failure_category, c1.http_status, c1.is_maintenance, c1.length_source, c1.maintenance_occurrence_id, c1.measured_at, c1.monitor_source, c1.outcome, c1.response_truncated, c1.safe_diagnostic, c1.tls_duration_ms, c1.total_duration_ms, c1.transferred_length, c1.ttfb_duration_ms
+    FROM web_health.logical_check AS l
+    LEFT JOIN web_health.check_configuration_snapshot AS c ON l.id = c.logical_check_id
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+    INNER JOIN web_health.environment AS e1 ON e0.environment_id = e1.id
+    INNER JOIN web_health.website AS w ON e1.website_id = w.id
+    INNER JOIN web_health.client AS c0 ON w.client_id = c0.id
+    LEFT JOIN web_health.check_result AS c1 ON l.id = c1.logical_check_id
+    WHERE l.id = @logicalCheckId
+    LIMIT 2
+) AS s
+LEFT JOIN web_health.execution_attempt AS e2 ON s.id = e2.logical_check_id
+LEFT JOIN web_health.durable_work AS d ON s.id = d.logical_check_id
+ORDER BY s.id, s.logical_check_id, s.id0, s.id1, s.id2, s.id3, s.id4, s.logical_check_id0, e2.id
+[23:56:38 INF] Executed DbCommand (2ms) [Parameters=[@endpointMonitorId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id AS "Id", e.endpoint_id AS "EndpointId", e0.environment_id AS "EnvironmentId", e1.website_id AS "WebsiteId", w.client_id AS "ClientId"
+FROM web_health.endpoint_monitor AS e
+INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+INNER JOIN web_health.environment AS e1 ON e0.environment_id = e1.id
+INNER JOIN web_health.website AS w ON e1.website_id = w.id
+WHERE e.id = @endpointMonitorId
+LIMIT 2
+[23:56:38 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 1.9851 ms
+[23:56:38 INF] Executed DbCommand (27ms) [Parameters=[@at='?' (DbType = DateTime), @monitor_Id='?' (DbType = Guid), @monitor_EndpointId='?' (DbType = Guid), @monitor_EnvironmentId='?' (DbType = Guid), @monitor_WebsiteId='?' (DbType = Guid), @monitor_ClientId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT m.id, m0.suppression_policy, m0.pause_escalation, m0.continue_failure_counter
+FROM web_health.maintenance_occurrence AS m
+INNER JOIN web_health.maintenance_window AS m0 ON m.maintenance_window_id = m0.id
+WHERE m.starts_at <= @at AND m.ends_at > @at AND m0.deleted_at IS NULL AND EXISTS (
+    SELECT 1
+    FROM web_health.maintenance_target AS m1
+    WHERE m0.id = m1.maintenance_window_id AND (m1.endpoint_monitor_id = @monitor_Id OR m1.endpoint_id = @monitor_EndpointId OR m1.environment_id = @monitor_EnvironmentId OR m1.website_id = @monitor_WebsiteId OR m1.client_id = @monitor_ClientId))
+ORDER BY m.starts_at
+LIMIT 1
+[23:56:38 INF] Executed DbCommand (6ms) [Parameters=[p0='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT * FROM web_health.issue_state
+WHERE endpoint_monitor_id = @p0
+FOR UPDATE
+[23:56:38 INF] Executed DbCommand (8ms) [Parameters=[@check_EndpointMonitorId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.endpoint_monitor_id, e.confirmed_at, e.confirmed_status, e.evidence_logical_check_id, e.version
+FROM web_health.endpoint_health AS e
+WHERE e.endpoint_monitor_id = @check_EndpointMonitorId
+LIMIT 2
+[23:56:38 INF] Executed DbCommand (4ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?' (DbType = Int32), @p3='?' (DbType = Boolean), @p4='?' (DbType = Int64), @p5='?' (DbType = Int32), @p6='?', @p7='?' (DbType = Int32), @p8='?' (DbType = Boolean), @p9='?', @p10='?' (DbType = Guid), @p11='?' (DbType = DateTime), @p12='?', @p13='?', @p14='?' (DbType = Boolean), @p15='?', @p16='?' (DbType = Int32), @p17='?' (DbType = Int32), @p18='?' (DbType = Int64), @p19='?' (DbType = Int32), @p22='?' (DbType = Guid), @p20='?', @p21='?' (DbType = DateTime), @p25='?' (DbType = Guid), @p23='?' (DbType = DateTime), @p24='?', @p28='?' (DbType = Guid), @p26='?' (DbType = DateTime), @p27='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO web_health.check_result (logical_check_id, completed_at, connect_duration_ms, counts_for_uptime, decoded_length, dns_duration_ms, failure_category, http_status, is_maintenance, length_source, maintenance_occurrence_id, measured_at, monitor_source, outcome, response_truncated, safe_diagnostic, tls_duration_ms, total_duration_ms, transferred_length, ttfb_duration_ms)
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15, @p16, @p17, @p18, @p19);
+UPDATE web_health.durable_work SET state = @p20, updated_at = @p21
+WHERE id = @p22;
+UPDATE web_health.execution_attempt SET finished_at = @p23, infrastructure_outcome = @p24
+WHERE id = @p25;
+UPDATE web_health.logical_check SET completed_at = @p26, state = @p27
+WHERE id = @p28;
+[23:56:42 INF] Executed DbCommand (7ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id, e.environment_id, e0.name, e0.is_production, e0.website_id, w.name, e.display_url, e.normalized_url, e.normalization_version, e.owner_subject_id, COALESCE(e.owner_subject_id, w.owner_subject_id), e.is_enabled, e.deleted_at IS NOT NULL, e.http_exception_reason, (
+    SELECT t.authorization_kind
+    FROM web_health.target_authorization AS t
+    WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.normalized_host = e.normalized_host AND t.port = e.effective_port
+    ORDER BY t.effective_from DESC
+    LIMIT 1), (
+    SELECT t0.evidence_reference
+    FROM web_health.target_authorization AS t0
+    WHERE e.id = t0.endpoint_id AND t0.revoked_at IS NULL AND t0.normalized_host = e.normalized_host AND t0.port = e.effective_port
+    ORDER BY t0.effective_from DESC
+    LIMIT 1), (
+    SELECT t1.expires_at
+    FROM web_health.target_authorization AS t1
+    WHERE e.id = t1.endpoint_id AND t1.revoked_at IS NULL AND t1.normalized_host = e.normalized_host AND t1.port = e.effective_port
+    ORDER BY t1.effective_from DESC
+    LIMIT 1), e.version, (
+    SELECT e1.monitor_type
+    FROM web_health.endpoint_monitor AS e1
+    WHERE e.id = e1.endpoint_id
+    LIMIT 1), (
+    SELECT e2.interval_seconds
+    FROM web_health.endpoint_monitor AS e2
+    WHERE e.id = e2.endpoint_id
+    LIMIT 1), (
+    SELECT e3.bounded_overrides
+    FROM web_health.endpoint_monitor AS e3
+    WHERE e.id = e3.endpoint_id
+    LIMIT 1), (
+    SELECT e4.timeout_seconds
+    FROM web_health.endpoint_monitor AS e4
+    WHERE e.id = e4.endpoint_id
+    LIMIT 1), (
+    SELECT e5.is_enabled
+    FROM web_health.endpoint_monitor AS e5
+    WHERE e.id = e5.endpoint_id
+    LIMIT 1)
+FROM web_health.endpoint AS e
+INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+INNER JOIN web_health.website AS w ON e0.website_id = w.id
+WHERE e.id = @endpointId
+ORDER BY w.name, e0.name, e.display_url
+[23:56:42 INF] Executed DbCommand (3ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", a.display_name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.app_user AS a ON o.user_id = a.id
+WHERE o.id = ANY (@ids) AND o.user_id IS NOT NULL
+[23:56:42 INF] Executed DbCommand (30ms) [Parameters=[@ids='?' (DbType = Object)], CommandType='Text', CommandTimeout='30']
+SELECT o.id AS "Id", t.name AS "Name"
+FROM web_health.owner_subject AS o
+INNER JOIN web_health.team AS t ON o.team_id = t.id
+WHERE o.id = ANY (@ids) AND o.team_id IS NOT NULL
+[23:56:42 INF] Executed DbCommand (6ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId)
+[23:56:42 INF] Executed DbCommand (6ms) [Parameters=[@now='?' (DbType = DateTime), @now1='?' (DbType = DateTime), @endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    INNER JOIN web_health.environment AS e0 ON e.environment_id = e0.id
+    INNER JOIN web_health.website AS w ON e0.website_id = w.id
+    INNER JOIN web_health.client AS c ON w.client_id = c.id
+    WHERE e.deleted_at IS NULL AND e.is_enabled AND e0.deleted_at IS NULL AND e0.is_active AND w.deleted_at IS NULL AND w.is_enabled AND c.deleted_at IS NULL AND c.is_active AND EXISTS (
+        SELECT 1
+        FROM web_health.endpoint_monitor AS e1
+        WHERE e.id = e1.endpoint_id AND e1.deleted_at IS NULL AND e1.is_enabled) AND EXISTS (
+        SELECT 1
+        FROM web_health.target_authorization AS t
+        WHERE e.id = t.endpoint_id AND t.revoked_at IS NULL AND t.effective_from <= @now AND (t.expires_at IS NULL OR t.expires_at > @now1) AND t.normalized_host = e.normalized_host AND t.port = e.effective_port) AND e.id = @endpointId AND e.deleted_at IS NULL)
+[23:56:42 INF] Executed DbCommand (2ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.id AS "Id", e.display_url AS "DisplayUrl"
+FROM web_health.endpoint AS e
+WHERE e.id = @endpointId
+LIMIT 2
+[23:56:42 INF] Executed DbCommand (3ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM web_health.logical_check AS l
+INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+WHERE e.endpoint_id = @endpointId
+[23:56:42 INF] Executed DbCommand (4ms) [Parameters=[@endpointId='?' (DbType = Guid), @p2='?' (DbType = Int32), @p='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.source, s.state, s.scheduled_for, s.requested_at, a.display_name, s.completed_at, c.outcome, c.failure_category, c.http_status, c.total_duration_ms, c.logical_check_id IS NOT NULL AND c.counts_for_uptime
+FROM (
+    SELECT l.id, l.completed_at, l.created_at, l.initiated_by_user_id, l.requested_at, l.scheduled_for, l.source, l.state
+    FROM web_health.logical_check AS l
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    WHERE e.endpoint_id = @endpointId
+    ORDER BY l.created_at DESC, l.id DESC
+    LIMIT @p2 OFFSET @p
+) AS s
+LEFT JOIN web_health.app_user AS a ON s.initiated_by_user_id = a.id
+LEFT JOIN web_health.check_result AS c ON s.id = c.logical_check_id
+ORDER BY s.created_at DESC, s.id DESC
+[23:56:42 INF] HTTP GET /Targets/Endpoint/b1a8ee92-3d71-43e5-8587-d94da6035eee responded 200 in 93.8576 ms
+[23:56:42 INF] HTTP GET /css/shell.css responded 200 in 17.9879 ms
+[23:56:42 INF] HTTP GET /js/shell.js responded 200 in 16.9541 ms
+[23:56:42 INF] HTTP GET /css/tokens.css responded 200 in 10.0435 ms
+[23:56:42 INF] HTTP GET /css/components.css responded 200 in 22.4011 ms
+[23:56:42 INF] HTTP GET /css/tokens.css responded 200 in 6.0287 ms
+[23:56:42 INF] HTTP GET /css/shell.css responded 200 in 7.7194 ms
+[23:56:42 INF] HTTP GET /js/shell.js responded 200 in 4.8200 ms
+[23:56:42 INF] HTTP GET /css/components.css responded 200 in 6.5291 ms
+[23:56:42 INF] HTTP GET /images/sidebar-support.png responded 304 in 4.7094 ms
+[23:56:42 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 5.0938 ms
+[23:56:42 INF] HTTP GET /favicon.ico responded 200 in 7.8333 ms
+[23:56:42 INF] HTTP GET /favicon.ico responded 200 in 4.2074 ms
+[23:56:59 DBG] Server desktop-40ser7o:30120:5e45544c heartbeat successfully sent
+[23:57:00 DBG] 2 recurring job(s) processed by scheduler.
+[23:57:01 INF] Executed DbCommand (3ms) [Parameters=[@logicalCheckId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT e.endpoint_id
+FROM web_health.logical_check AS l
+INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+WHERE l.id = @logicalCheckId
+LIMIT 2
+[23:57:01 INF] Executed DbCommand (4ms) [Parameters=[@endpointId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM web_health.endpoint AS e
+    WHERE e.id = @endpointId)
+[23:57:01 WRN] Compiling a query which loads related collections for more than one collection navigation, either via 'Include' or through projection, but no 'QuerySplittingBehavior' has been configured. By default, Entity Framework will use 'QuerySplittingBehavior.SingleQuery', which can potentially result in slow query performance. See https://go.microsoft.com/fwlink/?linkid=2134277 for more information. To identify the query that's triggering this warning call 'ConfigureWarnings(w => w.Throw(RelationalEventId.MultipleCollectionIncludeWarning))'.
+[23:57:02 INF] Executed DbCommand (35ms) [Parameters=[@logicalCheckId='?' (DbType = Guid)], CommandType='Text', CommandTimeout='30']
+SELECT s.id, s.cadence_key, s.completed_at, s.created_at, s.endpoint_monitor_id, s.initiated_by_user_id, s.policy_fingerprint, s.queued_at, s.requested_at, s.scheduled_for, s.source, s.started_at, s.state, s.id0, s.bounded_overrides, s.configuration_fingerprint, s.created_at0, s.created_by_user_id, s.critical_threshold_ms, s.deleted_at, s.deleted_by_user_id, s.endpoint_id, s.failure_confirmation_count, s.interval_seconds, s.is_enabled, s.monitor_type, s.next_due_at, s.policy_profile_id, s.recovery_confirmation_count, s.schedule_anchor, s.timeout_seconds, s.updated_at, s.updated_by_user_id, s.version, s.warning_threshold_ms, s.id1, s.created_at1, s.created_by_user_id0, s.deleted_at0, s.deleted_by_user_id0, s.display_url, s.effective_port, s.environment_id, s.http_exception_approved_at, s.http_exception_approved_by_user_id, s.http_exception_reason, s.is_enabled0, s.normalization_version, s.normalized_host, s.normalized_url, s.normalized_url_hash, s.owner_subject_id, s.updated_at0, s.updated_by_user_id0, s.version0, s.id2, s.access_failed_count, s.concurrency_stamp, s.created_at2, s.display_name, s.email, s.email_confirmed, s.is_disabled, s.lockout_enabled, s.lockout_end, s.normalized_email, s.normalized_user_name, s.password_hash, s.phone_number, s.phone_number_confirmed, s.security_stamp, s.two_factor_enabled, s.updated_at1, s.user_name, s.logical_check_id, s.completed_at0, s.connect_duration_ms, s.counts_for_uptime, s.decoded_length, s.dns_duration_ms, s.failure_category, s.http_status, s.is_maintenance, s.length_source, s.maintenance_occurrence_id, s.measured_at, s.monitor_source, s.outcome, s.response_truncated, s.safe_diagnostic, s.tls_duration_ms, s.total_duration_ms, s.transferred_length, s.ttfb_duration_ms, f.id, f.expected_value, f.issue_key, f.logical_check_id, f.observed_value, f.rule_key, f.severity, r.id, r.hop_number, r.http_status, r.is_loop, r.logical_check_id, r.normalized_from_url, r.normalized_to_url
+FROM (
+    SELECT l.id, l.cadence_key, l.completed_at, l.created_at, l.endpoint_monitor_id, l.initiated_by_user_id, l.policy_fingerprint, l.queued_at, l.requested_at, l.scheduled_for, l.source, l.started_at, l.state, e.id AS id0, e.bounded_overrides, e.configuration_fingerprint, e.created_at AS created_at0, e.created_by_user_id, e.critical_threshold_ms, e.deleted_at, e.deleted_by_user_id, e.endpoint_id, e.failure_confirmation_count, e.interval_seconds, e.is_enabled, e.monitor_type, e.next_due_at, e.policy_profile_id, e.recovery_confirmation_count, e.schedule_anchor, e.timeout_seconds, e.updated_at, e.updated_by_user_id, e.version, e.warning_threshold_ms, e0.id AS id1, e0.created_at AS created_at1, e0.created_by_user_id AS created_by_user_id0, e0.deleted_at AS deleted_at0, e0.deleted_by_user_id AS deleted_by_user_id0, e0.display_url, e0.effective_port, e0.environment_id, e0.http_exception_approved_at, e0.http_exception_approved_by_user_id, e0.http_exception_reason, e0.is_enabled AS is_enabled0, e0.normalization_version, e0.normalized_host, e0.normalized_url, e0.normalized_url_hash, e0.owner_subject_id, e0.updated_at AS updated_at0, e0.updated_by_user_id AS updated_by_user_id0, e0.version AS version0, a.id AS id2, a.access_failed_count, a.concurrency_stamp, a.created_at AS created_at2, a.display_name, a.email, a.email_confirmed, a.is_disabled, a.lockout_enabled, a.lockout_end, a.normalized_email, a.normalized_user_name, a.password_hash, a.phone_number, a.phone_number_confirmed, a.security_stamp, a.two_factor_enabled, a.updated_at AS updated_at1, a.user_name, c.logical_check_id, c.completed_at AS completed_at0, c.connect_duration_ms, c.counts_for_uptime, c.decoded_length, c.dns_duration_ms, c.failure_category, c.http_status, c.is_maintenance, c.length_source, c.maintenance_occurrence_id, c.measured_at, c.monitor_source, c.outcome, c.response_truncated, c.safe_diagnostic, c.tls_duration_ms, c.total_duration_ms, c.transferred_length, c.ttfb_duration_ms
+    FROM web_health.logical_check AS l
+    INNER JOIN web_health.endpoint_monitor AS e ON l.endpoint_monitor_id = e.id
+    INNER JOIN web_health.endpoint AS e0 ON e.endpoint_id = e0.id
+    LEFT JOIN web_health.app_user AS a ON l.initiated_by_user_id = a.id
+    LEFT JOIN web_health.check_result AS c ON l.id = c.logical_check_id
+    WHERE l.id = @logicalCheckId
+    LIMIT 2
+) AS s
+LEFT JOIN web_health.finding AS f ON s.logical_check_id = f.logical_check_id
+LEFT JOIN web_health.redirect_hop AS r ON s.logical_check_id = r.logical_check_id
+ORDER BY s.id, s.id0, s.id1, s.id2, s.logical_check_id, f.id
+[23:57:02 INF] HTTP GET /Checks/Check/489fbdfc-bf19-4f89-a09d-889aab32e1fe responded 200 in 976.8385 ms
+[23:57:02 INF] HTTP GET /css/shell.css responded 200 in 13.4613 ms
+[23:57:02 INF] HTTP GET /css/components.css responded 200 in 13.9317 ms
+[23:57:02 INF] HTTP GET /js/shell.js responded 200 in 12.9086 ms
+[23:57:02 INF] HTTP GET /css/tokens.css responded 200 in 15.0632 ms
+[23:57:02 INF] HTTP GET /images/sidebar-support.png responded 304 in 8.1962 ms
+[23:57:02 INF] HTTP GET /fonts/figtree-latin.woff2 responded 304 in 1.9520 ms
+[23:57:29 DBG] Server desktop-40ser7o:30120:5e45544c heartbeat successfully sent

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using WebHealth.Application.Monitoring;
 
@@ -23,9 +25,36 @@ internal static class SafeHttpConnectionFactory
             MaxResponseHeadersLength = options.MaxResponseHeadersKilobytes,
             PooledConnectionLifetime = TimeSpan.Zero,
             PooledConnectionIdleTimeout = TimeSpan.Zero,
+            // Fires once the connection is ready to carry HTTP: right after TCP connect for
+            // plain HTTP, or right after the TLS handshake completes for HTTPS. Unlike
+            // ConnectCallback, its context carries the same InitialRequestMessage, so this is
+            // the correlated hook for "handshake done" timing rather than a global callback.
+            PlaintextStreamFilter = (context, _) =>
+            {
+                if (context.InitialRequestMessage.RequestUri?.Scheme == Uri.UriSchemeHttps
+                    && context.InitialRequestMessage.Options
+                        .TryGetValue(SafeHttpTimingOptions.Key, out var timing)
+                    && timing.ConnectCompletedTimestamp is { } connectCompletedAt)
+                {
+                    timing.TlsDurationMs = SafeHttpTimingMath.ElapsedMs(connectCompletedAt);
+                }
+
+                return ValueTask.FromResult(context.PlaintextStream);
+            },
             ConnectCallback = async (context, cancellationToken) =>
             {
+                var timing = context.InitialRequestMessage.Options
+                    .TryGetValue(SafeHttpTimingOptions.Key, out var collector)
+                        ? collector
+                        : null;
+
+                var dnsStart = Stopwatch.GetTimestamp();
                 var answers = await resolver.ResolveAsync(context.DnsEndPoint.Host, cancellationToken);
+                if (timing is not null)
+                {
+                    timing.DnsDurationMs = SafeHttpTimingMath.ElapsedMs(dnsStart);
+                }
+
                 if (answers.Count is 0 || answers.Count > options.MaxDnsAnswers)
                 {
                     throw new SafeDestinationException();
@@ -45,6 +74,7 @@ internal static class SafeHttpConnectionFactory
                 var socket = new Socket(selected.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
                 try
                 {
+                    var connectStart = Stopwatch.GetTimestamp();
                     await socket.ConnectAsync(
                         new IPEndPoint(selected, context.DnsEndPoint.Port),
                         cancellationToken);
@@ -54,6 +84,13 @@ internal static class SafeHttpConnectionFactory
                         || !addressPolicy.IsAllowed(peer.Address))
                     {
                         throw new SafeDestinationException();
+                    }
+
+                    if (timing is not null)
+                    {
+                        var connectCompletedAt = Stopwatch.GetTimestamp();
+                        timing.ConnectDurationMs = SafeHttpTimingMath.ElapsedMs(connectStart, connectCompletedAt);
+                        timing.ConnectCompletedTimestamp = connectCompletedAt;
                     }
 
                     return new LeaseReleasingStream(

@@ -23,6 +23,8 @@ internal sealed class SafeHttpTransport(
         var redirects = new List<SafeHttpRedirectHop>();
         var normalized = EndpointUrlNormalizer.Normalize(request.Url);
         var requestIdentity = SafeHttpRequestIdentity.Create(request);
+        SafeHttpTimingCollector? currentTiming = null;
+        int? currentTtfbMs = null;
         if (!normalized.Succeeded
             || requestIdentity is null
             || request.MaxRedirects is < 0 or > SafeHttpTransportDefaults.MaxRedirects
@@ -64,7 +66,8 @@ internal sealed class SafeHttpTransport(
                         redirects,
                         requestIdentity,
                         redirects[^1].StatusCode,
-                        Destination(currentNormalization));
+                        Destination(currentNormalization),
+                        BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 if (!await targetAuthorizer.IsAuthorizedAsync(
@@ -74,7 +77,9 @@ internal sealed class SafeHttpTransport(
                     timeProvider.GetUtcNow(),
                     timeout.Token))
                 {
-                    return Failure(SafeHttpFailureKind.TargetNotAuthorized, stopwatch, redirects, requestIdentity);
+                    return Failure(
+                        SafeHttpFailureKind.TargetNotAuthorized, stopwatch, redirects, requestIdentity,
+                        timing: BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 using var hostLease = await concurrencyLimiter.AcquireHostAsync(
@@ -84,10 +89,15 @@ internal sealed class SafeHttpTransport(
                 message.Version = HttpVersion.Version11;
                 message.VersionPolicy = HttpVersionPolicy.RequestVersionExact;
                 message.Headers.ConnectionClose = true;
+                currentTiming = new SafeHttpTimingCollector();
+                currentTtfbMs = null;
+                message.Options.Set(SafeHttpTimingOptions.Key, currentTiming);
+                var ttfbStart = Stopwatch.GetTimestamp();
                 using var response = await client.SendAsync(
                     message,
                     HttpCompletionOption.ResponseHeadersRead,
                     timeout.Token);
+                currentTtfbMs = SafeHttpTimingMath.ElapsedMs(ttfbStart);
 
                 if (!IsRedirect(response.StatusCode))
                 {
@@ -104,7 +114,8 @@ internal sealed class SafeHttpTransport(
                         body.Truncated,
                         body.Content,
                         redirects,
-                        requestIdentity);
+                        requestIdentity,
+                        BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 if (redirects.Count >= request.MaxRedirects)
@@ -115,7 +126,8 @@ internal sealed class SafeHttpTransport(
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
-                        Destination(currentNormalization));
+                        Destination(currentNormalization),
+                        BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 if (response.Headers.Location is null)
@@ -126,7 +138,8 @@ internal sealed class SafeHttpTransport(
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
-                        Destination(currentNormalization));
+                        Destination(currentNormalization),
+                        BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 Uri target;
@@ -142,7 +155,8 @@ internal sealed class SafeHttpTransport(
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
-                        Destination(currentNormalization));
+                        Destination(currentNormalization),
+                        BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 var targetNormalization = EndpointUrlNormalizer.Normalize(target.AbsoluteUri);
@@ -154,7 +168,8 @@ internal sealed class SafeHttpTransport(
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
-                        Destination(currentNormalization));
+                        Destination(currentNormalization),
+                        BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 if (request.IsProduction
@@ -167,7 +182,8 @@ internal sealed class SafeHttpTransport(
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
-                        Destination(currentNormalization));
+                        Destination(currentNormalization),
+                        BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 redirects.Add(new SafeHttpRedirectHop(
@@ -180,17 +196,37 @@ internal sealed class SafeHttpTransport(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Failure(SafeHttpFailureKind.Cancelled, stopwatch, redirects, requestIdentity);
+            return Failure(
+                SafeHttpFailureKind.Cancelled, stopwatch, redirects, requestIdentity,
+                timing: BuildTiming(currentTiming, currentTtfbMs));
         }
         catch (OperationCanceledException)
         {
-            return Failure(SafeHttpFailureKind.Timeout, stopwatch, redirects, requestIdentity);
+            return Failure(
+                SafeHttpFailureKind.Timeout, stopwatch, redirects, requestIdentity,
+                timing: BuildTiming(currentTiming, currentTtfbMs));
         }
         catch (Exception exception) when (TryClassify(exception, out var failure))
         {
-            return Failure(failure, stopwatch, redirects, requestIdentity);
+            return Failure(
+                failure, stopwatch, redirects, requestIdentity,
+                timing: BuildTiming(currentTiming, currentTtfbMs));
         }
     }
+
+    /// <summary>
+    /// Only DNS/connect/TLS phases actually reached by the final network attempt are
+    /// populated; a phase the attempt never got to (or a hop that failed before any
+    /// attempt, e.g. an unauthorized redirect target) stays null instead of a misleading zero.
+    /// </summary>
+    private static SafeHttpPhaseTiming? BuildTiming(SafeHttpTimingCollector? collector, int? ttfbMs) =>
+        collector is null
+            ? null
+            : new SafeHttpPhaseTiming(
+                collector.DnsDurationMs,
+                collector.ConnectDurationMs,
+                collector.TlsDurationMs,
+                ttfbMs);
 
     private static async Task<BodyReadResult> ReadBodyAsync(
         HttpContent content,
@@ -234,7 +270,8 @@ internal sealed class SafeHttpTransport(
         IReadOnlyList<SafeHttpRedirectHop> redirects,
         string? requestIdentity,
         int? statusCode = null,
-        SafeHttpDestination? finalDestination = null) =>
+        SafeHttpDestination? finalDestination = null,
+        SafeHttpPhaseTiming? timing = null) =>
         new(
             failure,
             statusCode,
@@ -244,7 +281,8 @@ internal sealed class SafeHttpTransport(
             false,
             ReadOnlyMemory<byte>.Empty,
             redirects,
-            requestIdentity);
+            requestIdentity,
+            timing);
 
     private static bool TryClassify(Exception exception, out SafeHttpFailureKind failure)
     {

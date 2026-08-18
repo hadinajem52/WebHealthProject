@@ -1,5 +1,5 @@
 @model EnvironmentDetailsViewModel
-@{ViewData.SetTitle(Model.Environment.Name); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.Environment.WebsiteName), new BreadcrumbItem(Model.Environment.Name));}
+@{ViewData.SetTitle(Model.Environment.Name); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry", Url.Action("Websites", "Registry")), new BreadcrumbItem(Model.Environment.WebsiteName, Url.Action("Website", "Registry", new { id = Model.Environment.WebsiteId })), new BreadcrumbItem("Environments", Url.Action("Environments", "Targets", new { websiteId = Model.Environment.WebsiteId })), new BreadcrumbItem(Model.Environment.Name));}
 <section class="card">
     <div class="page-intro"><div><h2 class="card__title">@Model.Environment.Name</h2><p class="card__subtitle">@Model.Environment.WebsiteName · @Model.Environment.EnvironmentType · Version @Model.Environment.Version</p></div><div class="form-actions">@if (Model.CanManage && !Model.Environment.IsDeleted)
     {

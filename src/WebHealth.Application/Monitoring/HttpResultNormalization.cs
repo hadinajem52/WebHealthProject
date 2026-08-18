@@ -68,7 +68,8 @@ public sealed record NormalizedHttpResult(
     DateTimeOffset MeasuredAt,
     string? SafeDiagnostic,
     IReadOnlyList<NormalizedRedirectHop> Redirects,
-    IReadOnlyList<NormalizedFinding> Findings);
+    IReadOnlyList<NormalizedFinding> Findings,
+    SafeHttpPhaseTiming? Timing = null);
 
 public sealed record NormalizedRedirectHop(
     int HopNumber,
@@ -107,7 +108,8 @@ public static class HttpResultNormalizer
             input.MeasuredAt,
             Diagnostic(category),
             redirects,
-            findings);
+            findings,
+            input.Transport.Timing);
     }
 
     private static IEnumerable<NormalizedFinding> Evaluate(NormalizeHttpResult input)
