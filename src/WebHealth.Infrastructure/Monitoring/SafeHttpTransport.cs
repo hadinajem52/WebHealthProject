@@ -90,8 +90,10 @@ internal sealed class SafeHttpTransport(
                 message.VersionPolicy = HttpVersionPolicy.RequestVersionExact;
                 message.Headers.ConnectionClose = true;
                 currentTiming = new SafeHttpTimingCollector();
+                var currentTls = new SafeHttpTlsCollector();
                 currentTtfbMs = null;
                 message.Options.Set(SafeHttpTimingOptions.Key, currentTiming);
+                message.Options.Set(SafeHttpTlsOptions.Key, currentTls);
                 var ttfbStart = Stopwatch.GetTimestamp();
                 using var response = await client.SendAsync(
                     message,
@@ -105,6 +107,15 @@ internal sealed class SafeHttpTransport(
                         response.Content,
                         request.MaxResponseBodyBytes,
                         timeout.Token);
+
+                    // A response only exists here because the handshake passed full
+                    // validation, so the negotiated certificate is trusted and matched.
+                    var certificate = TlsCertificateReader.TryRead(
+                        currentTls.CertificateDer,
+                        hostnameMatched: true,
+                        chainTrusted: true,
+                        timeProvider.GetUtcNow());
+
                     return new SafeHttpTransportResult(
                         null,
                         (int)response.StatusCode,
@@ -115,7 +126,8 @@ internal sealed class SafeHttpTransport(
                         body.Content,
                         redirects,
                         requestIdentity,
-                        BuildTiming(currentTiming, currentTtfbMs));
+                        BuildTiming(currentTiming, currentTtfbMs),
+                        certificate);
                 }
 
                 if (redirects.Count >= request.MaxRedirects)

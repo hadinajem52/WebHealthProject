@@ -23,7 +23,7 @@ The transport:
 - applies the snapshotted whole-check timeout with a hard five-minute ceiling, a 5-second connect timeout, 32 KiB header limit, snapshotted decoded-body and redirect limits capped by hard 2 MiB/10-hop ceilings, a one-byte body sentinel, 16-answer DNS limit, and 20 global / 2 per-host / 4 per-IP concurrency limits;
 - performs no transport-level retry; later durable execution policy owns retry decisions.
 
-Only status, total duration, bytes actually read, truncation state, a query-free final URL and redirect summary, a normalized request-identity hash, and the bounded in-memory body are returned. Redirect hops store one authoritative from/to URL representation. The transport logs and persists none of these values. Result normalization consumes the body in memory and persistence retains zero body bytes.
+Only status, total duration, bytes actually read, truncation state, a query-free final URL and redirect summary, a normalized request-identity hash, and the bounded in-memory body are returned. Phase 5.1 later added one more field to this contract: the leaf certificate negotiated for a successful HTTPS response, described in [Certificate capture and safe TLS inspection](../phase-5/Certificate_Capture_and_Safe_Tls_Inspection.md). It changes nothing about the validation behavior recorded here. Redirect hops store one authoritative from/to URL representation. The transport logs and persists none of these values. Result normalization consumes the body in memory and persistence retains zero body bytes.
 
 ## Destination policy
 

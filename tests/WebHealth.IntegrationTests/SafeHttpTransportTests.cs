@@ -9,6 +9,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using WebHealth.Application.Monitoring;
+using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
 using Xunit;
 
@@ -40,6 +41,7 @@ public sealed class SafeHttpTransportTests
         result.FinalDestination.Should().Be(new SafeHttpDestination(
             $"http://allowed.test:{server.Port}/health"));
         result.RequestIdentity.Should().Be(SafeHttpRequestIdentity.Create(transportRequest));
+        result.Certificate.Should().BeNull();
         var request = await server.Request;
         request.Should().Contain($"Host: allowed.test:{server.Port}");
         request.Should().Contain("User-Agent: WebHealthMonitor/1.0");
@@ -322,6 +324,40 @@ public sealed class SafeHttpTransportTests
     }
 
     [Fact]
+    public async Task SendAsync_RecordsTheNegotiatedCertificateForAValidatedHttpsResponse()
+    {
+        // The handler's own validation is left completely untouched. The test only tells it
+        // which root to trust, so the handshake below is a real, fully validated one: expiry,
+        // hostname and signature are all still checked by the platform.
+        using var authority = TestCertificateAuthority.Create();
+        using var serverCertificate = authority.IssueServerCertificate("allowed.test");
+        await using var server = await HttpsFixture.Start(
+            serverCertificate,
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        await using var harness = CreateHarness(
+            new HostResolver(("allowed.test", [IPAddress.Loopback])),
+            AuthorizeAll,
+            configureHandler: authority.Trust);
+
+        var result = await harness.Transport.SendAsync(
+            new(Guid.NewGuid(), $"https://allowed.test:{server.Port}/", true));
+
+        result.Succeeded.Should().BeTrue();
+        result.StatusCode.Should().Be(200);
+        var certificate = result.Certificate.Should().NotBeNull()
+            .And.Subject.As<TlsCertificateObservation>();
+        certificate.Subject.Should().Be("CN=allowed.test");
+        certificate.Issuer.Should().Be(authority.SubjectName);
+        certificate.Sha256Fingerprint.Should().Be(
+            Convert.ToHexStringLower(serverCertificate.GetCertHash(HashAlgorithmName.SHA256)));
+        certificate.SubjectAlternativeNames.Should().Equal("allowed.test");
+        certificate.HostnameMatched.Should().BeTrue();
+        certificate.ChainTrusted.Should().BeTrue();
+        certificate.ValidationCategory.Should().Be(TlsValidationCategory.Valid);
+        certificate.NotAfter.Should().BeAfter(DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
     public async Task SendAsync_EnforcesWholeRequestTimeoutAndCallerCancellation()
     {
         await using var server = await HttpFixture.Start(
@@ -427,7 +463,8 @@ public sealed class SafeHttpTransportTests
         IMonitoringDnsResolver resolver,
         Func<Guid, string, int, DateTimeOffset, CancellationToken, Task<bool>> authorize,
         Func<SafeHttpTransportOptions, SafeHttpTransportOptions>? configure = null,
-        IDestinationAddressPolicy? addressPolicy = null)
+        IDestinationAddressPolicy? addressPolicy = null,
+        Action<SocketsHttpHandler>? configureHandler = null)
     {
         var options = configure?.Invoke(DefaultOptions()) ?? DefaultOptions();
         var services = new ServiceCollection();
@@ -444,11 +481,16 @@ public sealed class SafeHttpTransportTests
                 client.Timeout = Timeout.InfiniteTimeSpan;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
             })
-            .ConfigurePrimaryHttpMessageHandler(provider => SafeHttpConnectionFactory.Create(
-                provider.GetRequiredService<IMonitoringDnsResolver>(),
-                provider.GetRequiredService<IDestinationAddressPolicy>(),
-                provider.GetRequiredService<SafeHttpConcurrencyLimiter>(),
-                options));
+            .ConfigurePrimaryHttpMessageHandler(provider =>
+            {
+                var handler = SafeHttpConnectionFactory.Create(
+                    provider.GetRequiredService<IMonitoringDnsResolver>(),
+                    provider.GetRequiredService<IDestinationAddressPolicy>(),
+                    provider.GetRequiredService<SafeHttpConcurrencyLimiter>(),
+                    options);
+                configureHandler?.Invoke(handler);
+                return handler;
+            });
         services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
         var provider = services.BuildServiceProvider();
         var scope = provider.CreateAsyncScope();
@@ -641,6 +683,135 @@ public sealed class SafeHttpTransportTests
         public async ValueTask DisposeAsync()
         {
             _stop.Cancel();
+            _listener.Stop();
+            await _server;
+            _stop.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A throwaway certificate authority for tests that need a genuinely valid handshake.
+    /// <see cref="Trust" /> adds the root to one handler's chain policy only; it never disables
+    /// or weakens validation, and no store on the machine is touched.
+    /// </summary>
+    private sealed class TestCertificateAuthority : IDisposable
+    {
+        private readonly X509Certificate2 _authority;
+
+        private TestCertificateAuthority(X509Certificate2 authority) => _authority = authority;
+
+        public string SubjectName => _authority.Subject;
+
+        public static TestCertificateAuthority Create()
+        {
+            using var key = RSA.Create(2048);
+            var request = new CertificateRequest(
+                "CN=WebHealth Test CA", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            request.CertificateExtensions.Add(
+                new X509BasicConstraintsExtension(true, false, 0, true));
+            request.CertificateExtensions.Add(new X509KeyUsageExtension(
+                X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.DigitalSignature, true));
+            return new TestCertificateAuthority(request.CreateSelfSigned(
+                DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(365)));
+        }
+
+        public X509Certificate2 IssueServerCertificate(string dnsName)
+        {
+            using var key = RSA.Create(2048);
+            var request = new CertificateRequest(
+                $"CN={dnsName}", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                [new Oid("1.3.6.1.5.5.7.3.1")], false));
+            var names = new SubjectAlternativeNameBuilder();
+            names.AddDnsName(dnsName);
+            request.CertificateExtensions.Add(names.Build());
+
+            using var issued = request.Create(
+                _authority,
+                DateTimeOffset.UtcNow.AddHours(-1),
+                DateTimeOffset.UtcNow.AddDays(30),
+                RandomNumberGenerator.GetBytes(16));
+            using var withKey = issued.CopyWithPrivateKey(key);
+            return X509CertificateLoader.LoadPkcs12(withKey.Export(X509ContentType.Pfx), null);
+        }
+
+        public void Trust(SocketsHttpHandler handler)
+        {
+            var policy = new X509ChainPolicy
+            {
+                TrustMode = X509ChainTrustMode.CustomRootTrust,
+                RevocationMode = X509RevocationMode.NoCheck
+            };
+            policy.CustomTrustStore.Add(_authority);
+            handler.SslOptions.CertificateChainPolicy = policy;
+        }
+
+        public void Dispose() => _authority.Dispose();
+    }
+
+    private sealed class HttpsFixture : IAsyncDisposable
+    {
+        private readonly TcpListener _listener;
+        private readonly X509Certificate2 _certificate;
+        private readonly string _response;
+        private readonly CancellationTokenSource _stop = new();
+        private readonly Task _server;
+
+        private HttpsFixture(TcpListener listener, X509Certificate2 certificate, string response)
+        {
+            _listener = listener;
+            _certificate = certificate;
+            _response = response;
+            _server = ServeAsync();
+        }
+
+        public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
+
+        public static Task<HttpsFixture> Start(X509Certificate2 certificate, string response)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            return Task.FromResult(new HttpsFixture(listener, certificate, response));
+        }
+
+        private async Task ServeAsync()
+        {
+            try
+            {
+                using var client = await _listener.AcceptTcpClientAsync(_stop.Token);
+                await using var ssl = new SslStream(client.GetStream());
+                await ssl.AuthenticateAsServerAsync(
+                    new SslServerAuthenticationOptions
+                    {
+                        ServerCertificate = _certificate,
+                        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
+                    },
+                    _stop.Token);
+
+                var buffer = new byte[4096];
+                if (await ssl.ReadAsync(buffer, _stop.Token) > 0)
+                {
+                    await ssl.WriteAsync(Encoding.ASCII.GetBytes(_response), _stop.Token);
+                }
+            }
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+            {
+            }
+            catch (AuthenticationException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+            catch (ObjectDisposedException) when (_stop.IsCancellationRequested)
+            {
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _stop.CancelAsync();
             _listener.Stop();
             await _server;
             _stop.Dispose();

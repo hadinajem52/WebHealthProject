@@ -39,6 +39,11 @@ public sealed record SafeHttpTransportRequest(
     int MaxResponseBodyBytes = SafeHttpTransportDefaults.MaxDecodedBodyBytes,
     int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds);
 
+/// <summary>
+/// <c>Certificate</c> carries the leaf certificate negotiated for a successful HTTPS response.
+/// It is always a valid, trusted certificate, because a response cannot be produced otherwise;
+/// evidence about invalid certificates comes from <see cref="ISslCertificateProbe" />.
+/// </summary>
 public sealed record SafeHttpTransportResult(
     SafeHttpFailureKind? Failure,
     int? StatusCode,
@@ -49,7 +54,8 @@ public sealed record SafeHttpTransportResult(
     ReadOnlyMemory<byte> Body,
     IReadOnlyList<SafeHttpRedirectHop> Redirects,
     string? RequestIdentity = null,
-    SafeHttpPhaseTiming? Timing = null)
+    SafeHttpPhaseTiming? Timing = null,
+    TlsCertificateObservation? Certificate = null)
 {
     public bool Succeeded => Failure is null;
 }

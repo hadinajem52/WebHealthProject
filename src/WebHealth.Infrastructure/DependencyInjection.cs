@@ -181,6 +181,7 @@ public static class DependencyInjection
         services.AddSingleton<SafeHttpConcurrencyLimiter>();
         services.AddScoped<IMonitoringTargetAuthorizer, MonitoringTargetAuthorizer>();
         services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
+        services.AddScoped<ISslCertificateProbe, SslCertificateProbe>();
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
             {
                 client.Timeout = Timeout.InfiniteTimeSpan;

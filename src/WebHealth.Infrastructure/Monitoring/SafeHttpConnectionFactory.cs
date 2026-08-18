@@ -1,12 +1,9 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
-using System.Net.Sockets;
+using System.Net.Security;
 using WebHealth.Application.Monitoring;
 
 namespace WebHealth.Infrastructure.Monitoring;
-
-internal sealed class SafeDestinationException : HttpRequestException;
 
 internal static class SafeHttpConnectionFactory
 {
@@ -31,121 +28,56 @@ internal static class SafeHttpConnectionFactory
             // the correlated hook for "handshake done" timing rather than a global callback.
             PlaintextStreamFilter = (context, _) =>
             {
-                if (context.InitialRequestMessage.RequestUri?.Scheme == Uri.UriSchemeHttps
-                    && context.InitialRequestMessage.Options
-                        .TryGetValue(SafeHttpTimingOptions.Key, out var timing)
-                    && timing.ConnectCompletedTimestamp is { } connectCompletedAt)
+                if (context.InitialRequestMessage.RequestUri?.Scheme == Uri.UriSchemeHttps)
                 {
-                    timing.TlsDurationMs = SafeHttpTimingMath.ElapsedMs(connectCompletedAt);
+                    RecordTlsDuration(context.InitialRequestMessage);
+                    RecordNegotiatedCertificate(context.InitialRequestMessage, context.PlaintextStream);
                 }
 
                 return ValueTask.FromResult(context.PlaintextStream);
             },
-            ConnectCallback = async (context, cancellationToken) =>
+            ConnectCallback = (context, cancellationToken) =>
             {
                 var timing = context.InitialRequestMessage.Options
                     .TryGetValue(SafeHttpTimingOptions.Key, out var collector)
                         ? collector
                         : null;
 
-                var dnsStart = Stopwatch.GetTimestamp();
-                var answers = await resolver.ResolveAsync(context.DnsEndPoint.Host, cancellationToken);
-                if (timing is not null)
-                {
-                    timing.DnsDurationMs = SafeHttpTimingMath.ElapsedMs(dnsStart);
-                }
-
-                if (answers.Count is 0 || answers.Count > options.MaxDnsAnswers)
-                {
-                    throw new SafeDestinationException();
-                }
-
-                var addresses = answers
-                    .Select(address => address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address)
-                    .Distinct()
-                    .ToArray();
-                if (addresses.Any(address => !addressPolicy.IsAllowed(address)))
-                {
-                    throw new SafeDestinationException();
-                }
-
-                var selected = addresses[0];
-                var addressLease = await limiter.AcquireAddressAsync(selected.ToString(), cancellationToken);
-                var socket = new Socket(selected.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                try
-                {
-                    var connectStart = Stopwatch.GetTimestamp();
-                    await socket.ConnectAsync(
-                        new IPEndPoint(selected, context.DnsEndPoint.Port),
-                        cancellationToken);
-                    if (socket.RemoteEndPoint is not IPEndPoint peer
-                        || !Normalize(peer.Address).Equals(selected)
-                        || peer.Port != context.DnsEndPoint.Port
-                        || !addressPolicy.IsAllowed(peer.Address))
-                    {
-                        throw new SafeDestinationException();
-                    }
-
-                    if (timing is not null)
-                    {
-                        var connectCompletedAt = Stopwatch.GetTimestamp();
-                        timing.ConnectDurationMs = SafeHttpTimingMath.ElapsedMs(connectStart, connectCompletedAt);
-                        timing.ConnectCompletedTimestamp = connectCompletedAt;
-                    }
-
-                    return new LeaseReleasingStream(
-                        new NetworkStream(socket, ownsSocket: true),
-                        addressLease);
-                }
-                catch
-                {
-                    socket.Dispose();
-                    addressLease.Dispose();
-                    throw;
-                }
+                return new ValueTask<Stream>(SafeDestinationConnector.ConnectAsync(
+                    resolver,
+                    addressPolicy,
+                    limiter,
+                    options,
+                    context.DnsEndPoint.Host,
+                    context.DnsEndPoint.Port,
+                    timing,
+                    cancellationToken));
             }
         };
 
-    private static IPAddress Normalize(IPAddress address) =>
-        address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
-
-    private sealed class LeaseReleasingStream(Stream inner, IDisposable lease) : Stream
+    private static void RecordTlsDuration(HttpRequestMessage request)
     {
-        private IDisposable? _lease = lease;
-
-        public override bool CanRead => inner.CanRead;
-        public override bool CanSeek => inner.CanSeek;
-        public override bool CanWrite => inner.CanWrite;
-        public override long Length => inner.Length;
-        public override long Position { get => inner.Position; set => inner.Position = value; }
-        public override void Flush() => inner.Flush();
-        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
-        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
-        public override int Read(Span<byte> buffer) => inner.Read(buffer);
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
-            inner.ReadAsync(buffer, cancellationToken);
-        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
-        public override void SetLength(long value) => inner.SetLength(value);
-        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
-        public override void Write(ReadOnlySpan<byte> buffer) => inner.Write(buffer);
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
-            inner.WriteAsync(buffer, cancellationToken);
-
-        protected override void Dispose(bool disposing)
+        if (request.Options.TryGetValue(SafeHttpTimingOptions.Key, out var timing)
+            && timing.ConnectCompletedTimestamp is { } connectCompletedAt)
         {
-            if (disposing)
-            {
-                inner.Dispose();
-                Interlocked.Exchange(ref _lease, null)?.Dispose();
-            }
-            base.Dispose(disposing);
+            timing.TlsDurationMs = SafeHttpTimingMath.ElapsedMs(connectCompletedAt);
         }
+    }
 
-        public override async ValueTask DisposeAsync()
+    /// <summary>
+    /// This filter only runs after a fully validated handshake, so the certificate recorded
+    /// here is by definition trusted and hostname-matched: the availability path never sees a
+    /// rejected certificate, and certificate validation stays untouched (BR-Q04). Evidence for
+    /// invalid certificates comes from <see cref="SslCertificateProbe" /> instead.
+    /// </summary>
+    private static void RecordNegotiatedCertificate(HttpRequestMessage request, Stream plaintextStream)
+    {
+        if (plaintextStream is SslStream { RemoteCertificate: { } negotiated }
+            && request.Options.TryGetValue(SafeHttpTlsOptions.Key, out var tls))
         {
-            await inner.DisposeAsync();
-            Interlocked.Exchange(ref _lease, null)?.Dispose();
-            GC.SuppressFinalize(this);
+            // Copy the encoded certificate now: the instance is owned by the SslStream and is
+            // disposed with the connection, well before the result is assembled.
+            tls.CertificateDer = negotiated.GetRawCertData();
         }
     }
 }
