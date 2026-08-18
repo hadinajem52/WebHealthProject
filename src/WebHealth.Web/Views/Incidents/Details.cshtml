@@ -32,7 +32,7 @@
                 <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName · @incident.IssueKey</p>
             </div>
             <div class="form-actions">
-                <span class="badge" data-status="@(incident.Severity == "Critical" ? "danger" : "warning")">@incident.Severity</span>
+                <span class="badge" data-status="@StatusBadges.ForSeverity(incident.Severity)">@incident.Severity</span>
                 <span class="badge" data-status="@StatusBadge(incident.Status)">@incident.Status</span>
             </div>
         </div>

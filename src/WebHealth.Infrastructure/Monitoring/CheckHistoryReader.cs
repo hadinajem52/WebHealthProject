@@ -40,22 +40,41 @@ internal sealed class CheckHistoryReader(
             .ThenByDescending(check => check.Id)
             .Skip((boundedPage - 1) * PageSize)
             .Take(PageSize)
-            .Select(check => new CheckHistoryItem(
-                check.Id,
-                check.Source,
-                check.State,
-                check.ScheduledFor,
-                check.RequestedAt,
-                check.InitiatedByUser == null ? null : check.InitiatedByUser.DisplayName,
-                check.CompletedAt,
-                check.Result == null ? null : check.Result.Outcome,
-                check.Result == null ? null : check.Result.FailureCategory,
-                check.Result == null ? null : check.Result.HttpStatus,
-                check.Result == null ? null : check.Result.TotalDurationMs,
-                check.Result != null && check.Result.CountsForUptime))
+            .Select(check => new
+            {
+                Item = new CheckHistoryItem(
+                    check.Id,
+                    check.Source,
+                    check.State,
+                    check.ScheduledFor,
+                    check.RequestedAt,
+                    check.InitiatedByUser == null ? null : check.InitiatedByUser.DisplayName,
+                    check.CompletedAt,
+                    check.Result == null ? null : check.Result.Outcome,
+                    check.Result == null ? null : check.Result.FailureCategory,
+                    check.Result == null ? null : check.Result.HttpStatus,
+                    check.Result == null ? null : check.Result.TotalDurationMs,
+                    check.Result == null ? null : check.Result.MonitorSource,
+                    check.Result != null && check.Result.CountsForUptime),
+                ConfigurationFingerprint = check.ConfigurationSnapshot.ConfigurationFingerprint
+            })
             .ToArrayAsync(cancellationToken);
 
-        return new(endpoint.Id, endpoint.DisplayUrl, items, boundedPage, PageSize, totalCount);
+        // BR-P05: only completed results carry a measurement context, so a still-running check
+        // neither claims comparability nor breaks it.
+        var comparability = PerformanceComparability.Evaluate(items
+            .Where(row => row.Item.MonitorSource is not null)
+            .Select(row => new PerformanceSampleContext(
+                row.Item.MonitorSource!, row.ConfigurationFingerprint)));
+
+        return new(
+            endpoint.Id,
+            endpoint.DisplayUrl,
+            items.Select(row => row.Item).ToArray(),
+            boundedPage,
+            PageSize,
+            totalCount,
+            comparability);
     }
 
     public async Task<CheckDetails?> FindCheckAsync(
@@ -110,7 +129,11 @@ internal sealed class CheckHistoryReader(
             result?.ConnectDurationMs,
             result?.TlsDurationMs,
             result?.TtfbDurationMs,
+            result?.TransferredLength,
             result?.DecodedLength,
+            result?.LengthSource,
+            result?.MonitorSource,
+            result?.MeasuredAt,
             result?.ResponseTruncated ?? false,
             result?.SafeDiagnostic,
             result?.CountsForUptime ?? false,

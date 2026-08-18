@@ -76,7 +76,13 @@
             </div>
             <div><dt>Subject</dt><dd>@certificate.Subject</dd></div>
             <div><dt>Issuer</dt><dd>@certificate.Issuer</dd></div>
-            <div><dt>Valid until</dt><dd>@certificate.NotAfter.ToString("yyyy-MM-dd HH:mm 'UTC'") (@certificate.DaysRemaining days)</dd></div>
+            <div>
+                <dt>Expiry</dt>
+                <dd>
+                    <span class="badge" data-status="@StatusBadges.ForExpirySeverity(certificate.ExpirySeverity)">@StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)</span>
+                </dd>
+            </div>
+            <div><dt>Valid until</dt><dd>@certificate.NotAfter.ToString("yyyy-MM-dd HH:mm 'UTC'") (@certificate.DaysRemaining days remaining)</dd></div>
             <div><dt>Hostname</dt><dd>@(certificate.HostnameMatched ? "Matches" : "Does not match")</dd></div>
             <div><dt>Chain</dt><dd>@(certificate.ChainTrusted ? "Trusted" : "Not trusted")</dd></div>
             <div><dt>Fingerprint (SHA-256)</dt><dd class="target-url">@certificate.Sha256Fingerprint</dd></div>

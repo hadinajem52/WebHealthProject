@@ -26,7 +26,8 @@ internal sealed class IncidentAutomationService(
         HealthCounterMode counterMode,
         bool isMaintenance,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? observedCertificateFingerprint = null)
     {
         if (counterMode != HealthCounterMode.Count)
         {
@@ -34,6 +35,12 @@ internal sealed class IncidentAutomationService(
         }
 
         var incidents = await LoadActiveAsync(check.EndpointMonitorId, cancellationToken);
+        if (observedCertificateFingerprint is not null)
+        {
+            await ApplyCertificateRenewalAsync(
+                check, result, incidents, observedCertificateFingerprint, isMaintenance, now, cancellationToken);
+        }
+
         if (result.Outcome == HttpResultOutcomes.Healthy)
         {
             await ApplyRecoveryAsync(check, result, healthDecision, incidents, isMaintenance, now, cancellationToken);
@@ -56,19 +63,16 @@ internal sealed class IncidentAutomationService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var observed = ObservedIssueKeys(result);
-        var confirmed = healthDecision.Issues
-            .Where(issue => observed.Contains(issue.IssueKey)
-                && issue.ConsecutiveFailures >= check.ConfigurationSnapshot.FailureConfirmationCount)
-            .Select(issue => issue.IssueKey)
-            .ToArray();
-
-        foreach (var issueKey in confirmed)
+        // The engine already applied each issue's own confirmation count (BR-P03), so the
+        // threshold lives in exactly one place.
+        foreach (var issueKey in healthDecision.ConfirmedIssueKeys)
         {
+            var severity = SelectSeverity(result, issueKey);
             var incident = incidents.SingleOrDefault(candidate => candidate.IssueKey == issueKey);
             if (incident is null)
             {
-                incident = await OpenAsync(check, result, issueKey, isMaintenance, now, cancellationToken);
+                incident = await OpenAsync(
+                    check, result, issueKey, severity, isMaintenance, now, cancellationToken);
                 incidents.Add(incident);
                 continue;
             }
@@ -86,9 +90,62 @@ internal sealed class IncidentAutomationService(
                 "ConfirmedFailure",
                 IncidentAuditAction.FailureRecorded,
                 now,
-                cancellationToken);
+                cancellationToken,
+                severity);
         }
     }
+
+    /// <summary>
+    /// BR-C06. A renewed certificate has a new fingerprint and therefore a new expiry issue key,
+    /// which leaves any incident opened for the previous certificate with nothing left to
+    /// observe. Resolving it here rather than waiting for a healthy result matters: a
+    /// certificate renewed into another warning band never produces a healthy result, and the
+    /// stale incident would stay open against a certificate that no longer exists.
+    /// </summary>
+    private async Task ApplyCertificateRenewalAsync(
+        LogicalCheck check,
+        NormalizedCheckResult result,
+        List<Incident> incidents,
+        string observedFingerprint,
+        bool isMaintenance,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var superseded = incidents
+            .Where(incident => SslMonitorIdentity.IsSupersededExpiryIssueKey(
+                incident.IssueKey, observedFingerprint))
+            .ToArray();
+        foreach (var incident in superseded)
+        {
+            AddEvent(
+                incident,
+                IncidentEventTypes.CertificateRenewed,
+                now,
+                note: $"A different certificate is now presented (SHA-256 {observedFingerprint}).");
+            await ResolveAsync(
+                incident,
+                check,
+                result,
+                isMaintenance,
+                now,
+                cancellationToken,
+                IncidentResolutionCategories.CertificateRenewed,
+                "The certificate this incident tracked was replaced by a different certificate.");
+            incidents.Remove(incident);
+        }
+    }
+
+    /// <summary>
+    /// An incident is as severe as the finding that confirmed it (BR-C04). A confirmed issue
+    /// with no finding behind it came from a transport failure, which has no severity of its
+    /// own and is always critical.
+    /// </summary>
+    private static string SelectSeverity(NormalizedCheckResult result, string issueKey) =>
+        result.Findings
+            .Where(finding => string.Equals(finding.IssueKey, issueKey, StringComparison.Ordinal))
+            .Select(finding => finding.Severity)
+            .DefaultIfEmpty(IncidentSeverities.Critical)
+            .Aggregate(FindingSeverities.Max);
 
     private async Task ApplyRecoveryAsync(
         LogicalCheck check,
@@ -161,6 +218,7 @@ internal sealed class IncidentAutomationService(
         LogicalCheck check,
         NormalizedCheckResult result,
         string issueKey,
+        string severity,
         bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -174,7 +232,7 @@ internal sealed class IncidentAutomationService(
                 ?? check.EndpointMonitor.Endpoint.Environment.Website.OwnerSubjectId,
             PreviousIncidentId = previous?.Id,
             IssueKey = issueKey,
-            Severity = IncidentSeverities.Critical,
+            Severity = severity,
             Status = IncidentStatuses.Open,
             RecurrenceCount = previous is null ? 0 : previous.RecurrenceCount + 1,
             OpenedAt = result.MeasuredAt,
@@ -239,7 +297,9 @@ internal sealed class IncidentAutomationService(
         NormalizedCheckResult result,
         bool isMaintenance,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? resolutionCategory = null,
+        string? resolutionNote = null)
     {
         var decision = IncidentLifecycleEngine.Evaluate(new(
             incident.Status,
@@ -252,8 +312,8 @@ internal sealed class IncidentAutomationService(
         var before = IncidentLifecycleService.Snapshot(incident);
         var previousStatus = incident.Status;
         incident.Status = decision.NewStatus!;
-        incident.ResolutionCategory = decision.ResolutionCategory;
-        incident.ResolutionNote = decision.ResolutionNote;
+        incident.ResolutionCategory = resolutionCategory ?? decision.ResolutionCategory;
+        incident.ResolutionNote = resolutionNote ?? decision.ResolutionNote;
         incident.ResolvedAt = result.MeasuredAt;
         incident.RecoveryDurationMs = IncidentLifecycleEngine.DurationMilliseconds(
             incident.RecoveryStartedAt ?? result.MeasuredAt,
@@ -291,10 +351,26 @@ internal sealed class IncidentAutomationService(
         string evidenceRole,
         IncidentAuditAction action,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? observedSeverity = null)
     {
         var before = IncidentLifecycleService.Snapshot(incident);
         incident.Version++;
+        // A certificate keeps one incident as it crosses expiry bands (its fingerprint, and so
+        // its issue key, does not change), so the incident escalates in place. It never
+        // de-escalates: an incident that reached critical stays critical until it resolves.
+        var escalated = observedSeverity is not null
+            && FindingSeverities.Rank(observedSeverity) > FindingSeverities.Rank(incident.Severity);
+        if (escalated)
+        {
+            AddEvent(
+                incident,
+                IncidentEventTypes.NoteAdded,
+                now,
+                note: $"Severity escalated from {incident.Severity} to {observedSeverity}.");
+            incident.Severity = observedSeverity!;
+        }
+
         AddEvidence(incident, check, result, evidenceType, evidenceRole, now);
         AddEvidenceEvent(incident, $"{evidenceType} evidence recorded.", now);
         await WriteAuditAsync(action, before, incident, now, cancellationToken);
@@ -410,15 +486,8 @@ internal sealed class IncidentAutomationService(
     private static IncidentAuditWriteContext SystemContext(DateTimeOffset now) =>
         new(null, "system", now);
 
-    private static HashSet<string> ObservedIssueKeys(NormalizedCheckResult result)
-    {
-        var issueKeys = result.Findings.Select(finding => finding.IssueKey)
+    private static HashSet<string> ObservedIssueKeys(NormalizedCheckResult result) =>
+        CheckResultIssues.Observe(result, 1)
+            .Select(issue => issue.IssueKey)
             .ToHashSet(StringComparer.Ordinal);
-        if (issueKeys.Count == 0)
-        {
-            issueKeys.Add(HttpIssueIdentity.Create($"Http.{result.FailureCategory ?? "Unknown"}"));
-        }
-
-        return issueKeys;
-    }
 }

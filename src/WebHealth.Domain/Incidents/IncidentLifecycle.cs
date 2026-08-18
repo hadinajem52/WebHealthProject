@@ -27,6 +27,13 @@ public static class IncidentEventTypes
     public const string Reassigned = "Reassigned";
     public const string NoteAdded = "NoteAdded";
     public const string EvidenceRecorded = "EvidenceRecorded";
+
+    /// <summary>
+    /// A certificate with a different fingerprint replaced the one this incident was raised
+    /// against (BR-C06). It is its own event type rather than a note, because the timeline has
+    /// to distinguish "someone wrote something" from "the monitored subject was replaced".
+    /// </summary>
+    public const string CertificateRenewed = "CertificateRenewed";
 }
 
 public static class IncidentEvidenceTypes
@@ -41,4 +48,11 @@ public static class IncidentResolutionCategories
 {
     public const string AutomaticRecovery = "AutomaticRecovery";
     public const string ForcedClosure = "ForcedClosure";
+
+    /// <summary>
+    /// The certificate the incident tracked was renewed, so the incident's subject no longer
+    /// exists to recover (BR-C06). Distinct from <see cref="AutomaticRecovery" />, which means
+    /// the same subject started passing again.
+    /// </summary>
+    public const string CertificateRenewed = "CertificateRenewed";
 }

@@ -86,7 +86,10 @@ internal sealed class LogicalCheckFinalizationService(
         var healthDecision = await ApplyHealthAsync(
             check, normalized, counterMode, now, cancellationToken);
         await incidentAutomation.ApplyAsync(
-            check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken);
+            check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken,
+            // BR-C06: the fingerprint just observed decides which expiry incidents still have a
+            // certificate behind them.
+            (command.Evidence as SslCertificateEvidence)?.Result.Certificate?.Sha256Fingerprint);
         CompleteAttempt(attempt!, command.Evidence, now);
         CompleteWork(work, now);
 
@@ -279,6 +282,7 @@ internal sealed class LogicalCheckFinalizationService(
             return SslResultNormalizer.Normalize(new(ssl.Result, now));
         }
 
+
         var reason = ((ExecutionTerminalEvidence)evidence).Reason;
         var category = reason == ExecutionTerminalReason.TargetIneligible
             ? HttpFailureCategories.TargetIneligible
@@ -287,13 +291,19 @@ internal sealed class LogicalCheckFinalizationService(
             ? HttpResultOutcomes.Cancelled
             : HttpResultOutcomes.Critical;
         return new(
-            outcome, category, null, 0, null, null, "WebHealthExecutionV1", now,
+            outcome, category, null, 0, null, null, null, "WebHealthExecutionV1", now,
             reason == ExecutionTerminalReason.TargetIneligible
                 ? "The target is not currently eligible for monitoring."
                 : "The execution retry limit was exhausted.",
             [], []);
     }
 
+    /// <summary>
+    /// BR-P02. Thresholds come from the check's own configuration snapshot, never from the
+    /// monitor as it stands now, so a result is always judged against the thresholds that were
+    /// in force when it was measured. A snapshot that recorded no override falls back to the
+    /// documented defaults.
+    /// </summary>
     private static HttpResultPolicy CreatePolicy(
         CheckConfigurationSnapshot snapshot,
         IReadOnlyCollection<int> statuses) => new(
@@ -301,7 +311,10 @@ internal sealed class LogicalCheckFinalizationService(
         snapshot.RequiredContentMarker,
         snapshot.ContentMarkerComparison == "Ordinal",
         snapshot.ProductionHttpSeverity,
-        snapshot.MaxResponseBodyBytes);
+        snapshot.MaxResponseBodyBytes,
+        new ResponseTimeThresholds(
+            snapshot.WarningThresholdMs ?? ResponseTimeThresholds.Default.WarningMs,
+            snapshot.CriticalThresholdMs ?? ResponseTimeThresholds.Default.CriticalMs));
 
     private static bool MatchesTarget(LogicalCheck check, SafeHttpTransportRequest request)
     {
@@ -354,6 +367,8 @@ internal sealed class LogicalCheckFinalizationService(
     {
         var result = evidence.Result;
         return result.Redirects.Count <= evidence.Request.MaxRedirects
+            && result.TransferredLength is null or >= 0
+            && (result.Failure is null || result.TransferredLength is null)
             && result.Body.Length <= evidence.Request.MaxResponseBodyBytes
             && result.ResponseBytesRead >= result.Body.Length
             && HasValidBodyEvidence(evidence)
@@ -449,6 +464,7 @@ internal sealed class LogicalCheckFinalizationService(
             TlsDurationMs = normalized.Timing?.TlsDurationMs,
             TtfbDurationMs = normalized.Timing?.TtfbDurationMs,
             TotalDurationMs = normalized.TotalDurationMs,
+            TransferredLength = normalized.TransferredLength,
             DecodedLength = normalized.DecodedLength,
             LengthSource = normalized.LengthSource,
             ResponseTruncated = IsResponseTruncated(evidence),
@@ -498,8 +514,10 @@ internal sealed class LogicalCheckFinalizationService(
                 Sha256Fingerprint = certificate.Sha256Fingerprint,
                 NotBefore = certificate.NotBefore,
                 NotAfter = certificate.NotAfter,
+                // The same instant the expiry finding was judged at (BR-C04), so the stored
+                // day count can never disagree with the severity that was raised from it.
                 DaysRemaining = CertificateExpiry.DaysRemaining(
-                    certificate.NotAfter, certificate.ObservedAt),
+                    certificate.NotAfter, normalized.MeasuredAt),
                 ValidationCategory = certificate.ValidationCategory.ToString(),
                 HostnameMatched = certificate.HostnameMatched,
                 ChainTrusted = certificate.ChainTrusted,
@@ -544,9 +562,8 @@ internal sealed class LogicalCheckFinalizationService(
         var decision = HealthConfirmationEngine.Evaluate(new(
             health?.ConfirmedStatus ?? EndpointHealthStatuses.Unknown,
             states.Select(ToCounter).ToArray(),
-            ObservedIssueKeys(result),
+            CheckResultIssues.Observe(result, check.ConfigurationSnapshot.FailureConfirmationCount),
             result.Outcome == HttpResultOutcomes.Healthy,
-            check.ConfigurationSnapshot.FailureConfirmationCount,
             check.ConfigurationSnapshot.RecoveryConfirmationCount,
             counterMode));
 
@@ -626,21 +643,6 @@ internal sealed class LogicalCheckFinalizationService(
         state.IssueKey,
         state.ConsecutiveFailures,
         state.ConsecutiveRecoveries);
-
-    private static IReadOnlyCollection<string> ObservedIssueKeys(NormalizedCheckResult result)
-    {
-        if (result.Outcome == HttpResultOutcomes.Healthy)
-        {
-            return [];
-        }
-
-        var issueKeys = result.Findings.Select(finding => finding.IssueKey)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        return issueKeys.Length > 0
-            ? issueKeys
-            : [HttpIssueIdentity.Create($"Http.{result.FailureCategory ?? "Unknown"}")];
-    }
 
     private static void CompleteAttempt(
         ExecutionAttempt attempt,

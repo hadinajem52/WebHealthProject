@@ -639,6 +639,19 @@ code,
     background-color: var(--status-danger-text);
 }
 
+/*
+ * Warning and high share the orange family, with high the darker of the two, so
+ * the three severity bands read as one escalating scale rather than three
+ * unrelated colours. Both keep the white label at AA against their fill.
+ */
+.badge[data-status="warning"] {
+    background-color: var(--status-warning-text);
+}
+
+.badge[data-status="high"] {
+    background-color: var(--color-orange-700);
+}
+
 .tag-list {
     display: flex;
     flex-wrap: wrap;

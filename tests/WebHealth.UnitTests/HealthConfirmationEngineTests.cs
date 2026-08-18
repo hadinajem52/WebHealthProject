@@ -10,15 +10,19 @@ namespace WebHealth.UnitTests;
 public sealed class HealthConfirmationEngineTests
 {
     private const string IssueKey = "v1|HttpAvailability|Http.ServerError|default";
+    private const string ExpiryIssueKey = "v1|SslCertificate|Ssl.ExpiringSoon|abc123";
+
+    private static readonly string SlowResponseIssueKey =
+        HttpIssueIdentity.Create(PerformanceRules.SlowResponse);
 
     [Fact]
     public void TwoConsecutiveFailures_ConfirmCritical()
     {
-        var first = Evaluate(EndpointHealthStatuses.Healthy, [], [IssueKey], false);
+        var first = Evaluate(EndpointHealthStatuses.Healthy, [], [Critical(IssueKey)], false);
         first.ConfirmedStatus.Should().BeNull();
         first.Issues.Single().ConsecutiveFailures.Should().Be(1);
 
-        var second = Evaluate(EndpointHealthStatuses.Healthy, first.Issues, [IssueKey], false);
+        var second = Evaluate(EndpointHealthStatuses.Healthy, first.Issues, [Critical(IssueKey)], false);
         second.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Critical);
         second.Transition.Should().Be(HealthTransition.FailureConfirmed);
     }
@@ -26,9 +30,9 @@ public sealed class HealthConfirmationEngineTests
     [Fact]
     public void FailPassFail_RestartsFailureConfirmation()
     {
-        var firstFailure = Evaluate(EndpointHealthStatuses.Healthy, [], [IssueKey], false);
+        var firstFailure = Evaluate(EndpointHealthStatuses.Healthy, [], [Critical(IssueKey)], false);
         var pass = Evaluate(EndpointHealthStatuses.Healthy, firstFailure.Issues, [], true);
-        var secondFailure = Evaluate(EndpointHealthStatuses.Healthy, pass.Issues, [IssueKey], false);
+        var secondFailure = Evaluate(EndpointHealthStatuses.Healthy, pass.Issues, [Critical(IssueKey)], false);
 
         pass.Issues.Single().ConsecutiveFailures.Should().Be(0);
         secondFailure.Issues.Single().ConsecutiveFailures.Should().Be(1);
@@ -65,7 +69,7 @@ public sealed class HealthConfirmationEngineTests
     {
         var current = new[] { new HealthIssueCounter(IssueKey, 1, 0) };
 
-        var decision = Evaluate(EndpointHealthStatuses.Healthy, current, [IssueKey], false, mode);
+        var decision = Evaluate(EndpointHealthStatuses.Healthy, current, [Critical(IssueKey)], false, mode);
 
         decision.Issues.Single().ConsecutiveFailures.Should().Be(expectedFailures);
         decision.ConfirmedStatus.Should().BeNull();
@@ -92,12 +96,140 @@ public sealed class HealthConfirmationEngineTests
             .Should().Be(expected);
     }
 
+    [Fact]
+    public void ConfirmedWarningIssue_ConfirmsWarningRatherThanCritical()
+    {
+        // BR-C04: an endpoint whose certificate expires in 30 days is still serving traffic.
+        var first = Evaluate(
+            EndpointHealthStatuses.Healthy, [], [Warning(ExpiryIssueKey)], false);
+        var second = Evaluate(
+            EndpointHealthStatuses.Healthy, first.Issues, [Warning(ExpiryIssueKey)], false);
+
+        second.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Warning);
+        second.Transition.Should().Be(HealthTransition.FailureConfirmed);
+        second.ConfirmedIssueKeys.Should().ContainSingle().Which.Should().Be(ExpiryIssueKey);
+    }
+
+    [Fact]
+    public void HighSeverityIssue_ConfirmsWarningStatus()
+    {
+        // High is an escalation of urgency, not of unavailability, so it stops at Warning.
+        var first = Evaluate(
+            EndpointHealthStatuses.Healthy, [], [High(ExpiryIssueKey)], false);
+        var second = Evaluate(
+            EndpointHealthStatuses.Healthy, first.Issues, [High(ExpiryIssueKey)], false);
+
+        second.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Warning);
+    }
+
+    [Fact]
+    public void CriticalIssue_EscalatesAnAlreadyConfirmedWarning()
+    {
+        var current = new[]
+        {
+            new HealthIssueCounter(ExpiryIssueKey, 2, 0),
+            new HealthIssueCounter(IssueKey, 1, 0)
+        };
+
+        var decision = Evaluate(
+            EndpointHealthStatuses.Warning,
+            current,
+            [Warning(ExpiryIssueKey), Critical(IssueKey)],
+            false);
+
+        decision.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Critical);
+        decision.Transition.Should().Be(HealthTransition.FailureConfirmed);
+        decision.ConfirmedIssueKeys.Should().BeEquivalentTo([ExpiryIssueKey, IssueKey]);
+    }
+
+    [Fact]
+    public void ConfirmedWarning_RecoversLikeAConfirmedCritical()
+    {
+        var current = new[] { new HealthIssueCounter(ExpiryIssueKey, 2, 0) };
+
+        var first = Evaluate(EndpointHealthStatuses.Warning, current, [], true);
+        var second = Evaluate(EndpointHealthStatuses.Warning, first.Issues, [], true);
+
+        first.Transition.Should().Be(HealthTransition.RecoveryStarted);
+        second.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Healthy);
+        second.Transition.Should().Be(HealthTransition.RecoveryConfirmed);
+    }
+
+    [Fact]
+    public void SlowResponse_ConfirmsOnItsOwnCountWhileAvailabilityConfirmsOnTheMonitorCount()
+    {
+        // BR-P03 against a monitor that confirms availability in two: the slow-response issue
+        // still needs three consecutive breaches, and the availability issue still needs two.
+        var observed = new[] { Critical(IssueKey), SlowResponse() };
+
+        var first = Evaluate(EndpointHealthStatuses.Healthy, [], observed, false);
+        var second = Evaluate(EndpointHealthStatuses.Healthy, first.Issues, observed, false);
+        var third = Evaluate(EndpointHealthStatuses.Critical, second.Issues, observed, false);
+
+        first.ConfirmedIssueKeys.Should().BeEmpty();
+        second.ConfirmedIssueKeys.Should().ContainSingle().Which.Should().Be(IssueKey);
+        third.ConfirmedIssueKeys.Should().BeEquivalentTo([IssueKey, SlowResponseIssueKey]);
+    }
+
+    [Fact]
+    public void SlowResponse_ResetsOnASampleThatIsNotSlow()
+    {
+        // BR-P03: two breaches, then a fast sample that still failed for another reason. The
+        // slow-response counter restarts; the availability counter does not.
+        var slowAndFailing = new[] { Critical(IssueKey), SlowResponse() };
+
+        var first = Evaluate(EndpointHealthStatuses.Healthy, [], slowAndFailing, false);
+        var second = Evaluate(EndpointHealthStatuses.Healthy, first.Issues, slowAndFailing, false);
+        var fastButFailing = Evaluate(
+            EndpointHealthStatuses.Critical, second.Issues, [Critical(IssueKey)], false);
+        var slowAgain = Evaluate(
+            EndpointHealthStatuses.Critical, fastButFailing.Issues, slowAndFailing, false);
+
+        fastButFailing.Issues.Single(issue => issue.IssueKey == SlowResponseIssueKey)
+            .ConsecutiveFailures.Should().Be(0);
+        slowAgain.Issues.Single(issue => issue.IssueKey == SlowResponseIssueKey)
+            .ConsecutiveFailures.Should().Be(1);
+        slowAgain.ConfirmedIssueKeys.Should().NotContain(SlowResponseIssueKey);
+    }
+
+    [Fact]
+    public void SlowResponse_ResetsOnAPassingSample()
+    {
+        var slow = new[] { SlowResponse() };
+        var first = Evaluate(EndpointHealthStatuses.Healthy, [], slow, false);
+        var second = Evaluate(EndpointHealthStatuses.Healthy, first.Issues, slow, false);
+        var passing = Evaluate(EndpointHealthStatuses.Healthy, second.Issues, [], true);
+
+        passing.Issues.Single().ConsecutiveFailures.Should().Be(0);
+    }
+
+    [Fact]
+    public void AnObservedIssueWithAnInvalidSeverity_IsRejected()
+    {
+        var act = () => Evaluate(
+            EndpointHealthStatuses.Healthy, [], [new ObservedIssue(IssueKey, "Nuisance", 1)], false);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    private static ObservedIssue Critical(string issueKey) =>
+        new(issueKey, FindingSeverities.Critical, 2);
+
+    private static ObservedIssue High(string issueKey) => new(issueKey, FindingSeverities.High, 2);
+
+    private static ObservedIssue Warning(string issueKey) =>
+        new(issueKey, FindingSeverities.Warning, 2);
+
+    private static ObservedIssue SlowResponse() => new(
+        SlowResponseIssueKey,
+        FindingSeverities.Warning,
+        PerformanceRules.SelectFailureConfirmationCount(PerformanceRules.SlowResponse, 2));
+
     private static HealthConfirmationDecision Evaluate(
         string status,
         IReadOnlyCollection<HealthIssueCounter> issues,
-        IReadOnlyCollection<string> observed,
+        IReadOnlyCollection<ObservedIssue> observed,
         bool isPassing,
         HealthCounterMode mode = HealthCounterMode.Count) =>
-        HealthConfirmationEngine.Evaluate(new(
-            status, issues, observed, isPassing, 2, 2, mode));
+        HealthConfirmationEngine.Evaluate(new(status, issues, observed, isPassing, 2, mode));
 }

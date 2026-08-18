@@ -127,7 +127,13 @@ internal sealed class SafeHttpTransport(
                         redirects,
                         requestIdentity,
                         BuildTiming(currentTiming, currentTtfbMs),
-                        certificate);
+                        certificate,
+                        // BR-P04: what the response said it was sending, before decoding. A
+                        // negative or absurd advertised length is discarded rather than stored,
+                        // because the header is attacker-controlled input like any other.
+                        response.Content.Headers.ContentLength is { } advertised and >= 0
+                            ? advertised
+                            : null);
                 }
 
                 if (redirects.Count >= request.MaxRedirects)

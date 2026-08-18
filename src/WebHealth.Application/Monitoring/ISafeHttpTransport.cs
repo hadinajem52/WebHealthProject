@@ -43,6 +43,11 @@ public sealed record SafeHttpTransportRequest(
 /// <c>Certificate</c> carries the leaf certificate negotiated for a successful HTTPS response.
 /// It is always a valid, trusted certificate, because a response cannot be produced otherwise;
 /// evidence about invalid certificates comes from <see cref="ISslCertificateProbe" />.
+/// <para>
+/// <c>TransferredLength</c> is the length the response advertised on the wire, before any
+/// content decoding (BR-P04). It is null when the response advertised none, which is why it is
+/// separate from <c>ResponseBytesRead</c> rather than replacing it.
+/// </para>
 /// </summary>
 public sealed record SafeHttpTransportResult(
     SafeHttpFailureKind? Failure,
@@ -55,7 +60,8 @@ public sealed record SafeHttpTransportResult(
     IReadOnlyList<SafeHttpRedirectHop> Redirects,
     string? RequestIdentity = null,
     SafeHttpPhaseTiming? Timing = null,
-    TlsCertificateObservation? Certificate = null)
+    TlsCertificateObservation? Certificate = null,
+    long? TransferredLength = null)
 {
     public bool Succeeded => Failure is null;
 }

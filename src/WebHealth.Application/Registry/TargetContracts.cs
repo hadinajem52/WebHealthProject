@@ -1,3 +1,5 @@
+using WebHealth.Domain.Monitoring;
+
 namespace WebHealth.Application.Registry;
 
 public static class EnvironmentTypes
@@ -127,7 +129,14 @@ public sealed record CertificateObservationItem(
     bool HostnameMatched,
     bool ChainTrusted,
     string? SubjectAlternativeNames,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt,
+    /// <summary>
+    /// The BR-C04 expiry band for this observation, derived from the day count that was stored
+    /// with it rather than from the current clock, so the page shows the same severity the
+    /// check itself raised. <c>None</c> for a certificate that is not valid today: its
+    /// validation category is the thing to report, not how soon it would have expired.
+    /// </summary>
+    CertificateExpirySeverity ExpirySeverity);
 
 public sealed record CreateEnvironment(
     Guid WebsiteId,

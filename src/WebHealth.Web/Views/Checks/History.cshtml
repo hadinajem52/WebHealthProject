@@ -8,12 +8,6 @@
     var hasPrevious = history.Page > 1;
     var hasNext = lastVisible < history.TotalCount;
 
-    static string OutcomeStatus(string? outcome) => outcome switch
-    {
-        "Healthy" => "success",
-        "Critical" => "danger",
-        _ => "warning"
-    };
 }
 
 <div class="stack">
@@ -35,6 +29,17 @@
         }
         else
         {
+            @* BR-P05: say so before the numbers are read, not after. *@
+            @if (history.Comparability.Warning is { } comparabilityWarning)
+            {
+                <div class="flash" data-level="warning" role="status">
+                    <span class="flash__icon">@await Html.PartialAsync("_Icon", "warning")</span>
+                    <div>
+                        <p class="flash__label">Comparability</p>
+                        <p class="flash__text">@comparabilityWarning</p>
+                    </div>
+                </div>
+            }
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table">
                     <caption class="visually-hidden">Scheduled and manual checks for this endpoint</caption>
@@ -45,6 +50,7 @@
                             <th scope="col">Initiator</th>
                             <th scope="col">Outcome</th>
                             <th scope="col">Duration</th>
+                            <th scope="col">Monitor source</th>
                             <th scope="col">HTTP status</th>
                             <th scope="col">Uptime</th>
                             <th scope="col"><span class="visually-hidden">Details</span></th>
@@ -58,13 +64,14 @@
                                 <td data-label="Source"><span class="tag">@item.Source</span></td>
                                 <td data-label="Initiator">@(item.InitiatedByDisplayName ?? "—")</td>
                                 <td data-label="Outcome">
-                                    <span class="badge" data-status="@OutcomeStatus(item.Outcome)">@(item.Outcome ?? "Pending")</span>
+                                    <span class="badge" data-status="@StatusBadges.ForOutcome(item.Outcome)">@(item.Outcome ?? "Pending")</span>
                                     @if (item.FailureCategory is not null)
                                     {
                                         <span class="data-table__secondary">@item.FailureCategory</span>
                                     }
                                 </td>
                                 <td data-label="Duration">@(item.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</td>
+                                <td data-label="Monitor source">@(item.MonitorSource ?? "—")</td>
                                 <td data-label="HTTP status">@(item.HttpStatus?.ToString() ?? "—")</td>
                                 <td data-label="Uptime">@(item.CountsForUptime ? "Counts" : "Excluded")</td>
                                 <td data-label="Details">

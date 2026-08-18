@@ -54,7 +54,7 @@
                         <a class="app-notifications__card" data-unread="@item.IsUnread.ToString().ToLowerInvariant()"
                            asp-controller="Incidents" asp-action="Details" asp-route-id="@item.IncidentId">
                             <span class="app-notifications__card-top">
-                                <span class="badge" data-status="@(item.EventType == "Recovered" ? "success" : item.Severity == "Critical" ? "danger" : "warning")">@item.EventType</span>
+                                <span class="badge" data-status="@(item.EventType == "Recovered" ? StatusBadges.Success : StatusBadges.ForSeverity(item.Severity))">@item.EventType</span>
                                 <span class="app-notifications__time">@item.OccurredAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</span>
                             </span>
                             <span class="app-notifications__target">@item.EndpointDisplayUrl</span>

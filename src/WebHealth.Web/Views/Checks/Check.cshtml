@@ -4,12 +4,7 @@
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Endpoints(Url), Breadcrumbs.Endpoint(Url, Model.Check.EndpointId, Model.Check.EndpointDisplayUrl), new BreadcrumbItem("Check history", Url.Action("History", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check details"));
     var check = Model.Check;
     var hasResult = check.Outcome is not null;
-    var outcomeStatus = check.Outcome switch
-    {
-        "Healthy" => "success",
-        "Critical" => "danger",
-        _ => "warning"
-    };
+    var outcomeStatus = StatusBadges.ForOutcome(check.Outcome);
 }
 
 <div class="stack">
@@ -50,8 +45,11 @@
                 <div><dt>Connect</dt><dd>@(check.ConnectDurationMs is { } connect ? $"{connect} ms" : "—")</dd></div>
                 <div><dt>TLS</dt><dd>@(check.TlsDurationMs is { } tls ? $"{tls} ms" : "—")</dd></div>
                 <div><dt>Time to first byte</dt><dd>@(check.TtfbDurationMs is { } ttfb ? $"{ttfb} ms" : "—")</dd></div>
-                <div><dt>Decoded length</dt><dd>@(check.DecodedLength is { } length ? $"{length:N0} bytes" : "—")</dd></div>
+                <div><dt>Page size</dt><dd>@(check.DecodedLength is { } length ? $"{length:N0} bytes" : "—") @if (check.LengthSource is not null) { <span class="data-table__secondary">Measured as @check.LengthSource</span> }</dd></div>
+                <div><dt>Transferred length</dt><dd>@(check.TransferredLength is { } transferred ? $"{transferred:N0} bytes" : "Not advertised")</dd></div>
                 <div><dt>Response truncated</dt><dd>@(check.ResponseTruncated ? "Yes" : "No")</dd></div>
+                <div><dt>Monitor source</dt><dd>@(check.MonitorSource ?? "—")</dd></div>
+                <div><dt>Measured at</dt><dd>@(check.MeasuredAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
             </dl>
         </section>
     }
@@ -81,7 +79,7 @@
                         {
                             <tr>
                                 <td data-label="Rule">@finding.RuleKey</td>
-                                <td data-label="Severity"><span class="badge" data-status="@(finding.Severity == "Critical" ? "danger" : "warning")">@finding.Severity</span></td>
+                                <td data-label="Severity"><span class="badge" data-status="@StatusBadges.ForSeverity(finding.Severity)">@finding.Severity</span></td>
                                 <td data-label="Observed">@(finding.ObservedValue ?? "—")</td>
                                 <td data-label="Expected">@(finding.ExpectedValue ?? "—")</td>
                                 <td data-label="Issue key" class="code">@finding.IssueKey</td>

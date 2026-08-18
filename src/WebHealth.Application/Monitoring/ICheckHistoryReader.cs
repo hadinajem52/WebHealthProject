@@ -22,7 +22,13 @@ public sealed record CheckHistoryPage(
     IReadOnlyList<CheckHistoryItem> Items,
     int Page,
     int PageSize,
-    int TotalCount);
+    int TotalCount,
+    /// <summary>
+    /// BR-P05. Whether the timings on this page may be read against each other, and why not
+    /// when they may not. Assessed over the results actually shown, so the warning appears on
+    /// exactly the pages where the mixture exists.
+    /// </summary>
+    ComparabilityAssessment Comparability);
 
 public sealed record CheckHistoryItem(
     Guid LogicalCheckId,
@@ -36,6 +42,7 @@ public sealed record CheckHistoryItem(
     string? FailureCategory,
     int? HttpStatus,
     int? TotalDurationMs,
+    string? MonitorSource,
     bool CountsForUptime);
 
 public sealed record CheckDetails(
@@ -58,7 +65,11 @@ public sealed record CheckDetails(
     int? ConnectDurationMs,
     int? TlsDurationMs,
     int? TtfbDurationMs,
+    long? TransferredLength,
     long? DecodedLength,
+    string? LengthSource,
+    string? MonitorSource,
+    DateTimeOffset? MeasuredAt,
     bool ResponseTruncated,
     string? SafeDiagnostic,
     bool CountsForUptime,

@@ -184,8 +184,9 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
                 + "'RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge',"
                 + "'HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect',"
                 + "'ExecutionExhausted','TargetIneligible','Protocol',"
+                + "'SlowResponse','PageTooLarge',"
                 + "'SslExpired','SslNotYetValid','SslHostnameMismatch','SslUntrusted',"
-                + "'SslHandshakeFailed')");
+                + "'SslHandshakeFailed','SslExpiringSoon')");
             table.HasCheckConstraint(
                 "ck_check_result_outcome_category",
                 "(outcome = 'Healthy' AND failure_category IS NULL) OR "
@@ -240,7 +241,7 @@ internal sealed class FindingConfiguration : IEntityTypeConfiguration<Finding>
     {
         builder.ToTable("finding", table => table.HasCheckConstraint(
             "ck_finding_severity",
-            "severity IN ('Warning', 'Critical')"));
+            "severity IN ('Warning', 'High', 'Critical')"));
         builder.Property(finding => finding.RuleKey).HasMaxLength(100).IsRequired();
         builder.Property(finding => finding.Severity).HasMaxLength(20).IsRequired();
         builder.Property(finding => finding.ObservedValue).HasMaxLength(500);

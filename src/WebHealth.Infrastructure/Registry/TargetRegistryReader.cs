@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Persistence;
 
+using WebHealth.Domain.Monitoring;
+
 namespace WebHealth.Infrastructure.Registry;
 
 internal sealed class TargetRegistryReader(
@@ -206,7 +208,8 @@ internal sealed class TargetRegistryReader(
         var latest = await dbContext.CertificateObservations.AsNoTracking()
             .Where(observation => observation.EndpointMonitorId == monitorId)
             .OrderByDescending(observation => observation.ObservedAt)
-            .Select(observation => new CertificateObservationItem(
+            .Select(observation => new
+            {
                 observation.Subject,
                 observation.Issuer,
                 observation.SerialNumber,
@@ -218,10 +221,35 @@ internal sealed class TargetRegistryReader(
                 observation.HostnameMatched,
                 observation.ChainTrusted,
                 observation.SubjectAlternativeNames,
-                observation.ObservedAt))
+                observation.ObservedAt
+            })
             .FirstOrDefaultAsync(cancellationToken);
-        return new CertificateStatus(true, latest);
+        return new CertificateStatus(true, latest is null ? null : new CertificateObservationItem(
+            latest.Subject,
+            latest.Issuer,
+            latest.SerialNumber,
+            latest.Sha256Fingerprint,
+            latest.NotBefore,
+            latest.NotAfter,
+            latest.DaysRemaining,
+            latest.ValidationCategory,
+            latest.HostnameMatched,
+            latest.ChainTrusted,
+            latest.SubjectAlternativeNames,
+            latest.ObservedAt,
+            SelectExpirySeverity(latest.ValidationCategory, latest.DaysRemaining)));
     }
+
+    /// <summary>
+    /// BR-C04, re-derived from the stored day count so the page and the check that produced it
+    /// can never show different severities for the same observation.
+    /// </summary>
+    private static CertificateExpirySeverity SelectExpirySeverity(
+        string validationCategory,
+        int daysRemaining) =>
+        validationCategory == nameof(TlsValidationCategory.Valid)
+            ? CertificateExpiry.SelectSeverity(daysRemaining, CertificateExpiryThresholds.Default)
+            : CertificateExpirySeverity.None;
 
     public async Task<IReadOnlyList<EnvironmentListItem>> ListDeletedEnvironmentsAsync(
         RegistryAccessContext access,

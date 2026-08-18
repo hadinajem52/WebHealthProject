@@ -16,7 +16,9 @@ internal sealed class IncidentConfiguration : IEntityTypeConfiguration<Incident>
     {
         builder.ToTable("incident", table =>
         {
-            table.HasCheckConstraint("ck_incident_severity", "severity IN ('Warning', 'Critical')");
+            table.HasCheckConstraint(
+                "ck_incident_severity",
+                "severity IN ('Warning', 'High', 'Critical')");
             table.HasCheckConstraint(
                 "ck_incident_status",
                 "status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery', 'Resolved', 'Closed')");
@@ -83,7 +85,8 @@ internal sealed class IncidentEventConfiguration : IEntityTypeConfiguration<Inci
             table.HasCheckConstraint("ck_incident_event_sequence_number", "sequence_number > 0");
             table.HasCheckConstraint(
                 "ck_incident_event_type",
-                "event_type IN ('Opened', 'StatusChanged', 'Reassigned', 'NoteAdded', 'EvidenceRecorded')");
+                "event_type IN ('Opened', 'StatusChanged', 'Reassigned', 'NoteAdded', "
+                + "'EvidenceRecorded', 'CertificateRenewed')");
             table.HasCheckConstraint(
                 "ck_incident_event_fields",
                 "(event_type = 'Opened' AND to_status IS NOT NULL AND from_status IS NULL "
@@ -100,6 +103,9 @@ internal sealed class IncidentEventConfiguration : IEntityTypeConfiguration<Inci
                 + "AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL "
                 + "AND bounded_note IS NOT NULL AND length(bounded_note) > 0) OR "
                 + "(event_type = 'EvidenceRecorded' AND from_status IS NULL AND to_status IS NULL "
+                + "AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL "
+                + "AND bounded_note IS NOT NULL AND length(bounded_note) > 0) OR "
+                + "(event_type = 'CertificateRenewed' AND from_status IS NULL AND to_status IS NULL "
                 + "AND from_owner_subject_id IS NULL AND to_owner_subject_id IS NULL "
                 + "AND bounded_note IS NOT NULL AND length(bounded_note) > 0)");
         });

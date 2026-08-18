@@ -95,7 +95,7 @@
                                     <span class="data-table__secondary">@item.ClientName / @item.WebsiteName / @item.EnvironmentName</span>
                                 </td>
                                 <td data-label="Issue">@item.IssueKey @if (item.RecurrenceCount > 0) { <span class="tag">Recurrence @item.RecurrenceCount</span> }</td>
-                                <td data-label="Severity"><span class="badge" data-status="@(item.Severity == "Critical" ? "danger" : "warning")">@item.Severity</span></td>
+                                <td data-label="Severity"><span class="badge" data-status="@StatusBadges.ForSeverity(item.Severity)">@item.Severity</span></td>
                                 <td data-label="Status">
                                     <span class="badge" data-status="@StatusBadge(item.Status)">@item.Status</span>
                                     @if (item.AcknowledgedAt is null && item.Status != "Resolved" && item.Status != "Closed")
