@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebHealth.Application.Auditing;
+using WebHealth.Application.Notifications;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -23,6 +24,11 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
 
         builder.ConfigureServices(services =>
         {
+            // The shell renders the notification panel on every page. These tests run with no
+            // database, so the feed is stubbed rather than reaching for a DbContext.
+            services.RemoveAll<INotificationFeedReader>();
+            services.AddScoped<INotificationFeedReader, EmptyNotificationFeedReader>();
+
             services.RemoveAll<IAuthorizationDenialAuditWriter>();
             services.AddSingleton<RecordingAuthorizationDenialAuditWriter>();
             services.AddSingleton<IAuthorizationDenialAuditWriter>(services =>

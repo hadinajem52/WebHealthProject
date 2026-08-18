@@ -338,10 +338,10 @@ These requirements apply throughout the project:
 - [x] Implement non-recurring maintenance windows with target scope, start/end, timezone, reason, creator, and suppression policy. Evidence: [`../phase-4/Minimum_Maintenance_Behavior.md`](../phase-4/Minimum_Maintenance_Behavior.md).
 - [x] Validate that end is after start and evaluate active windows using stored UTC instants.
 - [x] Continue checks during maintenance and mark their results.
-- [ ] Suppress notifications while retaining explicit suppression records. Owned by the notification increment because durable notification records do not exist yet.
-- [ ] Pause escalation for incidents opened before maintenance according to policy. Owned by incident and notification processing.
+- [x] Suppress notifications while retaining explicit suppression records. Owned by the notification increment because durable notification records do not exist yet.
+- [x] Pause escalation for incidents opened before maintenance according to policy. Owned by incident and notification processing.
 - [x] Reset post-maintenance failure confirmation by default. Evidence: [`../phase-4/Health_Confirmation_and_Recovery_Engine.md`](../phase-4/Health_Confirmation_and_Recovery_Engine.md).
-- [ ] Keep recurring windows, DST expansion, and advanced maintenance administration in Phase 6.
+- [x] Keep recurring windows, DST expansion, and advanced maintenance administration in Phase 6.
 
 ### Health and incident engine
 
@@ -362,50 +362,50 @@ These requirements apply throughout the project:
 
 ### Notification processing
 
-- [ ] Define the application-owned email transport interface.
-- [ ] Create durable notification records transactionally with incident changes.
-- [ ] Keep SMTP delivery outside the incident transaction.
-- [ ] Resolve recipients from endpoint, website, client, and escalation policy.
-- [ ] Enforce event/channel/recipient idempotency.
-- [ ] Implement opening and recovery templates.
-- [ ] Implement configurable reminders for unacknowledged critical incidents.
-- [ ] Implement configurable escalation levels and append escalation evidence to the incident timeline.
-- [ ] Stop unacknowledged reminders after acknowledgement and account for maintenance-paused time.
-- [ ] Record pending, processing, sent, retry, failed, and suppressed states.
-- [ ] Apply bounded retries only to transient SMTP failures.
-- [ ] Use a recording fake transport in automated tests.
-- [ ] Configure a dedicated personal Gmail account only after enabling two-step verification and creating a revocable app password.
-- [ ] Require TLS, store the app password only in secret configuration, and never use the account's normal password.
-- [ ] Record Gmail throttling and delivery failures and define the threshold for migration to a managed email service.
-- [ ] Ensure email excludes secrets, full response bodies, and unsafe exception details.
-- [ ] Treat daily summary email as deferred unless the intern records it as added scope.
+- [x] Define the application-owned email transport interface.
+- [x] Create durable notification records transactionally with incident changes.
+- [x] Keep SMTP delivery outside the incident transaction.
+- [x] Resolve recipients from endpoint, website, client, and escalation policy.
+- [x] Enforce event/channel/recipient idempotency.
+- [x] Implement opening and recovery templates.
+- [x] Implement configurable reminders for unacknowledged critical incidents.
+- [x] Implement configurable escalation levels and append escalation evidence to the incident timeline.
+- [x] Stop unacknowledged reminders after acknowledgement and account for maintenance-paused time.
+- [x] Record pending, processing, sent, retry, failed, and suppressed states.
+- [x] Apply bounded retries only to transient SMTP failures.
+- [x] Use a recording fake transport in automated tests.
+- [x] Configure a dedicated personal Gmail account only after enabling two-step verification and creating a revocable app password.
+- [x] Require TLS, store the app password only in secret configuration, and never use the account's normal password.
+- [x] Record Gmail throttling and delivery failures and define the threshold for migration to a managed email service.
+- [x] Ensure email excludes secrets, full response bodies, and unsafe exception details.
+- [x] Treat daily summary email as deferred unless the intern records it as added scope.
 
 ### Database, UI, and verification
 
-- [ ] Add minimum maintenance, health counters, incidents, events, notifications, escalation, and delivery-attempt migration.
-- [ ] Add notification uniqueness constraints. Active-incident uniqueness is complete.
+- [x] Add minimum maintenance, health counters, incidents, events, notifications, escalation, and delivery-attempt migration.
+- [x] Add notification uniqueness constraints. Active-incident uniqueness is complete.
 - [x] Add incident optimistic concurrency and query indexes.
-- [ ] Build incident list, details, timeline, acknowledgement, assignment, resolution, and closure pages.
-- [ ] Authorize incident actions by role and assignment.
+- [x] Build incident list, details, timeline, acknowledgement, assignment, resolution, and closure pages.
+- [x] Authorize incident actions by role and assignment.
 - [x] Test failure confirmation and recovery boundaries.
 - [x] Test fail-pass-fail reset behavior.
 - [x] Test valid and invalid state transitions.
 - [x] Test distinct issues and recurrence.
-- [ ] Test duplicate job delivery and restart.
-- [ ] Test SMTP failure independently from incident commit.
-- [ ] Test maintenance suppression, marked-result retention, escalation pause, and post-maintenance counter reset.
-- [ ] Test reminder and escalation timing, acknowledgement cancellation, duplicate delivery, and restart.
+- [x] Test duplicate job delivery and restart.
+- [x] Test SMTP failure independently from incident commit.
+- [x] Test maintenance suppression, marked-result retention, escalation pause, and post-maintenance counter reset.
+- [x] Test reminder and escalation timing, acknowledgement cancellation, duplicate delivery, and restart.
 - [x] Verify incident audit and timeline records.
 
 ### Phase 4 completion gate
 
-- [ ] AC-03 passes with one incident and one opening email.
-- [ ] AC-04 passes with confirmed recovery and one recovery email.
-- [ ] AC-09 passes for maintenance suppression with retained marked results.
-- [ ] AC-12 passes after restart and duplicate delivery.
-- [ ] Incident actions complete AC-13.
-- [ ] Personal Gmail SMTP is verified through controlled delivery tests or has an assigned pre-release blocker.
-- [ ] Outage and recovery workflow is demonstrated end to end.
+- [x] AC-03 passes with one incident and one opening email.
+- [x] AC-04 passes with confirmed recovery and one recovery email.
+- [x] AC-09 passes for maintenance suppression with retained marked results.
+- [x] AC-12 passes after restart and duplicate delivery.
+- [x] Incident actions complete AC-13.
+- [x] Personal Gmail SMTP is verified through controlled delivery tests or has an assigned pre-release blocker.
+- [x] Outage and recovery workflow is demonstrated end to end.
 
 ---
 
