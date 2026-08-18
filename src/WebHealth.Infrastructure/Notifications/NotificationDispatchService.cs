@@ -110,8 +110,9 @@ internal sealed class NotificationDispatchService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var delivery = await dbContext.NotificationDeliveries
+        // Read untracked: the message only needs a snapshot, and leaving nothing tracked keeps
+        // the write below working from the row's true current state.
+        var source = await dbContext.NotificationDeliveries.AsNoTracking()
             .Include(candidate => candidate.NotificationEvent).ThenInclude(notificationEvent => notificationEvent.Incident)
                 .ThenInclude(incident => incident.EndpointMonitor).ThenInclude(monitor => monitor.Endpoint)
                     .ThenInclude(endpoint => endpoint.Environment).ThenInclude(environment => environment.Website)
@@ -121,15 +122,33 @@ internal sealed class NotificationDispatchService(
             .SingleOrDefaultAsync(
                 candidate => candidate.Id == deliveryId && candidate.LeaseOwner == leaseOwner,
                 cancellationToken);
-        if (delivery is null)
+        if (source is null)
         {
-            await transaction.RollbackAsync(cancellationToken);
             return false;
         }
 
-        var ownerDisplayName = await ResolveOwnerDisplayNameAsync(delivery.NotificationEvent.Incident.OwnerSubject, cancellationToken);
-        var message = BuildMessage(delivery, ownerDisplayName);
+        var ownerDisplayName = await ResolveOwnerDisplayNameAsync(source.NotificationEvent.Incident.OwnerSubject, cancellationToken);
+        var message = BuildMessage(source, ownerDisplayName);
+
+        // SMTP is a network round trip with a multi-second timeout, so it runs with no
+        // transaction and no connection held. The lease is what protects the row meanwhile.
         var result = await emailTransport.SendAsync(message, cancellationToken);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // Re-read under the lease: if it expired and another worker claimed the row while the
+        // send was in flight, that worker now owns the outcome and this one must not write.
+        var delivery = await dbContext.NotificationDeliveries.SingleOrDefaultAsync(
+            candidate => candidate.Id == deliveryId && candidate.LeaseOwner == leaseOwner,
+            cancellationToken);
+        if (delivery is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            logger.LogWarning(
+                "Notification delivery {DeliveryId} lost its lease during send; outcome {Outcome} discarded.",
+                deliveryId, result.Outcome);
+            return false;
+        }
+
         delivery.AttemptCount++;
         dbContext.NotificationAttempts.Add(new NotificationAttempt
         {

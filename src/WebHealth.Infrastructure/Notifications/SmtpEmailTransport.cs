@@ -46,7 +46,9 @@ internal sealed class SmtpEmailTransport(
         }
         catch (SmtpCommandException exception)
         {
-            var permanent = exception.StatusCode is >= SmtpStatusCode.MailboxUnavailable;
+            // RFC 5321: 4xx is a temporary negative reply, 5xx is permanent. Comparing against a
+            // single code would retry permanent rejections such as 535 authentication failed.
+            var permanent = (int)exception.StatusCode / 100 == 5;
             logger.LogError(
                 exception,
                 "SMTP command failed with status {SmtpStatus} for host {SmtpHost}.",
@@ -55,6 +57,12 @@ internal sealed class SmtpEmailTransport(
             return new(
                 permanent ? EmailTransportOutcome.PermanentFailure : EmailTransportOutcome.TransientFailure,
                 $"smtp status {(int)exception.StatusCode}");
+        }
+        // Shutdown is not a delivery failure: let it cancel so no attempt is recorded and the
+        // lease simply expires. Only MailKit's own timeout arrives here as a transient fault.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception exception) when (exception is SmtpProtocolException or IOException or OperationCanceledException)
         {

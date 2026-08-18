@@ -14,6 +14,8 @@ internal sealed class NotificationFeedReader(
     ApplicationDbContext dbContext,
     TimeProvider timeProvider) : INotificationFeedReader
 {
+    private const int MaximumLimit = 50;
+
     private static readonly NotificationFeed Empty = new([], 0);
 
     public async Task<NotificationFeed> GetForRecipientAsync(
@@ -27,6 +29,10 @@ internal sealed class NotificationFeedReader(
         {
             return Empty;
         }
+
+        // The panel renders on every authenticated page, so the page size is bounded here
+        // rather than trusting the caller.
+        limit = Math.Clamp(limit, 1, MaximumLimit);
 
         // A user who has never opened the panel has no marker, so everything counts as unread.
         var lastReadAt = await dbContext.NotificationReadMarkers.AsNoTracking()
@@ -61,26 +67,21 @@ internal sealed class NotificationFeedReader(
         return new(items, unreadCount);
     }
 
-    public async Task MarkReadAsync(Guid userId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Idempotent by construction: a single atomic upsert, so concurrent tabs, double clicks or
+    /// retries collapse into one row instead of racing to a duplicate-key failure.
+    /// </summary>
+    public Task MarkReadAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
-        var marker = await dbContext.NotificationReadMarkers
-            .SingleOrDefaultAsync(candidate => candidate.UserId == userId, cancellationToken);
-        if (marker is null)
-        {
-            dbContext.NotificationReadMarkers.Add(new NotificationReadMarker
-            {
-                UserId = userId,
-                LastReadAt = now,
-                Version = 1
-            });
-        }
-        else
-        {
-            marker.LastReadAt = now;
-            marker.Version++;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
+        return dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+             INSERT INTO web_health.notification_read_marker (user_id, last_read_at, version)
+             VALUES ({userId}, {now}, 1)
+             ON CONFLICT (user_id) DO UPDATE
+             SET last_read_at = GREATEST(web_health.notification_read_marker.last_read_at, EXCLUDED.last_read_at),
+                 version = web_health.notification_read_marker.version + 1
+             """,
+            cancellationToken);
     }
 }

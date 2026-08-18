@@ -148,9 +148,10 @@
         }
     }
 
-    // The account menu is a non-modal popup: it closes on Escape, on a click
-    // outside it, and as soon as focus leaves it, so it never traps the user.
-    function setUpAccountMenu(container, toggle, menu) {
+    // A non-modal popup: it closes on Escape, on a click outside it, and as soon as
+    // focus leaves it, so it never traps the user. Shared by the account and
+    // notification menus in the header.
+    function setUpPopupMenu(container, toggle, menu) {
         var isOpen = false;
 
         function setOpen(open) {
@@ -269,16 +270,15 @@
         var accountMenu = document.querySelector('[data-shell-account-menu]');
 
         if (account && accountToggle && accountMenu) {
-            setUpAccountMenu(account, accountToggle, accountMenu);
+            setUpPopupMenu(account, accountToggle, accountMenu);
         }
 
-        // The notification panel is the same non-modal popup as the account menu.
         var notifications = document.querySelector('[data-shell-notifications]');
         var notificationsToggle = document.querySelector('[data-shell-notifications-toggle]');
         var notificationsMenu = document.querySelector('[data-shell-notifications-menu]');
 
         if (notifications && notificationsToggle && notificationsMenu) {
-            setUpAccountMenu(notifications, notificationsToggle, notificationsMenu);
+            setUpPopupMenu(notifications, notificationsToggle, notificationsMenu);
         }
 
         var flashMessages = document.querySelector('.flash-messages');
