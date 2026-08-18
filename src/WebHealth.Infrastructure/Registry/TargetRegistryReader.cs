@@ -115,6 +115,10 @@ internal sealed class TargetRegistryReader(
             endpoint.MonitorType,
             endpoint.IntervalSeconds,
             MonitorIntervalOverride.GetSeconds(endpoint.BoundedOverrides) / 60,
+            endpoint.WarningThresholdMs ?? ResponseTimeThresholds.Default.WarningMs,
+            endpoint.CriticalThresholdMs ?? ResponseTimeThresholds.Default.CriticalMs,
+            ResponseThresholdOverride.IsOverride(
+                endpoint.WarningThresholdMs, endpoint.CriticalThresholdMs),
             endpoint.TimeoutSeconds,
             endpoint.MonitorEnabled,
             endpoint.SchedulingEnabled,
@@ -376,6 +380,12 @@ internal sealed class TargetRegistryReader(
                     .Select(monitor => monitor.BoundedOverrides).Single(),
                 endpoint.Monitors
                     .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.WarningThresholdMs).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.CriticalThresholdMs).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
                     .Select(monitor => monitor.TimeoutSeconds).Single(),
                 endpoint.Monitors
                     .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
@@ -427,6 +437,7 @@ internal sealed class TargetRegistryReader(
         Guid EffectiveOwnerSubjectId, bool IsEnabled, bool IsDeleted, string? HttpExceptionReason,
         string? TargetAuthorizationKind, string? TargetAuthorizationEvidence,
         DateTimeOffset? TargetAuthorizationExpiresAt, long Version, string MonitorType,
-        int IntervalSeconds, string BoundedOverrides, int TimeoutSeconds, bool MonitorEnabled,
+        int IntervalSeconds, string BoundedOverrides, int? WarningThresholdMs,
+        int? CriticalThresholdMs, int TimeoutSeconds, bool MonitorEnabled,
         bool SchedulingEnabled);
 }

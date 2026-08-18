@@ -79,6 +79,16 @@ public sealed class EndpointFormViewModel
     [Range(1, 1440), Display(Name = "Monitoring interval override (minutes)")]
     public int? IntervalMinutesOverride { get; set; }
 
+    // BR-P02. Left blank, the endpoint uses the documented 1,500 / 3,000 ms budget; the
+    // registry service rejects one value without the other.
+    [Range(ResponseThresholdOverride.MinimumMs, ResponseThresholdOverride.MaximumMs)]
+    [Display(Name = "Slow-response warning threshold (ms)")]
+    public int? WarningThresholdMsOverride { get; set; }
+
+    [Range(ResponseThresholdOverride.MinimumMs, ResponseThresholdOverride.MaximumMs)]
+    [Display(Name = "Slow-response critical threshold (ms)")]
+    public int? CriticalThresholdMsOverride { get; set; }
+
     public bool CanConfigureInterval { get; set; }
 
     public long Version { get; set; }

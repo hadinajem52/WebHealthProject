@@ -37,6 +37,13 @@ internal sealed class EndpointRegistryService(
             return Validation(interval.Error);
         }
 
+        var thresholds = ResponseThresholdOverride.Decide(
+            command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
+        if (thresholds.Error is not null)
+        {
+            return Validation(thresholds.Error);
+        }
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var environment = await LockEnvironmentAsync(command.EnvironmentId, cancellationToken);
         if (environment is null)
@@ -67,7 +74,8 @@ internal sealed class EndpointRegistryService(
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
         dbContext.Endpoints.Add(endpoint);
         dbContext.EndpointMonitors.Add(CreateMonitor(
-            endpoint, environment.IsProduction, interval.Seconds, command.SchedulingEnabled, access.UserId, now));
+            endpoint, environment.IsProduction, interval.Seconds, command.SchedulingEnabled,
+            thresholds.Thresholds, access.UserId, now));
         if (RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl))
         {
             dbContext.EndpointMonitors.Add(CreateSslMonitor(
@@ -133,6 +141,13 @@ internal sealed class EndpointRegistryService(
             return Validation(interval.Error);
         }
 
+        var thresholds = ResponseThresholdOverride.Decide(
+            command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
+        if (thresholds.Error is not null)
+        {
+            return Validation(thresholds.Error);
+        }
+
         if (!await IsValidOwnerAsync(command.OwnerSubjectId, endpoint.OwnerSubjectId, cancellationToken))
         {
             return Validation("Select an enabled user or team owner, or inherit the website owner.");
@@ -174,6 +189,7 @@ internal sealed class EndpointRegistryService(
                 exception,
                 endpoint.Environment.IsProduction,
                 interval.Seconds,
+                thresholds.Thresholds,
                 access.UserId,
                 now);
             await auditTrail.RecordEndpointMutationAsync(
@@ -430,6 +446,7 @@ internal sealed class EndpointRegistryService(
         bool isProduction,
         int? intervalOverrideSeconds,
         bool schedulingEnabled,
+        ResponseTimeThresholds thresholds,
         Guid actorId,
         DateTimeOffset now)
     {
@@ -449,16 +466,19 @@ internal sealed class EndpointRegistryService(
                 RegistryDefaults.HttpTimeoutSeconds,
                 2,
                 2,
-                1000,
-                3000),
+                thresholds.WarningMs,
+                thresholds.CriticalMs),
             ScheduleAnchor = schedule.Anchor,
             NextDueAt = schedule.NextDueAt,
             IntervalSeconds = interval,
             TimeoutSeconds = RegistryDefaults.HttpTimeoutSeconds,
             FailureConfirmationCount = 2,
             RecoveryConfirmationCount = 2,
-            WarningThresholdMs = 1000,
-            CriticalThresholdMs = 3000,
+            // BR-P02: the resolved value is stored rather than left null, so a result's
+            // configuration snapshot records the threshold it was judged against even if the
+            // documented default changes later.
+            WarningThresholdMs = thresholds.WarningMs,
+            CriticalThresholdMs = thresholds.CriticalMs,
             SchedulingEnabled = schedulingEnabled,
             IsEnabled = true,
             CreatedAt = now,
@@ -588,6 +608,7 @@ internal sealed class EndpointRegistryService(
         HttpExceptionDecision exception,
         bool isProduction,
         int? intervalOverrideSeconds,
+        ResponseTimeThresholds thresholds,
         Guid actorId,
         DateTimeOffset now)
     {
@@ -636,6 +657,8 @@ internal sealed class EndpointRegistryService(
             }
 
             monitor.BoundedOverrides = MonitorIntervalOverride.Serialize(intervalOverrideSeconds);
+            monitor.WarningThresholdMs = thresholds.WarningMs;
+            monitor.CriticalThresholdMs = thresholds.CriticalMs;
             monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
                 endpoint.NormalizedUrl,
                 isProduction,

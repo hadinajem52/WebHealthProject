@@ -8,10 +8,14 @@ public static class SslMonitorIdentity
     public const string DefaultDiscriminator = "default";
 
     /// <summary>
-    /// The expiry rule is keyed by certificate rather than by endpoint, so its issue key is the
-    /// only one on this monitor that carries a real discriminator.
+    /// One rule covers a certificate's whole expiry lifecycle — approaching expiry and then
+    /// past it. They share a rule key, and therefore an issue key, deliberately: a certificate
+    /// that crosses its own expiry date has not developed a second problem, and splitting the
+    /// key there would open a duplicate incident for the same certificate (BR-C05) and leave
+    /// the first one unrecognisable at renewal (BR-C06). The reported failure category still
+    /// distinguishes the two states.
     /// </summary>
-    public const string ExpiryRuleKey = "Ssl.ExpiringSoon";
+    public const string ExpiryRuleKey = "Ssl.Expiry";
 
     public static string CreateIssueKey(string ruleKey, string discriminator = DefaultDiscriminator) =>
         $"v1|{MonitorType}|{ruleKey}|{discriminator}";
@@ -103,28 +107,31 @@ public static class SslResultNormalizer
         }
 
         var validation = SelectValidationCategory(input.Probe);
-        if (validation is not null)
+
+        // BR-C04. Expiry — approaching or reached — is one fingerprint-keyed rule. Every other
+        // validation failure is a separate fact about the certificate and keeps its own key.
+        if (validation is null || validation == SslFailureCategories.Expired)
         {
-            yield return ValidationFinding(validation, input.Probe.Certificate);
+            var expiry = EvaluateExpiry(input, validation);
+            if (expiry is not null)
+            {
+                yield return expiry;
+            }
+
             yield break;
         }
 
-        // BR-C04. Only a certificate that is valid today gets an expiry band: an expired or
-        // untrusted one already has its own critical finding, and stacking a second one on it
-        // would double-count the same certificate as two issues.
-        var expiry = EvaluateExpiry(input);
-        if (expiry is not null)
-        {
-            yield return expiry;
-        }
+        yield return ValidationFinding(validation, input.Probe.Certificate);
     }
 
     /// <summary>
     /// BR-C04, keyed by fingerprint for BR-C05. Days remaining are counted from the result's
     /// measurement instant, the same instant every other rule on this result is judged at, so
-    /// one result never mixes two clocks.
+    /// one result never mixes two clocks. An already-expired certificate reports a negative
+    /// count and lands in the critical band by the same comparison, so it needs no separate
+    /// case here — only its own failure category.
     /// </summary>
-    private static NormalizedFinding? EvaluateExpiry(NormalizeSslResult input)
+    private static NormalizedFinding? EvaluateExpiry(NormalizeSslResult input, string? validationCategory)
     {
         if (input.Probe.Certificate is not { } certificate)
         {
@@ -137,10 +144,12 @@ public static class SslResultNormalizer
         return severity == CertificateExpirySeverity.None
             ? null
             : new NormalizedFinding(
-                SslFailureCategories.ExpiringSoon,
+                validationCategory ?? SslFailureCategories.ExpiringSoon,
                 SslMonitorIdentity.ExpiryRuleKey,
                 ToFindingSeverity(severity),
-                Bounded($"{daysRemaining} days remaining; expires {certificate.NotAfter:yyyy-MM-dd}"),
+                Bounded(validationCategory is null
+                    ? $"{daysRemaining} days remaining; expires {certificate.NotAfter:yyyy-MM-dd}"
+                    : $"Expired {-daysRemaining} days ago on {certificate.NotAfter:yyyy-MM-dd}"),
                 $"More than {thresholds.WarningDays} days remaining",
                 SslMonitorIdentity.CreateExpiryIssueKey(certificate.Sha256Fingerprint));
     }
@@ -160,7 +169,7 @@ public static class SslResultNormalizer
     private static string? SelectFailureCategory(
         SslCertificateProbeResult probe,
         IReadOnlyList<NormalizedFinding> findings) =>
-        SelectValidationCategory(probe) ?? findings.FirstOrDefault()?.FailureCategory;
+        findings.FirstOrDefault()?.FailureCategory ?? SelectValidationCategory(probe);
 
     private static string? SelectValidationCategory(SslCertificateProbeResult probe)
     {
@@ -225,6 +234,8 @@ public static class SslResultNormalizer
         category == SslFailureCategories.ExpiringSoon
             ? Bounded($"The certificate expires soon: {findings[0].ObservedValue}.")
             : Diagnostic(category);
+
+
 
     private static string? Diagnostic(string? category) => category switch
     {

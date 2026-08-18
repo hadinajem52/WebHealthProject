@@ -100,6 +100,9 @@ public sealed record EndpointDetails(
     string MonitorType,
     int IntervalSeconds,
     int? IntervalMinutesOverride,
+    int WarningThresholdMs,
+    int CriticalThresholdMs,
+    bool HasThresholdOverride,
     int TimeoutSeconds,
     bool MonitorEnabled,
     bool SchedulingEnabled,
@@ -163,7 +166,9 @@ public sealed record CreateEndpoint(
     string? TargetAuthorizationEvidence,
     DateTimeOffset? TargetAuthorizationExpiresAt,
     int? IntervalMinutesOverride = null,
-    bool SchedulingEnabled = true);
+    bool SchedulingEnabled = true,
+    int? WarningThresholdMsOverride = null,
+    int? CriticalThresholdMsOverride = null);
 
 
 public sealed record UpdateEndpoint(
@@ -177,4 +182,6 @@ public sealed record UpdateEndpoint(
     DateTimeOffset? TargetAuthorizationExpiresAt,
     long Version,
     int? IntervalMinutesOverride = null,
-    bool SchedulingEnabled = true);
+    bool SchedulingEnabled = true,
+    int? WarningThresholdMsOverride = null,
+    int? CriticalThresholdMsOverride = null);

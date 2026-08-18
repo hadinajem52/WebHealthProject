@@ -1,4 +1,5 @@
 using System.Text;
+using WebHealth.Domain.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Normalization;
 
@@ -40,32 +41,22 @@ public static class HttpFailureCategories
     public const string PageTooLarge = "PageTooLarge";
 }
 
+/// <summary>
+/// The severity a finding reports. These are aliases of <see cref="IncidentSeverities" />
+/// rather than a parallel set: a finding severity is carried straight onto the incident it
+/// confirms, so the two vocabularies have to be the same one.
+/// </summary>
 public static class FindingSeverities
 {
-    public const string Warning = "Warning";
+    public const string Warning = IncidentSeverities.Warning;
+    public const string High = IncidentSeverities.High;
+    public const string Critical = IncidentSeverities.Critical;
 
-    /// <summary>
-    /// Between warning and critical. It exists for rules whose urgency escalates while the
-    /// endpoint itself is still serving traffic — certificate expiry inside 15 days (BR-C04) is
-    /// the first of them.
-    /// </summary>
-    public const string High = "High";
+    public static IReadOnlyList<string> All => IncidentSeverities.All;
 
-    public const string Critical = "Critical";
+    public static int Rank(string severity) => IncidentSeverities.Rank(severity);
 
-    public static readonly string[] All = [Warning, High, Critical];
-
-    public static int Rank(string severity) => severity switch
-    {
-        Critical => 3,
-        High => 2,
-        Warning => 1,
-        _ => 0
-    };
-
-    /// <summary>Returns whichever of the two severities is more urgent.</summary>
-    public static string Max(string first, string second) =>
-        Rank(second) > Rank(first) ? second : first;
+    public static string Max(string first, string second) => IncidentSeverities.Max(first, second);
 
     /// <summary>
     /// Collapses a finding severity onto the three-state result outcome. <see cref="High" />
@@ -223,13 +214,13 @@ public static class HttpResultNormalizer
             return null;
         }
 
-        if (transport.BodyTruncated)
+        if (transport.TransferredLength is { } transferred)
         {
-            return new(transport.ResponseBytesRead, PageLengthSources.BoundedDecoded, transport.TransferredLength);
+            return new(transferred, PageLengthSources.TransferredContentLength, transferred);
         }
 
-        return transport.TransferredLength is { } transferred
-            ? new(transferred, PageLengthSources.TransferredContentLength, transferred)
+        return transport.BodyTruncated
+            ? new(transport.ResponseBytesRead, PageLengthSources.BoundedDecoded, null)
             : new(transport.ResponseBytesRead, PageLengthSources.MeasuredDecoded, null);
     }
 
@@ -294,9 +285,12 @@ public static class HttpResultNormalizer
     }
 
     /// <summary>
-    /// BR-P02. The finding is raised for every completed exchange, including a failing one: a
-    /// server error that also took four seconds is two separate facts, and they track as two
-    /// separate issues (BR-I04).
+    /// BR-P02. Raised for every exchange that produced a response, including one that failed a
+    /// rule: a server error that also took four seconds is two separate facts, and they track
+    /// as two separate issues (BR-I04). An exchange that produced no response is a different
+    /// matter and is excluded before this runs — a timeout's duration is its budget, not a
+    /// measured response time, and reporting it as one would put the timeout into the
+    /// percentiles that BR-U05 keeps it out of.
     /// </summary>
     private static NormalizedFinding? EvaluateResponseTime(int totalDurationMs, HttpResultPolicy policy)
     {
@@ -321,8 +315,11 @@ public static class HttpResultNormalizer
     }
 
     /// <summary>
-    /// BR-P04. A truncated body already raises <c>ResponseTooLarge</c> and its byte count is a
-    /// lower bound rather than a measurement, so it is not also reported as an oversized page.
+    /// BR-P04. A body that hit the read cap without advertising its length has no measurement
+    /// to judge — only a lower bound — and <c>ResponseTooLarge</c> already reports it, so no
+    /// page-size finding is raised for it. A truncated body that <em>did</em> advertise a
+    /// length is judged normally: the advertised value is exact whether or not the read was cut
+    /// short, and an oversized page is exactly what it describes.
     /// </summary>
     private static NormalizedFinding? EvaluatePageSize(
         PageLengthMeasurement? length,

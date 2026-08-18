@@ -49,6 +49,19 @@ internal sealed class IncidentAutomationService(
 
         var interruptedIncidentIds = await InterruptRecoveryAsync(
             check, result, incidents, now, cancellationToken);
+
+        // An issue can recover while the endpoint as a whole is still failing something else,
+        // so incidents for cleared issues resolve here rather than waiting for a wholly healthy
+        // result that may never arrive.
+        foreach (var incident in incidents
+            .Where(candidate => healthDecision.RecoveredIssueKeys.Contains(
+                candidate.IssueKey, StringComparer.Ordinal))
+            .ToArray())
+        {
+            await ResolveAsync(incident, check, result, isMaintenance, now, cancellationToken);
+            incidents.Remove(incident);
+        }
+
         await ApplyFailuresAsync(
             check, result, healthDecision, incidents, interruptedIncidentIds, isMaintenance, now, cancellationToken);
     }
@@ -101,6 +114,12 @@ internal sealed class IncidentAutomationService(
     /// observe. Resolving it here rather than waiting for a healthy result matters: a
     /// certificate renewed into another warning band never produces a healthy result, and the
     /// stale incident would stay open against a certificate that no longer exists.
+    /// <para>
+    /// The observation of the replacement is itself the confirmation. That is sound only because
+    /// a certificate monitor confirms in a single observation by design (increment 5.2): unlike
+    /// a flapping HTTP response, the certificate a host presents does not alternate between
+    /// checks, so a second day of waiting would add no evidence.
+    /// </para>
     /// </summary>
     private async Task ApplyCertificateRenewalAsync(
         LogicalCheck check,
@@ -117,6 +136,14 @@ internal sealed class IncidentAutomationService(
             .ToArray();
         foreach (var incident in superseded)
         {
+            // The timeline entry is written only once the resolution itself is going to happen,
+            // so an incident can never be left carrying a renewal event it did not act on.
+            if (!IncidentLifecycleEngine.Evaluate(new(
+                incident.Status, IncidentLifecycleAction.ConfirmRecovery)).Succeeded)
+            {
+                continue;
+            }
+
             AddEvent(
                 incident,
                 IncidentEventTypes.CertificateRenewed,

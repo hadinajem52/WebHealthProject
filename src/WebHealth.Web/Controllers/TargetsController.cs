@@ -173,7 +173,8 @@ public sealed class TargetsController(
         var result = await endpointService.CreateAsync(
             new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt,
-                model.IntervalMinutesOverride, model.SchedulingEnabled),
+                model.IntervalMinutesOverride, model.SchedulingEnabled,
+                model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -204,6 +205,10 @@ public sealed class TargetsController(
             TargetAuthorizationExpiresAt = endpoint.TargetAuthorizationExpiresAt,
             SchedulingEnabled = endpoint.SchedulingEnabled,
             IntervalMinutesOverride = endpoint.IntervalMinutesOverride,
+            // Only a real override is echoed back, so re-saving an unchanged form does not
+            // freeze today's default into the endpoint as an explicit choice.
+            WarningThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.WarningThresholdMs : null,
+            CriticalThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.CriticalThresholdMs : null,
             Version = endpoint.Version
         }, cancellationToken));
     }
@@ -220,7 +225,8 @@ public sealed class TargetsController(
             new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
                 model.TargetAuthorizationExpiresAt, model.Version,
-                model.IntervalMinutesOverride, model.SchedulingEnabled),
+                model.IntervalMinutesOverride, model.SchedulingEnabled,
+                model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
