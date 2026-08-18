@@ -19,6 +19,15 @@ public sealed class TargetsController(
     ICheckHistoryReader checkHistoryReader) : Controller
 {
     [HttpGet]
+    public async Task<IActionResult> Endpoints(string? search, CancellationToken cancellationToken)
+    {
+        var access = GetAccess();
+        return View(new RegistryEndpointListViewModel(
+            await targetReader.ListAllEndpointsAsync(access, search, cancellationToken),
+            search));
+    }
+
+    [HttpGet]
     public async Task<IActionResult> Environments(Guid websiteId, CancellationToken cancellationToken)
     {
         var access = GetAccess();
@@ -159,7 +168,7 @@ public sealed class TargetsController(
         var result = await endpointService.CreateAsync(
             new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt,
-                model.IntervalMinutesOverride),
+                model.IntervalMinutesOverride, model.SchedulingEnabled),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -188,6 +197,7 @@ public sealed class TargetsController(
             TargetAuthorizationKind = endpoint.TargetAuthorizationKind,
             TargetAuthorizationEvidence = endpoint.TargetAuthorizationEvidence,
             TargetAuthorizationExpiresAt = endpoint.TargetAuthorizationExpiresAt,
+            SchedulingEnabled = endpoint.SchedulingEnabled,
             IntervalMinutesOverride = endpoint.IntervalMinutesOverride,
             Version = endpoint.Version
         }, cancellationToken));
@@ -204,7 +214,8 @@ public sealed class TargetsController(
         var result = await endpointService.UpdateAsync(
             new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
-                model.TargetAuthorizationExpiresAt, model.Version, model.IntervalMinutesOverride),
+                model.TargetAuthorizationExpiresAt, model.Version,
+                model.IntervalMinutesOverride, model.SchedulingEnabled),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -242,6 +253,16 @@ public sealed class TargetsController(
         ChangeStateAsync(id, version, endpointService.DeleteAsync, nameof(Archived), "Endpoint archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
+    public Task<IActionResult> PauseEndpointSchedule(Guid id, long version, CancellationToken cancellationToken) =>
+        ChangeStateAsync(id, version, endpointService.PauseScheduleAsync, nameof(Endpoint),
+            "Scheduled checks paused. Manual runs are still available.", cancellationToken);
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
+    public Task<IActionResult> ResumeEndpointSchedule(Guid id, long version, CancellationToken cancellationToken) =>
+        ChangeStateAsync(id, version, endpointService.ResumeScheduleAsync, nameof(Endpoint),
+            "Scheduled checks resumed.", cancellationToken);
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeStateAsync(id, version, endpointService.RestoreAsync, nameof(Archived), "Endpoint restored in a disabled state.", cancellationToken);
 
@@ -258,6 +279,8 @@ public sealed class TargetsController(
     {
         var environment = await targetReader.FindEnvironmentAsync(model.EnvironmentId, GetAccess(), cancellationToken);
         model.EnvironmentName = environment?.Name ?? model.EnvironmentName;
+        model.WebsiteId = environment?.WebsiteId ?? model.WebsiteId;
+        model.WebsiteName = environment?.WebsiteName ?? model.WebsiteName;
         model.IsProduction = environment?.IsProduction ?? model.IsProduction;
         model.CanApproveHttp = User.IsInRole(ApplicationRoles.Administrator);
         model.CanConfigureInterval = User.IsInRole(ApplicationRoles.Administrator);

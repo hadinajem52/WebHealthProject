@@ -1,7 +1,7 @@
 @model AuditIndexViewModel
 @{
     ViewData.SetTitle("Audit history");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Administration"), new BreadcrumbItem("Audit"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Administration(Url), new BreadcrumbItem("Audit"));
     var firstVisible = Model.Result.TotalCount == 0
         ? 0
         : ((Model.Result.Page - 1) * Model.Result.PageSize) + 1;

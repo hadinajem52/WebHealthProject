@@ -1,7 +1,7 @@
 @model WebsiteDetailsViewModel
 @{
     ViewData.SetTitle(Model.Website.Name);
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Websites", Url.Action("Websites")), new BreadcrumbItem(Model.Website.Name));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), new BreadcrumbItem(Model.Website.Name));
 }
 <section class="card">
     <div class="page-intro">

@@ -1,7 +1,7 @@
 @model CheckHistoryViewModel
 @{
     ViewData.SetTitle("Check history");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Endpoint", Url.Action("Endpoint", "Targets", new { id = Model.Page.EndpointId })), new BreadcrumbItem("Check history"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Endpoints(Url), Breadcrumbs.Endpoint(Url, Model.Page.EndpointId, Model.Page.EndpointDisplayUrl), new BreadcrumbItem("Check history"));
     var history = Model.Page;
     var firstVisible = history.TotalCount == 0 ? 0 : ((history.Page - 1) * history.PageSize) + 1;
     var lastVisible = Math.Min(history.Page * history.PageSize, history.TotalCount);

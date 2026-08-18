@@ -1,5 +1,5 @@
 @model EnvironmentFormViewModel
-@{ViewData.SetTitle("Edit environment"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.WebsiteName), new BreadcrumbItem("Edit environment"));}
+@{ViewData.SetTitle("Edit environment"); ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), Breadcrumbs.Website(Url, Model.WebsiteId, Model.WebsiteName), Breadcrumbs.Environments(Url, Model.WebsiteId), Breadcrumbs.Environment(Url, Model.EnvironmentId, Model.Name), new BreadcrumbItem("Edit environment"));}
 <section class="card form-card"><h2 class="card__title">Edit environment</h2><p class="card__subtitle">Changing to Production validates every HTTP endpoint exception.</p><form asp-action="EditEnvironment" method="post" class="form-stack"><input asp-for="EnvironmentId" type="hidden" /><input asp-for="WebsiteId" type="hidden" /><input asp-for="Version" type="hidden" /><partial name="_EnvironmentForm" model="Model" /><div class="form-actions">
     <button class="button button--primary" type="submit">
         @await Html.PartialAsync("_Icon", "check")

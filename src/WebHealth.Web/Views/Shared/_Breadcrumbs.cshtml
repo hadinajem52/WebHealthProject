@@ -9,13 +9,10 @@
             {
                 var item = breadcrumbs[index];
                 var isLast = index == breadcrumbs.Count - 1;
-                var itemUrl = item.Url ?? (index == 0 && item.Text == "Registry"
-                    ? Url.Action("Clients", "Registry")
-                    : null);
                 <li class="breadcrumbs__item" aria-current="@(isLast ? "page" : null)">
-                    @if (!isLast && itemUrl is not null)
+                    @if (!isLast && item.Url is not null)
                     {
-                        <a href="@itemUrl">@item.Text</a>
+                        <a href="@item.Url">@item.Text</a>
                     }
                     else
                     {

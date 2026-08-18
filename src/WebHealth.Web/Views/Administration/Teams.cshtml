@@ -1,7 +1,7 @@
 @model TeamListViewModel
 @{
     ViewData.SetTitle("Teams");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Administration"), new BreadcrumbItem("Teams"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Administration(Url), new BreadcrumbItem("Teams"));
 }
 
 <section class="card">

@@ -1646,6 +1646,10 @@ internal static class DatabaseFoundationAssertions
         public Task<bool> IsEndpointEligibleAsync(
             Guid endpointId,
             CancellationToken cancellationToken = default) => Task.FromResult(isEligible);
+
+        public Task<bool> IsEndpointTestableAsync(
+            Guid endpointId,
+            CancellationToken cancellationToken = default) => Task.FromResult(isEligible);
     }
 
     private sealed class RecordingSafeHttpTransport(

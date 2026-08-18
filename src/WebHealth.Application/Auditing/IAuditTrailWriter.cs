@@ -152,7 +152,9 @@ public enum EndpointAuditAction
     Updated,
     Disabled,
     Deleted,
-    Restored
+    Restored,
+    SchedulePaused,
+    ScheduleResumed
 }
 
 public sealed record EndpointAuditSnapshot(

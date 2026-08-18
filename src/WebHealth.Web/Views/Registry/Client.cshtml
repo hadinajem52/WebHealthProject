@@ -1,7 +1,7 @@
 @model ClientDetailsViewModel
 @{
     ViewData.SetTitle(Model.Client.Name);
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Clients", Url.Action("Clients")), new BreadcrumbItem(Model.Client.Name));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Clients(Url), new BreadcrumbItem(Model.Client.Name));
 }
 <section class="card">
     <div class="page-intro">

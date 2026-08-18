@@ -36,8 +36,12 @@ internal sealed class LogicalCheckExecutionService(
 
         EnsureExecutable(check, command.DurableWorkId);
         var request = CreateRequest(check);
-        var isEligible = await eligibilityService.IsEndpointEligibleAsync(
-            check.EndpointMonitor.EndpointId, cancellationToken);
+        // A paused monitor stops the cadence, so only scheduled work re-checks it here.
+        var isEligible = check.Source == LogicalCheckSources.Scheduled
+            ? await eligibilityService.IsEndpointEligibleAsync(
+                check.EndpointMonitor.EndpointId, cancellationToken)
+            : await eligibilityService.IsEndpointTestableAsync(
+                check.EndpointMonitor.EndpointId, cancellationToken);
         var attemptNumber = await CountAttemptsAsync(check.Id, cancellationToken) + 1;
         var isFinalAttempt = attemptNumber >= MaximumTotalAttempts;
         var claim = await AcquireLeaseAsync(check, cancellationToken);

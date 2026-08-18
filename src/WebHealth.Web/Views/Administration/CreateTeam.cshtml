@@ -2,7 +2,7 @@
 @{
     ViewData.SetTitle("Add team");
     ViewData.SetBreadcrumbs(
-        new BreadcrumbItem("Administration"),
+        Breadcrumbs.Administration(Url),
         new BreadcrumbItem("Teams", Url.Action("Teams")),
         new BreadcrumbItem("Add team"));
 }

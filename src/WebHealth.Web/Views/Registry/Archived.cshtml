@@ -1,7 +1,7 @@
 @model RegistryArchiveViewModel
 @{
     ViewData.SetTitle("Archived registry");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Archived"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Archived"));
 }
 
 <section class="card">

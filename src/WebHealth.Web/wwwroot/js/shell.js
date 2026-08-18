@@ -204,6 +204,55 @@
         });
     }
 
+    // Flash messages are transient, so dismissal is client-only: nothing is
+    // persisted and the next request renders whatever the server sends.
+    function setUpFlashDismissal(container) {
+        container.addEventListener('click', function (event) {
+            var button = event.target.closest('[data-shell-flash-dismiss]');
+            if (!button) {
+                return;
+            }
+
+            var flash = button.closest('.flash');
+            if (!flash) {
+                return;
+            }
+
+            flash.remove();
+
+            // The dismissed button held focus, so hand it somewhere predictable
+            // rather than letting it fall back to the document body.
+            var remaining = container.querySelector('[data-shell-flash-dismiss]');
+            if (remaining) {
+                remaining.focus();
+                return;
+            }
+
+            container.remove();
+            var main = document.getElementById('main-content');
+            if (main) {
+                main.focus();
+            }
+        });
+    }
+
+    // The monitoring interval only governs the scheduled cadence, so it is shown
+    // as inactive while scheduled checks are off. It stays readonly rather than
+    // disabled: a disabled input is not submitted, which would silently clear a
+    // stored override on the next save.
+    function setUpIntervalAvailability(toggle, field, input) {
+        var permissionLocked = input.getAttribute('data-permission-locked') === 'true';
+
+        function sync() {
+            var inactive = !toggle.checked;
+            field.setAttribute('data-inactive', inactive ? 'true' : 'false');
+            input.readOnly = permissionLocked || inactive;
+        }
+
+        toggle.addEventListener('change', sync);
+        sync();
+    }
+
     onReady(function () {
         var sidebar = document.querySelector('[data-shell-sidebar]');
         var toggle = document.querySelector('[data-shell-toggle]');
@@ -221,6 +270,19 @@
 
         if (account && accountToggle && accountMenu) {
             setUpAccountMenu(account, accountToggle, accountMenu);
+        }
+
+        var flashMessages = document.querySelector('.flash-messages');
+        if (flashMessages) {
+            setUpFlashDismissal(flashMessages);
+        }
+
+        var schedulingToggle = document.querySelector('[data-shell-scheduling-toggle]');
+        var intervalField = document.querySelector('[data-shell-interval-field]');
+        var intervalInput = document.querySelector('[data-shell-interval-input]');
+
+        if (schedulingToggle && intervalField && intervalInput) {
+            setUpIntervalAvailability(schedulingToggle, intervalField, intervalInput);
         }
 
         // A failed submission re-renders the page; move focus to the summary so

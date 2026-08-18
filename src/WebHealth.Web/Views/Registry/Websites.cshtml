@@ -1,7 +1,7 @@
 @model RegistryListViewModel
 @{
     ViewData.SetTitle("Websites");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Websites"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Websites"));
 }
 
 <section class="card">
@@ -12,6 +12,7 @@
         </div>
         <div class="form-actions">
             <a class="button button--secondary" asp-action="Clients">View clients</a>
+            <a class="button button--secondary" asp-controller="Targets" asp-action="Endpoints">View endpoints</a>
             @if (Model.CanManage)
             {
                 <a class="button button--secondary" asp-action="Archived">Archived</a>

@@ -161,6 +161,17 @@ public sealed class EndpointMonitor
     public int RecoveryConfirmationCount { get; set; }
     public int? WarningThresholdMs { get; set; }
     public int? CriticalThresholdMs { get; set; }
+
+    /// <summary>
+    /// Whether this endpoint takes part in scheduled monitoring at all. When false the
+    /// endpoint is manual-only and <see cref="IsEnabled" /> is not meaningful.
+    /// </summary>
+    public bool SchedulingEnabled { get; set; } = true;
+
+    /// <summary>
+    /// The pause switch used while <see cref="SchedulingEnabled" /> is true. Scheduled
+    /// dispatch requires both.
+    /// </summary>
     public bool IsEnabled { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid CreatedByUserId { get; set; }

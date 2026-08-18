@@ -67,7 +67,7 @@ internal sealed class EndpointRegistryService(
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
         dbContext.Endpoints.Add(endpoint);
         dbContext.EndpointMonitors.Add(CreateMonitor(
-            endpoint, environment.IsProduction, interval.Seconds, access.UserId, now));
+            endpoint, environment.IsProduction, interval.Seconds, command.SchedulingEnabled, access.UserId, now));
         await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
 
         try
@@ -196,6 +196,87 @@ internal sealed class EndpointRegistryService(
 
     public Task<RegistryMutationResult> RestoreAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
         ChangeStateAsync(command, access, EndpointAuditAction.Restored, cancellationToken);
+
+    public Task<RegistryMutationResult> PauseScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
+        ChangeScheduleAsync(command, access, scheduleEnabled: false, cancellationToken);
+
+    public Task<RegistryMutationResult> ResumeScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
+        ChangeScheduleAsync(command, access, scheduleEnabled: true, cancellationToken);
+
+    private async Task<RegistryMutationResult> ChangeScheduleAsync(
+        RegistryVersionCommand command,
+        RegistryAccessContext access,
+        bool scheduleEnabled,
+        CancellationToken cancellationToken)
+    {
+        if (!RegistryVisibility.CanManage(access))
+        {
+            return Forbidden();
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var endpoint = await dbContext.Endpoints.Include(candidate => candidate.Monitors)
+            .SingleOrDefaultAsync(candidate => candidate.Id == command.EntityId, cancellationToken);
+        if (endpoint is null)
+        {
+            return NotFound();
+        }
+
+        if (endpoint.DeletedAt is not null)
+        {
+            return Validation("Restore the endpoint before changing its schedule.");
+        }
+
+        var monitor = endpoint.Monitors.SingleOrDefault(candidate => candidate.DeletedAt == null);
+        if (monitor is null)
+        {
+            return Validation("The endpoint has no active monitor.");
+        }
+
+        if (!monitor.SchedulingEnabled)
+        {
+            return Validation("This endpoint runs manual checks only. Enable scheduled checks in Edit endpoint first.");
+        }
+
+        if (monitor.IsEnabled == scheduleEnabled)
+        {
+            return Validation(scheduleEnabled
+                ? "Scheduled checks are already running."
+                : "Scheduled checks are already paused.");
+        }
+
+        dbContext.Entry(endpoint).Property(candidate => candidate.Version).OriginalValue = command.Version;
+        var now = DateTimeOffset.UtcNow;
+        var action = scheduleEnabled
+            ? EndpointAuditAction.ScheduleResumed
+            : EndpointAuditAction.SchedulePaused;
+        var before = ToAudit(endpoint, false, false, false, now);
+
+        monitor.IsEnabled = scheduleEnabled;
+        if (scheduleEnabled)
+        {
+            // Rejoin the cadence grid rather than firing every slot missed while paused.
+            monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                monitor.ScheduleAnchor, monitor.IntervalSeconds, now);
+        }
+
+        monitor.UpdatedAt = now;
+        monitor.UpdatedByUserId = access.UserId;
+        monitor.Version++;
+        Touch(endpoint, access.UserId, now);
+
+        try
+        {
+            await auditTrail.RecordEndpointMutationAsync(
+                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return RegistryMutationResult.Success(endpoint.Id);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await RollBackConcurrencyAsync(transaction, cancellationToken);
+        }
+    }
 
     private async Task<RegistryMutationResult> ChangeStateAsync(
         RegistryVersionCommand command,
@@ -334,6 +415,7 @@ internal sealed class EndpointRegistryService(
         Endpoint endpoint,
         bool isProduction,
         int? intervalOverrideSeconds,
+        bool schedulingEnabled,
         Guid actorId,
         DateTimeOffset now)
     {
@@ -363,6 +445,7 @@ internal sealed class EndpointRegistryService(
             RecoveryConfirmationCount = 2,
             WarningThresholdMs = 1000,
             CriticalThresholdMs = 3000,
+            SchedulingEnabled = schedulingEnabled,
             IsEnabled = true,
             CreatedAt = now,
             CreatedByUserId = actorId,
@@ -402,6 +485,18 @@ internal sealed class EndpointRegistryService(
                 monitor.IntervalSeconds = interval;
                 monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
                     monitor.ScheduleAnchor, interval, now);
+            }
+
+            if (monitor.SchedulingEnabled != command.SchedulingEnabled)
+            {
+                monitor.SchedulingEnabled = command.SchedulingEnabled;
+                if (command.SchedulingEnabled)
+                {
+                    // Turning scheduling back on clears any earlier pause and rejoins the grid.
+                    monitor.IsEnabled = true;
+                    monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                        monitor.ScheduleAnchor, interval, now);
+                }
             }
 
             monitor.BoundedOverrides = MonitorIntervalOverride.Serialize(intervalOverrideSeconds);

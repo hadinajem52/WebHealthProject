@@ -1,7 +1,7 @@
 @model UserListViewModel
 @{
     ViewData.SetTitle("Users");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Administration"), new BreadcrumbItem("Users"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Administration(Url), new BreadcrumbItem("Users"));
 
     static string Initials(string displayName)
     {

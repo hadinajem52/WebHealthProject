@@ -1,7 +1,7 @@
 @model ClientFormViewModel
 @{
     ViewData.SetTitle("Edit client");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Clients", Url.Action("Clients")), new BreadcrumbItem("Edit client"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Clients(Url), new BreadcrumbItem("Edit client"));
 }
 <section class="card form-card">
     <h2 class="card__title">Edit client</h2>

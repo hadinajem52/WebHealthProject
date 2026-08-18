@@ -241,6 +241,10 @@ internal sealed class TargetAuthorizationEvidenceConfiguration : IEntityTypeConf
                 "ck_target_authorization_expiry",
                 "expires_at IS NULL OR expires_at > effective_from");
         });
+        // Keys are assigned in application code. Without this, the Guid key convention is
+        // store-generated, so evidence added to a tracked endpoint is detected as an
+        // existing row and saved as an UPDATE that matches nothing.
+        builder.Property(evidence => evidence.Id).ValueGeneratedNever();
         builder.Property(evidence => evidence.AuthorizationKind).HasMaxLength(30).IsRequired();
         builder.Property(evidence => evidence.EvidenceReference).HasMaxLength(500).IsRequired();
         builder.Property(evidence => evidence.NormalizedHost).HasMaxLength(253).IsRequired();
@@ -302,10 +306,11 @@ internal sealed class EndpointMonitorConfiguration : IEntityTypeConfiguration<En
         builder.Property(monitor => monitor.BoundedOverrides).HasColumnType("jsonb").IsRequired();
         builder.Property(monitor => monitor.ConfigurationFingerprint).HasMaxLength(64).IsRequired();
         builder.Property(monitor => monitor.Version).IsConcurrencyToken();
+        builder.Property(monitor => monitor.SchedulingEnabled).HasDefaultValue(true);
         builder.HasIndex(monitor => new { monitor.EndpointId, monitor.MonitorType })
             .IsUnique().HasFilter("deleted_at IS NULL");
         builder.HasIndex(monitor => new { monitor.NextDueAt, monitor.Id })
-            .HasFilter("deleted_at IS NULL AND is_enabled");
+            .HasFilter("deleted_at IS NULL AND is_enabled AND scheduling_enabled");
         builder.HasOne(monitor => monitor.Endpoint).WithMany(endpoint => endpoint.Monitors)
             .HasForeignKey(monitor => monitor.EndpointId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(monitor => monitor.PolicyProfile).WithMany()

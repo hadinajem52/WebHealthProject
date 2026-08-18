@@ -2,8 +2,9 @@
 @{
     ViewData.SetTitle("Environments");
     ViewData.SetBreadcrumbs(
-        new BreadcrumbItem("Registry", Url.Action("Websites", "Registry")),
-        new BreadcrumbItem(Model.WebsiteName, Url.Action("Website", "Registry", new { id = Model.WebsiteId })),
+        Breadcrumbs.Registry(Url),
+        Breadcrumbs.Websites(Url),
+        Breadcrumbs.Website(Url, Model.WebsiteId, Model.WebsiteName),
         new BreadcrumbItem("Environments"));
 }
 <section class="card">

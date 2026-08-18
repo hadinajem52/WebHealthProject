@@ -60,6 +60,19 @@ public sealed record EndpointListItem(
     long Version,
     string MonitorType);
 
+public sealed record RegistryEndpointItem(
+    Guid Id,
+    Guid ClientId,
+    string ClientName,
+    Guid WebsiteId,
+    string WebsiteName,
+    Guid EnvironmentId,
+    string EnvironmentName,
+    string DisplayUrl,
+    bool IsEnabled,
+    bool CanTest,
+    long Version);
+
 public sealed record EndpointDetails(
     Guid Id,
     Guid EnvironmentId,
@@ -87,6 +100,7 @@ public sealed record EndpointDetails(
     int? IntervalMinutesOverride,
     int TimeoutSeconds,
     bool MonitorEnabled,
+    bool SchedulingEnabled,
     bool IsMonitoringEligible,
     bool CanTest);
 
@@ -114,7 +128,8 @@ public sealed record CreateEndpoint(
     string? TargetAuthorizationKind,
     string? TargetAuthorizationEvidence,
     DateTimeOffset? TargetAuthorizationExpiresAt,
-    int? IntervalMinutesOverride = null);
+    int? IntervalMinutesOverride = null,
+    bool SchedulingEnabled = true);
 
 
 public sealed record UpdateEndpoint(
@@ -127,4 +142,5 @@ public sealed record UpdateEndpoint(
     string? TargetAuthorizationEvidence,
     DateTimeOffset? TargetAuthorizationExpiresAt,
     long Version,
-    int? IntervalMinutesOverride = null);
+    int? IntervalMinutesOverride = null,
+    bool SchedulingEnabled = true);

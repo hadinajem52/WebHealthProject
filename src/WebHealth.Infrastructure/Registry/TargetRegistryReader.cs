@@ -115,8 +115,52 @@ internal sealed class TargetRegistryReader(
             MonitorIntervalOverride.GetSeconds(endpoint.BoundedOverrides) / 60,
             endpoint.TimeoutSeconds,
             endpoint.MonitorEnabled,
+            endpoint.SchedulingEnabled,
             await monitoringEligibility.IsEndpointEligibleAsync(endpoint.Id, cancellationToken),
             await targetAuthorization.CanTestEndpointAsync(endpoint.Id, access, cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
+        RegistryAccessContext access,
+        string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, DateTimeOffset.UtcNow)
+            .Where(endpoint => endpoint.DeletedAt == null);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{search.Trim()}%";
+            query = query.Where(endpoint => EF.Functions.ILike(endpoint.DisplayUrl, pattern)
+                || EF.Functions.ILike(endpoint.Environment.Website.Name, pattern)
+                || EF.Functions.ILike(endpoint.Environment.Website.Client.Name, pattern));
+        }
+
+        var rows = await query
+            .OrderBy(endpoint => endpoint.Environment.Website.Client.Name)
+            .ThenBy(endpoint => endpoint.Environment.Website.Name)
+            .ThenBy(endpoint => endpoint.Environment.Name)
+            .ThenBy(endpoint => endpoint.DisplayUrl)
+            .Select(endpoint => new
+            {
+                endpoint.Id,
+                ClientId = endpoint.Environment.Website.ClientId,
+                ClientName = endpoint.Environment.Website.Client.Name,
+                WebsiteId = endpoint.Environment.WebsiteId,
+                WebsiteName = endpoint.Environment.Website.Name,
+                EnvironmentId = endpoint.EnvironmentId,
+                EnvironmentName = endpoint.Environment.Name,
+                endpoint.DisplayUrl,
+                endpoint.IsEnabled,
+                endpoint.Version
+            })
+            .ToListAsync(cancellationToken);
+
+        var testable = await targetAuthorization.FilterTestableEndpointsAsync(
+            rows.Select(row => row.Id).ToArray(), access, cancellationToken);
+        return rows.Select(row => new RegistryEndpointItem(
+            row.Id, row.ClientId, row.ClientName, row.WebsiteId, row.WebsiteName,
+            row.EnvironmentId, row.EnvironmentName, row.DisplayUrl, row.IsEnabled,
+            testable.Contains(row.Id), row.Version)).ToArray();
     }
 
     public async Task<IReadOnlyList<EnvironmentListItem>> ListDeletedEnvironmentsAsync(
@@ -235,7 +279,8 @@ internal sealed class TargetRegistryReader(
                 endpoint.Monitors.Select(monitor => monitor.IntervalSeconds).Single(),
                 endpoint.Monitors.Select(monitor => monitor.BoundedOverrides).Single(),
                 endpoint.Monitors.Select(monitor => monitor.TimeoutSeconds).Single(),
-                endpoint.Monitors.Select(monitor => monitor.IsEnabled).Single()))
+                endpoint.Monitors.Select(monitor => monitor.IsEnabled).Single(),
+                endpoint.Monitors.Select(monitor => monitor.SchedulingEnabled).Single()))
             .ToListAsync(cancellationToken);
 
     private async Task<Dictionary<Guid, string>> LoadOwnerNamesAsync(
@@ -280,5 +325,6 @@ internal sealed class TargetRegistryReader(
         Guid EffectiveOwnerSubjectId, bool IsEnabled, bool IsDeleted, string? HttpExceptionReason,
         string? TargetAuthorizationKind, string? TargetAuthorizationEvidence,
         DateTimeOffset? TargetAuthorizationExpiresAt, long Version, string MonitorType,
-        int IntervalSeconds, string BoundedOverrides, int TimeoutSeconds, bool MonitorEnabled);
+        int IntervalSeconds, string BoundedOverrides, int TimeoutSeconds, bool MonitorEnabled,
+        bool SchedulingEnabled);
 }

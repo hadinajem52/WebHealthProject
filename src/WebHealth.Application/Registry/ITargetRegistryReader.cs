@@ -17,6 +17,11 @@ public interface ITargetRegistryReader
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
+        RegistryAccessContext access,
+        string? search = null,
+        CancellationToken cancellationToken = default);
+
     Task<EndpointDetails?> FindEndpointAsync(
         Guid endpointId,
         RegistryAccessContext access,

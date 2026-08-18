@@ -14,9 +14,29 @@ internal sealed class TargetAuthorizationService(
         CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
-        return MonitoringEligibility.Apply(
+        return MonitoringEligibility.ApplyTestable(
                 visibility.ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now),
                 now)
             .AnyAsync(endpoint => endpoint.Id == endpointId && endpoint.DeletedAt == null, cancellationToken);
+    }
+
+    public async Task<IReadOnlySet<Guid>> FilterTestableEndpointsAsync(
+        IReadOnlyCollection<Guid> endpointIds,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        if (endpointIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var testable = await MonitoringEligibility.ApplyTestable(
+                visibility.ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now),
+                now)
+            .Where(endpoint => endpointIds.Contains(endpoint.Id) && endpoint.DeletedAt == null)
+            .Select(endpoint => endpoint.Id)
+            .ToListAsync(cancellationToken);
+        return testable.ToHashSet();
     }
 }

@@ -12,6 +12,7 @@ public sealed record EnvironmentListViewModel(
 
 public sealed record EnvironmentDetailsViewModel(EnvironmentDetails Environment, bool CanManage);
 public sealed record EndpointDetailsViewModel(EndpointDetails Endpoint, bool CanManage, CheckHistoryItem? LatestCheck);
+public sealed record RegistryEndpointListViewModel(IReadOnlyList<RegistryEndpointItem> Endpoints, string? Search);
 public sealed record TargetArchiveViewModel(
     IReadOnlyList<EnvironmentListItem> Environments,
     IReadOnlyList<EndpointListItem> Endpoints);
@@ -42,6 +43,8 @@ public sealed class EndpointFormViewModel
     public Guid EndpointId { get; set; }
     public Guid EnvironmentId { get; set; }
     public string EnvironmentName { get; set; } = string.Empty;
+    public Guid WebsiteId { get; set; }
+    public string WebsiteName { get; set; } = string.Empty;
     public bool IsProduction { get; set; }
     public bool CanApproveHttp { get; set; }
 
@@ -53,6 +56,9 @@ public sealed class EndpointFormViewModel
 
     [Display(Name = "Endpoint enabled")]
     public bool IsEnabled { get; set; } = true;
+
+    [Display(Name = "Run scheduled checks")]
+    public bool SchedulingEnabled { get; set; } = true;
 
     [StringLength(500), Display(Name = "Production HTTP exception reason")]
     public string? HttpExceptionReason { get; set; }

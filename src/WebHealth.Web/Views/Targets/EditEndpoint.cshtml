@@ -1,5 +1,5 @@
 @model EndpointFormViewModel
-@{ViewData.SetTitle("Edit endpoint"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.EnvironmentName), new BreadcrumbItem("Edit endpoint"));}
+@{ViewData.SetTitle("Edit endpoint"); ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), Breadcrumbs.Website(Url, Model.WebsiteId, Model.WebsiteName), Breadcrumbs.Environments(Url, Model.WebsiteId), Breadcrumbs.Environment(Url, Model.EnvironmentId, Model.EnvironmentName), Breadcrumbs.Endpoint(Url, Model.EndpointId, Model.Url), new BreadcrumbItem("Edit endpoint"));}
 <section class="card form-card"><h2 class="card__title">Edit endpoint</h2><p class="card__subtitle">The original version protects concurrent configuration changes.</p><form asp-action="EditEndpoint" method="post" class="form-stack"><input asp-for="EndpointId" type="hidden"/><input asp-for="EnvironmentId" type="hidden"/><input asp-for="Version" type="hidden"/><partial name="_EndpointForm" model="Model"/><div class="form-actions">
     <button class="button button--primary" type="submit">
         @await Html.PartialAsync("_Icon", "check")

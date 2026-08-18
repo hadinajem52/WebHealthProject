@@ -1,5 +1,5 @@
 @model EnvironmentFormViewModel
-@{ViewData.SetTitle("Add environment"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.WebsiteName), new BreadcrumbItem("Add environment"));}
+@{ViewData.SetTitle("Add environment"); ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), Breadcrumbs.Website(Url, Model.WebsiteId, Model.WebsiteName), Breadcrumbs.Environments(Url, Model.WebsiteId), new BreadcrumbItem("Add environment"));}
 <section class="card form-card"><h2 class="card__title">Add environment</h2><p class="card__subtitle">Define the deployment context before adding monitored endpoints.</p><form asp-action="CreateEnvironment" method="post" class="form-stack"><input asp-for="WebsiteId" type="hidden" /><partial name="_EnvironmentForm" model="Model" /><div class="form-actions">
     <button class="button button--primary" type="submit">
         @await Html.PartialAsync("_Icon", "plus")

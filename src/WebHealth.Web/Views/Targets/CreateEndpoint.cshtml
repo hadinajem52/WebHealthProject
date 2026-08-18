@@ -1,5 +1,5 @@
 @model EndpointFormViewModel
-@{ViewData.SetTitle("Add endpoint"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem(Model.EnvironmentName), new BreadcrumbItem("Add endpoint"));}
+@{ViewData.SetTitle("Add endpoint"); ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), Breadcrumbs.Website(Url, Model.WebsiteId, Model.WebsiteName), Breadcrumbs.Environments(Url, Model.WebsiteId), Breadcrumbs.Environment(Url, Model.EnvironmentId, Model.EnvironmentName), new BreadcrumbItem("Add endpoint"));}
 <section class="card form-card"><h2 class="card__title">Add endpoint</h2><p class="card__subtitle">Creates the endpoint and its default HTTP availability policy record.</p><form asp-action="CreateEndpoint" method="post" class="form-stack"><input asp-for="EnvironmentId" type="hidden" /><partial name="_EndpointForm" model="Model" /><div class="form-actions">
     <button class="button button--primary" type="submit">
         @await Html.PartialAsync("_Icon", "plus")

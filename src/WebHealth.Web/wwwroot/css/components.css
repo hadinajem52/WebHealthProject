@@ -299,6 +299,39 @@ code,
     font-weight: 700;
 }
 
+/* Hidden without the shell script, which is what performs the dismissal. */
+.flash__dismiss {
+    display: none;
+}
+
+.js .flash__dismiss {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    align-self: flex-start;
+    margin-left: auto;
+    padding: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-tile);
+    background: none;
+    color: inherit;
+    cursor: pointer;
+}
+
+.flash__dismiss svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.flash__dismiss:hover {
+    background-color: rgb(0 0 0 / 8%);
+}
+
+.flash__dismiss:focus-visible {
+    outline: 2px solid currentcolor;
+    outline-offset: 2px;
+}
+
 .flash__text {
     margin-top: var(--space-1);
     font-size: var(--font-size-sm);
@@ -563,6 +596,16 @@ code,
     text-align: right !important;
 }
 
+.data-table__action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.data-table__action-group form {
+    margin: 0;
+}
+
 .data-table__action a {
     color: var(--color-gray-500);
     font-size: var(--font-size-xs); /* 12px */
@@ -674,6 +717,16 @@ code,
 .form-field legend {
     font-size: var(--font-size-sm);
     font-weight: 700;
+}
+
+/* A field whose value has no effect under the current settings. Still readable
+   and still submitted, so the stored value survives. */
+.form-field[data-inactive="true"] {
+    opacity: 0.55;
+}
+
+.form-field[data-inactive="true"] input {
+    cursor: not-allowed;
 }
 
 .form-field input:not([type="checkbox"]),
@@ -817,7 +870,7 @@ code,
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
     gap: 1rem;
-    margin: 1.5rem 0 0;
+    margin: 1.5rem 0 1.5rem;
 }
 
 .registry-facts div {
@@ -918,6 +971,7 @@ code,
     align-items: flex-end;
     margin-top: var(--space-5);
     gap: var(--space-4);
+    margin-bottom: 15px;
 }
 
 .filter-grid .form-field {

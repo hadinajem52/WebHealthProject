@@ -15,6 +15,13 @@
                     <p class="flash__label">@level</p>
                     <p class="flash__text">@message.Text</p>
                 </div>
+                @* Revealed only when the shell script is present, so it is never a dead control. *@
+                <button type="button"
+                        class="flash__dismiss"
+                        data-shell-flash-dismiss
+                        aria-label="Dismiss this @level.ToLowerInvariant() message">
+                    @await Html.PartialAsync("_Icon", "close")
+                </button>
             </div>
         }
     </div>

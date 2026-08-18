@@ -33,10 +33,11 @@ internal sealed class ManualCheckService(
 
         var now = timeProvider.GetUtcNow();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // A paused monitor still runs on demand; pausing stops the cadence only.
         var monitor = await dbContext.EndpointMonitors
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType
-                && candidate.DeletedAt == null && candidate.IsEnabled)
+                && candidate.DeletedAt == null)
             .SingleOrDefaultAsync(cancellationToken);
         if (monitor is null)
         {

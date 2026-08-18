@@ -1,7 +1,7 @@
 @model WebsiteFormViewModel
 @{
     ViewData.SetTitle("Edit website");
-    ViewData.SetBreadcrumbs(new BreadcrumbItem("Registry"), new BreadcrumbItem("Websites", Url.Action("Websites")), new BreadcrumbItem("Edit website"));
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), new BreadcrumbItem("Edit website"));
 }
 <section class="card form-card">
     <h2 class="card__title">Edit website</h2><p class="card__subtitle">The original version is checked before this update is accepted.</p>

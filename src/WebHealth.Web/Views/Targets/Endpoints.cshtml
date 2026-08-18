@@ -1,0 +1,85 @@
+@model RegistryEndpointListViewModel
+@{
+    ViewData.SetTitle("Endpoints");
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Endpoints"));
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">Endpoint registry</h2>
+            <p class="card__subtitle">Every endpoint across clients, websites and environments within your access scope, in one place.</p>
+        </div>
+        <div class="form-actions">
+            <a class="button button--secondary" asp-controller="Registry" asp-action="Clients">View clients</a>
+            <a class="button button--secondary" asp-controller="Registry" asp-action="Websites">View websites</a>
+        </div>
+    </div>
+
+    <form method="get" class="filter-grid">
+        <div class="form-field">
+            <label for="search">Search</label>
+            <input id="search" name="search" type="search" value="@Model.Search" placeholder="Filter by URL, website or client" />
+        </div>
+        <div class="filter-grid__actions">
+            <button class="button button--primary" type="submit">Filter</button>
+            @if (!string.IsNullOrWhiteSpace(Model.Search))
+            {
+                <a class="button button--secondary" asp-action="Endpoints">Clear</a>
+            }
+        </div>
+    </form>
+
+    @if (Model.Endpoints.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "No endpoints found",
+            string.IsNullOrWhiteSpace(Model.Search)
+                ? "No endpoint records are available within your current access scope."
+                : "No endpoints match your search. Try a different URL, website or client name.",
+            "registry"))
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">Endpoints in the accessible registry scope</caption>
+                <thead>
+                    <tr>
+                        <th>Endpoint</th>
+                        <th>Client</th>
+                        <th>Website</th>
+                        <th>Environment</th>
+                        <th>Status</th>
+                        <th>Testable</th>
+                        <th><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var endpoint in Model.Endpoints)
+                {
+                    <tr>
+                        <td data-label="Endpoint" class="target-url">@endpoint.DisplayUrl</td>
+                        <td data-label="Client">@endpoint.ClientName</td>
+                        <td data-label="Website">@endpoint.WebsiteName</td>
+                        <td data-label="Environment">@endpoint.EnvironmentName</td>
+                        <td data-label="Status"><span class="badge" data-status="@(endpoint.IsEnabled ? "success" : "warning")">@(endpoint.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                        <td data-label="Testable"><span class="badge" data-status="@(endpoint.CanTest ? "success" : "warning")">@(endpoint.CanTest ? "Yes" : "No")</span></td>
+                        <td class="data-table__action" data-label="Actions">
+                            <div class="data-table__action-group">
+                                <a asp-action="Endpoint" asp-route-id="@endpoint.Id">Open<span class="visually-hidden"> @endpoint.DisplayUrl</span></a>
+                                @if (endpoint.CanTest)
+                                {
+                                    <form asp-controller="Checks" asp-action="RunCheck" asp-route-id="@endpoint.Id" method="post">
+                                        <button class="button button--secondary" type="submit">Run now</button>
+                                    </form>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
