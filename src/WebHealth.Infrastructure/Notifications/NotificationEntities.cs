@@ -46,3 +46,14 @@ public sealed class NotificationAttempt
     public DateTimeOffset AttemptedAt { get; set; }
     public NotificationDelivery Delivery { get; set; } = null!;
 }
+
+/// <summary>
+/// When a user last marked their in-app notification feed read. One row per user keeps the
+/// unread indicator cheap: no per-notification read rows to write or prune.
+/// </summary>
+public sealed class NotificationReadMarker
+{
+    public Guid UserId { get; set; }
+    public DateTimeOffset LastReadAt { get; set; }
+    public long Version { get; set; }
+}

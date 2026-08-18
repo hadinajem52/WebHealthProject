@@ -1,0 +1,82 @@
+@model WebHealth.Application.Notifications.NotificationFeed
+@{
+    var returnUrl = ViewContext.HttpContext.Request.Path + ViewContext.HttpContext.Request.QueryString;
+    var unread = Model.UnreadCount;
+    var badge = unread > 9 ? "9+" : unread.ToString();
+}
+@* Server-rendered open; shell.js collapses it to a button-triggered popup. *@
+<div class="app-account app-notifications" data-shell-notifications data-open="false">
+    <button type="button"
+            class="app-header__icon app-notifications__toggle"
+            data-shell-notifications-toggle
+            aria-controls="app-notifications-menu"
+            aria-expanded="false">
+        @await Html.PartialAsync("_Icon", "bell")
+        @if (unread > 0)
+        {
+            <span class="app-notifications__dot" aria-hidden="true">@badge</span>
+        }
+        <span class="visually-hidden">
+            Notifications@(unread > 0 ? $" — {unread} unread" : " — none unread")
+        </span>
+    </button>
+
+    <div class="app-account__menu app-notifications__menu" id="app-notifications-menu" data-shell-notifications-menu>
+        <div class="app-notifications__header">
+            <div>
+                <p class="app-notifications__title">Notifications</p>
+                <p class="app-notifications__subtitle">
+                    @(unread > 0 ? $"{unread} unread" : "You are all caught up")
+                </p>
+            </div>
+            @if (unread > 0)
+            {
+                <form asp-controller="Notifications" asp-action="MarkRead" method="post"
+                      asp-route-returnUrl="@returnUrl">
+                    <button type="submit" class="app-notifications__action" title="Mark all as read">
+                        @await Html.PartialAsync("_Icon", "check")
+                        <span class="visually-hidden">Mark all as read</span>
+                    </button>
+                </form>
+            }
+        </div>
+
+        @if (Model.Items.Count == 0)
+        {
+            <p class="app-notifications__empty">Incident alerts addressed to you appear here.</p>
+        }
+        else
+        {
+            <ul class="app-notifications__list">
+                @foreach (var item in Model.Items)
+                {
+                    <li>
+                        <a class="app-notifications__card" data-unread="@item.IsUnread.ToString().ToLowerInvariant()"
+                           asp-controller="Incidents" asp-action="Details" asp-route-id="@item.IncidentId">
+                            <span class="app-notifications__card-top">
+                                <span class="badge" data-status="@(item.EventType == "Recovered" ? "success" : item.Severity == "Critical" ? "danger" : "warning")">@item.EventType</span>
+                                <span class="app-notifications__time">@item.OccurredAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</span>
+                            </span>
+                            <span class="app-notifications__target">@item.EndpointDisplayUrl</span>
+                            <span class="app-notifications__meta">
+                                @item.Severity · incident @item.IncidentStatus
+                                @if (item.IsUnread)
+                                {
+                                    <span class="app-notifications__unread" aria-hidden="true"></span>
+                                    <span class="visually-hidden">Unread</span>
+                                }
+                            </span>
+                        </a>
+                    </li>
+                }
+            </ul>
+
+            <div class="app-notifications__footer">
+                <a class="app-notifications__viewall" asp-controller="Incidents" asp-action="Index">
+                    @await Html.PartialAsync("_Icon", "incidents")
+                    <span>View all incidents</span>
+                </a>
+            </div>
+        }
+    </div>
+</div>

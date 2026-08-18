@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Incidents;
 
 namespace WebHealth.Infrastructure.Notifications;
@@ -99,5 +100,19 @@ internal sealed class NotificationAttemptConfiguration : IEntityTypeConfiguratio
         builder.HasOne(attempt => attempt.Delivery).WithMany(delivery => delivery.Attempts)
             .HasForeignKey(attempt => attempt.NotificationDeliveryId).OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_notification_attempt_notification_delivery_id");
+    }
+}
+
+internal sealed class NotificationReadMarkerConfiguration : IEntityTypeConfiguration<NotificationReadMarker>
+{
+    public void Configure(EntityTypeBuilder<NotificationReadMarker> builder)
+    {
+        builder.ToTable("notification_read_marker");
+        builder.HasKey(marker => marker.UserId);
+        builder.Property(marker => marker.UserId).ValueGeneratedNever();
+        builder.Property(marker => marker.Version).IsConcurrencyToken();
+        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(marker => marker.UserId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_notification_read_marker_user_id");
     }
 }

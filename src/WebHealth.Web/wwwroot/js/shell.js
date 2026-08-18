@@ -272,6 +272,15 @@
             setUpAccountMenu(account, accountToggle, accountMenu);
         }
 
+        // The notification panel is the same non-modal popup as the account menu.
+        var notifications = document.querySelector('[data-shell-notifications]');
+        var notificationsToggle = document.querySelector('[data-shell-notifications-toggle]');
+        var notificationsMenu = document.querySelector('[data-shell-notifications-menu]');
+
+        if (notifications && notificationsToggle && notificationsMenu) {
+            setUpAccountMenu(notifications, notificationsToggle, notificationsMenu);
+        }
+
         var flashMessages = document.querySelector('.flash-messages');
         if (flashMessages) {
             setUpFlashDismissal(flashMessages);

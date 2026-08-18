@@ -78,6 +78,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<NotificationEvent> NotificationEvents => Set<NotificationEvent>();
 
     public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
+    public DbSet<NotificationReadMarker> NotificationReadMarkers => Set<NotificationReadMarker>();
 
     public DbSet<NotificationAttempt> NotificationAttempts => Set<NotificationAttempt>();
 

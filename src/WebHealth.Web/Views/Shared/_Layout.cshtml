@@ -103,10 +103,7 @@
                             <span class="visually-hidden">Settings &mdash; available in Phase 2</span>
                         </button>
 
-                        <button type="button" class="app-header__icon">
-                            @await Html.PartialAsync("_Icon", "bell")
-                            <span class="visually-hidden">Notifications &mdash; available in Phase 4</span>
-                        </button>
+                        @await Component.InvokeAsync("NotificationsMenu")
 
                         @if (IsSectionDefined("PageActions"))
                         {

@@ -44,6 +44,16 @@ public static class DependencyInjection
         ValidateNotificationOptions(notificationOptions);
         services.AddSingleton(notificationOptions);
 
+        var smtpOptions = configuration.GetSection(SmtpEmailOptions.SectionName)
+            .Get<SmtpEmailOptions>() ?? new SmtpEmailOptions();
+        if (smtpOptions.Enabled)
+        {
+            ValidateSmtpOptions(smtpOptions);
+            services.AddSingleton(smtpOptions);
+            // Registered before the recording fallback below, which uses TryAdd.
+            services.AddSingleton<IEmailTransport, SmtpEmailTransport>();
+        }
+
         services.AddDbContext<ApplicationDbContext>(options =>
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -104,6 +114,7 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
         services.AddScoped<IIncidentReader, IncidentReader>();
+        services.AddScoped<INotificationFeedReader, NotificationFeedReader>();
         services.AddScoped<NotificationEventWriter>();
         services.AddScoped<IncidentAutomationService>();
         services.AddScoped<NotificationDispatchService>();
@@ -210,6 +221,20 @@ public static class DependencyInjection
             || options.EscalationDelay < TimeSpan.FromMinutes(5))
         {
             throw new InvalidOperationException("Notification scheduling options are outside their safe bounds.");
+        }
+    }
+
+    private static void ValidateSmtpOptions(SmtpEmailOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.Host)
+            || options.Port is < 1 or > 65535
+            || options.TimeoutSeconds is < 1 or > 120
+            || string.IsNullOrWhiteSpace(options.FromAddress)
+            || string.IsNullOrWhiteSpace(options.UserName)
+            || string.IsNullOrWhiteSpace(options.Password))
+        {
+            throw new InvalidOperationException(
+                "SMTP is enabled but its host, port, sender or credentials are missing or out of range.");
         }
     }
 }

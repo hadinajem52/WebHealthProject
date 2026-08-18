@@ -817,3 +817,194 @@ html:not(.js) .app-header__toggle {
         display: none;
     }
 }
+
+/* Notification panel ------------------------------------------------------ */
+
+.app-notifications__toggle {
+    position: relative;
+}
+
+/* Unread indicator: a dot when empty, a small count when not. */
+.app-notifications__dot {
+    position: absolute;
+    top: 0.15rem;
+    right: 0.15rem;
+    display: grid;
+    min-width: 1rem;
+    height: 1rem;
+    padding: 0 0.2rem;
+    border: 2px solid var(--surface-raised);
+    border-radius: 999px;
+    background-color: var(--status-danger);
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+    place-items: center;
+}
+
+.app-notifications__menu {
+    width: 26rem;
+    max-width: calc(100vw - var(--space-4) * 2);
+    padding: 0;
+}
+
+.app-notifications__header {
+    display: flex;
+    align-items: flex-start;
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border-subtle);
+    gap: var(--space-3);
+    justify-content: space-between;
+}
+
+.app-notifications__title {
+    font-size: var(--font-size-base);
+    font-weight: 700;
+}
+
+.app-notifications__subtitle {
+    margin-top: 0.15rem;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+/* Icon-only affordance so the header stays uncluttered. */
+.app-notifications__action {
+    display: grid;
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-tile);
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    place-items: center;
+}
+
+.app-notifications__action:hover {
+    background-color: var(--surface-sunken);
+    color: var(--text-primary);
+}
+
+.app-notifications__action:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+}
+
+.app-notifications__action svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.app-notifications__list {
+    display: flex;
+    max-height: 24rem;
+    margin: 0;
+    padding: var(--space-3);
+    overflow-y: auto;
+    flex-direction: column;
+    /* Cards are separated by real space rather than dividers. */
+    gap: var(--space-3);
+    list-style: none;
+}
+
+.app-notifications__card {
+    display: flex;
+    padding: var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-tile);
+    background-color: var(--surface-raised);
+    color: inherit;
+    flex-direction: column;
+    gap: var(--space-2);
+    text-decoration: none;
+}
+
+.app-notifications__card:hover {
+    border-color: var(--border-strong);
+    background-color: var(--surface-sunken);
+}
+
+.app-notifications__card:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+}
+
+.app-notifications__card-top {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    justify-content: space-between;
+}
+
+.app-notifications__time {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+}
+
+.app-notifications__target {
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+
+.app-notifications__meta {
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    gap: var(--space-2);
+}
+
+/* Unread marker sits with the metadata instead of an edge accent. */
+.app-notifications__unread {
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-left: auto;
+    border-radius: 999px;
+    background-color: var(--status-danger);
+}
+
+.app-notifications__empty {
+    padding: var(--space-5) var(--space-4);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    text-align: center;
+}
+
+.app-notifications__footer {
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+    text-align: center;
+}
+
+/* Reads as a control, not body copy: the base anchor colour and underline are reset. */
+.app-notifications__viewall {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    gap: var(--space-2);
+    text-decoration: none;
+}
+
+.app-notifications__viewall:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
+.app-notifications__viewall:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+}
+
+.app-notifications__viewall svg {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+}
