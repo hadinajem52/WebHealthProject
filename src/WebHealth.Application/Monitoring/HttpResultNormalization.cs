@@ -57,7 +57,7 @@ public sealed record NormalizeHttpResult(
     HttpResultPolicy Policy,
     DateTimeOffset MeasuredAt);
 
-public sealed record NormalizedHttpResult(
+public sealed record NormalizedCheckResult(
     string Outcome,
     string? FailureCategory,
     int? HttpStatus,
@@ -88,7 +88,7 @@ public sealed record NormalizedFinding(
 
 public static class HttpResultNormalizer
 {
-    public static NormalizedHttpResult Normalize(NormalizeHttpResult input)
+    public static NormalizedCheckResult Normalize(NormalizeHttpResult input)
     {
         Validate(input.Policy);
         var redirects = input.Transport.Redirects.Select((hop, index) => new NormalizedRedirectHop(

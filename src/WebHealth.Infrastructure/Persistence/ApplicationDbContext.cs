@@ -55,6 +55,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<CheckResult> CheckResults => Set<CheckResult>();
 
+    public DbSet<CertificateObservation> CertificateObservations => Set<CertificateObservation>();
+
     public DbSet<RedirectHop> RedirectHops => Set<RedirectHop>();
 
     public DbSet<Finding> Findings => Set<Finding>();

@@ -163,6 +163,66 @@ internal sealed class TargetRegistryReader(
             testable.Contains(row.Id), row.Version)).ToArray();
     }
 
+    public async Task<CertificateStatus?> FindCertificateStatusAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var canManage = RegistryVisibility.CanManage(access);
+        var endpoint = await visibility
+            .ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, DateTimeOffset.UtcNow)
+            .Where(candidate => candidate.Id == endpointId)
+            .Where(candidate => canManage || candidate.DeletedAt == null)
+            .Select(candidate => new
+            {
+                candidate.NormalizedUrl,
+                MonitorId = candidate.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType
+                        && monitor.DeletedAt == null)
+                    .Select(monitor => (Guid?)monitor.Id)
+                    .FirstOrDefault()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (endpoint is null)
+        {
+            // Not visible to this caller, which is different from having no certificate.
+            return null;
+        }
+
+        // Not Applicable is decided by the URL scheme (BR-C01), not by whether a monitor row
+        // happens to exist: an HTTPS endpoint whose monitor is missing is a gap to show as
+        // awaiting a check, not an endpoint without certificates.
+        if (!RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl))
+        {
+            return CertificateStatus.NotApplicable;
+        }
+
+        var monitorId = endpoint.MonitorId;
+        if (monitorId is null)
+        {
+            return new CertificateStatus(true, null);
+        }
+
+        var latest = await dbContext.CertificateObservations.AsNoTracking()
+            .Where(observation => observation.EndpointMonitorId == monitorId)
+            .OrderByDescending(observation => observation.ObservedAt)
+            .Select(observation => new CertificateObservationItem(
+                observation.Subject,
+                observation.Issuer,
+                observation.SerialNumber,
+                observation.Sha256Fingerprint,
+                observation.NotBefore,
+                observation.NotAfter,
+                observation.DaysRemaining,
+                observation.ValidationCategory,
+                observation.HostnameMatched,
+                observation.ChainTrusted,
+                observation.SubjectAlternativeNames,
+                observation.ObservedAt))
+            .FirstOrDefaultAsync(cancellationToken);
+        return new CertificateStatus(true, latest);
+    }
+
     public async Task<IReadOnlyList<EnvironmentListItem>> ListDeletedEnvironmentsAsync(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
@@ -275,12 +335,26 @@ internal sealed class TargetRegistryReader(
                     .OrderByDescending(evidence => evidence.EffectiveFrom)
                     .Select(evidence => evidence.ExpiresAt).FirstOrDefault(),
                 endpoint.Version,
-                endpoint.Monitors.Select(monitor => monitor.MonitorType).Single(),
-                endpoint.Monitors.Select(monitor => monitor.IntervalSeconds).Single(),
-                endpoint.Monitors.Select(monitor => monitor.BoundedOverrides).Single(),
-                endpoint.Monitors.Select(monitor => monitor.TimeoutSeconds).Single(),
-                endpoint.Monitors.Select(monitor => monitor.IsEnabled).Single(),
-                endpoint.Monitors.Select(monitor => monitor.SchedulingEnabled).Single()))
+                // The listed cadence is the availability monitor's; an endpoint may also carry
+                // a certificate monitor with its own fixed daily schedule.
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.MonitorType).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.IntervalSeconds).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.BoundedOverrides).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.TimeoutSeconds).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.IsEnabled).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.SchedulingEnabled).Single()))
             .ToListAsync(cancellationToken);
 
     private async Task<Dictionary<Guid, string>> LoadOwnerNamesAsync(

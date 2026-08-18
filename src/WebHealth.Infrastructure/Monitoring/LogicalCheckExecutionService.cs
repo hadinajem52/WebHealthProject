@@ -12,6 +12,7 @@ internal sealed class LogicalCheckExecutionService(
     IMonitoringEligibilityService eligibilityService,
     IExecutionLeaseService leaseService,
     ISafeHttpTransport transport,
+    ISslCertificateProbe sslCertificateProbe,
     ILogicalCheckFinalizationService finalizationService,
     TimeProvider timeProvider,
     ILogger<LogicalCheckExecutionService> logger) : ILogicalCheckExecutionService
@@ -35,7 +36,6 @@ internal sealed class LogicalCheckExecutionService(
         }
 
         EnsureExecutable(check, command.DurableWorkId);
-        var request = CreateRequest(check);
         // A paused monitor stops the cadence, so only scheduled work re-checks it here.
         var isEligible = check.Source == LogicalCheckSources.Scheduled
             ? await eligibilityService.IsEndpointEligibleAsync(
@@ -77,10 +77,10 @@ internal sealed class LogicalCheckExecutionService(
                 isFinalAttempt, cancellationToken);
         }
 
-        SafeHttpTransportResult result;
+        LogicalCheckTerminalEvidence evidence;
         try
         {
-            result = await transport.SendAsync(request, cancellationToken);
+            evidence = await ObserveAsync(check, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -103,10 +103,30 @@ internal sealed class LogicalCheckExecutionService(
             cancellationToken.ThrowIfCancellationRequested();
         }
 
+        // A TLS-related failure also triggers an urgent certificate check (BR-C07); that is
+        // created inside the finalization transaction so it shares this result's fate.
         return await FinalizeAsync(
-            claim, attempt.Id, command.DurableWorkId,
-            new HttpTransportEvidence(request, result),
-            isFinalAttempt, cancellationToken);
+            claim, attempt.Id, command.DurableWorkId, evidence, isFinalAttempt, cancellationToken);
+    }
+
+    /// <summary>
+    /// The observation each monitor type makes is the only part of execution that differs.
+    /// Leasing, attempt accounting, retries and finalization are shared, so an SSL check gets
+    /// the same idempotency and recovery guarantees as an availability check.
+    /// </summary>
+    private async Task<LogicalCheckTerminalEvidence> ObserveAsync(
+        LogicalCheck check,
+        CancellationToken cancellationToken)
+    {
+        if (MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType))
+        {
+            var probeRequest = CreateProbeRequest(check);
+            return new SslCertificateEvidence(
+                probeRequest, await sslCertificateProbe.ProbeAsync(probeRequest, cancellationToken));
+        }
+
+        var request = CreateRequest(check);
+        return new HttpTransportEvidence(request, await transport.SendAsync(request, cancellationToken));
     }
 
     private Task<LogicalCheck?> LoadCheckAsync(Guid checkId, CancellationToken token) =>
@@ -225,6 +245,11 @@ internal sealed class LogicalCheckExecutionService(
     private Task<int> CountAttemptsAsync(Guid checkId, CancellationToken token) =>
         dbContext.ExecutionAttempts.CountAsync(attempt => attempt.LogicalCheckId == checkId, token);
 
+    private static SslCertificateProbeRequest CreateProbeRequest(LogicalCheck check) => new(
+        check.EndpointMonitor.Endpoint.Id,
+        check.EndpointMonitor.Endpoint.NormalizedUrl,
+        check.ConfigurationSnapshot.TimeoutSeconds);
+
     private static SafeHttpTransportRequest CreateRequest(LogicalCheck check)
     {
         var snapshot = check.ConfigurationSnapshot;
@@ -242,7 +267,7 @@ internal sealed class LogicalCheckExecutionService(
     private static void MarkWorkProcessing(LogicalCheck check, Guid workId, DateTimeOffset now)
     {
         var work = check.DurableWork.Single(candidate =>
-            candidate.Id == workId && candidate.WorkKind == DurableWorkKinds.HttpCheck);
+            candidate.Id == workId && candidate.WorkKind == ExpectedWorkKind(check));
         work.State = DurableWorkStates.Processing;
         work.AttemptCount++;
         work.LastFailureCategory = null;
@@ -259,14 +284,17 @@ internal sealed class LogicalCheckExecutionService(
             ["JobId"] = command.JobId
         });
 
+    private static string ExpectedWorkKind(LogicalCheck check) =>
+        MonitorWorkKinds.For(check.ConfigurationSnapshot.MonitorType);
+
     private static void EnsureExecutable(LogicalCheck check, Guid workId)
     {
         if (check.ConfigurationSnapshot is null
             || check.State is not (LogicalCheckStates.Queued or LogicalCheckStates.Running)
             || !check.DurableWork.Any(work =>
-                work.Id == workId && work.WorkKind == DurableWorkKinds.HttpCheck))
+                work.Id == workId && work.WorkKind == ExpectedWorkKind(check)))
         {
-            throw new InvalidOperationException("The logical check is not ready for HTTP execution.");
+            throw new InvalidOperationException("The logical check is not ready for execution.");
         }
     }
 

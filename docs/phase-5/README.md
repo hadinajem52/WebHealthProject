@@ -5,7 +5,7 @@ This folder records Phase 5 implementation evidence. The phase gate and its chec
 | Increment | Status | Evidence |
 |---|---|---|
 | 5.1 Certificate capture in the safe transport | Complete | [Evidence](Certificate_Capture_and_Safe_Tls_Inspection.md) |
-| 5.2 SSL monitor type, persistence, and scheduling | Planned | — |
+| 5.2 SSL monitor type, persistence, and scheduling | Complete | [Evidence](Ssl_Monitor_Type_and_Scheduling.md) |
 | 5.3 SSL severity, deduplication, and renewal | Planned | — |
 | 5.4 Performance rules (BR-P01–BR-P05) | Planned | — |
 | 5.5 Shared reporting query core and CSV export | Planned | — |
@@ -16,9 +16,11 @@ This folder records Phase 5 implementation evidence. The phase gate and its chec
 
 | Decision | Where |
 |---|---|
-| SSL is a second monitor type on the existing scheduling/lease/incident pipeline, not a parallel one | 5.2 |
+| SSL is a second monitor type on the existing scheduling/lease/incident pipeline, not a parallel one | [5.2](Ssl_Monitor_Type_and_Scheduling.md) |
 | The certificate probe records and rejects: a validation callback that always returns `false`, so invalid-certificate evidence exists without ever accepting one | [5.1](Certificate_Capture_and_Safe_Tls_Inspection.md) |
 | Validation-category precedence, and an inclusive RFC 5280 validity window | [5.1](Certificate_Capture_and_Safe_Tls_Inspection.md) |
+| Certificate results never count toward uptime | [5.2](Ssl_Monitor_Type_and_Scheduling.md) |
+| The migration backfills certificate monitors, with SQL/application fingerprint parity pinned by a test | [5.2](Ssl_Monitor_Type_and_Scheduling.md) |
 | Exact severity semantics at the 30/15/7-day boundaries | 5.3 |
 | `percentile_cont` for response-time P50/P95 | 5.5 |
 | CSV encoding, quoting, and formula-injection handling | 5.5 |

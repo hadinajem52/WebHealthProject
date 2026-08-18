@@ -68,6 +68,11 @@ internal sealed class EndpointRegistryService(
         dbContext.Endpoints.Add(endpoint);
         dbContext.EndpointMonitors.Add(CreateMonitor(
             endpoint, environment.IsProduction, interval.Seconds, command.SchedulingEnabled, access.UserId, now));
+        if (RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl))
+        {
+            dbContext.EndpointMonitors.Add(CreateSslMonitor(
+                endpoint, environment.IsProduction, command.SchedulingEnabled, access.UserId, now));
+        }
         await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
 
         try
@@ -119,7 +124,7 @@ internal sealed class EndpointRegistryService(
             return Validation("Restore the endpoint before editing it.");
         }
 
-        var monitor = endpoint.Monitors.Single(candidate => candidate.DeletedAt == null);
+        var monitor = AvailabilityMonitor(endpoint);
         var currentIntervalOverride = MonitorIntervalOverride.GetSeconds(monitor.BoundedOverrides);
         var interval = DecideIntervalOverride(
             command.IntervalMinutesOverride, access, currentIntervalOverride);
@@ -227,7 +232,9 @@ internal sealed class EndpointRegistryService(
             return Validation("Restore the endpoint before changing its schedule.");
         }
 
-        var monitor = endpoint.Monitors.SingleOrDefault(candidate => candidate.DeletedAt == null);
+        var monitor = endpoint.Monitors.SingleOrDefault(candidate =>
+            candidate.DeletedAt == null
+            && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
         if (monitor is null)
         {
             return Validation("The endpoint has no active monitor.");
@@ -252,17 +259,23 @@ internal sealed class EndpointRegistryService(
             : EndpointAuditAction.SchedulePaused;
         var before = ToAudit(endpoint, false, false, false, now);
 
-        monitor.IsEnabled = scheduleEnabled;
-        if (scheduleEnabled)
+        // Pausing an endpoint pauses every monitor on it, certificate checks included: a
+        // "paused" endpoint that still raised SSL incidents would not be paused at all.
+        foreach (var active in endpoint.Monitors.Where(candidate => candidate.DeletedAt == null))
         {
-            // Rejoin the cadence grid rather than firing every slot missed while paused.
-            monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
-                monitor.ScheduleAnchor, monitor.IntervalSeconds, now);
+            active.IsEnabled = scheduleEnabled;
+            if (scheduleEnabled)
+            {
+                // Rejoin the cadence grid rather than firing every slot missed while paused.
+                active.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                    active.ScheduleAnchor, active.IntervalSeconds, now);
+            }
+
+            active.UpdatedAt = now;
+            active.UpdatedByUserId = access.UserId;
+            active.Version++;
         }
 
-        monitor.UpdatedAt = now;
-        monitor.UpdatedByUserId = access.UserId;
-        monitor.Version++;
         Touch(endpoint, access.UserId, now);
 
         try
@@ -291,6 +304,7 @@ internal sealed class EndpointRegistryService(
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var endpoint = await dbContext.Endpoints.Include(candidate => candidate.Monitors)
+            .Include(candidate => candidate.Environment)
             .SingleOrDefaultAsync(candidate => candidate.Id == command.EntityId, cancellationToken);
         if (endpoint is null)
         {
@@ -306,7 +320,7 @@ internal sealed class EndpointRegistryService(
         dbContext.Entry(endpoint).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var now = DateTimeOffset.UtcNow;
         var before = ToAudit(endpoint, false, false, false, now);
-        ApplyState(endpoint, action, access.UserId, now);
+        ApplyState(endpoint, action, endpoint.Environment.IsProduction, access.UserId, now);
 
         try
         {
@@ -455,6 +469,118 @@ internal sealed class EndpointRegistryService(
         };
     }
 
+    private static EndpointMonitor AvailabilityMonitor(Endpoint endpoint) =>
+        endpoint.Monitors.Single(candidate =>
+            candidate.DeletedAt == null
+            && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
+
+    /// <summary>
+    /// BR-C01: the certificate monitor exists exactly while the endpoint is HTTPS. Switching an
+    /// endpoint to HTTP retires its certificate monitor instead of leaving one that can never
+    /// observe anything, and switching back to HTTPS creates a fresh one.
+    /// </summary>
+    private static void ApplySslMonitorPresence(
+        Endpoint endpoint,
+        bool isProduction,
+        bool schedulingEnabled,
+        Guid actorId,
+        DateTimeOffset now,
+        bool tlsIdentityChanged = false)
+    {
+        var existing = endpoint.Monitors.SingleOrDefault(candidate =>
+            candidate.DeletedAt == null
+            && candidate.MonitorType == RegistryDefaults.SslCertificateMonitorType);
+        var required = RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl);
+
+        // A different host or port is a different certificate. Keeping the same monitor would
+        // leave the previous host's observations attached to it, so the endpoint page would
+        // show the old certificate until the next daily check, and fingerprint-keyed
+        // deduplication would compare two unrelated TLS identities.
+        if (existing is not null && (!required || tlsIdentityChanged))
+        {
+            Retire(existing, actorId, now);
+            existing = null;
+        }
+
+        if (required && existing is null)
+        {
+            endpoint.Monitors.Add(CreateSslMonitor(endpoint, isProduction, schedulingEnabled, actorId, now));
+        }
+    }
+
+    private static void Retire(EndpointMonitor monitor, Guid actorId, DateTimeOffset now)
+    {
+        monitor.IsEnabled = false;
+        monitor.DeletedAt = now;
+        monitor.DeletedByUserId = actorId;
+        monitor.UpdatedAt = now;
+        monitor.UpdatedByUserId = actorId;
+        monitor.Version++;
+    }
+
+    private static void ApplySslMonitorUpdate(
+        EndpointMonitor monitor,
+        Endpoint endpoint,
+        bool schedulingEnabled,
+        bool isProduction,
+        Guid actorId,
+        DateTimeOffset now)
+    {
+        // The certificate cadence is fixed by BR-C07 and is not affected by the endpoint's
+        // availability interval override.
+        if (monitor.SchedulingEnabled != schedulingEnabled)
+        {
+            monitor.SchedulingEnabled = schedulingEnabled;
+            if (schedulingEnabled)
+            {
+                monitor.IsEnabled = true;
+                monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                    monitor.ScheduleAnchor, monitor.IntervalSeconds, now);
+            }
+        }
+
+        monitor.ConfigurationFingerprint = RegistryDefaults.CreateSslFingerprint(
+            endpoint.NormalizedUrl, isProduction);
+        monitor.UpdatedAt = now;
+        monitor.UpdatedByUserId = actorId;
+        monitor.Version++;
+    }
+
+    private static EndpointMonitor CreateSslMonitor(
+        Endpoint endpoint,
+        bool isProduction,
+        bool schedulingEnabled,
+        Guid actorId,
+        DateTimeOffset now)
+    {
+        var schedule = MonitorCadence.Initialize(now);
+        return new EndpointMonitor
+        {
+            Id = Guid.NewGuid(),
+            EndpointId = endpoint.Id,
+            PolicyProfileId = RegistryDefaults.SslCertificatePolicyProfileId,
+            MonitorType = RegistryDefaults.SslCertificateMonitorType,
+            BoundedOverrides = MonitorIntervalOverride.Serialize(null),
+            ConfigurationFingerprint = RegistryDefaults.CreateSslFingerprint(
+                endpoint.NormalizedUrl, isProduction),
+            ScheduleAnchor = schedule.Anchor,
+            NextDueAt = schedule.NextDueAt,
+            IntervalSeconds = RegistryDefaults.SslIntervalSeconds,
+            TimeoutSeconds = RegistryDefaults.SslTimeoutSeconds,
+            FailureConfirmationCount = RegistryDefaults.SslFailureConfirmationCount,
+            RecoveryConfirmationCount = RegistryDefaults.SslRecoveryConfirmationCount,
+            WarningThresholdMs = null,
+            CriticalThresholdMs = null,
+            SchedulingEnabled = schedulingEnabled,
+            IsEnabled = true,
+            CreatedAt = now,
+            CreatedByUserId = actorId,
+            UpdatedAt = now,
+            UpdatedByUserId = actorId,
+            Version = 1
+        };
+    }
+
     private static void ApplyEndpointUpdate(
         Endpoint endpoint,
         UpdateEndpoint command,
@@ -465,6 +591,8 @@ internal sealed class EndpointRegistryService(
         Guid actorId,
         DateTimeOffset now)
     {
+        var tlsIdentityChanged = endpoint.NormalizedHost != url.NormalizedHost
+            || endpoint.EffectivePort != url.EffectivePort!.Value;
         endpoint.OwnerSubjectId = command.OwnerSubjectId;
         endpoint.DisplayUrl = url.DisplayUrl!;
         endpoint.NormalizedUrl = url.NormalizedUrl!;
@@ -477,8 +605,16 @@ internal sealed class EndpointRegistryService(
         endpoint.HttpExceptionApprovedByUserId = exception.ApprovedByUserId;
         endpoint.HttpExceptionApprovedAt = exception.ApprovedAt;
         Touch(endpoint, actorId, now);
+        ApplySslMonitorPresence(
+            endpoint, isProduction, command.SchedulingEnabled, actorId, now, tlsIdentityChanged);
         foreach (var monitor in endpoint.Monitors.Where(monitor => monitor.DeletedAt == null))
         {
+            if (monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType)
+            {
+                ApplySslMonitorUpdate(monitor, endpoint, command.SchedulingEnabled, isProduction, actorId, now);
+                continue;
+            }
+
             var interval = intervalOverrideSeconds ?? RegistryDefaults.GetHttpIntervalSeconds(isProduction);
             if (monitor.IntervalSeconds != interval)
             {
@@ -515,7 +651,12 @@ internal sealed class EndpointRegistryService(
         }
     }
 
-    private static void ApplyState(Endpoint endpoint, EndpointAuditAction action, Guid actorId, DateTimeOffset now)
+    private static void ApplyState(
+        Endpoint endpoint,
+        EndpointAuditAction action,
+        bool isProduction,
+        Guid actorId,
+        DateTimeOffset now)
     {
         endpoint.IsEnabled = false;
         if (action == EndpointAuditAction.Deleted)
@@ -529,6 +670,7 @@ internal sealed class EndpointRegistryService(
             endpoint.DeletedByUserId = null;
         }
 
+        var requiresSslMonitor = RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl);
         foreach (var monitor in endpoint.Monitors)
         {
             if (action == EndpointAuditAction.Deleted)
@@ -538,6 +680,15 @@ internal sealed class EndpointRegistryService(
             }
             else if (action == EndpointAuditAction.Restored)
             {
+                // Restoring reconciles against the endpoint's current URL rather than
+                // resurrecting every monitor it ever had. A certificate monitor retired because
+                // the endpoint moved to HTTP must stay retired.
+                if (monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType
+                    && !requiresSslMonitor)
+                {
+                    continue;
+                }
+
                 monitor.DeletedAt = null;
                 monitor.DeletedByUserId = null;
             }
@@ -545,6 +696,23 @@ internal sealed class EndpointRegistryService(
             monitor.UpdatedAt = now;
             monitor.UpdatedByUserId = actorId;
             monitor.Version++;
+        }
+
+        if (action == EndpointAuditAction.Restored && requiresSslMonitor
+            && !endpoint.Monitors.Any(monitor =>
+                monitor.DeletedAt == null
+                && monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType))
+        {
+            // An HTTPS endpoint archived before certificate monitoring existed, or one whose
+            // certificate monitor was retired for a different URL, gets one on restore.
+            var availability = endpoint.Monitors.FirstOrDefault(monitor =>
+                monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
+            endpoint.Monitors.Add(CreateSslMonitor(
+                endpoint,
+                isProduction,
+                availability?.SchedulingEnabled ?? true,
+                actorId,
+                now));
         }
 
         Touch(endpoint, actorId, now);
@@ -567,8 +735,8 @@ internal sealed class EndpointRegistryService(
         Convert.ToHexString(endpoint.NormalizedUrlHash).ToLowerInvariant(), endpoint.NormalizationVersion,
         urlChanged, endpoint.IsEnabled, endpoint.HttpExceptionReason is not null,
         httpExceptionChanged, HasCurrentAuthorization(endpoint, now), targetAuthorizationChanged,
-        endpoint.Monitors.Single().IntervalSeconds,
-        MonitorIntervalOverride.HasOverride(endpoint.Monitors.Single().BoundedOverrides),
+        AvailabilityMonitor(endpoint).IntervalSeconds,
+        MonitorIntervalOverride.HasOverride(AvailabilityMonitor(endpoint).BoundedOverrides),
         endpoint.DeletedAt is not null, endpoint.Version);
 
     private static IntervalOverrideDecision DecideIntervalOverride(

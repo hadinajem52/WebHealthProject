@@ -104,6 +104,31 @@ public sealed record EndpointDetails(
     bool IsMonitoringEligible,
     bool CanTest);
 
+/// <summary>
+/// What the UI shows for an endpoint's certificate. <paramref name="IsMonitored" /> false means
+/// Not Applicable rather than Unknown: an HTTP endpoint has nothing to inspect.
+/// </summary>
+public sealed record CertificateStatus(
+    bool IsMonitored,
+    CertificateObservationItem? Latest)
+{
+    public static readonly CertificateStatus NotApplicable = new(false, null);
+}
+
+public sealed record CertificateObservationItem(
+    string Subject,
+    string Issuer,
+    string SerialNumber,
+    string Sha256Fingerprint,
+    DateTimeOffset NotBefore,
+    DateTimeOffset NotAfter,
+    int DaysRemaining,
+    string ValidationCategory,
+    bool HostnameMatched,
+    bool ChainTrusted,
+    string? SubjectAlternativeNames,
+    DateTimeOffset ObservedAt);
+
 public sealed record CreateEnvironment(
     Guid WebsiteId,
     string Name,

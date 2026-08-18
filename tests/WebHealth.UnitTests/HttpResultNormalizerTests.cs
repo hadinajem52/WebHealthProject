@@ -229,7 +229,7 @@ public sealed class HttpResultNormalizerTests
         critical.Findings.Single().IssueKey.Should().Be(warning.Findings.Single().IssueKey);
     }
 
-    private static NormalizedHttpResult Normalize(
+    private static NormalizedCheckResult Normalize(
         SafeHttpTransportResult transport,
         HttpResultPolicy? policy = null) =>
         HttpResultNormalizer.Normalize(new(

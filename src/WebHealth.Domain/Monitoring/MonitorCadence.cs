@@ -28,6 +28,7 @@ public static class ExecutionAttemptOutcomes
 public static class DurableWorkKinds
 {
     public const string HttpCheck = "HttpCheck";
+    public const string SslCheck = "SslCheck";
 }
 
 public static class DurableWorkStates

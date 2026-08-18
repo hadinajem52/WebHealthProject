@@ -182,6 +182,7 @@ public static class DependencyInjection
         services.AddScoped<IMonitoringTargetAuthorizer, MonitoringTargetAuthorizer>();
         services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
         services.AddScoped<ISslCertificateProbe, SslCertificateProbe>();
+        services.AddScoped<ISslUrgentCheckScheduler, SslUrgentCheckScheduler>();
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
             {
                 client.Timeout = Timeout.InfiniteTimeSpan;
@@ -205,7 +206,9 @@ public static class DependencyInjection
         if (options.DispatchBatchSize is < 1 or > 500
             || options.RecoveryBatchSize is < 1 or > 1000
             || options.RecoveryDelay < TimeSpan.FromMinutes(1)
-            || options.RecoveryDelay > TimeSpan.FromHours(1))
+            || options.RecoveryDelay > TimeSpan.FromHours(1)
+            || options.UrgentSslCooldown < TimeSpan.FromMinutes(5)
+            || options.UrgentSslCooldown > TimeSpan.FromDays(1))
         {
             throw new InvalidOperationException("Monitoring scheduling options are outside their safe bounds.");
         }

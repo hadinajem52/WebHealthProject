@@ -108,6 +108,47 @@ internal sealed class CheckConfigurationSnapshotConfiguration
     }
 }
 
+internal sealed class CertificateObservationConfiguration
+    : IEntityTypeConfiguration<CertificateObservation>
+{
+    public void Configure(EntityTypeBuilder<CertificateObservation> builder)
+    {
+        builder.ToTable("certificate_observation", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_certificate_observation_validity_window",
+                "not_after >= not_before");
+            table.HasCheckConstraint(
+                "ck_certificate_observation_fingerprint",
+                "sha256_fingerprint ~ '^[0-9a-f]{64}$'");
+            table.HasCheckConstraint(
+                "ck_certificate_observation_category",
+                "validation_category IN ('Valid', 'NotYetValid', 'Expired', 'HostnameMismatch', 'Untrusted')");
+        });
+        builder.HasKey(observation => observation.LogicalCheckId);
+        builder.Property(observation => observation.Subject).HasMaxLength(512).IsRequired();
+        builder.Property(observation => observation.Issuer).HasMaxLength(512).IsRequired();
+        builder.Property(observation => observation.SerialNumber).HasMaxLength(128).IsRequired();
+        builder.Property(observation => observation.Sha256Fingerprint).HasMaxLength(64).IsRequired();
+        builder.Property(observation => observation.ValidationCategory).HasMaxLength(30).IsRequired();
+        builder.Property(observation => observation.SubjectAlternativeNames).HasMaxLength(1024);
+        builder.HasIndex(observation => new { observation.EndpointMonitorId, observation.ObservedAt })
+            .IsDescending(false, true);
+        builder.HasIndex(observation => observation.Sha256Fingerprint);
+        // The composite key stops an observation from claiming a logical check that belongs to
+        // one monitor while pointing at another; the application writes matching values, and
+        // this makes the database refuse anything else.
+        builder.HasOne(observation => observation.LogicalCheck).WithOne()
+            .HasForeignKey<CertificateObservation>(observation =>
+                new { observation.LogicalCheckId, observation.EndpointMonitorId })
+            .HasPrincipalKey<LogicalCheck>(check => new { check.Id, check.EndpointMonitorId })
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(observation => observation.EndpointMonitor).WithMany()
+            .HasForeignKey(observation => observation.EndpointMonitorId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckResult>
 {
     public void Configure(EntityTypeBuilder<CheckResult> builder)
@@ -142,7 +183,9 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
                 + "('Dns','Connection','Tls','Timeout','Cancellation','ClientError','ServerError',"
                 + "'RedirectLoop','ExcessiveRedirects','ContentMismatch','ResponseTooLarge',"
                 + "'HttpsRequired','InvalidConfiguration','DestinationPolicy','InvalidRedirect',"
-                + "'ExecutionExhausted','TargetIneligible','Protocol')");
+                + "'ExecutionExhausted','TargetIneligible','Protocol',"
+                + "'SslExpired','SslNotYetValid','SslHostnameMismatch','SslUntrusted',"
+                + "'SslHandshakeFailed')");
             table.HasCheckConstraint(
                 "ck_check_result_outcome_category",
                 "(outcome = 'Healthy' AND failure_category IS NULL) OR "

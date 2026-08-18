@@ -19,6 +19,7 @@ internal sealed class LogicalCheckFinalizationService(
     ApplicationDbContext dbContext,
     IMaintenanceEvaluator maintenanceEvaluator,
     IncidentAutomationService incidentAutomation,
+    ISslUrgentCheckScheduler urgentCertificateChecks,
     TimeProvider timeProvider) : ILogicalCheckFinalizationService
 {
     public async Task<LogicalCheckFinalizationStatus> FinalizeAsync(
@@ -51,7 +52,7 @@ internal sealed class LogicalCheckFinalizationService(
             return LogicalCheckFinalizationStatus.InvalidExecutionAttempt;
         }
 
-        var work = FindHttpWork(check, command.DurableWorkId);
+        var work = FindWork(check, command.DurableWorkId);
         if (work is null)
         {
             return LogicalCheckFinalizationStatus.InvalidDurableWork;
@@ -75,7 +76,7 @@ internal sealed class LogicalCheckFinalizationService(
         var now = timeProvider.GetUtcNow();
         var normalized = Normalize(check, command.Evidence, now);
         var maintenance = await maintenanceEvaluator.FindActiveAsync(check.EndpointMonitorId, normalized.MeasuredAt, cancellationToken);
-        AddHistory(check, normalized, IsResponseTruncated(command.Evidence), maintenance, now);
+        AddHistory(check, normalized, command.Evidence, maintenance, now);
         var counterMode = HealthConfirmationEngine.SelectCounterMode(
             check.Source,
             normalized.Outcome,
@@ -88,8 +89,22 @@ internal sealed class LogicalCheckFinalizationService(
             check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken);
         CompleteAttempt(attempt!, command.Evidence, now);
         CompleteWork(work, now);
+
+        // BR-C07: an urgent certificate check is created in this transaction so it commits with
+        // the availability result it came from. Preparing it after the commit would lose it for
+        // good whenever the worker died in between — the completed check is never re-executed.
+        var urgentCertificateCheck = await urgentCertificateChecks.PrepareAfterTlsFailureAsync(
+            check.EndpointMonitor.EndpointId, command.Evidence, now, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        if (urgentCertificateCheck is not null)
+        {
+            // Best-effort hand-off. The work row is already committed, so reconciliation picks
+            // it up even if this never runs.
+            await urgentCertificateChecks.EnqueueAsync(urgentCertificateCheck, cancellationToken);
+        }
+
         return LogicalCheckFinalizationStatus.Finalized;
     }
 
@@ -117,7 +132,7 @@ internal sealed class LogicalCheckFinalizationService(
             return LogicalCheckRetryStatus.InvalidExecutionAttempt;
         }
 
-        var work = FindHttpWork(check, command.DurableWorkId);
+        var work = FindWork(check, command.DurableWorkId);
         if (work is null)
         {
             return LogicalCheckRetryStatus.InvalidDurableWork;
@@ -159,9 +174,10 @@ internal sealed class LogicalCheckFinalizationService(
             .Include(check => check.DurableWork)
             .SingleOrDefaultAsync(check => check.Id == logicalCheckId, token);
 
-    private static DurableWork? FindHttpWork(LogicalCheck check, Guid workId) =>
+    private static DurableWork? FindWork(LogicalCheck check, Guid workId) =>
         check.DurableWork.SingleOrDefault(work =>
-            work.Id == workId && work.WorkKind == DurableWorkKinds.HttpCheck);
+            work.Id == workId
+            && work.WorkKind == MonitorWorkKinds.For(check.ConfigurationSnapshot.MonitorType));
 
     private static bool IsRunning(ExecutionAttempt? attempt) => attempt is
     {
@@ -181,7 +197,13 @@ internal sealed class LogicalCheckFinalizationService(
                 : LogicalCheckFinalizationStatus.InvalidTransportResult;
         }
 
-        if (evidence is not HttpTransportEvidence http)
+        if (evidence is SslCertificateEvidence ssl)
+        {
+            return ValidateSslEvidence(check, ssl);
+        }
+
+        if (evidence is not HttpTransportEvidence http
+            || MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType))
         {
             return LogicalCheckFinalizationStatus.InvalidTransportResult;
         }
@@ -203,7 +225,41 @@ internal sealed class LogicalCheckFinalizationService(
             : LogicalCheckFinalizationStatus.InvalidTransportResult;
     }
 
-    private static NormalizedHttpResult Normalize(
+    private static LogicalCheckFinalizationStatus? ValidateSslEvidence(
+        LogicalCheck check,
+        SslCertificateEvidence evidence)
+    {
+        if (!MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType))
+        {
+            return LogicalCheckFinalizationStatus.InvalidTransportResult;
+        }
+
+        var endpoint = check.EndpointMonitor.Endpoint;
+        var normalized = EndpointUrlNormalizer.Normalize(evidence.Request.Url);
+        if (evidence.Request.EndpointId != endpoint.Id
+            || !normalized.Succeeded
+            || normalized.NormalizedUrl != endpoint.NormalizedUrl)
+        {
+            return LogicalCheckFinalizationStatus.TargetMismatch;
+        }
+
+        var expected = ExpectedPolicyFingerprint(
+            check, ParseAcceptedStatuses(check.ConfigurationSnapshot.AcceptedStatusCodes));
+        if (check.PolicyFingerprint != expected
+            || check.ConfigurationSnapshot.ConfigurationFingerprint != expected
+            || evidence.Request.TimeoutSeconds != check.ConfigurationSnapshot.TimeoutSeconds)
+        {
+            return LogicalCheckFinalizationStatus.PolicyMismatch;
+        }
+
+        // A probe either observed a certificate or reported why it could not; reporting both,
+        // or neither, means the result did not come from a completed probe.
+        return evidence.Result.Succeeded == (evidence.Result.Certificate is not null)
+            ? null
+            : LogicalCheckFinalizationStatus.InvalidTransportResult;
+    }
+
+    private static NormalizedCheckResult Normalize(
         LogicalCheck check,
         LogicalCheckTerminalEvidence evidence,
         DateTimeOffset now)
@@ -216,6 +272,11 @@ internal sealed class LogicalCheckFinalizationService(
                 http.Result,
                 CreatePolicy(check.ConfigurationSnapshot, statuses),
                 now));
+        }
+
+        if (evidence is SslCertificateEvidence ssl)
+        {
+            return SslResultNormalizer.Normalize(new(ssl.Result, now));
         }
 
         var reason = ((ExecutionTerminalEvidence)evidence).Reason;
@@ -258,7 +319,20 @@ internal sealed class LogicalCheckFinalizationService(
         IReadOnlyCollection<int> statuses)
     {
         var snapshot = check.ConfigurationSnapshot;
-        var expected = HttpPolicyFingerprint.Create(new(
+        var expected = ExpectedPolicyFingerprint(check, statuses);
+        return check.PolicyFingerprint == expected
+            && snapshot.ConfigurationFingerprint == expected
+            && request.TimeoutSeconds == snapshot.TimeoutSeconds
+            && request.MaxRedirects == snapshot.MaxRedirects
+            && request.MaxResponseBodyBytes == snapshot.MaxResponseBodyBytes;
+    }
+
+    private static string ExpectedPolicyFingerprint(
+        LogicalCheck check,
+        IReadOnlyCollection<int> statuses)
+    {
+        var snapshot = check.ConfigurationSnapshot;
+        return HttpPolicyFingerprint.Create(new(
             check.EndpointMonitor.Endpoint.NormalizedUrl,
             snapshot.MonitorType,
             check.EndpointMonitor.Endpoint.Environment.IsProduction,
@@ -274,11 +348,6 @@ internal sealed class LogicalCheckFinalizationService(
             snapshot.ProductionHttpSeverity,
             snapshot.MaxResponseBodyBytes,
             snapshot.MaxRedirects));
-        return check.PolicyFingerprint == expected
-            && snapshot.ConfigurationFingerprint == expected
-            && request.TimeoutSeconds == snapshot.TimeoutSeconds
-            && request.MaxRedirects == snapshot.MaxRedirects
-            && request.MaxResponseBodyBytes == snapshot.MaxResponseBodyBytes;
     }
 
     private static bool IsTransportConsistent(HttpTransportEvidence evidence)
@@ -363,11 +432,12 @@ internal sealed class LogicalCheckFinalizationService(
 
     private void AddHistory(
         LogicalCheck check,
-        NormalizedHttpResult normalized,
-        bool responseTruncated,
+        NormalizedCheckResult normalized,
+        LogicalCheckTerminalEvidence evidence,
         ActiveMaintenanceOccurrence? maintenance,
         DateTimeOffset completedAt)
     {
+        var isSsl = MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType);
         dbContext.CheckResults.Add(new CheckResult
         {
             LogicalCheckId = check.Id,
@@ -381,12 +451,16 @@ internal sealed class LogicalCheckFinalizationService(
             TotalDurationMs = normalized.TotalDurationMs,
             DecodedLength = normalized.DecodedLength,
             LengthSource = normalized.LengthSource,
-            ResponseTruncated = responseTruncated,
+            ResponseTruncated = IsResponseTruncated(evidence),
             MonitorSource = normalized.MonitorSource,
             MeasuredAt = normalized.MeasuredAt,
             MaintenanceOccurrenceId = maintenance?.OccurrenceId,
             IsMaintenance = maintenance is not null,
-            CountsForUptime = check.Source == LogicalCheckSources.Scheduled
+            // Uptime is an availability measure (BR-U03, BR-U05). A certificate check says
+            // nothing about whether the site was reachable, so it never becomes an uptime
+            // sample even when it succeeds.
+            CountsForUptime = !isSsl
+                && check.Source == LogicalCheckSources.Scheduled
                 && normalized.Outcome != HttpResultOutcomes.Cancelled
                 && maintenance is null,
             SafeDiagnostic = normalized.SafeDiagnostic,
@@ -412,13 +486,46 @@ internal sealed class LogicalCheckFinalizationService(
             ExpectedValue = finding.ExpectedValue,
             IssueKey = finding.IssueKey
         }));
+        if (evidence is SslCertificateEvidence { Result.Certificate: { } certificate })
+        {
+            dbContext.CertificateObservations.Add(new CertificateObservation
+            {
+                LogicalCheckId = check.Id,
+                EndpointMonitorId = check.EndpointMonitorId,
+                Subject = certificate.Subject,
+                Issuer = certificate.Issuer,
+                SerialNumber = certificate.SerialNumber,
+                Sha256Fingerprint = certificate.Sha256Fingerprint,
+                NotBefore = certificate.NotBefore,
+                NotAfter = certificate.NotAfter,
+                DaysRemaining = CertificateExpiry.DaysRemaining(
+                    certificate.NotAfter, certificate.ObservedAt),
+                ValidationCategory = certificate.ValidationCategory.ToString(),
+                HostnameMatched = certificate.HostnameMatched,
+                ChainTrusted = certificate.ChainTrusted,
+                SubjectAlternativeNames = FormatAlternativeNames(certificate.SubjectAlternativeNames),
+                ObservedAt = certificate.ObservedAt
+            });
+        }
+
         check.State = LogicalCheckStates.Completed;
         check.CompletedAt = completedAt;
     }
 
+    private static string? FormatAlternativeNames(IReadOnlyList<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return null;
+        }
+
+        var joined = string.Join(", ", names);
+        return joined.Length <= 1024 ? joined : joined[..1024];
+    }
+
     private async Task<HealthConfirmationDecision> ApplyHealthAsync(
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         HealthCounterMode counterMode,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -520,7 +627,7 @@ internal sealed class LogicalCheckFinalizationService(
         state.ConsecutiveFailures,
         state.ConsecutiveRecoveries);
 
-    private static IReadOnlyCollection<string> ObservedIssueKeys(NormalizedHttpResult result)
+    private static IReadOnlyCollection<string> ObservedIssueKeys(NormalizedCheckResult result)
     {
         if (result.Outcome == HttpResultOutcomes.Healthy)
         {
@@ -547,12 +654,15 @@ internal sealed class LogicalCheckFinalizationService(
             ExecutionTerminalEvidence => ExecutionAttemptOutcomes.TerminalFailure,
             HttpTransportEvidence { Result.Failure: SafeHttpFailureKind.Cancelled } =>
                 ExecutionAttemptOutcomes.Cancelled,
+            SslCertificateEvidence { Result.Failure: SslProbeFailureKind.Cancelled } =>
+                ExecutionAttemptOutcomes.Cancelled,
             _ => ExecutionAttemptOutcomes.Succeeded
         };
         attempt.FailureCategory = evidence switch
         {
             ExecutionTerminalEvidence terminal => terminal.Reason.ToString(),
             HttpTransportEvidence { Result.Failure: { } failure } => failure.ToString(),
+            SslCertificateEvidence { Result.Failure: { } probeFailure } => probeFailure.ToString(),
             _ => null
         };
         attempt.FinishedAt = now;

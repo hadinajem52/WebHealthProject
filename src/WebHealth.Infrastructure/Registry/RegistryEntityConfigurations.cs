@@ -273,16 +273,27 @@ internal sealed class PolicyProfileConfiguration : IEntityTypeConfiguration<Poli
         builder.Property(profile => profile.Version).IsConcurrencyToken();
         builder.HasIndex(profile => new { profile.Name, profile.MonitorType })
             .IsUnique().HasFilter("deleted_at IS NULL");
-        builder.HasData(new PolicyProfile
-        {
-            Id = RegistryDefaults.HttpAvailabilityPolicyProfileId,
-            Name = "Default HTTP availability",
-            MonitorType = RegistryDefaults.HttpAvailabilityMonitorType,
-            BoundedSettings = "{}",
-            IsSystem = true,
-            CreatedAt = RegistryDefaults.SeedTimestamp,
-            Version = 1
-        });
+        builder.HasData(
+            new PolicyProfile
+            {
+                Id = RegistryDefaults.HttpAvailabilityPolicyProfileId,
+                Name = "Default HTTP availability",
+                MonitorType = RegistryDefaults.HttpAvailabilityMonitorType,
+                BoundedSettings = "{}",
+                IsSystem = true,
+                CreatedAt = RegistryDefaults.SeedTimestamp,
+                Version = 1
+            },
+            new PolicyProfile
+            {
+                Id = RegistryDefaults.SslCertificatePolicyProfileId,
+                Name = "Default SSL certificate",
+                MonitorType = RegistryDefaults.SslCertificateMonitorType,
+                BoundedSettings = "{}",
+                IsSystem = true,
+                CreatedAt = RegistryDefaults.SeedTimestamp,
+                Version = 1
+            });
     }
 }
 

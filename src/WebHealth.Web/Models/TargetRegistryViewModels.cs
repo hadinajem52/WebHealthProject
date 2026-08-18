@@ -11,7 +11,11 @@ public sealed record EnvironmentListViewModel(
     bool CanManage);
 
 public sealed record EnvironmentDetailsViewModel(EnvironmentDetails Environment, bool CanManage);
-public sealed record EndpointDetailsViewModel(EndpointDetails Endpoint, bool CanManage, CheckHistoryItem? LatestCheck);
+public sealed record EndpointDetailsViewModel(
+    EndpointDetails Endpoint,
+    bool CanManage,
+    CheckHistoryItem? LatestCheck,
+    CertificateStatus Certificate);
 public sealed record RegistryEndpointListViewModel(IReadOnlyList<RegistryEndpointItem> Endpoints, string? Search);
 public sealed record TargetArchiveViewModel(
     IReadOnlyList<EnvironmentListItem> Environments,

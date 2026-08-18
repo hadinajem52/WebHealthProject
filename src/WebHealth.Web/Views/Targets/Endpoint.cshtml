@@ -45,6 +45,49 @@
 <section class="card">
     <div class="page-intro">
         <div>
+            <h2 class="card__title">Certificate</h2>
+            <p class="card__subtitle">The most recent certificate observed for this endpoint.</p>
+        </div>
+    </div>
+    @if (!Model.Certificate.IsMonitored)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "Not applicable",
+            "This endpoint uses HTTP, so it presents no certificate to check.",
+            "information"))
+    }
+    else if (Model.Certificate.Latest is null)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            "No certificate checked yet",
+            "Certificates are checked once a day. The first result will appear after the next run.",
+            "clock"))
+    }
+    else
+    {
+        var certificate = Model.Certificate.Latest;
+        var valid = certificate.ValidationCategory == "Valid";
+        <dl class="registry-facts">
+            <div>
+                <dt>Validation</dt>
+                <dd>
+                    <span class="badge" data-status="@(valid ? "success" : "danger")">@certificate.ValidationCategory</span>
+                </dd>
+            </div>
+            <div><dt>Subject</dt><dd>@certificate.Subject</dd></div>
+            <div><dt>Issuer</dt><dd>@certificate.Issuer</dd></div>
+            <div><dt>Valid until</dt><dd>@certificate.NotAfter.ToString("yyyy-MM-dd HH:mm 'UTC'") (@certificate.DaysRemaining days)</dd></div>
+            <div><dt>Hostname</dt><dd>@(certificate.HostnameMatched ? "Matches" : "Does not match")</dd></div>
+            <div><dt>Chain</dt><dd>@(certificate.ChainTrusted ? "Trusted" : "Not trusted")</dd></div>
+            <div><dt>Fingerprint (SHA-256)</dt><dd class="target-url">@certificate.Sha256Fingerprint</dd></div>
+            <div><dt>Observed</dt><dd>@certificate.ObservedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
+        </dl>
+    }
+</section>
+
+<section class="card">
+    <div class="page-intro">
+        <div>
             <h2 class="card__title">Latest check</h2>
             <p class="card__subtitle">The most recent scheduled or manual result for this endpoint.</p>
         </div>

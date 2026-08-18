@@ -63,7 +63,12 @@ public sealed class TargetsController(
         }
 
         var history = await checkHistoryReader.ListForEndpointAsync(id, access, page: 1, cancellationToken);
-        return View(new EndpointDetailsViewModel(endpoint, CanManage(access), history?.Items.FirstOrDefault()));
+        var certificate = await targetReader.FindCertificateStatusAsync(id, access, cancellationToken);
+        return View(new EndpointDetailsViewModel(
+            endpoint,
+            CanManage(access),
+            history?.Items.FirstOrDefault(),
+            certificate ?? CertificateStatus.NotApplicable));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]

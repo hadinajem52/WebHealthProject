@@ -98,8 +98,8 @@ internal sealed class MonitoringSchedulingService(
         {
             Id = durableWorkId,
             LogicalCheckId = logicalCheckId,
-            WorkKind = DurableWorkKinds.HttpCheck,
-            DedupeKey = $"v1|{logicalCheckId:N}|http-check",
+            WorkKind = MonitorWorkKinds.For(monitor.MonitorType),
+            DedupeKey = MonitorWorkKinds.CreateDedupeKey(logicalCheckId, monitor.MonitorType),
             QueueName = MonitoringQueueNames.ShortChecks,
             State = DurableWorkStates.Dispatching,
             AvailableAt = now,
@@ -164,8 +164,9 @@ internal sealed class MonitoringSchedulingService(
         JOIN web_health.environment AS environment ON environment.id = endpoint.environment_id
         JOIN web_health.website AS website ON website.id = environment.website_id
         JOIN web_health.client AS client ON client.id = website.client_id
-        WHERE monitor.monitor_type = 'HttpAvailability'
+        WHERE monitor.monitor_type IN ('HttpAvailability', 'SslCertificate')
           AND monitor.deleted_at IS NULL AND monitor.is_enabled
+          AND monitor.scheduling_enabled
           AND monitor.next_due_at <= @now
         ORDER BY monitor.next_due_at, monitor.id
         FOR UPDATE OF monitor, endpoint, environment, website, client SKIP LOCKED
@@ -182,7 +183,7 @@ internal sealed class MonitoringSchedulingService(
         JOIN web_health.logical_check AS check_record ON check_record.id = work.logical_check_id
         LEFT JOIN web_health.execution_lease AS lease
           ON lease.logical_check_id = work.logical_check_id
-        WHERE work.work_kind = 'HttpCheck'
+        WHERE work.work_kind IN ('HttpCheck', 'SslCheck')
           AND check_record.state <> 'Completed'
           AND work.available_at <= @now
           AND (

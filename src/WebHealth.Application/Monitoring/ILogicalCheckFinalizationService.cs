@@ -23,6 +23,10 @@ public sealed record HttpTransportEvidence(
     SafeHttpTransportRequest Request,
     SafeHttpTransportResult Result) : LogicalCheckTerminalEvidence;
 
+public sealed record SslCertificateEvidence(
+    SslCertificateProbeRequest Request,
+    SslCertificateProbeResult Result) : LogicalCheckTerminalEvidence;
+
 public sealed record ExecutionTerminalEvidence(
     ExecutionTerminalReason Reason) : LogicalCheckTerminalEvidence;
 

@@ -21,7 +21,7 @@ internal sealed class IncidentAutomationService(
 
     public async Task ApplyAsync(
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         HealthConfirmationDecision healthDecision,
         HealthCounterMode counterMode,
         bool isMaintenance,
@@ -48,7 +48,7 @@ internal sealed class IncidentAutomationService(
 
     private async Task ApplyFailuresAsync(
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         HealthConfirmationDecision healthDecision,
         List<Incident> incidents,
         IReadOnlySet<Guid> interruptedIncidentIds,
@@ -92,7 +92,7 @@ internal sealed class IncidentAutomationService(
 
     private async Task ApplyRecoveryAsync(
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         HealthConfirmationDecision healthDecision,
         IReadOnlyCollection<Incident> incidents,
         bool isMaintenance,
@@ -121,7 +121,7 @@ internal sealed class IncidentAutomationService(
 
     private async Task<HashSet<Guid>> InterruptRecoveryAsync(
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         IEnumerable<Incident> incidents,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -159,7 +159,7 @@ internal sealed class IncidentAutomationService(
 
     private async Task<Incident> OpenAsync(
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         string issueKey,
         bool isMaintenance,
         DateTimeOffset now,
@@ -205,7 +205,7 @@ internal sealed class IncidentAutomationService(
     private async Task BeginRecoveryAsync(
         Incident incident,
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
@@ -236,7 +236,7 @@ internal sealed class IncidentAutomationService(
     private async Task ResolveAsync(
         Incident incident,
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -286,7 +286,7 @@ internal sealed class IncidentAutomationService(
     private async Task RecordEvidenceMutationAsync(
         Incident incident,
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         string evidenceType,
         string evidenceRole,
         IncidentAuditAction action,
@@ -329,7 +329,7 @@ internal sealed class IncidentAutomationService(
     private void AddEvidence(
         Incident incident,
         LogicalCheck check,
-        NormalizedHttpResult result,
+        NormalizedCheckResult result,
         string evidenceType,
         string evidenceRole,
         DateTimeOffset now) =>
@@ -410,7 +410,7 @@ internal sealed class IncidentAutomationService(
     private static IncidentAuditWriteContext SystemContext(DateTimeOffset now) =>
         new(null, "system", now);
 
-    private static HashSet<string> ObservedIssueKeys(NormalizedHttpResult result)
+    private static HashSet<string> ObservedIssueKeys(NormalizedCheckResult result)
     {
         var issueKeys = result.Findings.Select(finding => finding.IssueKey)
             .ToHashSet(StringComparer.Ordinal);

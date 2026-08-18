@@ -127,6 +127,30 @@ public sealed class CheckResult
     public ICollection<Finding> Findings { get; } = [];
 }
 
+/// <summary>
+/// One certificate inspection, keyed to the logical check that produced it. Holds public
+/// certificate facts only (BR-C02): no private key material and no encoded certificate bytes.
+/// </summary>
+public sealed class CertificateObservation
+{
+    public Guid LogicalCheckId { get; set; }
+    public Guid EndpointMonitorId { get; set; }
+    public required string Subject { get; set; }
+    public required string Issuer { get; set; }
+    public required string SerialNumber { get; set; }
+    public required string Sha256Fingerprint { get; set; }
+    public DateTimeOffset NotBefore { get; set; }
+    public DateTimeOffset NotAfter { get; set; }
+    public int DaysRemaining { get; set; }
+    public required string ValidationCategory { get; set; }
+    public bool HostnameMatched { get; set; }
+    public bool ChainTrusted { get; set; }
+    public string? SubjectAlternativeNames { get; set; }
+    public DateTimeOffset ObservedAt { get; set; }
+    public LogicalCheck LogicalCheck { get; set; } = null!;
+    public EndpointMonitor EndpointMonitor { get; set; } = null!;
+}
+
 public sealed class RedirectHop
 {
     public Guid Id { get; set; }

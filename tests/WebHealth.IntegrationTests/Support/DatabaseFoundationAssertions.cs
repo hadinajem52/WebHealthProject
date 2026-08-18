@@ -52,7 +52,8 @@ internal static class DatabaseFoundationAssertions
         "20260817130137_DurableNotifications",
         "20260818065727_EndpointSchedulingMode",
         "20260818081749_NotificationReadMarker",
-        "20260818084805_NotificationRecipientIndex"
+        "20260818084805_NotificationRecipientIndex",
+        "20260818101710_SslCertificateMonitoring"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -61,6 +62,7 @@ internal static class DatabaseFoundationAssertions
         "access_grant",
         "client",
         "check_configuration_snapshot",
+        "certificate_observation",
         "check_result",
         "durable_work",
         "environment",
@@ -109,6 +111,49 @@ internal static class DatabaseFoundationAssertions
         "notification_event", "notification_delivery", "notification_attempt"
     ];
 
+    private static readonly string[] ExpectedEntityTypeNames =
+    [
+        // Identity entities
+        "IdentityRoleClaim`1",
+        "IdentityUserClaim`1",
+        "IdentityUserLogin`1",
+        "IdentityUserRole`1",
+        "IdentityUserToken`1",
+        "ApplicationRole",
+        "ApplicationUser",
+        // Administration
+        "OwnerSubject",
+        "Team",
+        "TeamMember",
+        "AuditEvent",
+        "AccessGrant",
+        // Monitoring
+        "EndpointHealth",
+        "IssueState",
+        "CertificateObservation",
+        "CheckConfigurationSnapshot",
+        "CheckResult",
+        "DurableWork",
+        "ExecutionAttempt",
+        "ExecutionLease",
+        "Finding",
+        "LogicalCheck",
+        "RedirectHop",
+        // Incidents
+        "Incident",
+        "IncidentEvent",
+        "IncidentEvidence",
+        // Maintenance
+        "MaintenanceOccurrence",
+        "MaintenanceTarget",
+        "MaintenanceWindow",
+        // Notifications
+        "NotificationAttempt",
+        "NotificationDelivery",
+        "NotificationEvent",
+        "NotificationReadMarker"
+    ];
+
     public static async Task VerifyAsync(string connectionString)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
@@ -119,7 +164,8 @@ internal static class DatabaseFoundationAssertions
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         (await context.Database.GetAppliedMigrationsAsync()).Should().BeEquivalentTo(ExpectedMigrations);
-        context.Model.GetEntityTypes().Should().HaveCount(40);
+        var entityTypeNames = context.Model.GetEntityTypes().Select(e => e.Name).ToList();
+        entityTypeNames.Should().BeEquivalentTo(ExpectedEntityTypeNames);
 
         var state = await ReadFoundationState(connectionString);
         state.SchemaExists.Should().BeTrue();
@@ -142,10 +188,229 @@ internal static class DatabaseFoundationAssertions
         await VerifyDistinctIssueKeysCreateDistinctIncidentsAsync(connectionString);
         await VerifyReminderEscalationSweepBoundariesAsync(connectionString);
         await VerifyMaintenanceClassifiedResultRetentionAsync(connectionString);
+        await VerifySslCertificateMonitoringAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(context, connectionString);
         await VerifyPhaseTwoUpgradeAsync(context);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
     }
+
+    /// <summary>
+    /// Certificate monitors follow the endpoint's scheme (BR-C01), and the fingerprint written
+    /// by the migration's SQL backfill has to be byte-identical to the one the application
+    /// computes — dispatch rejects any check whose stored fingerprint does not recompute, so a
+    /// mismatch would silently disable every backfilled certificate monitor.
+    /// </summary>
+    private static async Task VerifySslCertificateMonitoringAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var environmentId = await database.Environments
+            .Where(candidate => candidate.DeletedAt == null)
+            .Select(candidate => candidate.Id).FirstAsync();
+
+        var httpsResult = await endpointService.CreateAsync(
+            new(environmentId, "https://certificates.test/status", null, true, null,
+                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null),
+            access);
+        httpsResult.Succeeded.Should().BeTrue();
+        var httpsEndpointId = httpsResult.EntityId!.Value;
+
+        var sslMonitor = await database.EndpointMonitors.SingleAsync(monitor =>
+            monitor.EndpointId == httpsEndpointId
+            && monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType
+            && monitor.DeletedAt == null);
+        sslMonitor.IntervalSeconds.Should().Be(RegistryDefaults.SslIntervalSeconds);
+        sslMonitor.PolicyProfileId.Should().Be(RegistryDefaults.SslCertificatePolicyProfileId);
+
+        var httpResult = await endpointService.CreateAsync(
+            new(environmentId, "http://plaintext.test/status", null, true, null,
+                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null),
+            access);
+        httpResult.Succeeded.Should().BeTrue();
+        (await database.EndpointMonitors.AnyAsync(monitor =>
+            monitor.EndpointId == httpResult.EntityId!.Value
+            && monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType))
+            .Should().BeFalse("an HTTP endpoint presents no certificate to monitor");
+
+        await VerifyBackfilledFingerprintMatchesApplicationAsync(connectionString, sslMonitor.Id);
+        await VerifyUrgentCertificateRecheckAsync(scope, database, sslMonitor.Id, httpsEndpointId);
+        await VerifyCertificateMonitorFollowsTlsIdentityAsync(
+            database, endpointService, access, httpsEndpointId, sslMonitor.Id);
+    }
+
+    /// <summary>
+    /// A different host or port is a different certificate, so the monitor is retired and
+    /// replaced rather than inheriting the previous host's observations. This also proves the
+    /// retire and the replacement can be written in one save without tripping the partial
+    /// unique index on (endpoint_id, monitor_type) for live monitors.
+    /// </summary>
+    private static async Task VerifyCertificateMonitorFollowsTlsIdentityAsync(
+        ApplicationDbContext database,
+        IEndpointRegistryService endpointService,
+        RegistryAccessContext access,
+        Guid endpointId,
+        Guid originalSslMonitorId)
+    {
+        database.ChangeTracker.Clear();
+        var endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
+        (await endpointService.UpdateAsync(
+            new(endpointId, "https://renamed-certificates.test/status", null, true, null,
+                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null,
+                endpoint.Version),
+            access))
+            .Succeeded.Should().BeTrue();
+
+        database.ChangeTracker.Clear();
+        var monitors = await database.EndpointMonitors.AsNoTracking()
+            .Where(monitor => monitor.EndpointId == endpointId
+                && monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType)
+            .ToArrayAsync();
+        monitors.Should().HaveCount(2);
+        monitors.Single(monitor => monitor.Id == originalSslMonitorId).DeletedAt.Should().NotBeNull();
+        var replacement = monitors.Single(monitor => monitor.Id != originalSslMonitorId);
+        replacement.DeletedAt.Should().BeNull();
+        replacement.ConfigurationFingerprint.Should().Be(
+            RegistryDefaults.CreateSslFingerprint("https://renamed-certificates.test/status", false));
+
+        // A same-identity edit keeps the monitor, so certificate history is not reset by an
+        // unrelated change.
+        database.ChangeTracker.Clear();
+        endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
+        (await endpointService.UpdateAsync(
+            new(endpointId, "https://renamed-certificates.test/other", null, true, null,
+                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null,
+                endpoint.Version),
+            access))
+            .Succeeded.Should().BeTrue();
+        (await database.EndpointMonitors.AsNoTracking().CountAsync(monitor =>
+            monitor.EndpointId == endpointId
+            && monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType
+            && monitor.DeletedAt == null))
+            .Should().Be(1);
+    }
+
+    /// <summary>
+    /// BR-C07: a TLS-related availability failure queues an out-of-band certificate check, but
+    /// a flapping host must not be able to queue one per failed check.
+    /// </summary>
+    private static async Task VerifyUrgentCertificateRecheckAsync(
+        AsyncServiceScope scope,
+        ApplicationDbContext database,
+        Guid sslMonitorId,
+        Guid endpointId)
+    {
+        var scheduler = scope.ServiceProvider.GetRequiredService<ISslUrgentCheckScheduler>();
+        var request = new SafeHttpTransportRequest(endpointId, "https://certificates.test/status", true);
+        var tlsFailure = new HttpTransportEvidence(request, TransportFailure(SafeHttpFailureKind.Tls));
+
+        (await PrepareUrgentAsync(database, scheduler, endpointId, tlsFailure)).Should().NotBeNull();
+        var urgent = await database.LogicalChecks.AsNoTracking()
+            .Where(check => check.EndpointMonitorId == sslMonitorId
+                && check.Source == LogicalCheckSources.Urgent)
+            .ToArrayAsync();
+        urgent.Should().ContainSingle("a TLS failure triggers an immediate certificate check");
+        (await database.DurableWork.AsNoTracking()
+            .Where(work => work.LogicalCheckId == urgent[0].Id)
+            .Select(work => work.WorkKind)
+            .SingleAsync())
+            .Should().Be(DurableWorkKinds.SslCheck);
+
+        (await PrepareUrgentAsync(database, scheduler, endpointId, tlsFailure))
+            .Should().BeNull("the per-endpoint cooldown suppresses a second urgent check");
+        (await database.LogicalChecks.AsNoTracking().CountAsync(check =>
+            check.EndpointMonitorId == sslMonitorId && check.Source == LogicalCheckSources.Urgent))
+            .Should().Be(1);
+
+        // A non-TLS failure is not evidence about the certificate.
+        (await PrepareUrgentAsync(
+            database, scheduler, endpointId,
+            new HttpTransportEvidence(request, TransportFailure(SafeHttpFailureKind.Timeout))))
+            .Should().BeNull();
+        (await database.LogicalChecks.AsNoTracking().CountAsync(check =>
+            check.EndpointMonitorId == sslMonitorId && check.Source == LogicalCheckSources.Urgent))
+            .Should().Be(1);
+    }
+
+    /// <summary>
+    /// The scheduler writes into its caller's transaction, so the test supplies one exactly as
+    /// finalization does.
+    /// </summary>
+    private static async Task<UrgentCertificateCheck?> PrepareUrgentAsync(
+        ApplicationDbContext database,
+        ISslUrgentCheckScheduler scheduler,
+        Guid endpointId,
+        LogicalCheckTerminalEvidence evidence)
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync();
+        var prepared = await scheduler.PrepareAfterTlsFailureAsync(
+            endpointId, evidence, DateTimeOffset.UtcNow);
+        await database.SaveChangesAsync();
+        await transaction.CommitAsync();
+        return prepared;
+    }
+
+    private static SafeHttpTransportResult TransportFailure(SafeHttpFailureKind failure) => new(
+        failure, null, null, TimeSpan.FromSeconds(1), 0, false,
+        ReadOnlyMemory<byte>.Empty, [], null, null);
+
+    private static async Task VerifyBackfilledFingerprintMatchesApplicationAsync(
+        string connectionString,
+        Guid sslMonitorId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+            SELECT
+                endpoint.normalized_url,
+                environment.is_production,
+                monitor.configuration_fingerprint,
+                encode(sha256(convert_to(
+                    'v2|'
+                    || octet_length(endpoint.normalized_url)::text || ':'
+                    || endpoint.normalized_url || '|'
+                    || '14:SslCertificate|'
+                    || '1:' || CASE WHEN environment.is_production THEN '1' ELSE '0' END || '|'
+                    || '5:86400|2:15|1:1|1:1|-1:|-1:|0:|-1:|'
+                    || '17:OrdinalIgnoreCase|7:Warning|7:2097152|2:10|',
+                    'UTF8')), 'hex')
+            FROM web_health.endpoint_monitor AS monitor
+            JOIN web_health.endpoint AS endpoint ON endpoint.id = monitor.endpoint_id
+            JOIN web_health.environment AS environment ON environment.id = endpoint.environment_id
+            WHERE monitor.id = @id
+            """, connection);
+        command.Parameters.AddWithValue("id", sslMonitorId);
+        await using var reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue();
+
+        var normalizedUrl = reader.GetString(0);
+        var isProduction = reader.GetBoolean(1);
+        var storedFingerprint = reader.GetString(2);
+        var migrationFingerprint = reader.GetString(3);
+
+        // All three must agree: what the application stored, what the migration's SQL would
+        // compute for the same endpoint, and what the fingerprint function produces today.
+        var applicationFingerprint = RegistryDefaults.CreateSslFingerprint(normalizedUrl, isProduction);
+        storedFingerprint.Should().Be(applicationFingerprint);
+        migrationFingerprint.Should().Be(applicationFingerprint);
+    }
+
+    /// <summary>
+    /// These scenarios were written when an endpoint had exactly one monitor. HTTPS endpoints
+    /// now also carry a certificate monitor, so each query states the availability intent it
+    /// always had rather than relying on there being only one monitor to find.
+    /// </summary>
+    private static IQueryable<EndpointMonitor> AvailabilityMonitors(ApplicationDbContext database) =>
+        database.EndpointMonitors.Where(monitor =>
+            monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
 
     private static async Task VerifyEnvironmentEndpointRegistryAsync(string connectionString)
     {
@@ -204,9 +469,11 @@ internal static class DatabaseFoundationAssertions
             .SingleAsync(candidate => candidate.Id == endpointId);
         endpoint.NormalizedUrl.Should().Be("https://example.test/Health?q=A");
         endpoint.NormalizedUrlHash.Should().HaveCount(32);
-        endpoint.Monitors.Should().ContainSingle();
-        var monitor = endpoint.Monitors.Single();
-        monitor.MonitorType.Should().Be("HttpAvailability");
+        // An HTTPS endpoint carries both an availability monitor and a certificate monitor.
+        endpoint.Monitors.Select(candidate => candidate.MonitorType).Should()
+            .BeEquivalentTo(["HttpAvailability", "SslCertificate"]);
+        var monitor = endpoint.Monitors.Single(candidate =>
+            candidate.MonitorType == "HttpAvailability");
         monitor.ScheduleAnchor.Should().Be(monitor.CreatedAt);
         monitor.NextDueAt.Should().Be(monitor.CreatedAt);
         var authorizationEvidence = await database.TargetAuthorizations.SingleAsync(
@@ -298,7 +565,7 @@ internal static class DatabaseFoundationAssertions
         website.Version++;
         await database.SaveChangesAsync();
         (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeFalse();
-        (await database.EndpointMonitors.Where(candidate => candidate.EndpointId == endpointId)
+        (await AvailabilityMonitors(database).Where(candidate => candidate.EndpointId == endpointId)
             .Select(candidate => candidate.IsEnabled).SingleAsync()).Should().BeTrue();
         website.IsEnabled = true;
         website.Version++;
@@ -325,7 +592,7 @@ internal static class DatabaseFoundationAssertions
             administratorAccess);
         overriddenEndpoint.Succeeded.Should().BeTrue();
         var overriddenEndpointId = overriddenEndpoint.EntityId!.Value;
-        var overriddenMonitor = await database.EndpointMonitors.AsNoTracking()
+        var overriddenMonitor = await AvailabilityMonitors(database).AsNoTracking()
             .SingleAsync(candidate => candidate.EndpointId == overriddenEndpointId);
         overriddenMonitor.IntervalSeconds.Should().Be(420);
         MonitorIntervalOverride.GetSeconds(overriddenMonitor.BoundedOverrides).Should().Be(420);
@@ -375,7 +642,7 @@ internal static class DatabaseFoundationAssertions
 
         database.ChangeTracker.Clear();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
-        var renamedMonitor = await database.EndpointMonitors.SingleAsync(candidate => candidate.EndpointId == endpointId);
+        var renamedMonitor = await AvailabilityMonitors(database).SingleAsync(candidate => candidate.EndpointId == endpointId);
         var overdueSlot = DateTimeOffset.UtcNow.AddMinutes(-30);
         renamedMonitor.NextDueAt = overdueSlot;
         var intervalBeforeRename = renamedMonitor.IntervalSeconds;
@@ -384,7 +651,7 @@ internal static class DatabaseFoundationAssertions
         (await environmentService.UpdateAsync(
             new(staging.Id, "Staging Updated", EnvironmentTypes.Staging, staging.BaseUrl, true, staging.Version),
             administratorAccess)).Succeeded.Should().BeTrue();
-        var monitorAfterRename = await database.EndpointMonitors.AsNoTracking()
+        var monitorAfterRename = await AvailabilityMonitors(database).AsNoTracking()
             .SingleAsync(candidate => candidate.Id == renamedMonitor.Id);
         monitorAfterRename.NextDueAt.Should().BeCloseTo(overdueSlot, TimeSpan.FromMilliseconds(1));
         monitorAfterRename.IntervalSeconds.Should().Be(intervalBeforeRename);
@@ -393,7 +660,7 @@ internal static class DatabaseFoundationAssertions
         (await environmentService.DisableAsync(new(staging.Id, staging.Version), administratorAccess)).Succeeded.Should().BeTrue();
         (await targetAuthorization.CanTestEndpointAsync(endpointId,
             new(developer.Id, [ApplicationRoles.DeveloperSupport]))).Should().BeFalse();
-        (await database.EndpointMonitors.Where(candidate => candidate.EndpointId == endpointId)
+        (await AvailabilityMonitors(database).Where(candidate => candidate.EndpointId == endpointId)
             .Select(candidate => candidate.IsEnabled).SingleAsync()).Should().BeTrue();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
         (await environmentService.DeleteAsync(new(staging.Id, staging.Version), administratorAccess)).Succeeded.Should().BeTrue();
@@ -433,7 +700,7 @@ internal static class DatabaseFoundationAssertions
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
-        var monitor = await database.EndpointMonitors
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
                     .ThenInclude(environment => environment.Website)
@@ -531,7 +798,7 @@ internal static class DatabaseFoundationAssertions
             TimeSpan.FromMinutes(16)));
         await invalidLease.Should().ThrowAsync<ArgumentOutOfRangeException>();
 
-        var otherMonitorId = await database.EndpointMonitors
+        var otherMonitorId = await AvailabilityMonitors(database)
             .Where(candidate => candidate.Id != monitor.Id)
             .Select(candidate => candidate.Id)
             .FirstAsync();
@@ -587,7 +854,7 @@ internal static class DatabaseFoundationAssertions
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
         var finalizationService = scope.ServiceProvider.GetRequiredService<ILogicalCheckFinalizationService>();
-        var monitor = await database.EndpointMonitors
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
             .FirstAsync(candidate => !candidate.Endpoint.Environment.IsProduction);
@@ -840,7 +1107,7 @@ internal static class DatabaseFoundationAssertions
             .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var monitor = await database.EndpointMonitors
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
             .FirstAsync(candidate => !candidate.Endpoint.Environment.IsProduction);
@@ -1026,7 +1293,7 @@ internal static class DatabaseFoundationAssertions
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var database = new ApplicationDbContext(options.Options);
-        var monitor = await database.EndpointMonitors
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
                     .ThenInclude(environment => environment.Website)
@@ -1196,7 +1463,7 @@ internal static class DatabaseFoundationAssertions
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var database = new ApplicationDbContext(options.Options);
-        var monitor = await database.EndpointMonitors
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
             .OrderBy(candidate => candidate.CreatedAt)
             .Skip(1)
@@ -1337,7 +1604,7 @@ internal static class DatabaseFoundationAssertions
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var database = new ApplicationDbContext(options.Options);
-        var monitor = await database.EndpointMonitors
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
             .OrderBy(candidate => candidate.CreatedAt)
             .Skip(2)
@@ -1564,9 +1831,33 @@ internal static class DatabaseFoundationAssertions
             new FixedEligibilityService(isEligible),
             leaseService,
             transport,
+            new UnusedSslCertificateProbe(),
             finalizationService,
             timeProvider,
             NullLogger<LogicalCheckExecutionService>.Instance);
+    }
+
+    /// <summary>These availability-path assertions never reach the certificate probe.</summary>
+    private sealed class UnusedSslCertificateProbe : ISslCertificateProbe
+    {
+        public Task<SslCertificateProbeResult> ProbeAsync(
+            SslCertificateProbeRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class NoUrgentSslChecks : ISslUrgentCheckScheduler
+    {
+        public Task<UrgentCertificateCheck?> PrepareAfterTlsFailureAsync(
+            Guid endpointId,
+            LogicalCheckTerminalEvidence evidence,
+            DateTimeOffset now,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<UrgentCertificateCheck?>(null);
+
+        public Task EnqueueAsync(
+            UrgentCertificateCheck request,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private static LogicalCheckFinalizationService CreateFinalizationService(
@@ -1577,6 +1868,7 @@ internal static class DatabaseFoundationAssertions
             new MaintenanceEvaluator(database),
             new IncidentAutomationService(
                 database, new AuditTrailWriter(database), new NotificationEventWriter(database)),
+            new NoUrgentSslChecks(),
             timeProvider);
 
     private static async Task<LogicalCheck> CreateQueuedCheckAsync(
@@ -1866,18 +2158,18 @@ internal static class DatabaseFoundationAssertions
         var eligibleEndpointIds = MonitoringEligibility.Apply(
                 database.Endpoints.AsNoTracking(), clock.GetUtcNow())
             .Select(endpoint => endpoint.Id);
-        var monitor = await database.EndpointMonitors
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
             .Where(candidate => candidate.DeletedAt == null
                 && eligibleEndpointIds.Contains(candidate.EndpointId))
             .OrderBy(candidate => candidate.Id)
             .FirstAsync();
-        var otherEnabledMonitorIds = await database.EndpointMonitors.AsNoTracking()
+        var otherEnabledMonitorIds = await AvailabilityMonitors(database).AsNoTracking()
             .Where(candidate => candidate.Id != monitor.Id && candidate.IsEnabled)
             .Select(candidate => candidate.Id)
             .ToArrayAsync();
-        await database.EndpointMonitors
+        await AvailabilityMonitors(database)
             .Where(candidate => otherEnabledMonitorIds.Contains(candidate.Id))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(candidate => candidate.IsEnabled, false)
@@ -1900,7 +2192,7 @@ internal static class DatabaseFoundationAssertions
         var firstDispatch = await scheduling.DispatchDueAsync();
         firstDispatch.Should().Be(new MonitoringDispatchResult(1, 1));
         database.ChangeTracker.Clear();
-        monitor = await database.EndpointMonitors
+        monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
             .SingleAsync(candidate => candidate.Id == monitor.Id);
         var firstCheck = await database.LogicalChecks
@@ -1924,7 +2216,7 @@ internal static class DatabaseFoundationAssertions
             check => check.EndpointMonitorId == monitor.Id);
         (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
         // Claimed-but-ineligible monitors still advance cadence so they aren't re-claimed every tick.
-        (await database.EndpointMonitors.AsNoTracking()
+        (await AvailabilityMonitors(database).AsNoTracking()
             .Where(candidate => candidate.Id == monitor.Id)
             .Select(candidate => candidate.NextDueAt)
             .SingleAsync()).Should().BeAfter(disabledEndpointDueAt);
