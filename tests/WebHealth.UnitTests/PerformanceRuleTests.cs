@@ -125,21 +125,28 @@ public sealed class PerformanceRuleTests
     }
 
     [Fact]
-    public void PageSize_IsNotReportedTwiceForATruncatedBody()
+    public void PageSize_IsNotJudgedFromATruncatedBodyThatAdvertisedNoLength()
     {
-        // A truncated body already raises ResponseTooLarge, and its byte count is a lower
-        // bound, so it is labelled as bounded and raises no page-size finding of its own.
-        var cap = SafeHttpTransportDefaults.MaxDecodedBodyBytes;
-        var result = Normalize(new SafeHttpTransportRequest(Guid.NewGuid(), "https://example.test/", true),
-            new SafeHttpTransportResult(
-                null, 200, new SafeHttpDestination("https://example.test/"),
-                TimeSpan.FromMilliseconds(100), cap, true, new byte[cap], [],
-                Timing: null));
+        // Without a Content-Length the truncated byte count is a lower bound, not a
+        // measurement, and ResponseTooLarge already reports it.
+        var result = Normalize(Truncated(transferredLength: null));
 
         result.LengthSource.Should().Be(PageLengthSources.BoundedDecoded);
         result.Findings.Should().NotContain(finding => finding.RuleKey == PerformanceRules.PageTooLarge);
         result.Findings.Should().Contain(finding =>
             finding.FailureCategory == HttpFailureCategories.ResponseTooLarge);
+    }
+
+    [Fact]
+    public void PageSize_IsJudgedFromATruncatedBodyThatDidAdvertiseALength()
+    {
+        // The advertised length is exact whether or not the read was cut short, so an
+        // oversized page is reported as one rather than being lost to the read cap.
+        var result = Normalize(Truncated(transferredLength: 3L * 1024 * 1024));
+
+        result.LengthSource.Should().Be(PageLengthSources.TransferredContentLength);
+        result.TransferredLength.Should().Be(3L * 1024 * 1024);
+        result.Findings.Should().Contain(finding => finding.RuleKey == PerformanceRules.PageTooLarge);
     }
 
     [Fact]
@@ -224,6 +231,21 @@ public sealed class PerformanceRuleTests
         HttpResultPolicy? policy = null) =>
         HttpResultNormalizer.Normalize(new(
             request, transport, policy ?? HttpResultPolicy.Default, MeasuredAt));
+
+    private static SafeHttpTransportResult Truncated(long? transferredLength)
+    {
+        var cap = SafeHttpTransportDefaults.MaxDecodedBodyBytes;
+        return new(
+            null,
+            200,
+            new SafeHttpDestination("https://example.test/"),
+            TimeSpan.FromMilliseconds(100),
+            cap,
+            true,
+            new byte[cap],
+            [],
+            TransferredLength: transferredLength);
+    }
 
     private static SafeHttpTransportResult Transport(
         TimeSpan duration,

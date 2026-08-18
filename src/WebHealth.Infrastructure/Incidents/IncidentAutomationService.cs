@@ -27,6 +27,11 @@ internal sealed class IncidentAutomationService(
         bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken,
+        // The SHA-256 fingerprint of the certificate this result observed, or null when the
+        // result is not a certificate observation. It is the one monitor-specific input this
+        // otherwise generic pipeline takes, because BR-C06 is the only rule where an incident's
+        // subject can be replaced rather than repaired. If a second such rule appears, this
+        // belongs behind a named supersession concept rather than a second raw parameter.
         string? observedCertificateFingerprint = null)
     {
         if (counterMode != HealthCounterMode.Count)
@@ -513,8 +518,12 @@ internal sealed class IncidentAutomationService(
     private static IncidentAuditWriteContext SystemContext(DateTimeOffset now) =>
         new(null, "system", now);
 
+    /// <summary>
+    /// Only the keys are wanted here, so the confirmation count passed in is irrelevant — this
+    /// asks "which issues did this result see?", not "which of them are confirmed?".
+    /// </summary>
     private static HashSet<string> ObservedIssueKeys(NormalizedCheckResult result) =>
-        CheckResultIssues.Observe(result, 1)
+        CheckResultIssues.Observe(result, monitorFailureConfirmationCount: 1)
             .Select(issue => issue.IssueKey)
             .ToHashSet(StringComparer.Ordinal);
 }

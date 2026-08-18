@@ -22,7 +22,6 @@ public sealed class SslResultNormalizerTests
     }
 
     [Theory]
-    [InlineData(TlsValidationCategory.Expired, SslFailureCategories.Expired)]
     [InlineData(TlsValidationCategory.NotYetValid, SslFailureCategories.NotYetValid)]
     [InlineData(TlsValidationCategory.HostnameMismatch, SslFailureCategories.HostnameMismatch)]
     [InlineData(TlsValidationCategory.Untrusted, SslFailureCategories.Untrusted)]
@@ -39,6 +38,34 @@ public sealed class SslResultNormalizerTests
         var finding = result.Findings.Should().ContainSingle().Subject;
         finding.Severity.Should().Be(FindingSeverities.Critical);
         finding.IssueKey.Should().Be(SslMonitorIdentity.CreateIssueKey(expected));
+    }
+
+    [Fact]
+    public void Normalize_ReportsAnExpiredCertificateOnTheSameIssueKeyItUsedWhileValid()
+    {
+        // BR-C03 for the category, BR-C05/BR-C06 for the key. A certificate crossing its own
+        // expiry date has not become a second problem: splitting the key there would open a
+        // duplicate incident and leave the first one unrecognisable at renewal.
+        var expiringSoon = Normalize(Observed(TlsValidationCategory.Valid, 3));
+        var expired = Normalize(Observed(TlsValidationCategory.Expired, -1));
+
+        expired.Outcome.Should().Be(HttpResultOutcomes.Critical);
+        expired.FailureCategory.Should().Be(SslFailureCategories.Expired);
+        expired.SafeDiagnostic.Should().NotBeNullOrWhiteSpace();
+        var finding = expired.Findings.Should().ContainSingle().Subject;
+        finding.Severity.Should().Be(FindingSeverities.Critical);
+        finding.IssueKey
+            .Should().Be(SslMonitorIdentity.CreateExpiryIssueKey(Fingerprint('a')))
+            .And.Be(expiringSoon.Findings.Single().IssueKey);
+    }
+
+    [Fact]
+    public void IsSupersededExpiryIssueKey_RecognisesAnExpiredCertificatesIssueKey()
+    {
+        // BR-C06: renewing an already-expired certificate must resolve its incident too.
+        var issueKey = Normalize(Observed(TlsValidationCategory.Expired, -1)).Findings.Single().IssueKey;
+
+        SslMonitorIdentity.IsSupersededExpiryIssueKey(issueKey, Fingerprint('b')).Should().BeTrue();
     }
 
     [Fact]
@@ -150,14 +177,14 @@ public sealed class SslResultNormalizerTests
     }
 
     [Fact]
-    public void Normalize_DoesNotStackAnExpiryBandOnAnAlreadyInvalidCertificate()
+    public void Normalize_DoesNotStackAnExpiryBandOnACertificateThatIsInvalidForAnotherReason()
     {
-        // An expired certificate is already critical under BR-C03. Adding a second finding
-        // would track one certificate as two issues.
-        var result = Normalize(Observed(TlsValidationCategory.Expired, -1));
+        // An untrusted certificate is already critical under BR-C03. Adding an expiry finding
+        // on top would track one certificate as two issues.
+        var result = Normalize(Observed(TlsValidationCategory.Untrusted));
 
         result.Findings.Should().ContainSingle().Which.FailureCategory
-            .Should().Be(SslFailureCategories.Expired);
+            .Should().Be(SslFailureCategories.Untrusted);
     }
 
     [Theory]

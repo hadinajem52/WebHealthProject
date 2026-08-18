@@ -15,6 +15,9 @@ public sealed class HealthConfirmationEngineTests
     private static readonly string SlowResponseIssueKey =
         HttpIssueIdentity.Create(PerformanceRules.SlowResponse);
 
+    private static readonly string PageSizeIssueKey =
+        HttpIssueIdentity.Create(PerformanceRules.PageTooLarge);
+
     [Fact]
     public void TwoConsecutiveFailures_ConfirmCritical()
     {
@@ -201,6 +204,61 @@ public sealed class HealthConfirmationEngineTests
         var passing = Evaluate(EndpointHealthStatuses.Healthy, second.Issues, [], true);
 
         passing.Issues.Single().ConsecutiveFailures.Should().Be(0);
+    }
+
+    [Fact]
+    public void AnIssueRecoversWhileAnotherIssueOnTheSameEndpointKeepsFailing()
+    {
+        // The defect this guards: a page-size warning on every sample means the endpoint never
+        // produces a wholly healthy result, so an availability incident could never resolve.
+        var current = new[]
+        {
+            new HealthIssueCounter(IssueKey, 2, 0),
+            new HealthIssueCounter(PageSizeIssueKey, 2, 0)
+        };
+        var pageSizeOnly = new[] { Warning(PageSizeIssueKey) };
+
+        var first = Evaluate(EndpointHealthStatuses.Critical, current, pageSizeOnly, false);
+        var second = Evaluate(EndpointHealthStatuses.Critical, first.Issues, pageSizeOnly, false);
+
+        first.RecoveredIssueKeys.Should().BeEmpty();
+        second.RecoveredIssueKeys.Should().ContainSingle().Which.Should().Be(IssueKey);
+        second.RecoveredIssueKeys.Should().NotContain(PageSizeIssueKey);
+    }
+
+    [Fact]
+    public void ARecoveringIssue_RestartsItsRecoveryCountWhenItFailsAgain()
+    {
+        var current = new[]
+        {
+            new HealthIssueCounter(IssueKey, 0, 1),
+            new HealthIssueCounter(PageSizeIssueKey, 2, 0)
+        };
+
+        var relapse = Evaluate(
+            EndpointHealthStatuses.Critical,
+            current,
+            [Critical(IssueKey), Warning(PageSizeIssueKey)],
+            false);
+
+        relapse.Issues.Single(issue => issue.IssueKey == IssueKey)
+            .ConsecutiveRecoveries.Should().Be(0);
+        relapse.RecoveredIssueKeys.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AHealthyEndpointDoesNotAccumulateRecoveryCredit()
+    {
+        // Nothing is recovering from a Healthy endpoint, so a failing sample must not hand
+        // unrelated issues a head start toward resolution.
+        var current = new[] { new HealthIssueCounter(IssueKey, 0, 0) };
+
+        var decision = Evaluate(
+            EndpointHealthStatuses.Healthy, current, [Warning(PageSizeIssueKey)], false);
+
+        decision.Issues.Single(issue => issue.IssueKey == IssueKey)
+            .ConsecutiveRecoveries.Should().Be(0);
+        decision.RecoveredIssueKeys.Should().BeEmpty();
     }
 
     [Fact]
