@@ -38,6 +38,23 @@ namespace WebHealth.IntegrationTests.Support;
 
 internal static class DatabaseFoundationAssertions
 {
+    private static readonly string[] ExpectedMigrations =
+    [
+        "20260813095149_InitialFoundation",
+        "20260814190445_IdentityAccessAndAudit",
+        "20260814190510_RegistryFoundation",
+        "20260816120256_MonitoringExecutionFoundation",
+        "20260816175236_HttpMonitoringHistory",
+        "20260817070044_LogicalCheckExecutionLifecycle",
+        "20260817072634_HangfireSchedulingAndRecovery",
+        "20260817103231_HealthMaintenanceAndIncidents",
+        "20260817120619_IncidentLifecycle",
+        "20260817130137_DurableNotifications",
+        "20260818065727_EndpointSchedulingMode",
+        "20260818081749_NotificationReadMarker",
+        "20260818084805_NotificationRecipientIndex"
+    ];
+
     private static readonly string[] ExpectedTables =
     [
         "audit_event",
@@ -101,7 +118,7 @@ internal static class DatabaseFoundationAssertions
         await context.Database.MigrateAsync();
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        (await context.Database.GetAppliedMigrationsAsync()).Should().HaveCount(10);
+        (await context.Database.GetAppliedMigrationsAsync()).Should().BeEquivalentTo(ExpectedMigrations);
         context.Model.GetEntityTypes().Should().HaveCount(40);
 
         var state = await ReadFoundationState(connectionString);
