@@ -313,7 +313,8 @@ internal static class CrawlSchemaAssertions
                  robots_override_granted, robots_override_refused_because, query_policy,
                  max_pages, max_depth, check_external_links, started_at, finished_at)
             VALUES (@id, @endpoint, @status, @stop_reason, 'https://rejected.test/', 0, 0,
-                    @granted, @refused, 'Canonicalize', 1000, 5, false, now(), @finished);
+                    @granted, @refused, 'Canonicalize', 1000, 5, false, now(),
+                    CASE WHEN @finished THEN now() END);
             """, connection);
         command.Parameters.AddWithValue("id", Guid.CreateVersion7());
         command.Parameters.AddWithValue("endpoint", endpointId);
@@ -321,7 +322,10 @@ internal static class CrawlSchemaAssertions
         command.Parameters.AddWithValue("stop_reason", stopReason);
         command.Parameters.AddWithValue("granted", overrideGranted);
         command.Parameters.AddWithValue("refused", (object?)refusedBecause ?? DBNull.Value);
-        command.Parameters.AddWithValue("finished", finished ? DateTimeOffset.UtcNow : DBNull.Value);
+        // finished_at has to come from the server clock like started_at does. A client timestamp is
+        // captured before the statement reaches the server, so it lands before now() and violates
+        // ck_crawl_run_finished_after_started as well, letting PostgreSQL report either constraint.
+        command.Parameters.AddWithValue("finished", finished);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
         exception.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
@@ -377,7 +381,7 @@ internal static class CrawlSchemaAssertions
 
         await VerifyRunsAreInvisibleWithoutAccessAsync(services, endpointId, currentRun);
         await VerifyComparisonIsBoundedAsync(services, endpointId);
-        await VerifyPartialRunIsNeverABaselineAsync(services, endpointId, currentRun);
+        await VerifyPartialRunIsNeverABaselineAsync(services, endpointId);
         await VerifyUncheckedLinkIsNotReportedResolvedAsync(services, endpointId);
         await VerifyRunStartIsReplayableAsync(services, endpointId);
     }
@@ -453,9 +457,14 @@ internal static class CrawlSchemaAssertions
     /// </summary>
     private static async Task VerifyPartialRunIsNeverABaselineAsync(
         IServiceProvider services,
-        Guid endpointId,
-        Guid expectedCurrentRun)
+        Guid endpointId)
     {
+        // The full-scope run this stage asserts on is its own. Earlier stages write full-scope runs
+        // against the same endpoint, so the latest one is whichever stage ran last.
+        var fullScopeRun = Guid.CreateVersion7();
+        await WriteRunAsync(services, endpointId, fullScopeRun,
+            ("https://partial.test/a", "https://partial.test/gone", CrawlLinkClassifications.Broken));
+
         var partialRun = Guid.CreateVersion7();
         await WriteRunAsync(services, endpointId, partialRun, CrawlStopReasons.PageLimit);
 
@@ -463,7 +472,7 @@ internal static class CrawlSchemaAssertions
         var comparison = await scope.ServiceProvider.GetRequiredService<ICrawlReportReader>()
             .CompareLatestAsync(endpointId, await AdministratorAccessAsync(scope));
 
-        comparison.CurrentRunId.Should().Be(expectedCurrentRun,
+        comparison.CurrentRunId.Should().Be(fullScopeRun,
             "a page-limited run must not displace the last full-scope run as the current side");
     }
 

@@ -58,10 +58,9 @@ internal sealed class CrawlReportReader(
         RegistryAccessContext access,
         int offset = 0,
         CancellationToken cancellationToken = default) =>
-        await Project(BrokenLinksOf(VisibleLinks(access), runId))
-            .OrderBy(link => link.TargetUrl).ThenBy(link => link.SourceUrl)
-            .Skip(Math.Max(0, offset))
-            .Take(Math.Clamp(limit, 1, MaxBrokenLinksListed))
+        await Project(Ordered(BrokenLinksOf(VisibleLinks(access), runId))
+                .Skip(Math.Max(0, offset))
+                .Take(Math.Clamp(limit, 1, MaxBrokenLinksListed)))
             .ToArrayAsync(cancellationToken);
 
     public async Task<CrawlComparison> CompareLatestAsync(
@@ -147,9 +146,7 @@ internal sealed class CrawlReportReader(
         CancellationToken cancellationToken) =>
         new(
             await links.CountAsync(cancellationToken),
-            await Project(links)
-                .OrderBy(link => link.TargetUrl).ThenBy(link => link.SourceUrl)
-                .Take(ComparisonSampleSize)
+            await Project(Ordered(links).Take(ComparisonSampleSize))
                 .ToArrayAsync(cancellationToken));
 
     /// <summary>
@@ -185,6 +182,15 @@ internal sealed class CrawlReportReader(
     private static IQueryable<CrawlLinkResult> BrokenLinksOf(IQueryable<CrawlLinkResult> links, Guid runId) =>
         links.Where(link => link.RunId == runId
             && link.Classification == CrawlLinkClassifications.Broken);
+
+    /// <summary>
+    /// Ordering belongs on the row, not on the projection: ordering by a member of a constructed
+    /// <see cref="CrawlBrokenLink"/> is not translatable, so the sample would have to be paged in
+    /// memory. Applied before <see cref="Project"/> it stays a database ORDER BY, which is what
+    /// makes a bucket sample and a link page stable rather than planner-dependent.
+    /// </summary>
+    private static IOrderedQueryable<CrawlLinkResult> Ordered(IQueryable<CrawlLinkResult> links) =>
+        links.OrderBy(link => link.TargetUrl).ThenBy(link => link.SourceUrl);
 
     private static IQueryable<CrawlBrokenLink> Project(IQueryable<CrawlLinkResult> links) =>
         links.Select(link => new CrawlBrokenLink(
