@@ -101,14 +101,16 @@ internal sealed class ReportingReader(
         CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
-        var selection = SelectMonitors(query, access, now);
-        await GuardSelectionSizeAsync(selection, cancellationToken);
+        var totalCount = await CountAsync(SelectMonitors(query, access, now), cancellationToken);
 
-        var certificateMonitors = await selection
-            .Where(monitor => monitor.MonitorType == SslMonitorIdentity.MonitorType)
+        // The certificate subset is selected by the same method the whole selection is, with the
+        // monitor type as one more filter applied where every other filter is applied. Narrowing
+        // the projected rows afterwards instead would put a predicate on a constructed record,
+        // which the provider cannot translate once a visibility scope is in play.
+        var certificateMonitors = await SelectMonitors(
+                query, access, now, SslMonitorIdentity.MonitorType)
             .ToArrayAsync(cancellationToken);
-        var notApplicable = await selection
-            .CountAsync(monitor => monitor.MonitorType != SslMonitorIdentity.MonitorType, cancellationToken);
+        var notApplicable = totalCount - certificateMonitors.Length;
         if (certificateMonitors.Length == 0)
         {
             return ReportCertificateExpiry.Empty with { NotApplicableCount = notApplicable };
@@ -230,7 +232,7 @@ internal sealed class ReportingReader(
             .Sum(item => item.Count);
 
         var lastCompleted = await dbContext.CheckResults.AsNoTracking()
-            .Where(result => monitorIds.Contains(result.LogicalCheck.EndpointMonitorId))
+            .Where(result => monitorIds.Contains(result.EndpointMonitorId))
             .OrderByDescending(result => result.MeasuredAt)
             .Select(result => (DateTimeOffset?)result.MeasuredAt)
             .FirstOrDefaultAsync(cancellationToken);
@@ -308,7 +310,8 @@ internal sealed class ReportingReader(
     private IQueryable<MonitorRow> SelectMonitors(
         ReportQuery query,
         RegistryAccessContext access,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        string? restrictToMonitorType = null)
     {
         var endpoints = visibility
             .ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
@@ -345,43 +348,60 @@ internal sealed class ReportingReader(
             monitors = monitors.Where(monitor => monitor.MonitorType == monitorType);
         }
 
-        var projected = monitors.Select(monitor => new MonitorRow(
-            monitor.Id,
-            monitor.EndpointId,
-            monitor.Endpoint.Environment.Website.Client.Name,
-            monitor.Endpoint.Environment.Website.Name,
-            monitor.Endpoint.Environment.Name,
-            monitor.Endpoint.Environment.IsProduction,
-            monitor.Endpoint.DisplayUrl,
-            monitor.MonitorType,
-            monitor.Endpoint.OwnerSubjectId
-                ?? monitor.Endpoint.Environment.Website.OwnerSubjectId,
-            // BR-U06: the dashboard reads the latest confirmed state. A monitor that has never
-            // confirmed anything is Unknown, which is a state to show rather than a row to hide.
-            dbContext.EndpointHealth
-                .Where(health => health.EndpointMonitorId == monitor.Id)
-                .Select(health => health.ConfirmedStatus)
-                .FirstOrDefault() ?? EndpointHealthStatuses.Unknown,
-            dbContext.EndpointHealth
-                .Where(health => health.EndpointMonitorId == monitor.Id)
-                .Select(health => (DateTimeOffset?)health.ConfirmedAt)
-                .FirstOrDefault(),
-            dbContext.Incidents.Count(incident =>
-                incident.EndpointMonitorId == monitor.Id
-                && IncidentStatuses.Active.Contains(incident.Status))));
+        if (restrictToMonitorType is { } restriction)
+        {
+            monitors = monitors.Where(monitor => monitor.MonitorType == restriction);
+        }
 
         if (query.HealthStatus is { } healthStatus)
         {
-            projected = projected.Where(row => row.ConfirmedStatus == healthStatus);
+            // Unknown is the absence of a confirmation, so it is the one status that also
+            // matches a monitor with no health row at all.
+            monitors = healthStatus == EndpointHealthStatuses.Unknown
+                ? monitors.Where(monitor => monitor.EndpointHealth == null
+                    || monitor.EndpointHealth.ConfirmedStatus == EndpointHealthStatuses.Unknown)
+                : monitors.Where(monitor => monitor.EndpointHealth != null
+                    && monitor.EndpointHealth.ConfirmedStatus == healthStatus);
         }
 
-        return projected
-            .OrderBy(row => row.ClientName)
-            .ThenBy(row => row.WebsiteName)
-            .ThenBy(row => row.EnvironmentName)
-            .ThenBy(row => row.EndpointDisplayUrl)
-            .ThenBy(row => row.MonitorType)
-            .ThenBy(row => row.EndpointMonitorId);
+        // The ordering is applied to the monitor's own columns before anything is projected.
+        // Ordering the projection instead makes the sort keys expressions over a constructed
+        // record, which the provider cannot translate once the visibility scope has contributed
+        // its own subqueries - so the dashboard worked for global access and failed for every
+        // other role.
+        var projected = monitors
+            .OrderBy(monitor => monitor.Endpoint.Environment.Website.Client.Name)
+            .ThenBy(monitor => monitor.Endpoint.Environment.Website.Name)
+            .ThenBy(monitor => monitor.Endpoint.Environment.Name)
+            .ThenBy(monitor => monitor.Endpoint.DisplayUrl)
+            .ThenBy(monitor => monitor.MonitorType)
+            .ThenBy(monitor => monitor.Id)
+            .Select(monitor => new MonitorRow(
+                monitor.Id,
+                monitor.EndpointId,
+                monitor.Endpoint.Environment.Website.Client.Name,
+                monitor.Endpoint.Environment.Website.Name,
+                monitor.Endpoint.Environment.Name,
+                monitor.Endpoint.Environment.IsProduction,
+                monitor.Endpoint.DisplayUrl,
+                monitor.MonitorType,
+                monitor.Endpoint.OwnerSubjectId
+                    ?? monitor.Endpoint.Environment.Website.OwnerSubjectId,
+                // BR-U06: the dashboard reads the latest confirmed state. Health is one row per
+                // monitor, so it is read through the navigation as a join rather than as two
+                // correlated subqueries per row. A monitor that has never confirmed anything is
+                // Unknown, which is a state to show rather than a row to hide.
+                monitor.EndpointHealth == null
+                    ? EndpointHealthStatuses.Unknown
+                    : monitor.EndpointHealth.ConfirmedStatus,
+                monitor.EndpointHealth == null
+                    ? null
+                    : (DateTimeOffset?)monitor.EndpointHealth.ConfirmedAt,
+                dbContext.Incidents.Count(incident =>
+                    incident.EndpointMonitorId == monitor.Id
+                    && IncidentStatuses.Active.Contains(incident.Status))));
+
+        return projected;
     }
 
     private static async Task<int> CountAsync(
@@ -543,29 +563,46 @@ internal sealed class ReportingReader(
     {
         if (monitorIds.Count == 0)
         {
-            return PerformanceComparability.Evaluate([]);
+            return PerformanceComparability.Evaluate([], configurationChanged: false);
         }
 
+        // "The configuration changed" is a question about one monitor over time, and it is
+        // grouped by monitor for that reason. A fingerprint hashes the endpoint's normalized URL
+        // among other things, so two different monitors always carry different fingerprints:
+        // comparing them across a fleet answers "are these different monitors?", which is always
+        // yes, and the warning was therefore on for every report covering more than one endpoint.
+        // A warning that is always on carries no information.
         const string sql = """
-            SELECT DISTINCT result.monitor_source, snapshot.configuration_fingerprint
-            FROM web_health.check_result AS result
-            JOIN web_health.logical_check AS check_row ON check_row.id = result.logical_check_id
-            JOIN web_health.check_configuration_snapshot AS snapshot
-              ON snapshot.logical_check_id = check_row.id
-            WHERE check_row.endpoint_monitor_id = ANY(@monitor_ids)
-              AND result.measured_at >= @window_start
-              AND result.measured_at < @window_end
-              AND result.counts_for_uptime;
+            WITH per_monitor AS (
+                SELECT
+                    result.endpoint_monitor_id,
+                    array_agg(DISTINCT result.monitor_source) AS sources,
+                    min(snapshot.configuration_fingerprint)
+                        <> max(snapshot.configuration_fingerprint) AS changed
+                FROM web_health.check_result AS result
+                JOIN web_health.check_configuration_snapshot AS snapshot
+                  ON snapshot.logical_check_id = result.logical_check_id
+                WHERE result.endpoint_monitor_id = ANY(@monitor_ids)
+                  AND result.measured_at >= @window_start
+                  AND result.measured_at < @window_end
+                  AND result.counts_for_uptime
+                GROUP BY result.endpoint_monitor_id
+            )
+            SELECT
+                (SELECT array_agg(DISTINCT source)
+                 FROM per_monitor, unnest(per_monitor.sources) AS source) AS monitor_sources,
+                (SELECT coalesce(bool_or(changed), false) FROM per_monitor) AS configuration_changed;
             """;
         await using var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken);
         await using var reader = await scope.Command.ExecuteReaderAsync(cancellationToken);
-        var contexts = new List<PerformanceSampleContext>();
-        while (await reader.ReadAsync(cancellationToken))
+        if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0))
         {
-            contexts.Add(new(reader.GetString(0), reader.GetString(1)));
+            return PerformanceComparability.Evaluate([], configurationChanged: false);
         }
 
-        return PerformanceComparability.Evaluate(contexts);
+        return PerformanceComparability.Evaluate(
+            reader.GetFieldValue<string[]>(0),
+            reader.GetBoolean(1));
     }
 
     /// <summary>
@@ -592,6 +629,14 @@ internal sealed class ReportingReader(
     /// timeout setting instead of describing how the site performs.
     /// </para>
     /// <para>
+    /// The aggregate reads <c>check_result</c> alone. The monitor identity is carried on the
+    /// sample, so the monitor filter and the window filter are both predicates on one table and
+    /// one composite index answers them together. Reaching the monitor through
+    /// <c>logical_check</c> instead put the two halves of the predicate on different tables,
+    /// which no index can serve: every aggregate became a full scan of both tables joined by
+    /// hash, and the measured dashboard sat at roughly twice its budget.
+    /// </para>
+    /// <para>
     /// <c>percentile_cont</c>, not <c>percentile_disc</c>: response time is a continuous
     /// quantity, and interpolating between the two samples that straddle the rank gives a P95
     /// that moves smoothly as samples arrive. The cost is that a reported percentile may be a
@@ -607,7 +652,7 @@ internal sealed class ReportingReader(
     {
         var sql = $"""
             SELECT
-                {(groupByMonitor ? "check_row.endpoint_monitor_id" : "NULL::uuid")} AS monitor_id,
+                {(groupByMonitor ? "result.endpoint_monitor_id" : "NULL::uuid")} AS monitor_id,
                 count(*) FILTER (WHERE {EligibleSample}) AS eligible,
                 count(*) FILTER (WHERE {HealthySample}) AS healthy_samples,
                 count(*) FILTER (WHERE {WarningSample}) AS warning_samples,
@@ -622,11 +667,10 @@ internal sealed class ReportingReader(
                 min(result.monitor_source) AS lowest_source,
                 max(result.monitor_source) AS highest_source
             FROM web_health.check_result AS result
-            JOIN web_health.logical_check AS check_row ON check_row.id = result.logical_check_id
-            WHERE check_row.endpoint_monitor_id = ANY(@monitor_ids)
+            WHERE result.endpoint_monitor_id = ANY(@monitor_ids)
               AND result.measured_at >= @window_start
               AND result.measured_at < @window_end
-            {(groupByMonitor ? "GROUP BY check_row.endpoint_monitor_id" : string.Empty)};
+            {(groupByMonitor ? "GROUP BY result.endpoint_monitor_id" : string.Empty)};
             """;
         await using var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken);
         await using var reader = await scope.Command.ExecuteReaderAsync(cancellationToken);
@@ -684,8 +728,7 @@ internal sealed class ReportingReader(
                 percentile_cont(0.95) WITHIN GROUP (ORDER BY result.total_duration_ms)
                     FILTER (WHERE {RespondedSample}) AS p95_ms
             FROM web_health.check_result AS result
-            JOIN web_health.logical_check AS check_row ON check_row.id = result.logical_check_id
-            WHERE check_row.endpoint_monitor_id = ANY(@monitor_ids)
+            WHERE result.endpoint_monitor_id = ANY(@monitor_ids)
               AND result.measured_at >= @window_start
               AND result.measured_at < @window_end
               AND result.counts_for_uptime

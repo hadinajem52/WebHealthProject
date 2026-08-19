@@ -456,6 +456,7 @@ internal sealed class LogicalCheckFinalizationService(
         dbContext.CheckResults.Add(new CheckResult
         {
             LogicalCheckId = check.Id,
+            EndpointMonitorId = check.EndpointMonitorId,
             Outcome = normalized.Outcome,
             FailureCategory = normalized.FailureCategory,
             HttpStatus = normalized.HttpStatus,

@@ -28,22 +28,41 @@ public static class PerformanceComparability
     public static ComparabilityAssessment Evaluate(IEnumerable<PerformanceSampleContext> samples)
     {
         var contexts = samples.ToArray();
-        var sources = contexts
-            .Select(sample => sample.MonitorSource)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var configurationChanged = contexts
-            .Select(sample => sample.ConfigurationFingerprint)
-            .Distinct(StringComparer.Ordinal)
-            .Count() > 1;
+        return Evaluate(
+            contexts.Select(sample => sample.MonitorSource),
+            contexts
+                .Select(sample => sample.ConfigurationFingerprint)
+                .Distinct(StringComparer.Ordinal)
+                .Count() > 1);
+    }
 
-        if (sources.Length <= 1 && !configurationChanged)
-        {
-            return new(true, sources, false, null);
-        }
+    /// <summary>
+    /// The two facts the rule actually turns on: which monitors produced the samples, and
+    /// whether the configuration changed at all across them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stating it this way is what lets a caller answer the question without materialising one
+    /// context per sample: the distinct sources are a handful of values, and whether the
+    /// configuration changed is a single boolean.
+    /// </para>
+    /// <para>
+    /// <paramref name="configurationChanged" /> means <em>a monitor's own configuration changed
+    /// during the period</em>. It is not a comparison between monitors. A fingerprint hashes the
+    /// endpoint's normalized URL among other things, so two monitors always have different
+    /// fingerprints, and a caller that compares them across a fleet is asking "are these
+    /// different monitors?" - always yes, and the warning is then permanently on.
+    /// </para>
+    /// </remarks>
+    public static ComparabilityAssessment Evaluate(
+        IEnumerable<string> monitorSources,
+        bool configurationChanged)
+    {
+        var sources = monitorSources.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
-        return new(false, sources, configurationChanged, DescribeWarning(sources, configurationChanged));
+        return sources.Length <= 1 && !configurationChanged
+            ? new(true, sources, false, null)
+            : new(false, sources, configurationChanged, DescribeWarning(sources, configurationChanged));
     }
 
     private static string DescribeWarning(IReadOnlyList<string> sources, bool configurationChanged)

@@ -452,9 +452,9 @@ These requirements apply throughout the project:
 
 - [ ] Implement Purity UI Dashboard-based responsive dashboard and reports.
 - [ ] Verify keyboard navigation, focus, labels, contrast, and non-color status indicators.
-- [ ] Add certificate history and reporting indexes.
-- [ ] Add daily aggregates if required for long report windows.
-- [ ] Inspect representative PostgreSQL query plans.
+- [x] Add certificate history and reporting indexes.
+- [ ] Add daily aggregates if required for long report windows. *(Open: the measured dashboard does not yet meet NFR-02, so "required" is not yet answerable — see [5.7](../phase-5/Query_Plans_And_Performance_Baseline.md).)*
+- [x] Inspect representative PostgreSQL query plans.
 - [ ] Unit-test SSL boundaries and certificate replacement.
 - [ ] Test uptime eligibility and `[start, end)` windows.
 - [ ] Test P50/P95 inclusion behavior.
@@ -462,14 +462,14 @@ These requirements apply throughout the project:
 - [ ] Compare screen and CSV record identity for all filters.
 - [ ] Test Unicode, quoting, newlines, and spreadsheet formula handling in CSV.
 - [ ] Test authorization for pages, chart endpoints, reports, and exports.
-- [ ] Measure dashboard P95 using representative data.
+- [x] Measure dashboard P95 using representative data.
 
 ### Phase 5 completion gate
 
 - [ ] AC-06 passes at exact SSL boundaries.
 - [ ] AC-11 passes for shared screen and CSV data.
 - [ ] Dashboard accessibility checks pass.
-- [ ] Performance baseline is recorded.
+- [x] Performance baseline is recorded. *(Recorded; the recorded figures do not yet meet NFR-02.)*
 - [ ] BR-P01 through BR-P05 have implementation and test evidence.
 - [ ] SSL and dashboard workflows are demonstrated.
 

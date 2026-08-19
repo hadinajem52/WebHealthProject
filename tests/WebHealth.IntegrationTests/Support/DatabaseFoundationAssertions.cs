@@ -53,7 +53,9 @@ internal static class DatabaseFoundationAssertions
         "20260818065727_EndpointSchedulingMode",
         "20260818081749_NotificationReadMarker",
         "20260818084805_NotificationRecipientIndex",
-        "20260818101710_SslCertificateMonitoring"
+        "20260818101710_SslCertificateMonitoring",
+        "20260818110028_SslSeverityAndPerformanceRules",
+        "20260818185101_ReportingSampleMonitorIndex"
     ];
 
     private static readonly string[] ExpectedTables =

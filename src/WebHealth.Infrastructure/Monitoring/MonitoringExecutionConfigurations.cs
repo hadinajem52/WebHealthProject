@@ -208,9 +208,26 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
         builder.Property(result => result.SafeDiagnostic).HasMaxLength(200);
         builder.HasIndex(result => new { result.MeasuredAt, result.LogicalCheckId });
         builder.HasIndex(result => result.MaintenanceOccurrenceId);
+        // The reporting index: every aggregate asks for one set of monitors over one window, so
+        // both halves of the predicate are leading columns here. The payload columns are included
+        // so the index carries everything the aggregates read, which lets PostgreSQL choose an
+        // index-only scan when the visibility map permits one; the captured plans show it
+        // choosing a bitmap heap scan over this index on a freshly loaded table, which is the
+        // normal outcome before the pages are all-visible.
+        builder.HasIndex(result => new { result.EndpointMonitorId, result.MeasuredAt })
+            .IncludeProperties(result => new
+            {
+                result.Outcome,
+                result.CountsForUptime,
+                result.TotalDurationMs,
+                result.MonitorSource
+            })
+            .HasDatabaseName("ix_check_result_monitor_measured_at");
         builder.HasOne(result => result.LogicalCheck).WithOne(check => check.Result)
-            .HasForeignKey<CheckResult>(result => result.LogicalCheckId)
-            .OnDelete(DeleteBehavior.Restrict);
+            .HasForeignKey<CheckResult>(result => new { result.LogicalCheckId, result.EndpointMonitorId })
+            .HasPrincipalKey<LogicalCheck>(check => new { check.Id, check.EndpointMonitorId })
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("fk_check_result_logical_check_monitor");
         builder.HasOne(result => result.MaintenanceOccurrence).WithMany()
             .HasForeignKey(result => result.MaintenanceOccurrenceId)
             .OnDelete(DeleteBehavior.Restrict)

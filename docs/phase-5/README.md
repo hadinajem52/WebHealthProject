@@ -10,7 +10,13 @@ This folder records Phase 5 implementation evidence. The phase gate and its chec
 | 5.4 Performance rules (BR-P01–BR-P05) | Complete | [Evidence](Performance_Rules.md) |
 | 5.5 Shared reporting query core and CSV export | Complete | [Evidence](Shared_Reporting_Query_Core.md) |
 | 5.6 Dashboard, trends, and reports UI | Complete | [Evidence](Dashboard_Trends_And_Reports_Ui.md) |
-| 5.7 Query plans, performance baseline, and completion gate | Planned | — |
+| 5.7 Query plans, performance baseline, and completion gate | In progress — NFR-02 not yet met | [Evidence](Query_Plans_And_Performance_Baseline.md) |
+
+## Planned verification
+
+| Checklist | Purpose |
+|---|---|
+| [Browser-driven UI test checklist](Phase_5_Ui_Test_Checklist.md) | The Playwright cases to write once Phase 5's surfaces are settled — claims that can only be falsified in a real browser, deliberately excluding rules the xUnit suites already prove. |
 
 ## Decisions recorded in this phase
 
@@ -29,9 +35,12 @@ This folder records Phase 5 implementation evidence. The phase gate and its chec
 | Page size prefers the advertised transferred length, and the measurement is labelled | [5.4](Performance_Rules.md) |
 | Existing 1,000 ms monitors are not backfilled; the new override surface is the remedy | [5.4](Performance_Rules.md) |
 | One filter object and one query layer, so AC-11 holds by construction | [5.5](Shared_Reporting_Query_Core.md) |
-| A sample counts as up unless its outcome is Critical; warnings are reported separately | [5.5](Shared_Reporting_Query_Core.md) |
+| Uptime is healthy over eligible (BR-U01); the reachable figure is reported beside it, and every sample predicate is written positively | [5.5](Shared_Reporting_Query_Core.md) |
 | `percentile_cont` for response-time P50/P95 | [5.5](Shared_Reporting_Query_Core.md) |
 | CSV encoding, quoting, and formula-injection handling on user text only | [5.5](Shared_Reporting_Query_Core.md) |
 | Chart.js vendored locally; the chart always has a table equivalent | [5.6](Dashboard_Trends_And_Reports_Ui.md) |
 | Non-colour status cues are a shape on `.badge` itself, not on a partial | [5.6](Dashboard_Trends_And_Reports_Ui.md) |
-| Daily aggregates deferred to Phase 7 unless query-plan evidence requires them earlier | 5.7 |
+| Plans are captured with `auto_explain`, so the evidence is about the query the application sent | [5.7](Query_Plans_And_Performance_Baseline.md) |
+| The monitor identity is carried on the sample, guarded by a composite foreign key, so one index serves both halves of every reporting predicate | [5.7](Query_Plans_And_Performance_Baseline.md) |
+| Comparability asks for the two facts BR-P05 turns on rather than every distinct pair | [5.7](Query_Plans_And_Performance_Baseline.md) |
+| Daily aggregates: decision open until the dashboard meets NFR-02 on measured evidence | [5.7](Query_Plans_And_Performance_Baseline.md) |

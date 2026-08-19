@@ -285,6 +285,40 @@ internal static class ReportingQueryCoreAssertions
             .Should().BeEmpty("the incident list applies the same visibility scope");
         (await reader.QueryCertificateExpiryAsync(query, unprivileged))
             .NeedingAttention.Should().BeEmpty("the certificate card applies the same visibility scope");
+
+        // A scoped reader's selection carries extra grant subqueries that global access never
+        // produces, and each filter changes the shape again. Every surface is exercised under
+        // every status and monitor-type combination so that a selection which only composes for
+        // an administrator cannot pass as working.
+        foreach (var scoped in EveryScopedFilter(fixture))
+        {
+            (await reader.QueryAsync(scoped, unprivileged)).Rows.Should().BeEmpty();
+            (await reader.ExportAsync(scoped, unprivileged)).Rows.Should().BeEmpty();
+            (await reader.QueryCertificateExpiryAsync(scoped, unprivileged))
+                .NeedingAttention.Should().BeEmpty();
+            (await reader.QueryDiagnosticsAsync(scoped, unprivileged))
+                .ScheduledMonitorCount.Should().Be(0);
+            (await reader.QueryActiveIncidentsAsync(scoped, unprivileged, 10)).Should().BeEmpty();
+        }
+    }
+
+    private static IEnumerable<ReportQuery> EveryScopedFilter(ReportingFixture fixture)
+    {
+        string?[] statuses =
+        [
+            null,
+            EndpointHealthStatuses.Healthy,
+            EndpointHealthStatuses.Unknown,
+            EndpointHealthStatuses.Critical
+        ];
+        string?[] monitorTypes = [null, .. ReportMonitorTypes.All];
+
+        return from status in statuses
+               from monitorType in monitorTypes
+               from client in new Guid?[] { null, fixture.ClientId }
+               select Query(
+                   fixture, monitorType, client, null, null, null, status,
+                   scopeToFixtureClient: false);
     }
 
     private static IEnumerable<ReportQuery> EveryFilterCombination(ReportingFixture fixture)
@@ -517,6 +551,7 @@ internal static class ReportingQueryCoreAssertions
         database.CheckResults.Add(new CheckResult
         {
             LogicalCheckId = check.Id,
+            EndpointMonitorId = endpointMonitorId,
             Outcome = outcome,
             FailureCategory = outcome == "Healthy" ? null : "ServerError",
             TotalDurationMs = totalDurationMs,
