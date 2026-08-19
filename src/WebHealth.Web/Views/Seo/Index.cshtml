@@ -1,0 +1,169 @@
+@model SeoListViewModel
+@using WebHealth.Application.Seo
+@using WebHealth.Domain.Seo
+@{
+    ViewData.SetTitle("SEO");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("SEO"));
+    var listPage = Model.Results;
+    var firstVisible = listPage.TotalCount == 0 ? 0 : ((listPage.Page - 1) * listPage.PageSize) + 1;
+    var lastVisible = Math.Min(listPage.Page * listPage.PageSize, listPage.TotalCount);
+    var hasPrevious = listPage.Page > 1;
+    var hasNext = lastVisible < listPage.TotalCount;
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">SEO</h2>
+                <p class="card__subtitle">Title, description, canonical and indexing values read from the last successful check of each endpoint.</p>
+            </div>
+            <span class="tag">@listPage.TotalCount endpoint@(listPage.TotalCount == 1 ? null : "s")</span>
+        </div>
+
+        <form method="get" class="filter-grid">
+            <div class="form-field">
+                <label asp-for="Applicability">Applicability</label>
+                <select asp-for="Applicability" name="applicability">
+                    <option value="">Any</option>
+                    <option value="@SeoApplicabilities.Applicable">Applicable</option>
+                    <option value="@SeoApplicabilities.NotApplicable">Not applicable</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label asp-for="Environment">Environment</label>
+                <select asp-for="Environment" name="environment">
+                    <option value="">Any</option>
+                    <option value="@SeoQuery.Production">Production</option>
+                    <option value="@SeoQuery.NonProduction">Non-production</option>
+                </select>
+            </div>
+            <label class="switch-field">
+                <input asp-for="ProblemsOnly" name="problemsOnly" type="checkbox" />
+                <span>With SEO findings only</span>
+            </label>
+            <div class="filter-grid__actions">
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>Apply filters</span>
+                </button>
+                <a class="button button--secondary" asp-action="Index">
+                    @await Html.PartialAsync("_Icon", "close")
+                    <span>Clear</span>
+                </a>
+            </div>
+        </form>
+
+        <p class="card__subtitle">@Model.FilterSummary</p>
+
+        @if (listPage.Items.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No SEO observations match these filters",
+                "SEO values are extracted from successful HTML responses during ordinary checks.",
+                "reports"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">SEO observations visible to your account</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Endpoint</th>
+                            <th scope="col">Title</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Canonical</th>
+                            <th scope="col">Indexing</th>
+                            <th scope="col">Findings</th>
+                            <th scope="col">Observed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in listPage.Items)
+                        {
+                            <tr>
+                                <td data-label="Endpoint">
+                                    <span class="data-table__primary target-url">@item.EndpointUrl</span>
+                                    <span class="data-table__secondary">@item.WebsiteName / @item.EnvironmentName</span>
+                                </td>
+                                @if (item.Applicability == SeoApplicabilities.NotApplicable)
+                                {
+                                    @* One cell across the value columns: a non-HTML response has no
+                                       SEO values, and rendering four dashes would look like four
+                                       separate problems rather than one reason. *@
+                                    <td data-label="Values" colspan="4">
+                                        <span class="badge" data-status="neutral">Not applicable</span>
+                                        <span class="data-table__secondary">@(item.NotApplicableReason ?? "No reason recorded")</span>
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td data-label="Title">
+                                        @SeoListViewModel.Present(item.Title, item.TitleLength)
+                                        @if (item.TitleCount > 1)
+                                        {
+                                            <span class="tag">@item.TitleCount titles</span>
+                                        }
+                                    </td>
+                                    <td data-label="Description">@SeoListViewModel.Present(item.MetaDescription, item.MetaDescriptionLength)</td>
+                                    <td data-label="Canonical">
+                                        <span class="target-url">@(item.CanonicalAbsoluteUrl ?? "—")</span>
+                                        @if (item.CanonicalCount > 1)
+                                        {
+                                            <span class="tag">@item.CanonicalCount canonicals</span>
+                                        }
+                                    </td>
+                                    <td data-label="Indexing">
+                                        <span class="badge" data-status="@(item.DeclaresNoIndex ? "warning" : "success")">
+                                            @(item.DeclaresNoIndex ? "noindex" : "Indexable")
+                                        </span>
+                                        <span class="data-table__secondary">Expected: @SeoListViewModel.DescribeExpectation(item)</span>
+                                    </td>
+                                }
+                                <td data-label="Findings">
+                                    @if (item.OpenFindingCount == 0)
+                                    {
+                                        <span class="badge" data-status="success">None</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge" data-status="warning">@item.OpenFindingCount</span>
+                                    }
+                                    @if (item.DocumentTruncated)
+                                    {
+                                        @* BR-E10: absence rules cannot be trusted on a document that
+                                           was cut short, so the reader is told rather than left to
+                                           read a missing value as a missing tag. *@
+                                        <span class="data-table__secondary">Response was truncated</span>
+                                    }
+                                </td>
+                                <td data-label="Observed">@item.ObservedAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="pagination" aria-label="SEO pages">
+                <span>Showing @firstVisible–@lastVisible of @listPage.TotalCount</span>
+                <span class="pagination__actions">
+                    @if (hasPrevious)
+                    {
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page - 1)" asp-route-applicability="@Model.Applicability" asp-route-environment="@Model.Environment" asp-route-problemsOnly="@Model.ProblemsOnly">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (hasNext)
+                    {
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page + 1)" asp-route-applicability="@Model.Applicability" asp-route-environment="@Model.Environment" asp-route-problemsOnly="@Model.ProblemsOnly">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
+        }
+    </section>
+</div>

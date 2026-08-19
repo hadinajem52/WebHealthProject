@@ -1,0 +1,169 @@
+@model CrawlIndexViewModel
+@{
+    ViewData.SetTitle("Broken links");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Broken links"));
+    var comparison = Model.Comparison;
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Broken links</h2>
+                <p class="card__subtitle">Crawl history for one endpoint, and how its latest full-scope crawl compares to the one before it.</p>
+            </div>
+        </div>
+
+        <form method="get" class="filter-grid">
+            <div class="form-field">
+                <label for="endpointId">Endpoint</label>
+                <select id="endpointId" name="endpointId">
+                    <option value="">Select an endpoint</option>
+                    @foreach (var option in Model.Endpoints)
+                    {
+                        <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-grid__actions">
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>Show crawls</span>
+                </button>
+            </div>
+        </form>
+
+        @if (Model.SelectedEndpointId is null)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "Select an endpoint",
+                "Crawl results are recorded per endpoint. Choose one to see its history.",
+                "reports"))
+        }
+        else if (Model.Runs.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No crawls have run for this endpoint",
+                "A crawl records every page it fetched and every link it checked.",
+                "reports"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Crawl runs for the selected endpoint</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Started</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Coverage</th>
+                            <th scope="col">Pages</th>
+                            <th scope="col">Broken links</th>
+                            <th scope="col">Robots override</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var run in Model.Runs)
+                        {
+                            <tr>
+                                <td data-label="Started">@run.StartedAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</td>
+                                <td data-label="Status">
+                                    <span class="badge" data-status="@CrawlRunDisplay.StatusTone(run)">@CrawlRunDisplay.DescribeStatus(run)</span>
+                                </td>
+                                @* BR-L05: a run that stopped on a budget must never read as a clean
+                                   result, so the reason it stopped is stated, not implied. *@
+                                <td data-label="Coverage">@CrawlRunDisplay.DescribeStopReason(run)</td>
+                                <td data-label="Pages">@run.PagesFetched</td>
+                                <td data-label="Broken links">
+                                    <span class="badge" data-status="@(run.BrokenLinkCount == 0 ? "success" : "warning")">@run.BrokenLinkCount</span>
+                                </td>
+                                <td data-label="Robots override">@(run.RobotsOverrideGranted ? "Granted" : "No")</td>
+                                <td data-label="Details">
+                                    <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId">
+                                        <span>View</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @if (Model.SelectedEndpointId is not null)
+    {
+        <section class="card">
+            <div class="page-intro">
+                <div>
+                    <h2 class="card__title">Change since the previous crawl</h2>
+                    <p class="card__subtitle">@CrawlRunDisplay.DescribeComparison(comparison)</p>
+                </div>
+            </div>
+
+            @if (comparison.CurrentRunId is null)
+            {
+                @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                    "Nothing to compare yet",
+                    "A comparison needs a crawl that covered the whole scope. Partial crawls are excluded so missing pages cannot look like fixed links.",
+                    "reports"))
+            }
+            else
+            {
+                <div class="registry-facts">
+                    <div><dt>New</dt><dd>@comparison.New.TotalCount</dd></div>
+                    <div><dt>Continuing</dt><dd>@comparison.Continuing.TotalCount</dd></div>
+                    <div><dt>Resolved</dt><dd>@comparison.Resolved.TotalCount</dd></div>
+                    <div><dt>Indeterminate</dt><dd>@comparison.Indeterminate.TotalCount</dd></div>
+                </div>
+
+                @* The counts above are exact; each table below shows a bounded sample, because a
+                   large crawl would otherwise turn this page into an unbounded response. *@
+                @foreach (var bucket in new[]
+                {
+                    ("New broken links", comparison.New, "These were not broken in the previous crawl."),
+                    ("Continuing", comparison.Continuing, "Broken in this crawl and the previous one."),
+                    ("Resolved", comparison.Resolved, "Broken before, and not broken now — either re-checked successfully, or the page no longer links to it."),
+                    ("Indeterminate", comparison.Indeterminate, "Broken before, and this crawl could not establish whether they still are.")
+                })
+                {
+                    @if (bucket.Item2.TotalCount > 0)
+                    {
+                        <h3 class="card__title">@bucket.Item1</h3>
+                        <p class="card__subtitle">@bucket.Item3</p>
+                        <div class="table-scroll table-scroll--flush">
+                            <table class="data-table">
+                                <caption class="visually-hidden">@bucket.Item1</caption>
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Source page</th>
+                                        <th scope="col">Link target</th>
+                                        <th scope="col">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var link in bucket.Item2.Sample)
+                                    {
+                                        <tr>
+                                            <td data-label="Source page"><span class="target-url">@(link.SourceUrl ?? "Seed URL")</span></td>
+                                            <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
+                                            <td data-label="Status">@(link.StatusCode?.ToString() ?? link.Classification)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        @if (bucket.Item2.HasMore)
+                        {
+                            <p class="card__subtitle">
+                                Showing @bucket.Item2.Sample.Count of @bucket.Item2.TotalCount.
+                                Open the run to page through every broken link it recorded.
+                            </p>
+                        }
+                    }
+                }
+            }
+        </section>
+    }
+</div>

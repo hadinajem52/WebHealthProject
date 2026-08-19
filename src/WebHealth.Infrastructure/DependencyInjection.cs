@@ -135,6 +135,7 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
         services.AddSingleton<ISeoValueExtractor, SeoValueExtractor>();
+        services.AddScoped<ISeoReader, SeoReader>();
         services.AddScoped<RobotsRefreshService>();
         services.AddScoped<IRobotsPolicyService, RobotsPolicyService>();
         services.AddScoped<RobotsRefreshJob>();

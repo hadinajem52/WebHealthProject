@@ -26,6 +26,18 @@ public static class ShellNavigation
                 "Incidents",
                 "Index",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"]),
+            new NavigationItem(
+                "SEO",
+                "reports",
+                "Seo",
+                "Index",
+                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
+            new NavigationItem(
+                "Broken links",
+                "reports",
+                "Crawl",
+                "Index",
+                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
             new NavigationItem("Reports", "reports")
         ]),
         new("Administration",

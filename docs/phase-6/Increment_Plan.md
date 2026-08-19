@@ -113,6 +113,10 @@ crawl data.
 Maintenance, SEO and broken-link views in the established dashboard style, every filter server-side,
 every role's direct requests tested. Gate evidence for AC-07, AC-08 and the AC-09 regression.
 
+**Delivered.** `/Seo` and `/Crawl` behind `ReadRegistry`, both scoped in the database through
+`RegistryVisibility`; maintenance already carried 6.1's occurrences. Evidence and the acceptance
+mapping are in `docs/phase-6/Phase_6_Gate.md`.
+
 ---
 
 ## Sequencing and risk

@@ -1,0 +1,104 @@
+@model CrawlRunViewModel
+@{
+    ViewData.SetTitle("Crawl run");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Broken links", "/Crawl"),
+        new BreadcrumbItem("Crawl run"));
+    var run = Model.Run;
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Crawl run</h2>
+                <p class="card__subtitle">@CrawlRunDisplay.DescribeStopReason(run)</p>
+            </div>
+            <span class="badge" data-status="@CrawlRunDisplay.StatusTone(run)">@CrawlRunDisplay.DescribeStatus(run)</span>
+        </div>
+
+        <dl class="registry-facts">
+            <div><dt>Started (UTC)</dt><dd>@run.StartedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
+            <div><dt>Finished (UTC)</dt><dd>@(run.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Still running")</dd></div>
+            <div><dt>Pages fetched</dt><dd>@run.PagesFetched</dd></div>
+            <div><dt>Links recorded</dt><dd>@run.LinksRecorded</dd></div>
+            <div><dt>Broken links</dt><dd>@run.BrokenLinkCount</dd></div>
+            <div><dt>Covered whole scope</dt><dd>@(run.CoveredWholeScope ? "Yes" : "No")</dd></div>
+            <div><dt>Robots override</dt><dd>@(run.RobotsOverrideGranted ? "Granted" : "Not granted")</dd></div>
+        </dl>
+    </section>
+
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">Broken links</h2>
+                <p class="card__subtitle">Each row is one link on one page, so a page linking to the same broken URL twice appears once.</p>
+            </div>
+        </div>
+
+        @if (Model.BrokenLinks.Count == 0)
+        {
+            @* "No broken links" is not "everything works": a run can hold timeouts, blocked and
+               skipped links, and a partial run never reached part of the site at all. The empty
+               state says only what the data supports. *@
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                Model.Offset == 0 ? "No broken links were recorded" : "No more broken links",
+                Model.Offset == 0
+                    ? (run.CoveredWholeScope
+                        ? "This crawl covered the whole scope. Links it could not classify are not counted as broken."
+                        : "This crawl did not cover the whole scope, so links it never reached are not counted here.")
+                    : "You have reached the end of the list.",
+                "reports"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Broken links found by this crawl</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Source page</th>
+                            <th scope="col">Link target</th>
+                            <th scope="col">Scope</th>
+                            <th scope="col">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var link in Model.BrokenLinks)
+                        {
+                            <tr>
+                                @* AC-08: the source page is what makes the report actionable. *@
+                                <td data-label="Source page"><span class="target-url">@(link.SourceUrl ?? "Seed URL")</span></td>
+                                <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
+                                <td data-label="Scope">@(link.IsInternal ? "Internal" : "External")</td>
+                                <td data-label="Status">
+                                    <span class="badge" data-status="danger">@(link.StatusCode?.ToString() ?? link.Classification)</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="pagination" aria-label="Broken link pages">
+                <span>Showing @(Model.Offset + 1)–@(Model.Offset + Model.BrokenLinks.Count)</span>
+                <span class="pagination__actions">
+                    @if (Model.Offset > 0)
+                    {
+                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.PreviousOffset">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (Model.HasMore)
+                    {
+                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.NextOffset">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
+        }
+    </section>
+</div>

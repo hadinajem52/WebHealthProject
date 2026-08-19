@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using WebHealth.Application.Crawling;
+using WebHealth.Infrastructure.Identity;
+using WebHealth.Application.Registry;
 using WebHealth.Domain.Crawling;
 using WebHealth.Infrastructure;
 using WebHealth.Infrastructure.Crawling;
@@ -351,29 +353,97 @@ internal static class CrawlSchemaAssertions
 
         await using var scope = services.CreateAsyncScope();
         var reader = scope.ServiceProvider.GetRequiredService<ICrawlReportReader>();
-        var comparison = await reader.CompareLatestAsync(endpointId);
+        var access = await AdministratorAccessAsync(scope);
+        var comparison = await reader.CompareLatestAsync(endpointId, access);
 
         comparison.CurrentRunId.Should().Be(currentRun);
         comparison.PreviousRunId.Should().Be(previousRun);
-        comparison.New.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/new");
-        comparison.Continuing.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/still");
-        comparison.Resolved.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/fixed");
+        comparison.New.Sample.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/new");
+        comparison.New.TotalCount.Should().Be(1);
+        comparison.Continuing.Sample.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/still");
+        comparison.Resolved.Sample.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/fixed");
 
-        comparison.Indeterminate.Should().BeEmpty("every previously broken link was re-checked");
+        comparison.Indeterminate.TotalCount.Should().Be(0, "every previously broken link was re-checked");
 
-        var broken = await reader.ListBrokenLinksAsync(currentRun, limit: 100);
+        var broken = await reader.ListBrokenLinksAsync(currentRun, limit: 100, access);
         broken.Should().HaveCount(2, "a healthy link is not a broken-link report row");
         broken.Should().OnlyContain(link => link.SourceUrl == "https://cmp.test/a");
 
-        var runs = await reader.ListRunsAsync(endpointId, 2);
+        var runs = await reader.ListRunsAsync(endpointId, 2, access);
         runs.Should().HaveCount(2);
         runs[0].RunId.Should().Be(currentRun);
         runs[0].BrokenLinkCount.Should().Be(2);
         runs[0].CoveredWholeScope.Should().BeTrue();
 
+        await VerifyRunsAreInvisibleWithoutAccessAsync(services, endpointId, currentRun);
+        await VerifyComparisonIsBoundedAsync(services, endpointId);
         await VerifyPartialRunIsNeverABaselineAsync(services, endpointId, currentRun);
         await VerifyUncheckedLinkIsNotReportedResolvedAsync(services, endpointId);
         await VerifyRunStartIsReplayableAsync(services, endpointId);
+    }
+
+    /// <summary>
+    /// The comparison counts every link but renders a bounded sample. Loading both runs in full to
+    /// subtract them in memory would make one page request an unbounded read; truncating the *set*
+    /// instead of the display would be worse, because a previous run cut short reports its missing
+    /// links as resolved.
+    /// </summary>
+    private static async Task VerifyComparisonIsBoundedAsync(IServiceProvider services, Guid endpointId)
+    {
+        var oversize = CrawlReportReader.ComparisonSampleSize + 12;
+        var previousRun = Guid.CreateVersion7();
+        var currentRun = Guid.CreateVersion7();
+
+        // Every link is broken in the current run and healthy in the previous one, so they all land
+        // in a single bucket and the bound is what limits the response rather than the data.
+        await WriteRunAsync(services, endpointId, previousRun, CrawlStopReasons.FrontierExhausted,
+            [.. Enumerable.Range(0, oversize).Select(index =>
+                ("https://bulk.test/source", $"https://bulk.test/target-{index}",
+                    CrawlLinkClassifications.Healthy))]);
+        await WriteRunAsync(services, endpointId, currentRun, CrawlStopReasons.FrontierExhausted,
+            [.. Enumerable.Range(0, oversize).Select(index =>
+                ("https://bulk.test/source", $"https://bulk.test/target-{index}",
+                    CrawlLinkClassifications.Broken))]);
+
+        await using var scope = services.CreateAsyncScope();
+        var comparison = await scope.ServiceProvider.GetRequiredService<ICrawlReportReader>()
+            .CompareLatestAsync(endpointId, await AdministratorAccessAsync(scope));
+
+        comparison.CurrentRunId.Should().Be(currentRun);
+        comparison.New.TotalCount.Should().Be(oversize, "the count is exact and computed in the database");
+        comparison.New.Sample.Should().HaveCount(CrawlReportReader.ComparisonSampleSize,
+            "only what is rendered is capped");
+        comparison.New.HasMore.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The reader scopes by visibility, not by the id it was handed. A viewer with no grants must
+    /// read another client's runs as absent — an endpoint id in a URL is a parameter, not a
+    /// permission, and the shell tests can only prove the route is reachable, not that the query
+    /// is scoped.
+    /// </summary>
+    private static async Task VerifyRunsAreInvisibleWithoutAccessAsync(
+        IServiceProvider services,
+        Guid endpointId,
+        Guid knownRunId)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var reader = scope.ServiceProvider.GetRequiredService<ICrawlReportReader>();
+
+        // A viewer with no access grants at all: authenticated, entitled to nothing.
+        var strangerAccess = new RegistryAccessContext(Guid.CreateVersion7(), [ApplicationRoles.Viewer]);
+
+        (await reader.ListRunsAsync(endpointId, 10, strangerAccess)).Should().BeEmpty(
+            "an endpoint id is a parameter, not a permission");
+        (await reader.FindRunAsync(knownRunId, strangerAccess)).Should().BeNull();
+        (await reader.ListBrokenLinksAsync(knownRunId, 100, strangerAccess)).Should().BeEmpty();
+        (await reader.CompareLatestAsync(endpointId, strangerAccess)).CurrentRunId.Should().BeNull();
+
+        // The same reader with a real administrator still sees them, so the assertion above is
+        // about the scope rather than about an empty database.
+        var administrator = await AdministratorAccessAsync(scope);
+        (await reader.ListRunsAsync(endpointId, 10, administrator)).Should().NotBeEmpty();
+        (await reader.FindRunAsync(knownRunId, administrator)).Should().NotBeNull();
     }
 
     /// <summary>
@@ -391,7 +461,7 @@ internal static class CrawlSchemaAssertions
 
         await using var scope = services.CreateAsyncScope();
         var comparison = await scope.ServiceProvider.GetRequiredService<ICrawlReportReader>()
-            .CompareLatestAsync(endpointId);
+            .CompareLatestAsync(endpointId, await AdministratorAccessAsync(scope));
 
         comparison.CurrentRunId.Should().Be(expectedCurrentRun,
             "a page-limited run must not displace the last full-scope run as the current side");
@@ -414,11 +484,11 @@ internal static class CrawlSchemaAssertions
 
         await using var scope = services.CreateAsyncScope();
         var comparison = await scope.ServiceProvider.GetRequiredService<ICrawlReportReader>()
-            .CompareLatestAsync(endpointId);
+            .CompareLatestAsync(endpointId, await AdministratorAccessAsync(scope));
 
-        comparison.Resolved.Should().NotContain(link => link.TargetUrl == "https://cmp.test/slow",
+        comparison.Resolved.Sample.Should().NotContain(link => link.TargetUrl == "https://cmp.test/slow",
             "a timeout is not evidence that a broken link was fixed");
-        comparison.Indeterminate.Select(link => link.TargetUrl).Should()
+        comparison.Indeterminate.Sample.Select(link => link.TargetUrl).Should()
             .Contain("https://cmp.test/slow");
     }
 
@@ -439,6 +509,19 @@ internal static class CrawlSchemaAssertions
         var sink = second.ServiceProvider.GetRequiredService<ICrawlResultSink>();
         await sink.Invoking(item => item.BeginRunAsync(start)).Should().NotThrowAsync(
             "a replayed start must not fail the one operation that cannot be retried");
+    }
+
+    /// <summary>
+    /// The reader scopes every read to what the requester may see, so these assertions need a real
+    /// access context rather than an id alone. The bootstrap administrator has global visibility,
+    /// which keeps this stage about the schema; the per-role checks live in the shell tests.
+    /// </summary>
+    private static async Task<RegistryAccessContext> AdministratorAccessAsync(AsyncServiceScope scope)
+    {
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var administrator = await database.Users
+            .SingleAsync(user => user.Email == "bootstrap@example.test");
+        return new(administrator.Id, [ApplicationRoles.Administrator]);
     }
 
     private static Task WriteRunAsync(

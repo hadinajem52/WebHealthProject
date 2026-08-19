@@ -13,6 +13,17 @@ public static class CrawlLinkClassifications
 
     public static bool IsSupported(string value) =>
         value is Healthy or Redirected or Broken or Blocked or Timeout or Skipped or Unknown;
+
+    /// <summary>
+    /// Classifications that leave a link's health unknown. A previously broken link in one of these
+    /// states has not been shown to work, so a comparison must report it as indeterminate rather
+    /// than resolved. It lives here rather than in a reader because it is a rule about what the
+    /// classifications *mean*, and two readers deciding it separately could disagree.
+    /// </summary>
+    public static IReadOnlyList<string> Indeterminate => [Timeout, Blocked, Skipped, Unknown];
+
+    /// <summary>The two classifications that positively establish a link works.</summary>
+    public static IReadOnlyList<string> Working => [Healthy, Redirected];
 }
 
 /// <summary>

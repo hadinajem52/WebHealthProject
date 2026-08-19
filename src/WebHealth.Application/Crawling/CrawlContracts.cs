@@ -1,3 +1,4 @@
+using WebHealth.Application.Registry;
 using WebHealth.Domain.Crawling;
 
 namespace WebHealth.Application.Crawling;
@@ -174,6 +175,21 @@ public sealed record CrawlBrokenLink(
     bool IsInternal);
 
 /// <summary>
+/// One bucket of a comparison: how many links fall in it, and a bounded sample to show.
+/// <para>
+/// The count comes from the database and is exact; the sample is capped. A page cannot render an
+/// unbounded number of rows, and truncating the *set* instead of the *display* would be worse than
+/// slow — a previous run whose links were cut short would report them as resolved.
+/// </para>
+/// </summary>
+public sealed record CrawlComparisonBucket(int TotalCount, IReadOnlyList<CrawlBrokenLink> Sample)
+{
+    public static CrawlComparisonBucket Empty { get; } = new(0, []);
+
+    public bool HasMore => TotalCount > Sample.Count;
+}
+
+/// <summary>
 /// Two runs of the same endpoint, bucketed. <c>PreviousRunId</c> is null for a first crawl, where
 /// every broken link is new because there is nothing to compare against — which is different from
 /// a run that genuinely introduced them, and is why the null is carried rather than hidden.
@@ -181,19 +197,31 @@ public sealed record CrawlBrokenLink(
 public sealed record CrawlComparison(
     Guid? CurrentRunId,
     Guid? PreviousRunId,
-    IReadOnlyList<CrawlBrokenLink> New,
-    IReadOnlyList<CrawlBrokenLink> Continuing,
-    IReadOnlyList<CrawlBrokenLink> Resolved,
-    IReadOnlyList<CrawlBrokenLink> Indeterminate)
+    CrawlComparisonBucket New,
+    CrawlComparisonBucket Continuing,
+    CrawlComparisonBucket Resolved,
+    CrawlComparisonBucket Indeterminate)
 {
-    public static CrawlComparison Empty { get; } = new(null, null, [], [], [], []);
+    public static CrawlComparison Empty { get; } = new(
+        null, null,
+        CrawlComparisonBucket.Empty,
+        CrawlComparisonBucket.Empty,
+        CrawlComparisonBucket.Empty,
+        CrawlComparisonBucket.Empty);
 }
 
+/// <summary>
+/// AC-08's read surface. Every method takes the requester's access context and scopes to endpoints
+/// they may see, in the database. A reader that trusted a caller-supplied endpoint id would let any
+/// authenticated user read another client's crawl results by guessing one — the id is a parameter,
+/// not a permission.
+/// </summary>
 public interface ICrawlReportReader
 {
     Task<IReadOnlyList<CrawlRunSummary>> ListRunsAsync(
         Guid endpointId,
         int limit,
+        RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -204,6 +232,7 @@ public interface ICrawlReportReader
     Task<IReadOnlyList<CrawlBrokenLink>> ListBrokenLinksAsync(
         Guid runId,
         int limit,
+        RegistryAccessContext access,
         int offset = 0,
         CancellationToken cancellationToken = default);
 
@@ -215,5 +244,12 @@ public interface ICrawlReportReader
     /// </summary>
     Task<CrawlComparison> CompareLatestAsync(
         Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>One run's summary, or null when the requester may not see its endpoint.</summary>
+    Task<CrawlRunSummary?> FindRunAsync(
+        Guid runId,
+        RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 }

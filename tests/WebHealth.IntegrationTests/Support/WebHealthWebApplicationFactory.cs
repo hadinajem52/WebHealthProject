@@ -7,6 +7,8 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Incidents;
 using WebHealth.Application.Notifications;
+using WebHealth.Application.Seo;
+using WebHealth.Application.Crawling;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Reporting;
 
@@ -42,6 +44,12 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddScoped<IIncidentReader, EmptyIncidentReader>();
             services.RemoveAll<ITargetRegistryReader>();
             services.AddScoped<ITargetRegistryReader, EmptyTargetRegistryReader>();
+
+            // The Phase 6 views read through their own readers, stubbed here for the same reason.
+            services.RemoveAll<ISeoReader>();
+            services.AddScoped<ISeoReader, EmptySeoReader>();
+            services.RemoveAll<ICrawlReportReader>();
+            services.AddScoped<ICrawlReportReader, EmptyCrawlReportReader>();
 
             services.RemoveAll<IAuthorizationDenialAuditWriter>();
             services.AddSingleton<RecordingAuthorizationDenialAuditWriter>();
