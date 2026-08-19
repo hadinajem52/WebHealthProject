@@ -55,11 +55,17 @@ document must not reach logs, diagnostics, audit payloads, or findings either:
 - `seo_observation` has no column that can hold markup;
 - `check_result.safe_diagnostic` is derived from the failure category, never from body content;
 - findings carry a rule key and a bounded observed value, never a document fragment;
-- the extractor takes no logger, so there is no path from a parsed document to a log sink.
+- the extractor takes no logger, so there is no path from a parsed document to a log sink — and a
+  parse that throws is turned into a recorded reason rather than an exception carrying document
+  text up the stack.
 
-This is asserted by a test that checks for **absence** — that a document containing a distinctive
-marker string produces no stored value, diagnostic or audit payload containing it — not merely by
-tests that check the extracted values are present.
+This is asserted twice as **absence**, not merely by tests that check the extracted values are
+present. Once at the extractor, where a document whose body, comments, scripts and unrelated
+metadata all carry a distinctive marker must return nothing containing it. Once at the database,
+where a real check finalises that document and every text column of `seo_observation`,
+`check_result`, `finding` and `audit_event` is scanned for the marker — by enumerating
+`information_schema`, so a column added later is covered automatically rather than quietly falling
+outside the claim.
 
 ### 2.1 Stored values are bounded, lengths are not
 
@@ -86,6 +92,11 @@ Applicable" requires — an explicit recorded decision, not a missing row.
 | the status is 2xx | `NonSuccessStatus` |
 | the media type is `text/html` or `application/xhtml+xml` | `NonHtml` |
 | the body is non-empty | `EmptyBody` |
+| the document parses | `ExtractionFailed` |
+
+`ExtractionFailed` exists because extraction must never be able to cost a check. The parser runs on
+untrusted input on the path that finalises availability results, so a parse that throws is recorded
+as a decision and the availability result is written exactly as it would have been.
 
 Media type is compared case-insensitively after stripping parameters, so `TEXT/HTML; charset=utf-8`
 is HTML. A response with no `Content-Type` at all is treated as `NonHtml`: guessing that unlabelled
@@ -93,10 +104,18 @@ bytes are markup is exactly the "parse binary content" BR-E01 forbids.
 
 ### 3.1 Character encoding
 
-The `Content-Type` charset is authoritative when the response declares one and .NET recognises it.
+The `Content-Type` charset is authoritative when the response declares one and it can be resolved.
 Otherwise the bytes are handed to AngleSharp, which performs the spec's own sniffing (BOM, then
-`<meta charset>`). An unrecognised charset name is treated as absent rather than as a failure — the
-document is still readable, and refusing to look at it would lose the check.
+`<meta charset>`) and falls back to UTF-8 when the document declares nothing at all. An
+unrecognised charset name is treated as absent rather than as a failure — the document is still
+readable, and refusing to look at it would lose the check.
+
+**`CodePagesEncodingProvider` is registered.** .NET ships only the UTF encodings, ASCII and
+Latin-1; `windows-1252` — still common on exactly the older sites these checks exist for — would
+otherwise fail to resolve, and the document would be decoded as UTF-8 into replacement characters.
+The provider is part of the shared framework on `net10.0`, so this costs no dependency. It is worth
+testing with bytes that decode *differently* under UTF-8 and windows-1252 (`0x93`/`0x94`), because a
+sample that happens to be valid Latin-1 passes whether or not the declared charset was honoured.
 
 ### 3.2 A truncated document is extracted but flagged
 
@@ -112,10 +131,41 @@ that the page lacks one. Presence-based findings stay valid; absence-based ones 
 | `title`, `title_length`, `title_count` | first non-empty `<title>` text, whitespace-collapsed; count of title elements, so BR-E02 can distinguish missing from duplicate |
 | `meta_description`, `meta_description_length`, `meta_description_count` | `<meta name="description">` content and how many were present (BR-E03) |
 | `canonical_href`, `canonical_length`, `canonical_count`, `canonical_absolute_url` | `<link rel="canonical">` href exactly as authored, how many were present, and the absolute form resolved against the response's final URL (BR-E04 needs both: the authored value for diagnosis, the resolved one for the host comparison) |
+
+Three rules keep the canonical honest:
+
+- **Values are read from `<head>` only.** An SVG `<title>` in the body is a graphic's label and a
+  `<meta>` outside `<head>` is ignored by search engines; counting either would make BR-E02 and
+  BR-E03 judge something that is not page metadata.
+- **Resolution uses the authored href in full, before bounding.** Bounding first would resolve a
+  long canonical from a truncated prefix and record a host the page never named.
+- **A resolved URL past the stored bound is recorded as absent, never truncated.** A cut-off URL
+  names a different resource, and storing one would hand 6.3 a host comparison against something
+  the page never pointed at. The authored value and its real length are still recorded.
+
+The canonical href is bounded by **trimming only** — no whitespace collapsing. It is diagnostic
+evidence, and internal whitespace in a URL is precisely the authoring mistake worth seeing. Title,
+description and robots content are human-readable text and are collapsed.
+
+The base for resolution is the transport's **redacted** final URL, which carries no query string.
+The only case that changes is an empty canonical href, which resolves without the query. That is
+the accepted cost of not carrying query strings — which can hold secrets — into storage.
 | `robots_meta`, `robots_meta_length`, `robots_meta_count` | `<meta name="robots">` content, lowercased, for BR-E05 |
 
 Resolving the canonical href is a *fact* about the document plus the URL it was served from, so it
 belongs here. Whether that resolved host is acceptable is *policy*, and belongs to 6.3.
+
+## 4.1 Extraction runs outside the finalization transaction
+
+Parsing depends only on the evidence in hand, so it happens **before** the transaction opens.
+Running an untrusted document of arbitrary size and shape through a tree builder while the
+logical-check row is locked would put page complexity inside the most contended path in the system.
+Combined with `ExtractionFailed`, this means SEO work can neither block nor roll back the
+availability result it rides along with.
+
+A check whose evidence never produced a response still records a decision (`TransportFailed`), so
+non-applicability is visible in the history for every HTTP check rather than only for those that
+got as far as a response. Certificate checks have no page at all and record nothing.
 
 ## 5. Storage shape
 
@@ -125,8 +175,9 @@ the composite foreign key to `logical_check (id, endpoint_monitor_id)` — the P
 lesson: the filter column belongs on the high-volume row, not one join away.
 
 Check constraints enforce the applicability contract in the database: a `NotApplicable` row carries
-a reason and no values, an `Applicable` row carries no reason, and every length and count is
-non-negative.
+a recognised reason, no values, **zero counts and zero lengths**; an `Applicable` row carries no
+reason; every length is at least the length of the value stored beside it, so a bounded value can
+never claim to be shorter than what is kept.
 
 ## 6. Verification
 
@@ -142,6 +193,19 @@ Extractor (`SeoValueExtractorTests`, no database):
 - duplicate titles, canonicals and descriptions produce counts greater than one;
 - malformed markup (unclosed tags, a comment containing markup, a `<title>` inside `<script>`)
   extracts what a browser would and does not throw;
+- head scoping: an SVG `<title>` and body-level `<meta>`/`<link>` are not page metadata;
+- the declared charset is honoured for bytes that would decode differently without it;
+- a canonical longer than the stored bound resolves from the full authored value and records no
+  resolved URL rather than a truncated one;
+- a document the parser cannot handle produces `ExtractionFailed` rather than an exception;
 - a truncated document still extracts and is flagged;
 - **absence test:** a document containing a distinctive marker produces no extracted value
   containing it.
+
+Database (`DatabaseFoundationAssertions`):
+
+- the column inventory of `seo_observation` — no column exists that could hold markup;
+- each half of the applicability contract is rejected by name;
+- **absence test at the persistence boundary:** a finalised check over a marker-laden document
+  leaves the marker in no text column of `seo_observation`, `check_result`, `finding` or
+  `audit_event`.
