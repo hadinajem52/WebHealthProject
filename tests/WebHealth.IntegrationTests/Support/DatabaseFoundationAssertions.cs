@@ -55,7 +55,8 @@ internal static class DatabaseFoundationAssertions
         "20260818084805_NotificationRecipientIndex",
         "20260818101710_SslCertificateMonitoring",
         "20260818110028_SslSeverityAndPerformanceRules",
-        "20260818185101_ReportingSampleMonitorIndex"
+        "20260818185101_ReportingSampleMonitorIndex",
+        "20260819090959_RecurringMaintenanceOccurrences"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -101,6 +102,7 @@ internal static class DatabaseFoundationAssertions
         ,"notification_event"
         ,"notification_delivery"
         ,"notification_attempt"
+        ,"notification_read_marker"
     ];
 
     // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
@@ -176,7 +178,9 @@ internal static class DatabaseFoundationAssertions
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         (await context.Database.GetAppliedMigrationsAsync()).Should().BeEquivalentTo(ExpectedMigrations);
-        var entityTypeNames = context.Model.GetEntityTypes().Select(e => e.Name).ToList();
+        // IEntityType.Name is namespace-qualified; the inventory above is written as CLR type
+        // names, which is what makes an unexpected entity type readable in a failure message.
+        var entityTypeNames = context.Model.GetEntityTypes().Select(e => e.ClrType.Name).ToList();
         entityTypeNames.Should().BeEquivalentTo(ExpectedEntityTypeNames);
 
         var state = await ReadFoundationState(connectionString);
@@ -200,6 +204,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyDistinctIssueKeysCreateDistinctIncidentsAsync(connectionString);
         await VerifyReminderEscalationSweepBoundariesAsync(connectionString);
         await VerifyMaintenanceClassifiedResultRetentionAsync(connectionString);
+        await VerifyRecurringMaintenanceExpansionAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(context, connectionString);
@@ -2833,14 +2838,19 @@ internal static class DatabaseFoundationAssertions
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var transaction = await connection.BeginTransactionAsync();
+        // Since SslCertificateMonitoring, an HTTPS endpoint already owns a live certificate
+        // monitor, and ix_endpoint_monitor_endpoint_id_monitor_type would reject this row on
+        // INSERT before the deferred policy trigger under test could run at COMMIT. That partial
+        // index covers live monitors only, so the row is written already soft-deleted: it is the
+        // type-versus-policy pairing that must be rejected here, not uniqueness.
         const string sql = """
             INSERT INTO web_health.endpoint_monitor
                 (id, endpoint_id, policy_profile_id, monitor_type, bounded_overrides, configuration_fingerprint,
                  interval_seconds, timeout_seconds, failure_confirmation_count, recovery_confirmation_count,
                  schedule_anchor, next_due_at, is_enabled,
-                 created_at, created_by_user_id, updated_at, updated_by_user_id, version)
+                 created_at, created_by_user_id, updated_at, updated_by_user_id, deleted_at, version)
             VALUES (@id, @endpoint_id, 'fd3c8021-ff54-4f31-a3ad-2010b7b193dd', 'SslCertificate', '{}', repeat('0', 64),
-                    900, 30, 2, 2, now(), now(), FALSE, now(), @actor, now(), @actor, 1);
+                    900, 30, 2, 2, now(), now(), FALSE, now(), @actor, now(), @actor, now(), 1);
             """;
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("id", Guid.NewGuid());
@@ -2881,7 +2891,7 @@ internal static class DatabaseFoundationAssertions
         var maintenanceAccess = new RegistryAccessContext(userId, [ApplicationRoles.Administrator]);
         var createdMaintenance = await maintenanceService.CreateAsync(new(
             new(MaintenanceScopeKind.Monitor, monitor.Id), now.AddMinutes(-5), now.AddMinutes(5), "UTC",
-            "Controlled maintenance verification", MaintenanceSuppressionPolicies.SuppressAll, true, false),
+            "Controlled maintenance verification", MaintenanceSuppressionPolicies.SuppressAll, true, false, OneOff),
             maintenanceAccess);
         createdMaintenance.Succeeded.Should().BeTrue();
         var activeMaintenance = await maintenanceEvaluator.FindActiveAsync(monitor.Id, now);
@@ -3044,6 +3054,9 @@ internal static class DatabaseFoundationAssertions
             Reason = "Scheduled patching",
             TimezoneId = "UTC",
             SuppressionPolicy = MaintenanceSuppressionPolicies.SuppressAll,
+            ScheduleStartsAt = now.AddHours(1),
+            ScheduleDurationSeconds = 7200,
+            RecurrencePattern = MaintenanceRecurrencePatterns.None,
             PauseEscalation = true,
             ContinueFailureCounter = false,
             CreatedAt = now,
@@ -3290,7 +3303,8 @@ internal static class DatabaseFoundationAssertions
             "Reminder sweep pause verification",
             MaintenanceSuppressionPolicies.SuppressAll,
             true,
-            false), administratorAccess);
+            false,
+            OneOff), administratorAccess);
         maintenanceWindow.Succeeded.Should().BeTrue();
         (await reminderService.SweepAsync()).Should().Be(new NotificationReminderSweepResult(0, 0));
         (await maintenanceService.CancelAsync(new(maintenanceWindow.MaintenanceWindowId!.Value, 1), administratorAccess))
@@ -3329,6 +3343,138 @@ internal static class DatabaseFoundationAssertions
     /// Item 13 (retention half): a check finalized during an active maintenance window is marked
     /// and kept, not dropped, through the real FinalizeAsync pipeline — not a hand-built row.
     /// </summary>
+    /// <summary>
+    /// BR-M05 and the AC-09 regression. Expansion is keyed on (window, occurrence start): running
+    /// it twice over one horizon writes nothing, extending the horizon appends only later
+    /// occurrences and rewrites no history, and a failure inside a materialised recurring
+    /// occurrence is retained and suppressed exactly as a one-off window's is.
+    /// </summary>
+    private static async Task VerifyRecurringMaintenanceExpansionAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var maintenanceService = scope.ServiceProvider.GetRequiredService<IMaintenanceWindowService>();
+        var maintenanceEvaluator = scope.ServiceProvider.GetRequiredService<IMaintenanceEvaluator>();
+        var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var environmentId = await database.Environments
+            .Where(candidate => candidate.DeletedAt == null)
+            .Select(candidate => candidate.Id).FirstAsync();
+
+        var endpointResult = await endpointService.CreateAsync(
+            new(environmentId, "https://recurring-maintenance.test/status", null, true, null,
+                TargetAuthorizationKinds.Owned, "Recurring maintenance fixture owned by the project.", null),
+            access);
+        endpointResult.Succeeded.Should().BeTrue(string.Join(" ", endpointResult.Errors));
+        var monitor = await database.EndpointMonitors
+            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
+            .SingleAsync(candidate => candidate.EndpointId == endpointResult.EntityId!.Value
+                && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType
+                && candidate.DeletedAt == null);
+
+        const int horizonDays = 90;
+        var options = new MaintenanceSchedulingOptions { HorizonDays = horizonDays, BatchSize = 25 };
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        var anchor = clock.GetUtcNow().AddMinutes(-5);
+        var created = await maintenanceService.CreateAsync(new(
+            new(MaintenanceScopeKind.Monitor, monitor.Id),
+            anchor,
+            anchor.AddHours(1),
+            "Europe/Berlin",
+            "Nightly recurring maintenance verification",
+            MaintenanceSuppressionPolicies.SuppressAll,
+            true,
+            false,
+            new(MaintenanceRecurrencePatterns.Daily, MaintenanceDayOfWeekMask.Empty, null)), access);
+        created.Succeeded.Should().BeTrue(string.Join(" ", created.Errors));
+        var windowId = created.MaintenanceWindowId!.Value;
+
+        // Creation materialises the whole first horizon in its own transaction, so the window
+        // suppresses immediately rather than from the next expansion tick.
+        var initialStarts = await OccurrenceStartsAsync(database, windowId);
+        initialStarts.Should().HaveCount(horizonDays + 1);
+        initialStarts[0].Should().Be(anchor.ToUniversalTime());
+        initialStarts.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems();
+
+        var expander = new MaintenanceOccurrenceExpander(database, options, clock, NullLogger<MaintenanceOccurrenceExpander>.Instance);
+        (await expander.ExpandWindowAsync(windowId)).Should().Be(0,
+            "re-running the expander over the same horizon cannot double-book a window");
+        database.ChangeTracker.Clear();
+        (await expander.ExpandDueAsync()).OccurrencesCreated.Should().Be(0);
+        database.ChangeTracker.Clear();
+        (await OccurrenceStartsAsync(database, windowId)).Should().Equal(initialStarts);
+
+        // AC-09 regression against a materialised recurring occurrence.
+        var activeOccurrence = await maintenanceEvaluator.FindActiveAsync(monitor.Id, clock.GetUtcNow());
+        activeOccurrence.Should().NotBeNull();
+        activeOccurrence!.SuppressionPolicy.Should().Be(MaintenanceSuppressionPolicies.SuppressAll);
+        var checkId = await FinalizeScheduledResultAsync(database, monitor, 61, 500, clock);
+        database.ChangeTracker.Clear();
+        var result = await database.CheckResults.AsNoTracking()
+            .SingleAsync(candidate => candidate.LogicalCheckId == checkId);
+        result.IsMaintenance.Should().BeTrue();
+        result.MaintenanceOccurrenceId.Should().Be(activeOccurrence.OccurrenceId);
+        result.CountsForUptime.Should().BeFalse();
+        (await database.IssueStates.AnyAsync(state => state.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+        (await database.Incidents.AnyAsync(incident => incident.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+
+        // Extending the horizon appends only later occurrences and rewrites no history.
+        clock.Advance(TimeSpan.FromDays(10));
+        database.ChangeTracker.Clear();
+        (await expander.ExpandWindowAsync(windowId)).Should().Be(10);
+        database.ChangeTracker.Clear();
+        var extendedStarts = await OccurrenceStartsAsync(database, windowId);
+        extendedStarts.Should().HaveCount(initialStarts.Count + 10);
+        extendedStarts.Take(initialStarts.Count).Should().Equal(initialStarts);
+        extendedStarts.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems();
+        var window = await database.MaintenanceWindows.AsNoTracking().SingleAsync(item => item.Id == windowId);
+        window.ExpandedThrough.Should().Be(clock.GetUtcNow().AddDays(horizonDays));
+
+        await VerifyDuplicateOccurrenceStartRejectedAsync(connectionString, windowId, extendedStarts[0]);
+
+        (await maintenanceService.CancelAsync(new(windowId, window.Version), access))
+            .Succeeded.Should().BeTrue();
+        database.ChangeTracker.Clear();
+        (await maintenanceEvaluator.FindActiveAsync(monitor.Id, initialStarts[1])).Should().BeNull(
+            "a cancelled recurrence suppresses nothing, even where its occurrences remain for history");
+    }
+
+    private static async Task<IReadOnlyList<DateTimeOffset>> OccurrenceStartsAsync(
+        ApplicationDbContext database, Guid windowId) =>
+        await database.MaintenanceOccurrences.AsNoTracking()
+            .Where(occurrence => occurrence.MaintenanceWindowId == windowId)
+            .OrderBy(occurrence => occurrence.StartsAt)
+            .Select(occurrence => occurrence.StartsAt)
+            .ToArrayAsync();
+
+    private static async Task VerifyDuplicateOccurrenceStartRejectedAsync(
+        string connectionString, Guid windowId, DateTimeOffset startsAt)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO web_health.maintenance_occurrence (id, maintenance_window_id, starts_at, ends_at, created_at)
+            VALUES (@id, @window_id, @starts_at, @starts_at + interval '2 hours', now());
+            """, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("window_id", windowId);
+        command.Parameters.AddWithValue("starts_at", startsAt);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+        exception.ConstraintName.Should().Be("ux_maintenance_occurrence_window_start");
+    }
+
+    private static readonly MaintenanceRecurrenceSpec OneOff =
+        new(MaintenanceRecurrencePatterns.None, MaintenanceDayOfWeekMask.Empty, null);
+
     private static async Task VerifyMaintenanceClassifiedResultRetentionAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -3370,7 +3516,8 @@ internal static class DatabaseFoundationAssertions
             "Retention verification",
             MaintenanceSuppressionPolicies.SuppressAll,
             true,
-            false), administratorAccess);
+            false,
+            OneOff), administratorAccess);
         maintenanceWindow.Succeeded.Should().BeTrue(string.Join(" ", maintenanceWindow.Errors));
 
         var checkId = await FinalizeScheduledResultAsync(database, monitor, 38, 500, clock);

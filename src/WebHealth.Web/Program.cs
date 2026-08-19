@@ -11,6 +11,7 @@ using WebHealth.Application.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using WebHealth.Web.Authorization;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Notifications;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -120,6 +121,7 @@ app.MapControllerRoute(
 
 app.UseMonitoringScheduling();
 app.UseNotificationScheduling();
+app.UseMaintenanceScheduling();
 
 app.Run();
 

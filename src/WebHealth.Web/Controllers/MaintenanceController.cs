@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.Maintenance;
 using WebHealth.Application.Registry;
+using WebHealth.Domain.Maintenance;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
@@ -68,6 +69,9 @@ public sealed class MaintenanceController(
             ScopeId = window.Scope.TargetId,
             StartsAtUtc = window.StartsAt.UtcDateTime,
             EndsAtUtc = window.EndsAt.UtcDateTime,
+            RecurrencePattern = window.Recurrence.Pattern,
+            RecurrenceDays = ToDaySelections(window.Recurrence.DaysOfWeekMask),
+            RecurrenceUntilUtc = window.Recurrence.Until?.UtcDateTime,
             TimezoneId = window.TimezoneId,
             Reason = window.Reason,
             SuppressionPolicy = window.SuppressionPolicy,
@@ -89,7 +93,8 @@ public sealed class MaintenanceController(
         var result = await maintenanceService.UpdateAsync(new(
             model.MaintenanceWindowId, model.Version, new(model.ScopeKind, model.ScopeId.Value),
             ToUtc(model.StartsAtUtc), ToUtc(model.EndsAtUtc), model.TimezoneId, model.Reason,
-            model.SuppressionPolicy, model.PauseEscalation, model.ContinueFailureCounter), GetAccess(), cancellationToken);
+            model.SuppressionPolicy, model.PauseEscalation, model.ContinueFailureCounter,
+            ToRecurrence(model)), GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
             if (result.Status == MaintenanceMutationStatus.NotFound) return NotFound();
@@ -124,7 +129,22 @@ public sealed class MaintenanceController(
 
     private static CreateMaintenanceWindow ToCreate(MaintenanceWindowFormViewModel model) => new(
         new(model.ScopeKind, model.ScopeId!.Value), ToUtc(model.StartsAtUtc), ToUtc(model.EndsAtUtc), model.TimezoneId,
-        model.Reason, model.SuppressionPolicy, model.PauseEscalation, model.ContinueFailureCounter);
+        model.Reason, model.SuppressionPolicy, model.PauseEscalation, model.ContinueFailureCounter, ToRecurrence(model));
+
+    // The submitted pattern is passed through unchanged so an unsupported value is rejected by
+    // the application service rather than silently downgraded to a one-off window here. Only the
+    // fields that depend on the pattern are cleared.
+    private static MaintenanceRecurrenceSpec ToRecurrence(MaintenanceWindowFormViewModel model) =>
+        model.RecurrencePattern == MaintenanceRecurrencePatterns.None
+            ? new(MaintenanceRecurrencePatterns.None, MaintenanceDayOfWeekMask.Empty, null)
+            : new(model.RecurrencePattern,
+                model.RecurrencePattern == MaintenanceRecurrencePatterns.Weekly
+                    ? model.RecurrenceDaysMask
+                    : MaintenanceDayOfWeekMask.Empty,
+                model.RecurrenceUntilUtc is { } until ? ToUtc(until) : null);
+
+    private static bool[] ToDaySelections(int mask) => Enum.GetValues<DayOfWeek>()
+        .Select(day => MaintenanceDayOfWeekMask.Includes(mask, day)).ToArray();
 
     private static DateTimeOffset ToUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 

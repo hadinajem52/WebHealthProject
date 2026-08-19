@@ -7,6 +7,12 @@ public sealed class MaintenanceWindow
     public required string Reason { get; set; }
     public required string TimezoneId { get; set; }
     public required string SuppressionPolicy { get; set; }
+    public DateTimeOffset ScheduleStartsAt { get; set; }
+    public int ScheduleDurationSeconds { get; set; }
+    public required string RecurrencePattern { get; set; }
+    public int RecurrenceDaysOfWeek { get; set; }
+    public DateTimeOffset? RecurrenceUntil { get; set; }
+    public DateTimeOffset? ExpandedThrough { get; set; }
     public bool PauseEscalation { get; set; }
     public bool ContinueFailureCounter { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

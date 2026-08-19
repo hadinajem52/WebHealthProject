@@ -11,12 +11,14 @@
     }
     else
     {
-        <div class="table-scroll"><table class="data-table"><thead><tr><th>Scope</th><th>Window (UTC)</th><th>Policy</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Scope</th><th>Window (UTC)</th><th>Repeats</th><th>Next occurrence (UTC)</th><th>Policy</th><th>Status</th><th>Actions</th></tr></thead><tbody>
         @foreach (var window in Model.Windows)
         {
             <tr>
                 <td data-label="Scope"><span class="data-table__primary">@window.ScopeLabel</span></td>
                 <td data-label="Window (UTC)">@window.StartsAt.ToString("yyyy-MM-dd HH:mm") – @window.EndsAt.ToString("yyyy-MM-dd HH:mm")</td>
+                <td data-label="Repeats">@MaintenanceRecurrenceDisplay.Describe(window.Recurrence)</td>
+                <td data-label="Next occurrence (UTC)">@(window.NextOccurrenceStartsAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
                 <td data-label="Policy">@(window.SuppressionPolicy == "SuppressAll" ? "Suppress notifications" : "Do not suppress")</td>
                 <td data-label="Status"><span class="badge" data-status="@(window.IsCancelled ? "danger" : "warning")">@(window.IsCancelled ? "Cancelled" : "Scheduled")</span></td>
                 <td class="data-table__action" data-label="Actions"><a asp-action="Details" asp-route-id="@window.Id">Details</a></td>

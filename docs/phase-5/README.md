@@ -17,6 +17,7 @@ This folder records Phase 5 implementation evidence. The phase gate and its chec
 | Checklist | Purpose |
 |---|---|
 | [Browser-driven UI test checklist](Phase_5_Ui_Test_Checklist.md) | The Playwright cases to write once Phase 5's surfaces are settled — claims that can only be falsified in a real browser, deliberately excluding rules the xUnit suites already prove. |
+| [Browser verification evidence](Browser_Verification_Evidence.md) | What was observed when that checklist was walked by hand against the seeded fixture on 2026-08-19, including what it did not cover. |
 
 ## Decisions recorded in this phase
 

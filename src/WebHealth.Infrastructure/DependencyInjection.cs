@@ -46,6 +46,11 @@ public static class DependencyInjection
         ValidateNotificationOptions(notificationOptions);
         services.AddSingleton(notificationOptions);
 
+        var maintenanceOptions = configuration.GetSection(MaintenanceSchedulingOptions.SectionName)
+            .Get<MaintenanceSchedulingOptions>() ?? new MaintenanceSchedulingOptions();
+        ValidateMaintenanceOptions(maintenanceOptions);
+        services.AddSingleton(maintenanceOptions);
+
         var smtpOptions = configuration.GetSection(SmtpEmailOptions.SectionName)
             .Get<SmtpEmailOptions>() ?? new SmtpEmailOptions();
         if (smtpOptions.Enabled)
@@ -116,6 +121,8 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceWindowService, MaintenanceWindowService>();
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
+        services.AddScoped<IMaintenanceOccurrenceExpander, MaintenanceOccurrenceExpander>();
+        services.AddScoped<MaintenanceExpansionJob>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
         services.AddScoped<IIncidentReader, IncidentReader>();
         services.AddScoped<INotificationFeedReader, NotificationFeedReader>();
@@ -127,7 +134,7 @@ public static class DependencyInjection
         services.AddScoped<LogicalCheckJob>();
         services.AddScoped<MonitoringDispatchJob>();
         services.AddScoped<NotificationDispatchJob>();
-        var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled;
+        var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled || maintenanceOptions.Enabled;
         if (hangfireEnabled)
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -156,6 +163,11 @@ public static class DependencyInjection
                 if (notificationOptions.Enabled)
                 {
                     queues.Add(NotificationQueueNames.Notifications);
+                }
+
+                if (maintenanceOptions.Enabled)
+                {
+                    queues.Add(MaintenanceQueueNames.Maintenance);
                 }
 
                 options.Queues = queues.ToArray();
@@ -229,6 +241,14 @@ public static class DependencyInjection
             || options.EscalationDelay < TimeSpan.FromMinutes(5))
         {
             throw new InvalidOperationException("Notification scheduling options are outside their safe bounds.");
+        }
+    }
+
+    private static void ValidateMaintenanceOptions(MaintenanceSchedulingOptions options)
+    {
+        if (options.HorizonDays is < 1 or > 730 || options.BatchSize is < 1 or > 500)
+        {
+            throw new InvalidOperationException("Maintenance scheduling options are outside their safe bounds.");
         }
     }
 

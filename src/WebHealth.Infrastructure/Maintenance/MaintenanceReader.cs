@@ -4,31 +4,51 @@ using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Maintenance;
 
-internal sealed class MaintenanceReader(ApplicationDbContext dbContext) : IMaintenanceReader
+internal sealed class MaintenanceReader(ApplicationDbContext dbContext, TimeProvider timeProvider) : IMaintenanceReader
 {
     public async Task<IReadOnlyList<MaintenanceWindowListItem>> ListAsync(CancellationToken cancellationToken = default)
     {
-        var windows = await dbContext.MaintenanceWindows.AsNoTracking().Include(item => item.Targets).Include(item => item.Occurrences)
-            .OrderByDescending(item => item.CreatedAt).ToArrayAsync(cancellationToken);
-        return windows.Select(item =>
-        {
-            var target = item.Targets.Single();
-            var occurrence = item.Occurrences.Single();
-            return new MaintenanceWindowListItem(item.Id, ScopeLabel(target), occurrence.StartsAt, occurrence.EndsAt, item.TimezoneId,
-                item.SuppressionPolicy, item.PauseEscalation, item.DeletedAt is not null, item.Version);
-        }).ToArray();
+        // The window carries its schedule specification, so the list never loads a recurring
+        // window's materialised occurrences; only the next one ahead of now is read.
+        var now = timeProvider.GetUtcNow();
+        var windows = await dbContext.MaintenanceWindows.AsNoTracking().Include(item => item.Targets)
+            .OrderByDescending(item => item.CreatedAt)
+            .Select(item => new
+            {
+                Window = item,
+                NextOccurrenceStartsAt = item.Occurrences
+                    .Where(occurrence => occurrence.EndsAt > now)
+                    .Min(occurrence => (DateTimeOffset?)occurrence.StartsAt)
+            })
+            .ToArrayAsync(cancellationToken);
+        return windows.Select(row => new MaintenanceWindowListItem(
+            row.Window.Id, ScopeLabel(row.Window.Targets.Single()), row.Window.ScheduleStartsAt,
+            ScheduleEndsAt(row.Window), row.Window.TimezoneId, row.Window.SuppressionPolicy,
+            row.Window.PauseEscalation, row.Window.DeletedAt is not null, ToRecurrence(row.Window),
+            row.NextOccurrenceStartsAt, row.Window.Version)).ToArray();
     }
 
     public async Task<MaintenanceWindowDetails?> FindAsync(Guid maintenanceWindowId, CancellationToken cancellationToken = default)
     {
-        var item = await dbContext.MaintenanceWindows.AsNoTracking().Include(window => window.Targets).Include(window => window.Occurrences)
-            .SingleOrDefaultAsync(window => window.Id == maintenanceWindowId, cancellationToken);
-        if (item is null) return null;
-        var target = item.Targets.Single();
-        var occurrence = item.Occurrences.Single();
-        return new MaintenanceWindowDetails(item.Id, ToScope(target), ScopeLabel(target), occurrence.StartsAt, occurrence.EndsAt,
-            item.TimezoneId, item.Reason, item.SuppressionPolicy, item.PauseEscalation, item.ContinueFailureCounter,
-            item.DeletedAt is not null, item.Version);
+        var now = timeProvider.GetUtcNow();
+        var row = await dbContext.MaintenanceWindows.AsNoTracking().Include(window => window.Targets)
+            .Where(window => window.Id == maintenanceWindowId)
+            .Select(window => new
+            {
+                Window = window,
+                OccurrenceCount = window.Occurrences.Count,
+                NextOccurrenceStartsAt = window.Occurrences
+                    .Where(occurrence => occurrence.EndsAt > now)
+                    .Min(occurrence => (DateTimeOffset?)occurrence.StartsAt)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (row is null) return null;
+        var target = row.Window.Targets.Single();
+        return new MaintenanceWindowDetails(row.Window.Id, ToScope(target), ScopeLabel(target),
+            row.Window.ScheduleStartsAt, ScheduleEndsAt(row.Window), row.Window.TimezoneId, row.Window.Reason,
+            row.Window.SuppressionPolicy, row.Window.PauseEscalation, row.Window.ContinueFailureCounter,
+            row.Window.DeletedAt is not null, ToRecurrence(row.Window), row.NextOccurrenceStartsAt,
+            row.OccurrenceCount, row.Window.Version);
     }
 
     public async Task<IReadOnlyList<MaintenanceScopeOption>> ListScopeOptionsAsync(CancellationToken cancellationToken = default)
@@ -45,6 +65,12 @@ internal sealed class MaintenanceReader(ApplicationDbContext dbContext) : IMaint
             .Select(item => new MaintenanceScopeOption(MaintenanceScopeKind.Monitor, item.Id, $"Monitor · {item.Endpoint.DisplayUrl} ({item.MonitorType})")).ToArrayAsync(cancellationToken);
         return clients.Concat(websites).Concat(environments).Concat(endpoints).Concat(monitors).OrderBy(item => item.Label, StringComparer.OrdinalIgnoreCase).ToArray();
     }
+
+    private static DateTimeOffset ScheduleEndsAt(MaintenanceWindow window) =>
+        window.ScheduleStartsAt.AddSeconds(window.ScheduleDurationSeconds);
+
+    private static MaintenanceRecurrenceSpec ToRecurrence(MaintenanceWindow window) =>
+        new(window.RecurrencePattern, window.RecurrenceDaysOfWeek, window.RecurrenceUntil);
 
     private static MaintenanceScope ToScope(MaintenanceTarget target) => target.ClientId is { } id ? new(MaintenanceScopeKind.Client, id) : target.WebsiteId is { } websiteId ? new(MaintenanceScopeKind.Website, websiteId) : target.EnvironmentId is { } environmentId ? new(MaintenanceScopeKind.Environment, environmentId) : target.EndpointId is { } endpointId ? new(MaintenanceScopeKind.Endpoint, endpointId) : new(MaintenanceScopeKind.Monitor, target.EndpointMonitorId!.Value);
     private static string ScopeLabel(MaintenanceTarget target) => $"{ToScope(target).Kind} · {ToScope(target).TargetId}";
