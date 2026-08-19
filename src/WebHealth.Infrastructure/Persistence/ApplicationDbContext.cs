@@ -4,6 +4,7 @@ using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Auditing;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Registry;
+using WebHealth.Infrastructure.Seo;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Maintenance;
@@ -83,6 +84,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<NotificationReadMarker> NotificationReadMarkers => Set<NotificationReadMarker>();
 
     public DbSet<NotificationAttempt> NotificationAttempts => Set<NotificationAttempt>();
+
+    public DbSet<SeoObservation> SeoObservations => Set<SeoObservation>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

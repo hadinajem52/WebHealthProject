@@ -495,6 +495,19 @@ internal sealed class EndpointRegistryService(
             && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
 
     /// <summary>
+    /// The audit snapshot describes the availability monitor whatever its lifecycle state.
+    /// Deleting an endpoint retires its monitors before the "after" snapshot is taken, so
+    /// requiring a live one here would throw on exactly the mutation being recorded. A live
+    /// monitor still wins when there is one.
+    /// </summary>
+    private static EndpointMonitor AuditedAvailabilityMonitor(Endpoint endpoint) =>
+        endpoint.Monitors
+            .Where(candidate => candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+            .OrderBy(candidate => candidate.DeletedAt is null ? 0 : 1)
+            .ThenByDescending(candidate => candidate.CreatedAt)
+            .First();
+
+    /// <summary>
     /// BR-C01: the certificate monitor exists exactly while the endpoint is HTTPS. Switching an
     /// endpoint to HTTP retires its certificate monitor instead of leaving one that can never
     /// observe anything, and switching back to HTTPS creates a fresh one.
@@ -753,14 +766,18 @@ internal sealed class EndpointRegistryService(
         bool urlChanged,
         bool httpExceptionChanged,
         bool targetAuthorizationChanged,
-        DateTimeOffset now) => new(
-        endpoint.Id, endpoint.EnvironmentId, endpoint.OwnerSubjectId,
-        Convert.ToHexString(endpoint.NormalizedUrlHash).ToLowerInvariant(), endpoint.NormalizationVersion,
-        urlChanged, endpoint.IsEnabled, endpoint.HttpExceptionReason is not null,
-        httpExceptionChanged, HasCurrentAuthorization(endpoint, now), targetAuthorizationChanged,
-        AvailabilityMonitor(endpoint).IntervalSeconds,
-        MonitorIntervalOverride.HasOverride(AvailabilityMonitor(endpoint).BoundedOverrides),
-        endpoint.DeletedAt is not null, endpoint.Version);
+        DateTimeOffset now)
+    {
+        var monitor = AuditedAvailabilityMonitor(endpoint);
+        return new(
+            endpoint.Id, endpoint.EnvironmentId, endpoint.OwnerSubjectId,
+            Convert.ToHexString(endpoint.NormalizedUrlHash).ToLowerInvariant(), endpoint.NormalizationVersion,
+            urlChanged, endpoint.IsEnabled, endpoint.HttpExceptionReason is not null,
+            httpExceptionChanged, HasCurrentAuthorization(endpoint, now), targetAuthorizationChanged,
+            monitor.IntervalSeconds,
+            MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides),
+            endpoint.DeletedAt is not null, endpoint.Version);
+    }
 
     private static IntervalOverrideDecision DecideIntervalOverride(
         int? intervalMinutes,

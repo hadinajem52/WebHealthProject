@@ -6,12 +6,15 @@ using NpgsqlTypes;
 using WebHealth.Application.Health;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Maintenance;
+using WebHealth.Application.Seo;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Normalization;
+using WebHealth.Domain.Seo;
 using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Infrastructure.Seo;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
@@ -20,12 +23,18 @@ internal sealed class LogicalCheckFinalizationService(
     IMaintenanceEvaluator maintenanceEvaluator,
     IncidentAutomationService incidentAutomation,
     ISslUrgentCheckScheduler urgentCertificateChecks,
+    ISeoValueExtractor seoValueExtractor,
     TimeProvider timeProvider) : ILogicalCheckFinalizationService
 {
     public async Task<LogicalCheckFinalizationStatus> FinalizeAsync(
         FinalizeLogicalCheck command,
         CancellationToken cancellationToken = default)
     {
+        // BR-E01/BR-E10 extraction depends only on the evidence in hand, so it runs before the
+        // transaction opens. Parsing an untrusted document while the logical-check row is locked
+        // would put arbitrary page size and complexity inside the most contended path there is.
+        var seoExtraction = ExtractSeoValues(command.Evidence);
+
         await using var transaction = await BeginTransactionAsync(cancellationToken);
         await LockLogicalCheckAsync(command.Lease.LogicalCheckId, cancellationToken);
         var check = await LoadLogicalCheckAsync(command.Lease.LogicalCheckId, cancellationToken);
@@ -76,7 +85,7 @@ internal sealed class LogicalCheckFinalizationService(
         var now = timeProvider.GetUtcNow();
         var normalized = Normalize(check, command.Evidence, now);
         var maintenance = await maintenanceEvaluator.FindActiveAsync(check.EndpointMonitorId, normalized.MeasuredAt, cancellationToken);
-        AddHistory(check, normalized, command.Evidence, maintenance, now);
+        AddHistory(check, normalized, command.Evidence, seoExtraction, maintenance, now);
         var counterMode = HealthConfirmationEngine.SelectCounterMode(
             check.Source,
             normalized.Outcome,
@@ -449,6 +458,7 @@ internal sealed class LogicalCheckFinalizationService(
         LogicalCheck check,
         NormalizedCheckResult normalized,
         LogicalCheckTerminalEvidence evidence,
+        SeoExtraction? seoExtraction,
         ActiveMaintenanceOccurrence? maintenance,
         DateTimeOffset completedAt)
     {
@@ -503,6 +513,11 @@ internal sealed class LogicalCheckFinalizationService(
             ExpectedValue = finding.ExpectedValue,
             IssueKey = finding.IssueKey
         }));
+        if (!MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType) && seoExtraction is not null)
+        {
+            AddSeoObservation(check, seoExtraction, normalized.MeasuredAt);
+        }
+
         if (evidence is SslCertificateEvidence { Result.Certificate: { } certificate })
         {
             dbContext.CertificateObservations.Add(new CertificateObservation
@@ -530,6 +545,57 @@ internal sealed class LogicalCheckFinalizationService(
         check.State = LogicalCheckStates.Completed;
         check.CompletedAt = completedAt;
     }
+
+    /// <summary>
+    /// BR-E01 and BR-E10. Reads the body this check already captured — no second fetch — and keeps
+    /// the extracted values only. Evidence that never produced a response still yields a decision,
+    /// so "not applicable" is recorded in the history rather than left as a gap. Certificate checks
+    /// have no page at all and are excluded by the caller.
+    /// <para>
+    /// The base for canonical resolution is the redacted final URL: the transport deliberately
+    /// never surfaces the query string, so an empty canonical href resolves without it. That is
+    /// the accepted cost of not carrying query strings — which can hold secrets — into storage.
+    /// </para>
+    /// </summary>
+    private SeoExtraction? ExtractSeoValues(LogicalCheckTerminalEvidence evidence) => evidence switch
+    {
+        HttpTransportEvidence http => seoValueExtractor.Extract(new(
+            http.Result.Succeeded,
+            http.Result.StatusCode,
+            http.Result.ContentType,
+            http.Result.FinalDestination?.Url ?? http.Request.Url,
+            http.Result.BodyTruncated,
+            http.Result.Body)),
+        ExecutionTerminalEvidence => SeoExtraction.NotApplicable(SeoNotApplicableReasons.TransportFailed),
+        _ => null
+    };
+
+    private void AddSeoObservation(
+        LogicalCheck check,
+        SeoExtraction extraction,
+        DateTimeOffset observedAt) =>
+        dbContext.SeoObservations.Add(new SeoObservation
+        {
+            LogicalCheckId = check.Id,
+            EndpointMonitorId = check.EndpointMonitorId,
+            Applicability = extraction.Applicability,
+            NotApplicableReason = extraction.NotApplicableReason,
+            DocumentTruncated = extraction.DocumentTruncated,
+            Title = extraction.Title.Value,
+            TitleLength = extraction.Title.Length,
+            TitleCount = extraction.TitleCount,
+            MetaDescription = extraction.MetaDescription.Value,
+            MetaDescriptionLength = extraction.MetaDescription.Length,
+            MetaDescriptionCount = extraction.MetaDescriptionCount,
+            CanonicalHref = extraction.CanonicalHref.Value,
+            CanonicalLength = extraction.CanonicalHref.Length,
+            CanonicalCount = extraction.CanonicalCount,
+            CanonicalAbsoluteUrl = extraction.CanonicalAbsoluteUrl,
+            RobotsMeta = extraction.RobotsMeta.Value,
+            RobotsMetaLength = extraction.RobotsMeta.Length,
+            RobotsMetaCount = extraction.RobotsMetaCount,
+            ObservedAt = observedAt
+        });
 
     private static string? FormatAlternativeNames(IReadOnlyList<string> names)
     {

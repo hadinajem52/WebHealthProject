@@ -133,7 +133,10 @@ internal sealed class SafeHttpTransport(
                         // because the header is attacker-controlled input like any other.
                         response.Content.Headers.ContentLength is { } advertised and >= 0
                             ? advertised
-                            : null);
+                            : null,
+                        // BR-E01 needs the media type to decide whether this body may be parsed,
+                        // and the charset to decode it. Stored as declared, bounded, never trusted.
+                        BoundedContentType(response.Content.Headers.ContentType?.ToString()));
                 }
 
                 if (redirects.Count >= request.MaxRedirects)
@@ -281,6 +284,15 @@ internal sealed class SafeHttpTransport(
 
     private static string RedactedUrl(EndpointUrlNormalizationResult normalized) =>
         new Uri(normalized.NormalizedUrl!, UriKind.Absolute).GetLeftPart(UriPartial.Path);
+
+    private const int MaxContentTypeLength = 200;
+
+    private static string? BoundedContentType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        return trimmed.Length <= MaxContentTypeLength ? trimmed : trimmed[..MaxContentTypeLength];
+    }
 
     private static SafeHttpTransportResult Failure(
         SafeHttpFailureKind failure,

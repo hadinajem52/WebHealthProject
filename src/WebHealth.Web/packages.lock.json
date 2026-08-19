@@ -144,6 +144,7 @@
       "webhealth.infrastructure": {
         "type": "Project",
         "dependencies": {
+          "AngleSharp": "[1.7.1, )",
           "Hangfire.AspNetCore": "[1.8.24, )",
           "Hangfire.Core": "[1.8.24, )",
           "Hangfire.PostgreSql": "[1.21.1, )",
@@ -154,6 +155,12 @@
           "WebHealth.Application": "[1.0.0, )",
           "WebHealth.Domain": "[1.0.0, )"
         }
+      },
+      "AngleSharp": {
+        "type": "CentralTransitive",
+        "requested": "[1.7.1, )",
+        "resolved": "1.7.1",
+        "contentHash": "QBblGpRB3SYD66Mls7fHyl1mWkP93n7ErWDWHc1vd9sPHhdlTkmUoY3CjgfjcWNxGF9m7xjNyztRfErXqoBKOA=="
       },
       "Hangfire.AspNetCore": {
         "type": "CentralTransitive",

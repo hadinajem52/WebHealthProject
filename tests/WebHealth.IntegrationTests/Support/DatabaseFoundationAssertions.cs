@@ -21,9 +21,12 @@ using WebHealth.Application.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Incidents;
+using System.Text;
 using WebHealth.Domain.Maintenance;
+using WebHealth.Domain.Seo;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Registry;
+using WebHealth.Infrastructure.Seo;
 using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Maintenance;
@@ -56,7 +59,8 @@ internal static class DatabaseFoundationAssertions
         "20260818101710_SslCertificateMonitoring",
         "20260818110028_SslSeverityAndPerformanceRules",
         "20260818185101_ReportingSampleMonitorIndex",
-        "20260819090959_RecurringMaintenanceOccurrences"
+        "20260819094132_RecurringMaintenanceOccurrences",
+        "20260819095446_SeoValueExtraction"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -103,6 +107,7 @@ internal static class DatabaseFoundationAssertions
         ,"notification_delivery"
         ,"notification_attempt"
         ,"notification_read_marker"
+        ,"seo_observation"
     ];
 
     // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
@@ -165,7 +170,9 @@ internal static class DatabaseFoundationAssertions
         "NotificationAttempt",
         "NotificationDelivery",
         "NotificationEvent",
-        "NotificationReadMarker"
+        "NotificationReadMarker",
+        // SEO
+        "SeoObservation"
     ];
 
     public static async Task VerifyAsync(string connectionString)
@@ -205,6 +212,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyReminderEscalationSweepBoundariesAsync(connectionString);
         await VerifyMaintenanceClassifiedResultRetentionAsync(connectionString);
         await VerifyRecurringMaintenanceExpansionAsync(connectionString);
+        await VerifySeoObservationContractAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(context, connectionString);
@@ -1668,7 +1676,8 @@ internal static class DatabaseFoundationAssertions
         EndpointMonitor monitor,
         int sequence,
         int statusCode,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        string? htmlBody = null)
     {
         var check = await CreateQueuedCheckAsync(database, monitor, sequence);
         var work = check.DurableWork.Single();
@@ -1708,9 +1717,10 @@ internal static class DatabaseFoundationAssertions
             TimeSpan.FromMilliseconds(25),
             2,
             false,
-            "ok"u8.ToArray(),
+            htmlBody is null ? "ok"u8.ToArray() : Encoding.UTF8.GetBytes(htmlBody),
             [],
-            SafeHttpRequestIdentity.Create(request));
+            SafeHttpRequestIdentity.Create(request),
+            ContentType: htmlBody is null ? null : "text/html; charset=utf-8");
         var finalization = CreateFinalizationService(database, timeProvider ?? TimeProvider.System);
 
         (await finalization.FinalizeAsync(new(
@@ -1887,6 +1897,7 @@ internal static class DatabaseFoundationAssertions
             new IncidentAutomationService(
                 database, new AuditTrailWriter(database), new NotificationEventWriter(database)),
             new NoUrgentSslChecks(),
+            new SeoValueExtractor(),
             timeProvider);
 
     private static async Task<LogicalCheck> CreateQueuedCheckAsync(
@@ -2471,7 +2482,9 @@ internal static class DatabaseFoundationAssertions
         unownedResult.Succeeded.Should().BeTrue(string.Join(" ", unownedResult.Errors));
         var unownedEndpointId = unownedResult.EntityId!.Value;
 
-        var ownedMonitor = await database.EndpointMonitors.AsNoTracking()
+        // An HTTPS endpoint owns a certificate monitor as well since SslCertificateMonitoring, so
+        // the availability monitor has to be selected rather than assumed to be the only one.
+        var ownedMonitor = await AvailabilityMonitors(database).AsNoTracking()
             .SingleAsync(candidate => candidate.EndpointId == ownedEndpointId);
         var nextDueBeforeAnyRun = ownedMonitor.NextDueAt;
 
@@ -2871,7 +2884,10 @@ internal static class DatabaseFoundationAssertions
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).FirstAsync();
+        // The earliest monitor overall may now be a certificate monitor, which never produces
+        // logical checks of the kind this assertion needs (SslCertificateMonitoring).
+        var monitor = await AvailabilityMonitors(database)
+            .OrderBy(candidate => candidate.CreatedAt).FirstAsync();
         var otherMonitorId = await database.EndpointMonitors
             .Where(candidate => candidate.Id != monitor.Id)
             .Select(candidate => candidate.Id)
@@ -3398,7 +3414,11 @@ internal static class DatabaseFoundationAssertions
         // Creation materialises the whole first horizon in its own transaction, so the window
         // suppresses immediately rather than from the next expansion tick.
         var initialStarts = await OccurrenceStartsAsync(database, windowId);
-        initialStarts.Should().HaveCount(horizonDays + 1);
+        // One per local day across the horizon. The last one can fall an hour past the horizon
+        // when the range crosses a daylight-saving transition, which is the wall-clock rule
+        // working, so the count is the horizon or one more.
+        initialStarts.Should().HaveCountGreaterThanOrEqualTo(horizonDays)
+            .And.HaveCountLessThanOrEqualTo(horizonDays + 1);
         initialStarts[0].Should().Be(anchor.ToUniversalTime());
         initialStarts.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems();
 
@@ -3427,11 +3447,13 @@ internal static class DatabaseFoundationAssertions
         // Extending the horizon appends only later occurrences and rewrites no history.
         clock.Advance(TimeSpan.FromDays(10));
         database.ChangeTracker.Clear();
-        (await expander.ExpandWindowAsync(windowId)).Should().Be(10);
+        var appended = await expander.ExpandWindowAsync(windowId);
+        appended.Should().BeInRange(10, 11, "ten more local days, give or take a transition day");
         database.ChangeTracker.Clear();
         var extendedStarts = await OccurrenceStartsAsync(database, windowId);
-        extendedStarts.Should().HaveCount(initialStarts.Count + 10);
-        extendedStarts.Take(initialStarts.Count).Should().Equal(initialStarts);
+        extendedStarts.Should().HaveCount(initialStarts.Count + appended);
+        extendedStarts.Take(initialStarts.Count).Should().Equal(initialStarts,
+            "extending the horizon appends and never rewrites history");
         extendedStarts.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems();
         var window = await database.MaintenanceWindows.AsNoTracking().SingleAsync(item => item.Id == windowId);
         window.ExpandedThrough.Should().Be(clock.GetUtcNow().AddDays(horizonDays));
@@ -3470,6 +3492,153 @@ internal static class DatabaseFoundationAssertions
         var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
         exception.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
         exception.ConstraintName.Should().Be("ux_maintenance_occurrence_window_start");
+    }
+
+    /// <summary>
+    /// BR-E01 and BR-E10. The applicability contract is enforced by the database, not only by the
+    /// extractor: a NotApplicable row records why and carries no extracted values, an Applicable
+    /// row carries no reason, and a stored value can never claim to be longer than it is. There is
+    /// no column that could hold the document at all, which is asserted here by name.
+    /// </summary>
+    private static async Task VerifySeoObservationContractAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        var columns = new List<string>();
+        await using (var command = new NpgsqlCommand(
+            """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'web_health' AND table_name = 'seo_observation'
+            ORDER BY column_name;
+            """, connection))
+        await using (var reader = await command.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync()) columns.Add(reader.GetString(0));
+        }
+
+        columns.Should().BeEquivalentTo(
+            "logical_check_id", "endpoint_monitor_id", "applicability", "not_applicable_reason",
+            "document_truncated", "title", "title_length", "title_count", "meta_description",
+            "meta_description_length", "meta_description_count", "canonical_href", "canonical_length",
+            "canonical_count", "canonical_absolute_url", "robots_meta", "robots_meta_length",
+            "robots_meta_count", "observed_at");
+
+        await VerifySeoObservationRejectedAsync(
+            connectionString,
+            "'NotApplicable', 'NonHtml', 'A title'",
+            "ck_seo_observation_applicability_fields");
+        await VerifySeoObservationRejectedAsync(
+            connectionString,
+            "'Applicable', 'NonHtml', NULL",
+            "ck_seo_observation_applicability_fields");
+        await VerifySeoObservationRejectedAsync(
+            connectionString,
+            "'Sometimes', NULL, NULL",
+            "ck_seo_observation_applicability");
+        await VerifySeoDocumentIsNeverRetainedAsync(connectionString);
+    }
+
+    /// <summary>
+    /// BR-E10 asserted as absence at the boundary that matters: after a real check finalises a
+    /// document whose body, comments, scripts and unrelated metadata all carry a distinctive
+    /// marker, no stored column of the SEO observation, the check result, its findings, or the
+    /// audit trail may contain it. The extracted values are still there, which is the point —
+    /// values are kept, the document is not.
+    /// </summary>
+    private static async Task VerifySeoDocumentIsNeverRetainedAsync(string connectionString)
+    {
+        const string marker = "SECRET-DOCUMENT-MARKER-4b91e7";
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var monitor = await AvailabilityMonitors(database)
+            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
+            .Where(candidate => candidate.DeletedAt == null)
+            .OrderByDescending(candidate => candidate.CreatedAt)
+            .FirstAsync();
+
+        var checkId = await FinalizeScheduledResultAsync(database, monitor, 71, 200, null, $"""
+            <!doctype html><html><head>
+            <title>Extracted title</title>
+            <meta name="description" content="Extracted description.">
+            <link rel="canonical" href="https://example.test/canonical">
+            <meta name="robots" content="index, follow">
+            <meta name="author" content="{marker}">
+            <!-- {marker} -->
+            <script>var leaked = "{marker}";</script>
+            </head><body><h1>{marker}</h1><p>{marker}</p></body></html>
+            """);
+
+        database.ChangeTracker.Clear();
+        var observation = await database.SeoObservations.AsNoTracking()
+            .SingleAsync(candidate => candidate.LogicalCheckId == checkId);
+        observation.Applicability.Should().Be(SeoApplicabilities.Applicable);
+        observation.Title.Should().Be("Extracted title");
+        observation.MetaDescription.Should().Be("Extracted description.");
+        observation.CanonicalAbsoluteUrl.Should().Be("https://example.test/canonical");
+        observation.RobotsMeta.Should().Be("index, follow");
+
+        // Every text column of every table that could plausibly carry it, including columns added
+        // later: the absence claim must not quietly stop covering a new column.
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            DO $$
+            DECLARE
+                target record;
+                hits bigint;
+            BEGIN
+                FOR target IN
+                    SELECT table_name, column_name FROM information_schema.columns
+                    WHERE table_schema = 'web_health'
+                      AND table_name IN ('seo_observation', 'check_result', 'finding', 'audit_event')
+                      AND data_type IN ('text', 'character varying', 'jsonb', 'json')
+                LOOP
+                    EXECUTE format(
+                        'SELECT count(*) FROM web_health.%I WHERE %I::text LIKE $1',
+                        target.table_name, target.column_name)
+                    INTO hits USING '%' || @marker || '%';
+
+                    IF hits > 0 THEN
+                        RAISE EXCEPTION
+                            'BR-E10 violated: web_health.%.% retained document content.',
+                            target.table_name, target.column_name;
+                    END IF;
+                END LOOP;
+            END $$;
+            """, connection);
+        command.Parameters.AddWithValue("marker", marker);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task VerifySeoObservationRejectedAsync(
+        string connectionString, string values, string expectedConstraint)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"""
+            INSERT INTO web_health.seo_observation
+                (logical_check_id, endpoint_monitor_id, applicability, not_applicable_reason, title,
+                 title_length, title_count, meta_description_length, meta_description_count,
+                 canonical_length, canonical_count, robots_meta_length, robots_meta_count, observed_at)
+            SELECT check_row.id, check_row.endpoint_monitor_id, {values}, 0, 0, 0, 0, 0, 0, 0, 0, now()
+            FROM web_health.logical_check AS check_row
+            WHERE NOT EXISTS (
+                SELECT 1 FROM web_health.seo_observation AS existing
+                WHERE existing.logical_check_id = check_row.id)
+            LIMIT 1;
+            """, connection);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
+        exception.ConstraintName.Should().Be(expectedConstraint);
     }
 
     private static readonly MaintenanceRecurrenceSpec OneOff =

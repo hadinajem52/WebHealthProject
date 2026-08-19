@@ -17,7 +17,9 @@ using WebHealth.Infrastructure.Reporting;
 using WebHealth.Application.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Application.Maintenance;
+using WebHealth.Application.Seo;
 using WebHealth.Infrastructure.Maintenance;
+using WebHealth.Infrastructure.Seo;
 using WebHealth.Application.Incidents;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Application.Notifications;
@@ -121,6 +123,7 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceWindowService, MaintenanceWindowService>();
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
+        services.AddSingleton<ISeoValueExtractor, SeoValueExtractor>();
         services.AddScoped<IMaintenanceOccurrenceExpander, MaintenanceOccurrenceExpander>();
         services.AddScoped<MaintenanceExpansionJob>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();

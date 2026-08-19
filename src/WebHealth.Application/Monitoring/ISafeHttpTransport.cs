@@ -48,6 +48,11 @@ public sealed record SafeHttpTransportRequest(
 /// content decoding (BR-P04). It is null when the response advertised none, which is why it is
 /// separate from <c>ResponseBytesRead</c> rather than replacing it.
 /// </para>
+/// <para>
+/// <c>ContentType</c> is the raw <c>Content-Type</c> header, parameters included, because both the
+/// media type and the charset are needed to decide whether a body may be parsed at all (BR-E01)
+/// and how to decode it. It is null when the response declared none.
+/// </para>
 /// </summary>
 public sealed record SafeHttpTransportResult(
     SafeHttpFailureKind? Failure,
@@ -61,7 +66,8 @@ public sealed record SafeHttpTransportResult(
     string? RequestIdentity = null,
     SafeHttpPhaseTiming? Timing = null,
     TlsCertificateObservation? Certificate = null,
-    long? TransferredLength = null)
+    long? TransferredLength = null,
+    string? ContentType = null)
 {
     public bool Succeeded => Failure is null;
 }
