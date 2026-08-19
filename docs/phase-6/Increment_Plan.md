@@ -74,6 +74,9 @@ bug, it is an unbounded crawl of someone else's site.
 This is the highest-value, lowest-cost test surface in the phase, for the same reason the SSL
 boundary rules were in 5.3: every rule is a pure function with exact inputs and outputs.
 
+**Delivered.** Decision recorded in `docs/phase-6/Crawl_Scope_And_URL_Identity.md`; implemented in
+`WebHealth.Domain/Crawling`; evidence in that document's section 6.
+
 ## 6.6 — Bounded crawl execution (2.5 days)
 
 Page, depth, duration, concurrency and per-host rate limits; partial results preserved on
@@ -86,6 +89,10 @@ claim that cannot be made by inspection.
 
 Every request goes through the actual-connection SSRF control; robots overrides are restricted to
 authorized, owned, non-production targets and are recorded.
+
+**Delivered.** Decision recorded in `docs/phase-6/Crawl_Execution_And_Isolation.md`; implemented in
+`WebHealth.Infrastructure/Crawling` behind `ICrawlExecutionService`; evidence in that document's
+section 10. Results go to `ICrawlResultSink`, which 6.7 implements against the crawl schema it owns.
 
 ## 6.7 — Crawl schema, results, and comparison (1.5 days)
 

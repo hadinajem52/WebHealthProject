@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -30,7 +29,7 @@ public static class EndpointUrlNormalizer
             displayUrl,
             normalizedUrl,
             SHA256.HashData(Encoding.UTF8.GetBytes(normalizedUrl)),
-            uri.IdnHost.TrimEnd('.').ToLowerInvariant(),
+            UrlTextNormalization.BareHost(uri),
             uri.Port);
     }
 
@@ -80,49 +79,12 @@ public static class EndpointUrlNormalizer
     private static string BuildNormalizedUrl(Uri uri)
     {
         var scheme = uri.Scheme.ToLowerInvariant();
-        var host = NormalizeHost(uri);
-        var port = uri.IsDefaultPort ? string.Empty : $":{uri.Port.ToString(CultureInfo.InvariantCulture)}";
-        var path = uri.GetComponents(UriComponents.Path, UriFormat.UriEscaped);
-        path = path.Length == 0 ? "/" : $"/{NormalizeEscapes(path)}";
-        var query = uri.GetComponents(UriComponents.Query, UriFormat.UriEscaped);
+        var authority = $"{UrlTextNormalization.Host(uri)}{UrlTextNormalization.Port(uri)}";
+        var path = UrlTextNormalization.Path(uri);
+        var query = UrlTextNormalization.Query(uri);
         return query.Length == 0
-            ? $"{scheme}://{host}{port}{path}"
-            : $"{scheme}://{host}{port}{path}?{NormalizeEscapes(query)}";
-    }
-
-    private static string NormalizeHost(Uri uri)
-    {
-        var host = uri.IdnHost.TrimEnd('.').ToLowerInvariant();
-        return uri.HostNameType == UriHostNameType.IPv6 ? $"[{host}]" : host;
-    }
-
-    private static string NormalizeEscapes(string value)
-    {
-        var result = new StringBuilder(value.Length);
-        for (var index = 0; index < value.Length; index++)
-        {
-            if (value[index] != '%' || index + 2 >= value.Length
-                || !byte.TryParse(value.AsSpan(index + 1, 2), NumberStyles.HexNumber, null, out var decoded))
-            {
-                result.Append(value[index]);
-                continue;
-            }
-
-            var character = (char)decoded;
-            if (char.IsAsciiLetterOrDigit(character) || character is '-' or '.' or '_' or '~')
-            {
-                result.Append(character);
-            }
-            else
-            {
-                result.Append('%').Append(value[index + 1].ToString().ToUpperInvariant())
-                    .Append(value[index + 2].ToString().ToUpperInvariant());
-            }
-
-            index += 2;
-        }
-
-        return result.ToString();
+            ? $"{scheme}://{authority}{path}"
+            : $"{scheme}://{authority}{path}?{UrlTextNormalization.Escapes(query)}";
     }
 }
 

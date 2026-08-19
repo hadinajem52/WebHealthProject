@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +22,7 @@ using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Incidents;
 using System.Text;
+using System.Threading;
 using WebHealth.Domain.Maintenance;
 using WebHealth.Domain.Seo;
 using WebHealth.Infrastructure.Monitoring;
@@ -41,6 +42,13 @@ namespace WebHealth.IntegrationTests.Support;
 
 internal static class DatabaseFoundationAssertions
 {
+    /// <summary>
+    /// Spacing for fixture checks. It is allocated here rather than passed in by each caller: a
+    /// hand-picked number is a namespace every stage has to share, and one that grew past the
+    /// window its base allowed silently dated a check into the future.
+    /// </summary>
+    private static int fixtureSequence;
+
     private static readonly string[] ExpectedMigrations =
     [
         "20260813095149_InitialFoundation",
@@ -459,6 +467,61 @@ internal static class DatabaseFoundationAssertions
         database.EndpointMonitors.Where(monitor =>
             monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
 
+    /// <summary>
+    /// An availability monitor the calling stage owns, found by the URL it names rather than by
+    /// position. Picking an existing monitor by ordinal couples a stage to whatever every earlier
+    /// stage happened to leave on it — a held lease, issue state, an open incident — and silently
+    /// selects a different monitor as soon as the surrounding fixtures shift. The endpoint is
+    /// plain HTTP in a non-production environment so it carries no certificate monitor to retire
+    /// and raises no HTTPS-required finding.
+    /// </summary>
+    /// <summary>
+    /// The same owned fixture for a stage that drives its own <see cref="ApplicationDbContext"/>
+    /// instances rather than resolving one from a scope, as the concurrency stages do.
+    /// </summary>
+    private static async Task<Guid> CreateOwnedMonitorIdAsync(string connectionString, string url)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return (await CreateOwnedMonitorAsync(scope, database, url)).Id;
+    }
+
+    private static async Task<EndpointMonitor> CreateOwnedMonitorAsync(
+        AsyncServiceScope scope,
+        ApplicationDbContext database,
+        string url)
+    {
+        var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var environmentId = await database.Environments
+            .Where(candidate => candidate.DeletedAt == null
+                && candidate.IsActive
+                && !candidate.IsProduction
+                && candidate.Website.DeletedAt == null)
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
+            .Select(candidate => candidate.Id)
+            .FirstAsync();
+
+        var created = await endpointService.CreateAsync(
+            new(environmentId, url, null, true, null,
+                TargetAuthorizationKinds.Owned, "Foundation fixture owned by the project.", null),
+            access);
+        created.Succeeded.Should().BeTrue(string.Join(" ", created.Errors));
+
+        database.ChangeTracker.Clear();
+        return await AvailabilityMonitors(database)
+            .Include(monitor => monitor.Endpoint).ThenInclude(endpoint => endpoint.Environment)
+            .SingleAsync(monitor => monitor.EndpointId == created.EntityId!.Value
+                && monitor.DeletedAt == null);
+    }
+
     private static async Task VerifyEnvironmentEndpointRegistryAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -847,6 +910,7 @@ internal static class DatabaseFoundationAssertions
 
         var otherMonitorId = await AvailabilityMonitors(database)
             .Where(candidate => candidate.Id != monitor.Id)
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
             .Select(candidate => candidate.Id)
             .FirstAsync();
         var mismatchedLease = async () => await leaseService.TryAcquireAsync(new(
@@ -901,10 +965,7 @@ internal static class DatabaseFoundationAssertions
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var leaseService = scope.ServiceProvider.GetRequiredService<IExecutionLeaseService>();
         var finalizationService = scope.ServiceProvider.GetRequiredService<ILogicalCheckFinalizationService>();
-        var monitor = await AvailabilityMonitors(database)
-            .Include(candidate => candidate.Endpoint)
-                .ThenInclude(endpoint => endpoint.Environment)
-            .FirstAsync(candidate => !candidate.Endpoint.Environment.IsProduction);
+        var monitor = await CreateOwnedMonitorAsync(scope, database, "http://http-monitoring-history.test/status");
         var now = DateTimeOffset.UtcNow;
         var logicalCheckId = Guid.NewGuid();
         var policyFingerprint = HttpPolicyFingerprint.Create(new(
@@ -1154,12 +1215,9 @@ internal static class DatabaseFoundationAssertions
             .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var monitor = await AvailabilityMonitors(database)
-            .Include(candidate => candidate.Endpoint)
-                .ThenInclude(endpoint => endpoint.Environment)
-            .FirstAsync(candidate => !candidate.Endpoint.Environment.IsProduction);
+        var monitor = await CreateOwnedMonitorAsync(scope, database, "http://logical-check-execution.test/status");
 
-        var successfulCheck = await CreateQueuedCheckAsync(database, monitor, 1);
+        var successfulCheck = await CreateQueuedCheckAsync(database, monitor);
         var successfulHttpWork = successfulCheck.DurableWork.Single(work =>
             work.WorkKind == DurableWorkKinds.HttpCheck);
         var unrelatedWork = new DurableWork
@@ -1199,7 +1257,7 @@ internal static class DatabaseFoundationAssertions
         (await database.DurableWork.AsNoTracking().SingleAsync(work => work.Id == unrelatedWork.Id))
             .State.Should().Be(DurableWorkStates.Enqueued);
 
-        var retryCheck = await CreateQueuedCheckAsync(database, monitor, 2);
+        var retryCheck = await CreateQueuedCheckAsync(database, monitor);
         var retryTransport = new RecordingSafeHttpTransport((request, call) =>
             call == 1 ? throw new HttpRequestException() : Success(request, call));
         var retryExecution = CreateExecutionService(database, retryTransport, true);
@@ -1227,7 +1285,7 @@ internal static class DatabaseFoundationAssertions
         retryAttempts.Select(attempt => attempt.InfrastructureOutcome).Should()
             .Equal(ExecutionAttemptOutcomes.RetryableFailure, ExecutionAttemptOutcomes.Succeeded);
 
-        var timeoutCheck = await CreateQueuedCheckAsync(database, monitor, 4);
+        var timeoutCheck = await CreateQueuedCheckAsync(database, monitor);
         var timeoutTransport = new RecordingSafeHttpTransport((request, _) => Failure(
             request, SafeHttpFailureKind.Timeout));
         var timeoutExecution = CreateExecutionService(database, timeoutTransport, true);
@@ -1238,7 +1296,7 @@ internal static class DatabaseFoundationAssertions
         (await database.CheckResults.SingleAsync(result => result.LogicalCheckId == timeoutCheck.Id))
             .FailureCategory.Should().Be(HttpFailureCategories.Timeout);
 
-        var ineligibleCheck = await CreateQueuedCheckAsync(database, monitor, 5);
+        var ineligibleCheck = await CreateQueuedCheckAsync(database, monitor);
         var ineligibleTransport = new RecordingSafeHttpTransport(Success);
         var ineligibleExecution = CreateExecutionService(database, ineligibleTransport, false);
         (await ineligibleExecution.ExecuteAsync(new(
@@ -1252,7 +1310,7 @@ internal static class DatabaseFoundationAssertions
         ineligibleResult.FailureCategory.Should().Be(HttpFailureCategories.TargetIneligible);
         ineligibleResult.CountsForUptime.Should().BeFalse();
 
-        var cancelledCheck = await CreateQueuedCheckAsync(database, monitor, 7);
+        var cancelledCheck = await CreateQueuedCheckAsync(database, monitor);
         using var workerCancellation = new CancellationTokenSource();
         var cancelledTransport = new RecordingSafeHttpTransport((request, _) =>
         {
@@ -1272,7 +1330,7 @@ internal static class DatabaseFoundationAssertions
             work.Id == cancelledCheck.DurableWork.Single().Id)).State.Should()
             .Be(DurableWorkStates.Enqueued);
 
-        var leasedCheck = await CreateQueuedCheckAsync(database, monitor, 6);
+        var leasedCheck = await CreateQueuedCheckAsync(database, monitor);
         var competingLeaseService = new ExecutionLeaseService(database);
         var competingClaim = await competingLeaseService.TryAcquireAsync(new(
             monitor.Id,
@@ -1300,7 +1358,7 @@ internal static class DatabaseFoundationAssertions
         ApplicationDbContext database,
         EndpointMonitor monitor)
     {
-        var exhaustedCheck = await CreateQueuedCheckAsync(database, monitor, 10);
+        var exhaustedCheck = await CreateQueuedCheckAsync(database, monitor);
         var exhaustedWork = exhaustedCheck.DurableWork.Single();
         var exhaustedTransport = new RecordingSafeHttpTransport(
             (_, _) => throw new HttpRequestException("Simulated persistent transport fault."));
@@ -1373,7 +1431,7 @@ internal static class DatabaseFoundationAssertions
         database.Incidents.Add(previousIncident);
         await database.SaveChangesAsync();
 
-        await FinalizeScheduledResultAsync(database, monitor, 20, 500, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 500, clock);
         (await database.IssueStates.SingleAsync(state => state.EndpointMonitorId == monitor.Id))
             .ConsecutiveFailures.Should().Be(1);
         (await database.EndpointHealth.AnyAsync(health => health.EndpointMonitorId == monitor.Id))
@@ -1382,15 +1440,15 @@ internal static class DatabaseFoundationAssertions
             && incident.IssueKey == HttpIssueIdentity.Create("Http.ServerError")
             && IncidentStatuses.Active.Contains(incident.Status))).Should().BeFalse();
 
-        var resetPass = await FinalizeScheduledResultAsync(database, monitor, 21, 200, clock);
+        var resetPass = await FinalizeScheduledResultAsync(database, monitor, 200, clock);
         var healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Healthy);
         healthy.EvidenceLogicalCheckId.Should().Be(resetPass);
         (await database.IssueStates.SingleAsync(state => state.EndpointMonitorId == monitor.Id))
             .ConsecutiveFailures.Should().Be(0);
 
-        await FinalizeScheduledResultAsync(database, monitor, 22, 500, clock);
-        var confirmedFailure = await FinalizeScheduledResultAsync(database, monitor, 23, 500, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 500, clock);
+        var confirmedFailure = await FinalizeScheduledResultAsync(database, monitor, 500, clock);
         healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Critical);
         healthy.EvidenceLogicalCheckId.Should().Be(confirmedFailure);
@@ -1420,7 +1478,7 @@ internal static class DatabaseFoundationAssertions
         openedNotification.Deliveries.Should().ContainSingle();
 
         clock.Advance(TimeSpan.FromMinutes(1));
-        await FinalizeScheduledResultAsync(database, monitor, 24, 200, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 200, clock);
         healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Critical);
         healthy.EvidenceLogicalCheckId.Should().Be(confirmedFailure);
@@ -1441,7 +1499,7 @@ internal static class DatabaseFoundationAssertions
             && notificationEvent.EventType == NotificationEventTypes.Recovered)).Should().BeFalse();
 
         clock.Advance(TimeSpan.FromMinutes(1));
-        var confirmedRecovery = await FinalizeScheduledResultAsync(database, monitor, 25, 200, clock);
+        var confirmedRecovery = await FinalizeScheduledResultAsync(database, monitor, 200, clock);
         healthy = await database.EndpointHealth.SingleAsync(health => health.EndpointMonitorId == monitor.Id);
         healthy.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Healthy);
         healthy.EvidenceLogicalCheckId.Should().Be(confirmedRecovery);
@@ -1510,11 +1568,11 @@ internal static class DatabaseFoundationAssertions
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var database = new ApplicationDbContext(options.Options);
+        var ownedMonitorId = await CreateOwnedMonitorIdAsync(
+            connectionString, "http://competing-finalization.test/status");
         var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
-            .OrderBy(candidate => candidate.CreatedAt)
-            .Skip(1)
-            .FirstAsync();
+            .SingleAsync(candidate => candidate.Id == ownedMonitorId);
 
         database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
         database.EndpointHealth.RemoveRange(database.EndpointHealth.Where(health => health.EndpointMonitorId == monitor.Id));
@@ -1523,12 +1581,12 @@ internal static class DatabaseFoundationAssertions
 
         var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
         var raceIssueKey = HttpIssueIdentity.Create("Http.ServerError");
-        await FinalizeScheduledResultAsync(database, monitor, 30, 500, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 500, clock);
         (await database.IssueStates.SingleAsync(state =>
                 state.EndpointMonitorId == monitor.Id && state.IssueKey == raceIssueKey))
             .ConsecutiveFailures.Should().Be(1);
 
-        var check = await CreateQueuedCheckAsync(database, monitor, 31);
+        var check = await CreateQueuedCheckAsync(database, monitor);
         var work = check.DurableWork.Single();
         var now = clock.GetUtcNow();
         check.State = LogicalCheckStates.Running;
@@ -1651,11 +1709,11 @@ internal static class DatabaseFoundationAssertions
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var database = new ApplicationDbContext(options.Options);
+        var ownedMonitorId = await CreateOwnedMonitorIdAsync(
+            connectionString, "http://distinct-issue-keys.test/status");
         var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
-            .OrderBy(candidate => candidate.CreatedAt)
-            .Skip(2)
-            .FirstAsync();
+            .SingleAsync(candidate => candidate.Id == ownedMonitorId);
 
         database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
         database.EndpointHealth.RemoveRange(database.EndpointHealth.Where(health => health.EndpointMonitorId == monitor.Id));
@@ -1663,22 +1721,22 @@ internal static class DatabaseFoundationAssertions
         await database.ExecutionLeases.Where(lease => lease.EndpointMonitorId == monitor.Id).ExecuteDeleteAsync();
 
         var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
-        await FinalizeScheduledResultAsync(database, monitor, 32, 500, clock);
-        await FinalizeScheduledResultAsync(database, monitor, 33, 500, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 500, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 500, clock);
         var serverErrorKey = HttpIssueIdentity.Create("Http.ServerError");
         var serverErrorIncident = await database.Incidents.AsNoTracking().SingleAsync(incident =>
             incident.EndpointMonitorId == monitor.Id && incident.IssueKey == serverErrorKey);
         serverErrorIncident.Status.Should().Be(IncidentStatuses.Open);
 
         clock.Advance(TimeSpan.FromMinutes(1));
-        await FinalizeScheduledResultAsync(database, monitor, 34, 200, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 200, clock);
         clock.Advance(TimeSpan.FromMinutes(1));
-        await FinalizeScheduledResultAsync(database, monitor, 35, 200, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 200, clock);
         (await database.Incidents.AsNoTracking().SingleAsync(incident => incident.Id == serverErrorIncident.Id))
             .Status.Should().Be(IncidentStatuses.Resolved);
 
-        await FinalizeScheduledResultAsync(database, monitor, 36, 404, clock);
-        await FinalizeScheduledResultAsync(database, monitor, 37, 404, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 404, clock);
+        await FinalizeScheduledResultAsync(database, monitor, 404, clock);
         var clientErrorKey = HttpIssueIdentity.Create("Http.ClientError");
         var clientErrorIncident = await database.Incidents.AsNoTracking().SingleAsync(incident =>
             incident.EndpointMonitorId == monitor.Id && incident.IssueKey == clientErrorKey);
@@ -1695,12 +1753,11 @@ internal static class DatabaseFoundationAssertions
     private static async Task<Guid> FinalizeScheduledResultAsync(
         ApplicationDbContext database,
         EndpointMonitor monitor,
-        int sequence,
         int statusCode,
         TimeProvider? timeProvider = null,
         string? htmlBody = null)
     {
-        var check = await CreateQueuedCheckAsync(database, monitor, sequence, timeProvider);
+        var check = await CreateQueuedCheckAsync(database, monitor, timeProvider);
         var work = check.DurableWork.Single();
         var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         check.State = LogicalCheckStates.Running;
@@ -1713,7 +1770,7 @@ internal static class DatabaseFoundationAssertions
             Id = Guid.NewGuid(),
             LogicalCheckId = check.Id,
             AttemptNumber = 1,
-            JobId = $"health-{sequence}",
+            JobId = $"health-{check.Id:N}",
             WorkerId = "health-verification",
             StartedAt = now,
             InfrastructureOutcome = ExecutionAttemptOutcomes.Running
@@ -1758,7 +1815,7 @@ internal static class DatabaseFoundationAssertions
         ApplicationDbContext database,
         EndpointMonitor monitor)
     {
-        var check = await CreateQueuedCheckAsync(database, monitor, 9);
+        var check = await CreateQueuedCheckAsync(database, monitor);
         var work = check.DurableWork.Single();
         var now = DateTimeOffset.UtcNow;
         check.State = LogicalCheckStates.Running;
@@ -1799,7 +1856,7 @@ internal static class DatabaseFoundationAssertions
         ApplicationDbContext database,
         EndpointMonitor monitor)
     {
-        var check = await CreateQueuedCheckAsync(database, monitor, 8);
+        var check = await CreateQueuedCheckAsync(database, monitor);
         var work = check.DurableWork.Single();
         var leaseService = new ExecutionLeaseService(database);
         var staleClaim = await leaseService.TryAcquireAsync(new(
@@ -1929,16 +1986,21 @@ internal static class DatabaseFoundationAssertions
     private static async Task<LogicalCheck> CreateQueuedCheckAsync(
         ApplicationDbContext database,
         EndpointMonitor monitor,
-        int sequence,
         TimeProvider? timeProvider = null)
     {
+        var sequence = Interlocked.Increment(ref fixtureSequence);
         // The sequence only has to space fixtures apart, but it is added to the base, so the base
         // has to sit far enough back that a two-digit sequence cannot carry createdAt past the
         // caller's clock — durable_work's updated_at >= created_at check rejects that. It also has
         // to stay recent enough to fall inside the maintenance windows these fixtures open five
         // minutes back. Reading the caller's clock rather than the system one keeps the comparison
         // against a single time source when a frozen TimeProvider has drifted behind real time.
-        var createdAt = (timeProvider ?? TimeProvider.System).GetUtcNow().AddMinutes(-2).AddSeconds(sequence);
+        // Milliseconds, so the spacing orders fixtures apart without the count being able to walk
+        // createdAt up to the caller's clock: seconds gave this a ceiling of two minutes' worth of
+        // checks, and crossing it dated a check into the future where durable_work's
+        // updated_at >= created_at check rejected it.
+        var createdAt = (timeProvider ?? TimeProvider.System).GetUtcNow()
+            .AddMinutes(-2).AddMilliseconds(sequence);
         var check = new LogicalCheck
         {
             Id = Guid.NewGuid(),
@@ -2223,9 +2285,13 @@ internal static class DatabaseFoundationAssertions
         var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
+            // Production, because the snapshot below takes its interval from the environment
+            // default and the assertion on it is the production one. Ordered by creation so the
+            // stage keeps its monitor as fixtures are added around it.
             .Where(candidate => candidate.DeletedAt == null
+                && candidate.Endpoint.Environment.IsProduction
                 && eligibleEndpointIds.Contains(candidate.EndpointId))
-            .OrderBy(candidate => candidate.Id)
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
             .FirstAsync();
         var otherEnabledMonitorIds = await AvailabilityMonitors(database).AsNoTracking()
             .Where(candidate => candidate.Id != monitor.Id && candidate.IsEnabled)
@@ -2656,7 +2722,9 @@ internal static class DatabaseFoundationAssertions
 
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
-        var endpointId = await database.Endpoints.AsNoTracking().Select(candidate => candidate.Id).FirstAsync();
+        var endpointId = await database.Endpoints.AsNoTracking()
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
+            .Select(candidate => candidate.Id).FirstAsync();
 
         (await targetReader.FindEndpointAsync(endpointId, administratorAccess)).Should().NotBeNull();
 
@@ -3015,6 +3083,7 @@ internal static class DatabaseFoundationAssertions
             .OrderBy(candidate => candidate.CreatedAt).FirstAsync();
         var otherMonitorId = await database.EndpointMonitors
             .Where(candidate => candidate.Id != monitor.Id)
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
             .Select(candidate => candidate.Id)
             .FirstAsync();
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
@@ -3140,7 +3209,14 @@ internal static class DatabaseFoundationAssertions
         (await lifecycle.AddNoteAsync(new(incidentId, 5, "Reopened for controlled verification."), developerAccess))
             .Succeeded.Should().BeTrue();
         var reassignedOwnerId = await database.OwnerSubjects
-            .Where(subject => subject.Id != ownerSubjectId)
+            // Deterministic and still assignable: earlier stages disable users and teams, and
+            // reassignment rejects an owner whose user or team is no longer enabled.
+            .Where(subject => subject.Id != ownerSubjectId
+                && ((subject.UserId != null
+                        && database.Users.Any(user => user.Id == subject.UserId && !user.IsDisabled))
+                    || (subject.TeamId != null
+                        && database.Teams.Any(team => team.Id == subject.TeamId && !team.IsDisabled))))
+            .OrderBy(subject => subject.Id)
             .Select(subject => subject.Id)
             .FirstAsync();
         (await lifecycle.ReassignAsync(new(incidentId, 6, reassignedOwnerId), administratorAccess))
@@ -3167,6 +3243,7 @@ internal static class DatabaseFoundationAssertions
 
         var evidenceLogicalCheckId = await database.LogicalChecks
             .Where(check => check.EndpointMonitorId == monitor.Id)
+            .OrderBy(check => check.CreatedAt).ThenBy(check => check.Id)
             .Select(check => check.Id)
             .FirstAsync();
         await VerifyIncidentEvidenceCrossMonitorRejectedAsync(
@@ -3409,7 +3486,7 @@ internal static class DatabaseFoundationAssertions
         var maintenanceService = scope.ServiceProvider.GetRequiredService<IMaintenanceWindowService>();
         var lifecycle = scope.ServiceProvider.GetRequiredService<IIncidentLifecycleService>();
 
-        var monitor = await database.EndpointMonitors.OrderBy(candidate => candidate.CreatedAt).Skip(3).FirstAsync();
+        var monitor = await CreateOwnedMonitorAsync(scope, database, "http://reminder-escalation.test/status");
 
         // Earlier finalize calls run against production/HTTP monitors incidentally accumulate an
         // unrelated "Http.HttpsRequired" issue-state counter alongside whichever issue key each
@@ -3569,7 +3646,7 @@ internal static class DatabaseFoundationAssertions
         var activeOccurrence = await maintenanceEvaluator.FindActiveAsync(monitor.Id, clock.GetUtcNow());
         activeOccurrence.Should().NotBeNull();
         activeOccurrence!.SuppressionPolicy.Should().Be(MaintenanceSuppressionPolicies.SuppressAll);
-        var checkId = await FinalizeScheduledResultAsync(database, monitor, 61, 500, clock);
+        var checkId = await FinalizeScheduledResultAsync(database, monitor, 500, clock);
         database.ChangeTracker.Clear();
         var result = await database.CheckResults.AsNoTracking()
             .SingleAsync(candidate => candidate.LogicalCheckId == checkId);
@@ -3698,7 +3775,7 @@ internal static class DatabaseFoundationAssertions
             .OrderByDescending(candidate => candidate.CreatedAt)
             .FirstAsync();
 
-        var checkId = await FinalizeScheduledResultAsync(database, monitor, 71, 200, null, $"""
+        var checkId = await FinalizeScheduledResultAsync(database, monitor, 200, null, $"""
             <!doctype html><html><head>
             <title>Extracted title</title>
             <meta name="description" content="Extracted description.">
@@ -3794,28 +3871,7 @@ internal static class DatabaseFoundationAssertions
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var maintenanceService = scope.ServiceProvider.GetRequiredService<IMaintenanceWindowService>();
 
-        // VerifyEnvironmentEndpointRegistryAsync soft-deletes one of the earliest-created endpoints
-        // (cascading to its monitor), and VerifyHangfireSchedulingAsync disables every monitor
-        // besides the one it needs without ever re-enabling them. Excluding deleted monitors here
-        // and restoring IsEnabled keeps this test independent of exactly what earlier tests left
-        // behind, since MaintenanceWindowService.CreateAsync's scope check requires both.
-        // FinalizeScheduledResultAsync queues http-check durable work, which finalization matches
-        // against the snapshot's monitor type, so this has to be an availability monitor: an HTTPS
-        // endpoint also owns a certificate monitor, and picking one positionally out of every
-        // monitor type lands on it as soon as the surrounding fixtures shift.
-        var monitor = await AvailabilityMonitors(database)
-            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
-            .Where(candidate => candidate.DeletedAt == null)
-            .OrderBy(candidate => candidate.CreatedAt)
-            .Skip(4)
-            .FirstAsync();
-        database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
-        database.EndpointHealth.RemoveRange(database.EndpointHealth.Where(health => health.EndpointMonitorId == monitor.Id));
-        await database.SaveChangesAsync();
-        await database.ExecutionLeases.Where(lease => lease.EndpointMonitorId == monitor.Id).ExecuteDeleteAsync();
-
-        monitor.IsEnabled = true;
-        await database.SaveChangesAsync();
+        var monitor = await CreateOwnedMonitorAsync(scope, database, "http://maintenance-retention.test/status");
 
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
@@ -3832,7 +3888,7 @@ internal static class DatabaseFoundationAssertions
             OneOff), administratorAccess);
         maintenanceWindow.Succeeded.Should().BeTrue(string.Join(" ", maintenanceWindow.Errors));
 
-        var checkId = await FinalizeScheduledResultAsync(database, monitor, 38, 500, clock);
+        var checkId = await FinalizeScheduledResultAsync(database, monitor, 500, clock);
 
         database.ChangeTracker.Clear();
         var result = await database.CheckResults.AsNoTracking().SingleAsync(candidate => candidate.LogicalCheckId == checkId);

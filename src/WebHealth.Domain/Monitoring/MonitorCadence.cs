@@ -29,6 +29,12 @@ public static class DurableWorkKinds
 {
     public const string HttpCheck = "HttpCheck";
     public const string SslCheck = "SslCheck";
+
+    /// <summary>
+    /// A crawl is its own kind of work, not a large check. It gets its own queue and worker budget
+    /// so a run cannot occupy a worker a scheduled check is waiting for (BR-L05).
+    /// </summary>
+    public const string CrawlRun = "CrawlRun";
 }
 
 public static class DurableWorkStates

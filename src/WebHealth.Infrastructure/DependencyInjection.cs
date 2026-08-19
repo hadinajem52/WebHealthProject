@@ -20,6 +20,8 @@ using WebHealth.Application.Maintenance;
 using WebHealth.Application.Seo;
 using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Seo;
+using WebHealth.Application.Crawling;
+using WebHealth.Infrastructure.Crawling;
 using WebHealth.Application.Incidents;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Application.Notifications;
@@ -52,6 +54,10 @@ public static class DependencyInjection
             .Get<SeoSchedulingOptions>() ?? new SeoSchedulingOptions();
         ValidateSeoOptions(seoOptions);
         services.AddSingleton(seoOptions);
+
+        var crawlOptions = configuration.GetSection(CrawlSchedulingOptions.SectionName)
+            .Get<CrawlSchedulingOptions>() ?? new CrawlSchedulingOptions();
+        services.AddSingleton(crawlOptions);
 
         var maintenanceOptions = configuration.GetSection(MaintenanceSchedulingOptions.SectionName)
             .Get<MaintenanceSchedulingOptions>() ?? new MaintenanceSchedulingOptions();
@@ -132,6 +138,11 @@ public static class DependencyInjection
         services.AddScoped<RobotsRefreshService>();
         services.AddScoped<IRobotsPolicyService, RobotsPolicyService>();
         services.AddScoped<RobotsRefreshJob>();
+        services.AddSingleton<IHtmlLinkExtractor, HtmlLinkExtractor>();
+        services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
+        services.TryAddScoped<ICrawlResultSink, RecordingCrawlResultSink>();
+        services.AddScoped<ICrawlExecutionService, CrawlExecutionService>();
+        services.AddScoped<CrawlRunJob>();
         services.AddScoped<IMaintenanceOccurrenceExpander, MaintenanceOccurrenceExpander>();
         services.AddScoped<MaintenanceExpansionJob>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
@@ -146,7 +157,7 @@ public static class DependencyInjection
         services.AddScoped<MonitoringDispatchJob>();
         services.AddScoped<NotificationDispatchJob>();
         var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled
-            || maintenanceOptions.Enabled || seoOptions.Enabled;
+            || maintenanceOptions.Enabled || seoOptions.Enabled || crawlOptions.Enabled;
         if (hangfireEnabled)
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -190,6 +201,20 @@ public static class DependencyInjection
                 options.Queues = queues.ToArray();
                 options.WorkerCount = Math.Max(1, Math.Min(Environment.ProcessorCount, 4));
             });
+
+            // A second server, serving only the crawl queue. Listing the crawl queue on the server
+            // above would not isolate anything: Hangfire's queue order decides what a *free* worker
+            // picks up next, it does not reserve workers, so long crawls would still starve the
+            // monitoring queue. A separate pool is the only arrangement that reserves capacity.
+            if (crawlOptions.Enabled)
+            {
+                services.AddHangfireServer(options =>
+                {
+                    options.ServerName = $"{Environment.MachineName}-crawl";
+                    options.Queues = [CrawlQueueNames.Crawl];
+                    options.WorkerCount = crawlOptions.WorkerCount;
+                });
+            }
         }
 
         if (schedulingOptions.Enabled)
@@ -208,6 +233,7 @@ public static class DependencyInjection
                 : configuredUserAgent.Trim()
         };
         services.AddSingleton(safeHttpOptions);
+        ValidateCrawlOptions(crawlOptions, safeHttpOptions);
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IMonitoringDnsResolver, SystemMonitoringDnsResolver>();
         services.AddSingleton<IDestinationAddressPolicy, StrictDestinationAddressPolicy>();
@@ -244,6 +270,29 @@ public static class DependencyInjection
             || options.UrgentSslCooldown > TimeSpan.FromDays(1))
         {
             throw new InvalidOperationException("Monitoring scheduling options are outside their safe bounds.");
+        }
+    }
+
+    /// <summary>
+    /// The crawler's request budget is capped at half the transport's global concurrency. Without
+    /// that ceiling a saturated crawl would fill every shared HTTP slot and block scheduled checks
+    /// at the transport, which is the starvation the separate queue exists to prevent.
+    /// </summary>
+    private static void ValidateCrawlOptions(
+        CrawlSchedulingOptions options,
+        SafeHttpTransportOptions transportOptions)
+    {
+        if (options.WorkerCount is < 1 or > 8
+            || options.RequestConcurrency < 1
+            || options.RequestConcurrency > transportOptions.GlobalConcurrency / 2
+            || options.RequestsPerSecondPerHost is <= 0 or > 10
+            || options.MaxDuration < TimeSpan.FromMinutes(1)
+            || options.MaxDuration > TimeSpan.FromHours(4)
+            || options.FetchTimeoutSeconds is < 1 or > 120
+            || options.MaxPageBytes < 64 * 1024
+            || options.MaxPageBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes)
+        {
+            throw new InvalidOperationException("Crawl scheduling options are outside their safe bounds.");
         }
     }
 
