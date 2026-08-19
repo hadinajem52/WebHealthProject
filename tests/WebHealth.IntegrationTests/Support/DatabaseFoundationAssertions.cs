@@ -60,7 +60,8 @@ internal static class DatabaseFoundationAssertions
         "20260818110028_SslSeverityAndPerformanceRules",
         "20260818185101_ReportingSampleMonitorIndex",
         "20260819094132_RecurringMaintenanceOccurrences",
-        "20260819095446_SeoValueExtraction"
+        "20260819101929_SeoValueExtraction",
+        "20260819111509_SeoConfigurationAndRobotsPolicy"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -108,16 +109,23 @@ internal static class DatabaseFoundationAssertions
         ,"notification_attempt"
         ,"notification_read_marker"
         ,"seo_observation"
+        ,"robots_snapshot"
     ];
 
     // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
     // IncidentLifecycle's table-shape is a superset of the same tables, DurableNotifications) —
     // used to compute the expected table set at the Phase 3 boundary checkpoint.
-    private static readonly string[] PhaseFourOnlyTables =
+    /// <summary>
+    /// Every table created after the Phase 3 boundary, which is what the upgrade check migrates
+    /// back down to. Each phase that adds a table adds it here, or the down-level schema
+    /// comparison starts expecting a table that migration never created.
+    /// </summary>
+    private static readonly string[] TablesAddedAfterPhaseThree =
     [
         "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
         "maintenance_occurrence", "incident", "incident_event", "incident_evidence",
-        "notification_event", "notification_delivery", "notification_attempt"
+        "notification_event", "notification_delivery", "notification_attempt",
+        "notification_read_marker", "certificate_observation", "seo_observation", "robots_snapshot"
     ];
 
     private static readonly string[] ExpectedEntityTypeNames =
@@ -172,7 +180,8 @@ internal static class DatabaseFoundationAssertions
         "NotificationEvent",
         "NotificationReadMarker",
         // SEO
-        "SeoObservation"
+        "SeoObservation",
+        "RobotsSnapshot"
     ];
 
     public static async Task VerifyAsync(string connectionString)
@@ -215,9 +224,9 @@ internal static class DatabaseFoundationAssertions
         await VerifySeoObservationContractAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
-        await VerifyPhaseThreeToPhaseFourUpgradeAsync(context, connectionString);
-        await VerifyPhaseTwoUpgradeAsync(context);
-        await VerifyPhaseOneUpgradeAndRepeatabilityAsync(context, connectionString);
+        await VerifyPhaseThreeToPhaseFourUpgradeAsync(connectionString);
+        await VerifyPhaseTwoUpgradeAsync(connectionString);
+        await VerifyPhaseOneUpgradeAndRepeatabilityAsync(connectionString);
     }
 
     /// <summary>
@@ -230,7 +239,10 @@ internal static class DatabaseFoundationAssertions
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["ConnectionStrings:WebHealth"] = connectionString
+            ["ConnectionStrings:WebHealth"] = connectionString,
+            // BR-C07's urgent re-check is gated on scheduling being enabled, and the option
+            // defaults to off, so the recheck below never queues anything without this.
+            ["Monitoring:Scheduling:Enabled"] = "true"
         }).Build();
         await using var services = new ServiceCollection().AddLogging()
             .AddInfrastructure(configuration).BuildServiceProvider();
@@ -239,15 +251,22 @@ internal static class DatabaseFoundationAssertions
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        // An unordered First is whatever row the planner hands back, and the plaintext endpoint
+        // below is rejected in a production environment for want of an HTTP exception reason, so
+        // this stage passed or failed from one run to the next on row order alone.
         var environmentId = await database.Environments
-            .Where(candidate => candidate.DeletedAt == null)
+            .Where(candidate => candidate.DeletedAt == null
+                && candidate.IsActive
+                && !candidate.IsProduction
+                && candidate.Website.DeletedAt == null)
+            .OrderBy(candidate => candidate.CreatedAt)
             .Select(candidate => candidate.Id).FirstAsync();
 
         var httpsResult = await endpointService.CreateAsync(
             new(environmentId, "https://certificates.test/status", null, true, null,
                 TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null),
             access);
-        httpsResult.Succeeded.Should().BeTrue();
+        httpsResult.Succeeded.Should().BeTrue(string.Join(" ", httpsResult.Errors));
         var httpsEndpointId = httpsResult.EntityId!.Value;
 
         var sslMonitor = await database.EndpointMonitors.SingleAsync(monitor =>
@@ -261,14 +280,15 @@ internal static class DatabaseFoundationAssertions
             new(environmentId, "http://plaintext.test/status", null, true, null,
                 TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null),
             access);
-        httpResult.Succeeded.Should().BeTrue();
+        httpResult.Succeeded.Should().BeTrue(string.Join(" ", httpResult.Errors));
         (await database.EndpointMonitors.AnyAsync(monitor =>
             monitor.EndpointId == httpResult.EntityId!.Value
             && monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType))
             .Should().BeFalse("an HTTP endpoint presents no certificate to monitor");
 
         await VerifyBackfilledFingerprintMatchesApplicationAsync(connectionString, sslMonitor.Id);
-        await VerifyUrgentCertificateRecheckAsync(scope, database, sslMonitor.Id, httpsEndpointId);
+        await VerifyUrgentCertificateRecheckAsync(
+            scope, database, sslMonitor.Id, httpsEndpointId, "https://certificates.test/status");
         await VerifyCertificateMonitorFollowsTlsIdentityAsync(
             database, endpointService, access, httpsEndpointId, sslMonitor.Id);
     }
@@ -288,12 +308,12 @@ internal static class DatabaseFoundationAssertions
     {
         database.ChangeTracker.Clear();
         var endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
-        (await endpointService.UpdateAsync(
+        var renamed = await endpointService.UpdateAsync(
             new(endpointId, "https://renamed-certificates.test/status", null, true, null,
                 TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null,
                 endpoint.Version),
-            access))
-            .Succeeded.Should().BeTrue();
+            access);
+        renamed.Succeeded.Should().BeTrue(string.Join(" ", renamed.Errors));
 
         database.ChangeTracker.Clear();
         var monitors = await database.EndpointMonitors.AsNoTracking()
@@ -332,10 +352,11 @@ internal static class DatabaseFoundationAssertions
         AsyncServiceScope scope,
         ApplicationDbContext database,
         Guid sslMonitorId,
-        Guid endpointId)
+        Guid endpointId,
+        string url)
     {
         var scheduler = scope.ServiceProvider.GetRequiredService<ISslUrgentCheckScheduler>();
-        var request = new SafeHttpTransportRequest(endpointId, "https://certificates.test/status", true);
+        var request = new SafeHttpTransportRequest(endpointId, url, true);
         var tlsFailure = new HttpTransportEvidence(request, TransportFailure(SafeHttpFailureKind.Tls));
 
         (await PrepareUrgentAsync(database, scheduler, endpointId, tlsFailure)).Should().NotBeNull();
@@ -468,7 +489,7 @@ internal static class DatabaseFoundationAssertions
         var stagingResult = await environmentService.CreateAsync(
             new(website.Id, "  Staging  ", EnvironmentTypes.Staging, "HTTPS://Example.test:443/base", true),
             administratorAccess);
-        stagingResult.Succeeded.Should().BeTrue();
+        stagingResult.Succeeded.Should().BeTrue(string.Join(" ", stagingResult.Errors));
         var stagingId = stagingResult.EntityId ?? throw new InvalidOperationException("Environment id was not returned.");
         (await environmentService.CreateAsync(
             new(website.Id, "staging", EnvironmentTypes.Test, null, true), administratorAccess))
@@ -485,7 +506,7 @@ internal static class DatabaseFoundationAssertions
             new(stagingId, " HTTPS://EXAMPLE.test:443/a/../Health?q=%41 ", developerOwnerId, true, null,
                 TargetAuthorizationKinds.Owned, "Integration fixture owned by the project.", null),
             administratorAccess);
-        endpointResult.Succeeded.Should().BeTrue();
+        endpointResult.Succeeded.Should().BeTrue(string.Join(" ", endpointResult.Errors));
         var endpointId = endpointResult.EntityId ?? throw new InvalidOperationException("Endpoint id was not returned.");
         (await endpointService.CreateAsync(
             new(stagingId, "https://example.test/Health?q=A", null, true, null,
@@ -518,7 +539,7 @@ internal static class DatabaseFoundationAssertions
         var productionResult = await environmentService.CreateAsync(
             new(website.Id, "Production", EnvironmentTypes.Production, "https://example.test", true),
             administratorAccess);
-        productionResult.Succeeded.Should().BeTrue();
+        productionResult.Succeeded.Should().BeTrue(string.Join(" ", productionResult.Errors));
         var productionId = productionResult.EntityId ?? throw new InvalidOperationException("Production environment id was not returned.");
         (await endpointService.CreateAsync(
             new(productionId, "http://legacy.example.test/", null, true, "Legacy appliance",
@@ -529,12 +550,12 @@ internal static class DatabaseFoundationAssertions
                 "Legacy appliance requires HTTP during migration.", TargetAuthorizationKinds.ExplicitPermission,
                 "Permission ticket TEST-2", null),
             administratorAccess);
-        productionHttp.Succeeded.Should().BeTrue();
+        productionHttp.Succeeded.Should().BeTrue(string.Join(" ", productionHttp.Errors));
 
         var stagingHttp = await endpointService.CreateAsync(
             new(stagingId, "http://staging.example.test/", null, false, null, null, null, null),
             administratorAccess);
-        stagingHttp.Succeeded.Should().BeTrue();
+        stagingHttp.Succeeded.Should().BeTrue(string.Join(" ", stagingHttp.Errors));
         database.ChangeTracker.Clear();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
         (await environmentService.UpdateAsync(
@@ -616,7 +637,7 @@ internal static class DatabaseFoundationAssertions
             new(stagingId, "https://override.example.test/", administratorOwnerId, true, null,
                 TargetAuthorizationKinds.Owned, "Administrator-owned integration fixture.", null, 7),
             administratorAccess);
-        overriddenEndpoint.Succeeded.Should().BeTrue();
+        overriddenEndpoint.Succeeded.Should().BeTrue(string.Join(" ", overriddenEndpoint.Errors));
         var overriddenEndpointId = overriddenEndpoint.EntityId!.Value;
         var overriddenMonitor = await AvailabilityMonitors(database).AsNoTracking()
             .SingleAsync(candidate => candidate.EndpointId == overriddenEndpointId);
@@ -1679,7 +1700,7 @@ internal static class DatabaseFoundationAssertions
         TimeProvider? timeProvider = null,
         string? htmlBody = null)
     {
-        var check = await CreateQueuedCheckAsync(database, monitor, sequence);
+        var check = await CreateQueuedCheckAsync(database, monitor, sequence, timeProvider);
         var work = check.DurableWork.Single();
         var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         check.State = LogicalCheckStates.Running;
@@ -1710,14 +1731,18 @@ internal static class DatabaseFoundationAssertions
             check.ConfigurationSnapshot.MaxRedirects,
             check.ConfigurationSnapshot.MaxResponseBodyBytes,
             check.ConfigurationSnapshot.TimeoutSeconds);
+        // Finalization rejects evidence that read fewer bytes off the wire than it kept, so the
+        // read count has to follow the body rather than sit at the two bytes the default "ok"
+        // response happens to be.
+        var body = htmlBody is null ? "ok"u8.ToArray() : Encoding.UTF8.GetBytes(htmlBody);
         var result = new SafeHttpTransportResult(
             null,
             statusCode,
             new(new Uri(request.Url).GetLeftPart(UriPartial.Path)),
             TimeSpan.FromMilliseconds(25),
-            2,
+            body.Length,
             false,
-            htmlBody is null ? "ok"u8.ToArray() : Encoding.UTF8.GetBytes(htmlBody),
+            body,
             [],
             SafeHttpRequestIdentity.Create(request),
             ContentType: htmlBody is null ? null : "text/html; charset=utf-8");
@@ -1898,14 +1923,22 @@ internal static class DatabaseFoundationAssertions
                 database, new AuditTrailWriter(database), new NotificationEventWriter(database)),
             new NoUrgentSslChecks(),
             new SeoValueExtractor(),
+            new SafeHttpTransportOptions(),
             timeProvider);
 
     private static async Task<LogicalCheck> CreateQueuedCheckAsync(
         ApplicationDbContext database,
         EndpointMonitor monitor,
-        int sequence)
+        int sequence,
+        TimeProvider? timeProvider = null)
     {
-        var createdAt = DateTimeOffset.UtcNow.AddMinutes(-1).AddSeconds(sequence);
+        // The sequence only has to space fixtures apart, but it is added to the base, so the base
+        // has to sit far enough back that a two-digit sequence cannot carry createdAt past the
+        // caller's clock — durable_work's updated_at >= created_at check rejects that. It also has
+        // to stay recent enough to fall inside the maintenance windows these fixtures open five
+        // minutes back. Reading the caller's clock rather than the system one keeps the comparison
+        // against a single time source when a frozen TimeProvider has drifted behind real time.
+        var createdAt = (timeProvider ?? TimeProvider.System).GetUtcNow().AddMinutes(-2).AddSeconds(sequence);
         var check = new LogicalCheck
         {
             Id = Guid.NewGuid(),
@@ -2653,24 +2686,78 @@ internal static class DatabaseFoundationAssertions
 
     /// <summary>Item 22: migrating from the exact Phase 3 boundary applies the three Phase 4
     /// migrations cleanly on top of a database that already has real Phase 3 data in it.</summary>
-    private static async Task VerifyPhaseThreeToPhaseFourUpgradeAsync(
-        ApplicationDbContext database, string connectionString)
+    private static async Task VerifyPhaseThreeToPhaseFourUpgradeAsync(string connectionString)
     {
-        database.ChangeTracker.Clear();
+        var upgradeConnectionString = await CreateUpgradeDatabaseAsync(connectionString, "phase3");
+        await using var services = BuildUpgradeServices(upgradeConnectionString);
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
         await database.Database.MigrateAsync("HangfireSchedulingAndRecovery");
         (await database.Database.GetAppliedMigrationsAsync()).Should().HaveCount(7);
-        var phaseThreeState = await ReadFoundationState(connectionString);
+        var phaseThreeState = await ReadFoundationState(upgradeConnectionString);
         phaseThreeState.Tables.Should().BeEquivalentTo(
-            ExpectedTables.Except(PhaseFourOnlyTables).Append(DatabaseConventions.MigrationsHistoryTable));
+            ExpectedTables.Except(TablesAddedAfterPhaseThree).Append(DatabaseConventions.MigrationsHistoryTable));
 
         await database.Database.MigrateAsync();
-        (await database.Database.GetAppliedMigrationsAsync()).Should().HaveCount(10);
-        var upgradedState = await ReadFoundationState(connectionString);
+        (await database.Database.GetAppliedMigrationsAsync()).Should().HaveCount(ExpectedMigrations.Length);
+        var upgradedState = await ReadFoundationState(upgradeConnectionString);
         upgradedState.Tables.Should().BeEquivalentTo(ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
     }
 
-    private static async Task VerifyPhaseTwoUpgradeAsync(ApplicationDbContext database)
+    /// <summary>
+    /// Each upgrade check gets its own database in the same cluster. Walking the shared one
+    /// backwards would require every intervening migration to reverse the data the features
+    /// wrote — mapping severities and failure categories the older schema cannot express, and
+    /// deleting the incidents that reference retired monitors — so the check would be asserting
+    /// on the reversal rather than on the upgrade it exists to cover.
+    /// </summary>
+    private static async Task<string> CreateUpgradeDatabaseAsync(string connectionString, string suffix)
     {
+        var target = $"{new NpgsqlConnectionStringBuilder(connectionString).Database}_{suffix}";
+        var admin = new NpgsqlConnectionStringBuilder(connectionString) { Database = "postgres" }.ConnectionString;
+        await using (var connection = new NpgsqlConnection(admin))
+        {
+            await connection.OpenAsync();
+            await using var drop = new NpgsqlCommand($"""DROP DATABASE IF EXISTS "{target}";""", connection);
+            await drop.ExecuteNonQueryAsync();
+            await using var create = new NpgsqlCommand($"""CREATE DATABASE "{target}";""", connection);
+            await create.ExecuteNonQueryAsync();
+        }
+
+        return new NpgsqlConnectionStringBuilder(connectionString) { Database = target }.ConnectionString;
+    }
+
+    private static ServiceProvider BuildUpgradeServices(string connectionString) =>
+        new ServiceCollection()
+            .AddLogging()
+            .AddInfrastructure(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:WebHealth"] = connectionString,
+                ["BootstrapAdmin:Email"] = "upgrade@example.test",
+                ["BootstrapAdmin:DisplayName"] = "Upgrade Administrator",
+                ["BootstrapAdmin:Password"] = $"Integration-9!{Guid.NewGuid():N}"
+            }).Build())
+            .BuildServiceProvider();
+
+    /// <summary>
+    /// Item 21: the Phase 2 migration derives a monitor's cadence anchor from its creation time,
+    /// so the check needs a monitor that predates the migration. It is created at head through the
+    /// registry so every column the current model requires is filled in, then the database is
+    /// walked back to the Phase 1 boundary — which is safe here because this database holds no
+    /// incident, certificate or SEO rows for the intervening down migrations to reverse.
+    /// </summary>
+    private static async Task VerifyPhaseTwoUpgradeAsync(string connectionString)
+    {
+        var upgradeConnectionString = await CreateUpgradeDatabaseAsync(connectionString, "phase2");
+        await using var services = BuildUpgradeServices(upgradeConnectionString);
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await database.Database.MigrateAsync();
+        await scope.ServiceProvider.GetRequiredService<AdminBootstrapper>().BootstrapAsync();
+
+        await SeedUpgradeMonitorAsync(scope, database);
+
         database.ChangeTracker.Clear();
         await database.Database.MigrateAsync("RegistryFoundation");
         await database.Database.ExecuteSqlRawAsync(
@@ -2678,26 +2765,64 @@ internal static class DatabaseFoundationAssertions
 
         await database.Database.MigrateAsync();
 
+        database.ChangeTracker.Clear();
+        (await database.EndpointMonitors.AnyAsync()).Should().BeTrue(
+            "the backfill is only evidence if a monitor predates the migration");
         (await database.EndpointMonitors.AnyAsync(monitor =>
             monitor.ScheduleAnchor != monitor.CreatedAt || monitor.NextDueAt != monitor.CreatedAt))
             .Should().BeFalse();
     }
 
-    private static async Task VerifyPhaseOneUpgradeAndRepeatabilityAsync(
-        ApplicationDbContext database,
-        string connectionString)
+    private static async Task SeedUpgradeMonitorAsync(AsyncServiceScope scope, ApplicationDbContext database)
     {
-        database.ChangeTracker.Clear();
+        var administrator = await database.Users.SingleAsync(user => user.Email == "upgrade@example.test");
+        var ownerSubjectId = await database.OwnerSubjects
+            .Where(owner => owner.UserId == administrator.Id)
+            .Select(owner => owner.Id)
+            .SingleAsync();
+        var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var clientService = scope.ServiceProvider.GetRequiredService<IClientRegistryService>();
+        var websiteService = scope.ServiceProvider.GetRequiredService<IWebsiteRegistryService>();
+        var environmentService = scope.ServiceProvider.GetRequiredService<IEnvironmentRegistryService>();
+        var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+
+        var client = await clientService.CreateAsync(new("Upgrade Client", ownerSubjectId, null), access);
+        client.Succeeded.Should().BeTrue(string.Join(" ", client.Errors));
+        // Created disabled: a website cannot be enabled until it has an active environment, and
+        // the environment below is what this fixture is building up to.
+        var website = await websiteService.CreateAsync(
+            new(client.EntityId!.Value, "Upgrade Website", ownerSubjectId, null, false, []), access);
+        website.Succeeded.Should().BeTrue(string.Join(" ", website.Errors));
+        var environment = await environmentService.CreateAsync(
+            new(website.EntityId!.Value, "Staging", EnvironmentTypes.Staging, null, true), access);
+        environment.Succeeded.Should().BeTrue(string.Join(" ", environment.Errors));
+
+        // Plain HTTP in a non-production environment: no certificate monitor to retire on the way
+        // down and no production HTTP exception to approve.
+        var endpoint = await endpointService.CreateAsync(
+            new(environment.EntityId!.Value, "http://upgrade.test/status", null, true, null,
+                TargetAuthorizationKinds.Owned, "Upgrade fixture owned by the project.", null),
+            access);
+        endpoint.Succeeded.Should().BeTrue(string.Join(" ", endpoint.Errors));
+    }
+
+    private static async Task VerifyPhaseOneUpgradeAndRepeatabilityAsync(string connectionString)
+    {
+        var upgradeConnectionString = await CreateUpgradeDatabaseAsync(connectionString, "phase1");
+        await using var services = BuildUpgradeServices(upgradeConnectionString);
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
         await database.Database.MigrateAsync("InitialFoundation");
         (await database.Database.GetAppliedMigrationsAsync()).Should().ContainSingle();
-        var baseline = await ReadFoundationState(connectionString);
+        var baseline = await ReadFoundationState(upgradeConnectionString);
         baseline.Tables.Should().Equal(DatabaseConventions.MigrationsHistoryTable);
 
         await database.Database.MigrateAsync();
         var applied = (await database.Database.GetAppliedMigrationsAsync()).ToArray();
-        applied.Should().HaveCount(10);
+        applied.Should().HaveCount(ExpectedMigrations.Length);
         (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
-        var upgraded = await ReadFoundationState(connectionString);
+        var upgraded = await ReadFoundationState(upgradeConnectionString);
         upgraded.Tables.Should().BeEquivalentTo(
             ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
 
@@ -2909,7 +3034,7 @@ internal static class DatabaseFoundationAssertions
             new(MaintenanceScopeKind.Monitor, monitor.Id), now.AddMinutes(-5), now.AddMinutes(5), "UTC",
             "Controlled maintenance verification", MaintenanceSuppressionPolicies.SuppressAll, true, false, OneOff),
             maintenanceAccess);
-        createdMaintenance.Succeeded.Should().BeTrue();
+        createdMaintenance.Succeeded.Should().BeTrue(string.Join(" ", createdMaintenance.Errors));
         var activeMaintenance = await maintenanceEvaluator.FindActiveAsync(monitor.Id, now);
         activeMaintenance.Should().NotBeNull();
         activeMaintenance!.SuppressionPolicy.Should().Be(MaintenanceSuppressionPolicies.SuppressAll);
@@ -3321,7 +3446,7 @@ internal static class DatabaseFoundationAssertions
             true,
             false,
             OneOff), administratorAccess);
-        maintenanceWindow.Succeeded.Should().BeTrue();
+        maintenanceWindow.Succeeded.Should().BeTrue(string.Join(" ", maintenanceWindow.Errors));
         (await reminderService.SweepAsync()).Should().Be(new NotificationReminderSweepResult(0, 0));
         (await maintenanceService.CancelAsync(new(maintenanceWindow.MaintenanceWindowId!.Value, 1), administratorAccess))
             .Succeeded.Should().BeTrue();
@@ -3379,8 +3504,11 @@ internal static class DatabaseFoundationAssertions
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        // Ordered so the environment this stage builds on is the same one every run: an unordered
+        // First leaves production-ness, and everything keyed off it, to the query planner.
         var environmentId = await database.Environments
             .Where(candidate => candidate.DeletedAt == null)
+            .OrderBy(candidate => candidate.CreatedAt)
             .Select(candidate => candidate.Id).FirstAsync();
 
         var endpointResult = await endpointService.CreateAsync(
@@ -3396,7 +3524,14 @@ internal static class DatabaseFoundationAssertions
 
         const int horizonDays = 90;
         var options = new MaintenanceSchedulingOptions { HorizonDays = horizonDays, BatchSize = 25 };
-        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        // timestamptz keeps microseconds while a .NET tick is 100 nanoseconds, so a clock started
+        // on an unrounded UtcNow produces timestamps that come back from the round-trip a digit
+        // short, failing the comparisons below on every run except the one in ten that happens to
+        // land on a whole microsecond. Truncating once here keeps every value derived from it exact.
+        var startedAt = DateTimeOffset.UtcNow;
+        var clock = new MutableTimeProvider(new DateTimeOffset(
+            startedAt.Ticks - (startedAt.Ticks % TimeSpan.TicksPerMicrosecond),
+            startedAt.Offset));
         var anchor = clock.GetUtcNow().AddMinutes(-5);
         var created = await maintenanceService.CreateAsync(new(
             new(MaintenanceScopeKind.Monitor, monitor.Id),
@@ -3522,7 +3657,8 @@ internal static class DatabaseFoundationAssertions
             "document_truncated", "title", "title_length", "title_count", "meta_description",
             "meta_description_length", "meta_description_count", "canonical_href", "canonical_length",
             "canonical_count", "canonical_absolute_url", "robots_meta", "robots_meta_length",
-            "robots_meta_count", "observed_at");
+            "robots_meta_count", "observed_at",
+            "policy_description_required", "policy_expected_host", "policy_indexing_expectation");
 
         await VerifySeoObservationRejectedAsync(
             connectionString,
@@ -3587,8 +3723,11 @@ internal static class DatabaseFoundationAssertions
         // later: the absence claim must not quietly stop covering a new column.
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
+        // The marker is interpolated rather than bound: a DO block is an opaque string to the
+        // server, so a parameter placeholder inside it is never substituted and reads back as an
+        // operator applied to a missing column.
         await using var command = new NpgsqlCommand(
-            """
+            $"""
             DO $$
             DECLARE
                 target record;
@@ -3603,7 +3742,7 @@ internal static class DatabaseFoundationAssertions
                     EXECUTE format(
                         'SELECT count(*) FROM web_health.%I WHERE %I::text LIKE $1',
                         target.table_name, target.column_name)
-                    INTO hits USING '%' || @marker || '%';
+                    INTO hits USING '%{marker}%';
 
                     IF hits > 0 THEN
                         RAISE EXCEPTION
@@ -3613,7 +3752,6 @@ internal static class DatabaseFoundationAssertions
                 END LOOP;
             END $$;
             """, connection);
-        command.Parameters.AddWithValue("marker", marker);
         await command.ExecuteNonQueryAsync();
     }
 
@@ -3627,8 +3765,9 @@ internal static class DatabaseFoundationAssertions
             INSERT INTO web_health.seo_observation
                 (logical_check_id, endpoint_monitor_id, applicability, not_applicable_reason, title,
                  title_length, title_count, meta_description_length, meta_description_count,
-                 canonical_length, canonical_count, robots_meta_length, robots_meta_count, observed_at)
-            SELECT check_row.id, check_row.endpoint_monitor_id, {values}, 0, 0, 0, 0, 0, 0, 0, 0, now()
+                 canonical_length, canonical_count, robots_meta_length, robots_meta_count, observed_at,
+                 document_truncated)
+            SELECT check_row.id, check_row.endpoint_monitor_id, {values}, 0, 0, 0, 0, 0, 0, 0, 0, now(), false
             FROM web_health.logical_check AS check_row
             WHERE NOT EXISTS (
                 SELECT 1 FROM web_health.seo_observation AS existing
@@ -3660,7 +3799,11 @@ internal static class DatabaseFoundationAssertions
         // besides the one it needs without ever re-enabling them. Excluding deleted monitors here
         // and restoring IsEnabled keeps this test independent of exactly what earlier tests left
         // behind, since MaintenanceWindowService.CreateAsync's scope check requires both.
-        var monitor = await database.EndpointMonitors
+        // FinalizeScheduledResultAsync queues http-check durable work, which finalization matches
+        // against the snapshot's monitor type, so this has to be an availability monitor: an HTTPS
+        // endpoint also owns a certificate monitor, and picking one positionally out of every
+        // monitor type lands on it as soon as the surrounding fixtures shift.
+        var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
             .Where(candidate => candidate.DeletedAt == null)
             .OrderBy(candidate => candidate.CreatedAt)
@@ -4214,7 +4357,7 @@ internal static class DatabaseFoundationAssertions
                 $"Registry-9!{Guid.NewGuid():N}",
                 [ApplicationRoles.DeveloperSupport]),
             administrator.Id);
-        developerResult.Succeeded.Should().BeTrue();
+        developerResult.Succeeded.Should().BeTrue(string.Join(" ", developerResult.Errors));
         var viewerResult = await users.CreateUserAsync(
             new CreateManagedUser(
                 "Registry Viewer",
@@ -4222,7 +4365,7 @@ internal static class DatabaseFoundationAssertions
                 $"Registry-9!{Guid.NewGuid():N}",
                 [ApplicationRoles.Viewer]),
             administrator.Id);
-        viewerResult.Succeeded.Should().BeTrue();
+        viewerResult.Succeeded.Should().BeTrue(string.Join(" ", viewerResult.Errors));
 
         var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
         var viewer = await database.Users.SingleAsync(user => user.Email == "registry-viewer@example.test");
@@ -4234,7 +4377,7 @@ internal static class DatabaseFoundationAssertions
         var firstClient = await clients.CreateAsync(
             new CreateClient("  Alpha Client  ", developerOwnerId, "  scoped notes  "),
             administratorAccess);
-        firstClient.Succeeded.Should().BeTrue();
+        firstClient.Succeeded.Should().BeTrue(string.Join(" ", firstClient.Errors));
         var firstClientId = firstClient.EntityId ?? throw new InvalidOperationException("Client id was not returned.");
         var duplicateClient = await clients.CreateAsync(
             new CreateClient("alpha client", administratorOwnerId, null),
@@ -4243,7 +4386,7 @@ internal static class DatabaseFoundationAssertions
         var secondClient = await clients.CreateAsync(
             new CreateClient("Second Client", administratorOwnerId, null),
             administratorAccess);
-        secondClient.Succeeded.Should().BeTrue();
+        secondClient.Succeeded.Should().BeTrue(string.Join(" ", secondClient.Errors));
         var secondClientId = secondClient.EntityId ?? throw new InvalidOperationException("Client id was not returned.");
 
         var persistedClient = await database.Clients.SingleAsync(client => client.Id == firstClientId);
@@ -4264,7 +4407,7 @@ internal static class DatabaseFoundationAssertions
             new CreateWebsite(firstClientId, "  Portal  ", developerOwnerId, " ASP.NET ", false,
                 ["  Europe ", "ASP.NET", "europe"]),
             administratorAccess);
-        firstWebsite.Succeeded.Should().BeTrue();
+        firstWebsite.Succeeded.Should().BeTrue(string.Join(" ", firstWebsite.Errors));
         var firstWebsiteId = firstWebsite.EntityId ?? throw new InvalidOperationException("Website id was not returned.");
         (await websites.CreateAsync(
             new CreateWebsite(firstClientId, "portal", developerOwnerId, null, false, []),
@@ -4387,10 +4530,10 @@ internal static class DatabaseFoundationAssertions
         database.ChangeTracker.Clear();
         persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
         var disabled = await websites.DisableAsync(new(persistedWebsite.Id, persistedWebsite.Version), administratorAccess);
-        disabled.Succeeded.Should().BeTrue();
+        disabled.Succeeded.Should().BeTrue(string.Join(" ", disabled.Errors));
         persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
         var deleted = await websites.DeleteAsync(new(persistedWebsite.Id, persistedWebsite.Version), administratorAccess);
-        deleted.Succeeded.Should().BeTrue();
+        deleted.Succeeded.Should().BeTrue(string.Join(" ", deleted.Errors));
         (await reader.ListWebsitesAsync(administratorAccess))
             .Should().NotContain(website => website.Id == firstWebsiteId);
         (await reader.ListDeletedWebsitesAsync(administratorAccess))
@@ -4407,7 +4550,7 @@ internal static class DatabaseFoundationAssertions
                 false,
                 []),
             administratorAccess);
-        replacementWebsite.Succeeded.Should().BeTrue();
+        replacementWebsite.Succeeded.Should().BeTrue(string.Join(" ", replacementWebsite.Errors));
         (await websites.RestoreAsync(new(persistedWebsite.Id, persistedWebsite.Version), administratorAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         var replacementWebsiteEntity = await database.Websites.SingleAsync(website =>
@@ -4417,7 +4560,7 @@ internal static class DatabaseFoundationAssertions
             .Succeeded.Should().BeTrue();
         persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
         var restored = await websites.RestoreAsync(new(persistedWebsite.Id, persistedWebsite.Version), administratorAccess);
-        restored.Succeeded.Should().BeTrue();
+        restored.Succeeded.Should().BeTrue(string.Join(" ", restored.Errors));
 
         var websiteAuditActions = await database.AuditEvents
             .Where(audit => audit.EntityIdentifier == persistedWebsite.Id.ToString())
@@ -4469,7 +4612,7 @@ internal static class DatabaseFoundationAssertions
         var replacementClient = await clients.CreateAsync(
             new CreateClient(persistedClient.Name, persistedClient.OwnerSubjectId, null),
             administratorAccess);
-        replacementClient.Succeeded.Should().BeTrue();
+        replacementClient.Succeeded.Should().BeTrue(string.Join(" ", replacementClient.Errors));
         (await clients.RestoreAsync(new(persistedClient.Id, persistedClient.Version), administratorAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         var replacementClientEntity = await database.Clients.SingleAsync(client =>
@@ -4603,7 +4746,7 @@ internal static class DatabaseFoundationAssertions
                     managedPassword,
                     [ApplicationRoles.Viewer]),
                 user.Id);
-            createResult.Succeeded.Should().BeTrue();
+            createResult.Succeeded.Should().BeTrue(string.Join(" ", createResult.Errors));
 
             var managedUser = await userManager.FindByIdAsync(createResult.UserId!.Value.ToString());
             managedUser.Should().NotBeNull();
@@ -4619,7 +4762,7 @@ internal static class DatabaseFoundationAssertions
                     [ApplicationRoles.Operations],
                     replacementPassword),
                 user.Id);
-            disableResult.Succeeded.Should().BeTrue();
+            disableResult.Succeeded.Should().BeTrue(string.Join(" ", disableResult.Errors));
 
             managedUser = await userManager.FindByIdAsync(managedUser.Id.ToString());
             managedUser!.IsDisabled.Should().BeTrue();
@@ -4646,7 +4789,7 @@ internal static class DatabaseFoundationAssertions
                     roleOnlyPassword,
                     [ApplicationRoles.Administrator]),
                 user.Id);
-            roleOnlyCreateResult.Succeeded.Should().BeTrue();
+            roleOnlyCreateResult.Succeeded.Should().BeTrue(string.Join(" ", roleOnlyCreateResult.Errors));
 
             var roleOnlyUser = await userManager.FindByIdAsync(roleOnlyCreateResult.UserId!.Value.ToString());
             var roleOnlyPrincipal = await signInManager.CreateUserPrincipalAsync(roleOnlyUser!);
@@ -4658,7 +4801,7 @@ internal static class DatabaseFoundationAssertions
                     false,
                     [ApplicationRoles.Viewer]),
                 user.Id);
-            roleOnlyUpdateResult.Succeeded.Should().BeTrue();
+            roleOnlyUpdateResult.Succeeded.Should().BeTrue(string.Join(" ", roleOnlyUpdateResult.Errors));
 
             roleOnlyUser = await userManager.FindByIdAsync(roleOnlyUser.Id.ToString());
             roleOnlyUser!.SecurityStamp.Should().NotBe(roleOnlySecurityStamp);
@@ -4668,7 +4811,7 @@ internal static class DatabaseFoundationAssertions
             var createTeamResult = await teamAdministration.CreateTeamAsync(
                 new CreateManagedTeam("  Platform   Support  ", [roleOnlyUser.Id]),
                 user.Id);
-            createTeamResult.Succeeded.Should().BeTrue();
+            createTeamResult.Succeeded.Should().BeTrue(string.Join(" ", createTeamResult.Errors));
             var team = await teamAdministration.FindTeamAsync(createTeamResult.TeamId!.Value);
             team.Should().NotBeNull();
             team!.Name.Should().Be("Platform Support");
@@ -4692,7 +4835,7 @@ internal static class DatabaseFoundationAssertions
             var disabledTeamResult = await teamAdministration.CreateTeamAsync(
                 new CreateManagedTeam("Disabled Team", [roleOnlyUser.Id]),
                 user.Id);
-            disabledTeamResult.Succeeded.Should().BeTrue();
+            disabledTeamResult.Succeeded.Should().BeTrue(string.Join(" ", disabledTeamResult.Errors));
             var disabledTeam = await teamAdministration.FindTeamAsync(disabledTeamResult.TeamId!.Value);
             var disabledTeamOwnerSubjectId = await database.OwnerSubjects
                 .Where(subject => subject.TeamId == disabledTeam!.Id)
@@ -4714,7 +4857,7 @@ internal static class DatabaseFoundationAssertions
             var updateTeamResult = await teamAdministration.UpdateTeamAsync(
                 new UpdateManagedTeam(team.Id, "Platform Reliability", false, team.Version, []),
                 user.Id);
-            updateTeamResult.Succeeded.Should().BeTrue();
+            updateTeamResult.Succeeded.Should().BeTrue(string.Join(" ", updateTeamResult.Errors));
             var listedTeams = await teamAdministration.ListTeamsAsync();
             listedTeams.Should().ContainSingle(candidate =>
                 candidate.Id == team.Id
@@ -4813,12 +4956,12 @@ internal static class DatabaseFoundationAssertions
                 password,
                 [ApplicationRoles.Viewer]),
             administrator.Id);
-        createUser.Succeeded.Should().BeTrue();
+        createUser.Succeeded.Should().BeTrue(string.Join(" ", createUser.Errors));
         var memberId = createUser.UserId!.Value;
         var createTeam = await teamAdministration.CreateTeamAsync(
             new CreateManagedTeam("Retention Team", [memberId]),
             administrator.Id);
-        createTeam.Succeeded.Should().BeTrue();
+        createTeam.Succeeded.Should().BeTrue(string.Join(" ", createTeam.Errors));
 
         var disableUser = await userAdministration.UpdateUserAsync(
             new UpdateManagedUser(
@@ -4827,7 +4970,7 @@ internal static class DatabaseFoundationAssertions
                 true,
                 [ApplicationRoles.Viewer]),
             administrator.Id);
-        disableUser.Succeeded.Should().BeTrue();
+        disableUser.Succeeded.Should().BeTrue(string.Join(" ", disableUser.Errors));
         var team = await teamAdministration.FindTeamAsync(createTeam.TeamId!.Value);
         var renameTeam = await teamAdministration.UpdateTeamAsync(
             new UpdateManagedTeam(
@@ -4837,7 +4980,7 @@ internal static class DatabaseFoundationAssertions
                 team.Version,
                 [memberId]),
             administrator.Id);
-        renameTeam.Succeeded.Should().BeTrue();
+        renameTeam.Succeeded.Should().BeTrue(string.Join(" ", renameTeam.Errors));
         (await database.TeamMembers.SingleAsync(member => member.TeamId == team.Id))
             .EffectiveUntil.Should().BeNull();
 
@@ -4865,7 +5008,7 @@ internal static class DatabaseFoundationAssertions
                     $"Concurrent-4!{Guid.NewGuid():N}",
                     [ApplicationRoles.Viewer]),
                 administrator.Id);
-            createUser.Succeeded.Should().BeTrue();
+            createUser.Succeeded.Should().BeTrue(string.Join(" ", createUser.Errors));
             createUserId = createUser.UserId!.Value;
             var updateUser = await userAdministration.CreateUserAsync(
                 new CreateManagedUser(
@@ -4874,7 +5017,7 @@ internal static class DatabaseFoundationAssertions
                     $"Concurrent-3!{Guid.NewGuid():N}",
                     [ApplicationRoles.Viewer]),
                 administrator.Id);
-            updateUser.Succeeded.Should().BeTrue();
+            updateUser.Succeeded.Should().BeTrue(string.Join(" ", updateUser.Errors));
             updateUserId = updateUser.UserId!.Value;
         }
 
@@ -4892,7 +5035,7 @@ internal static class DatabaseFoundationAssertions
         var emptyTeamResult = await teamAdministration.CreateTeamAsync(
             new CreateManagedTeam("Concurrent Update Team", []),
             administrator.Id);
-        emptyTeamResult.Succeeded.Should().BeTrue();
+        emptyTeamResult.Succeeded.Should().BeTrue(string.Join(" ", emptyTeamResult.Errors));
         var emptyTeam = await teamAdministration.FindTeamAsync(emptyTeamResult.TeamId!.Value);
         var updateResult = await RunDuringConcurrentDisableAsync(
             connectionString,

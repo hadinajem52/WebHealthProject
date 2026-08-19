@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using WebHealth.Application.Seo;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 
@@ -88,6 +89,17 @@ public sealed class EndpointFormViewModel
     [Range(ResponseThresholdOverride.MinimumMs, ResponseThresholdOverride.MaximumMs)]
     [Display(Name = "Slow-response critical threshold (ms)")]
     public int? CriticalThresholdMsOverride { get; set; }
+
+    // BR-E04: blank means the endpoint's own host is the expected canonical host.
+    [StringLength(253), Display(Name = "Expected canonical host")]
+    public string? SeoExpectedCanonicalHost { get; set; }
+
+    // BR-E05 and BR-E09 as one setting; Default resolves from the environment.
+    [Required, Display(Name = "Indexing expectation")]
+    public string SeoIndexingExpectation { get; set; } = SeoIndexingExpectations.Default;
+
+    [Display(Name = "Require a meta description")]
+    public bool SeoDescriptionRequired { get; set; } = true;
 
     public bool CanConfigureInterval { get; set; }
 

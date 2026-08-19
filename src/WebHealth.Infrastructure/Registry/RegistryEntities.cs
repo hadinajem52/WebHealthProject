@@ -1,3 +1,5 @@
+using WebHealth.Application.Seo;
+
 namespace WebHealth.Infrastructure.Registry;
 
 using WebHealth.Infrastructure.Monitoring;
@@ -102,6 +104,15 @@ public sealed class Endpoint
     public string? HttpExceptionReason { get; set; }
     public Guid? HttpExceptionApprovedByUserId { get; set; }
     public DateTimeOffset? HttpExceptionApprovedAt { get; set; }
+
+    /// <summary>BR-E04: null means the endpoint's own host is the expected canonical host.</summary>
+    public string? SeoExpectedCanonicalHost { get; set; }
+
+    /// <summary>BR-E05 and BR-E09 as one setting; Default resolves from the environment.</summary>
+    public string SeoIndexingExpectation { get; set; } = SeoIndexingExpectations.Default;
+
+    /// <summary>BR-E03: the endpoint may disable the meta-description rule.</summary>
+    public bool SeoDescriptionRequired { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public Guid CreatedByUserId { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

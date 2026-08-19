@@ -87,6 +87,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<SeoObservation> SeoObservations => Set<SeoObservation>();
 
+    public DbSet<RobotsSnapshot> RobotsSnapshots => Set<RobotsSnapshot>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         DatabaseConventions.Configure(configurationBuilder);

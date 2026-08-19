@@ -106,6 +106,15 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 table: "incident_event",
                 sql: "event_type IN ('Opened', 'StatusChanged', 'Reassigned', 'NoteAdded', 'EvidenceRecorded')");
 
+            // The three-level scale collapses back to two here, so rows already recorded at High
+            // have to be retired before the constraints that outlaw it go back on, or this
+            // migration cannot run down against a database that used the feature. High is the band
+            // above the critical threshold, which is what the old two-level scale called Warning.
+            migrationBuilder.Sql("""
+                UPDATE web_health.finding SET severity = 'Warning' WHERE severity = 'High';
+                UPDATE web_health.incident SET severity = 'Warning' WHERE severity = 'High';
+                """);
+
             migrationBuilder.AddCheckConstraint(
                 name: "ck_incident_severity",
                 schema: "web_health",

@@ -12,6 +12,7 @@ using WebHealth.Domain.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure;
 using WebHealth.Infrastructure.Identity;
+using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Persistence;
 using WebHealth.Infrastructure.Registry;
@@ -455,16 +456,21 @@ internal static class ReportingQueryCoreAssertions
         RegistryAccessContext access)
     {
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+        // Ordered, and matched to what endpoint creation will accept: an unordered First leaves the
+        // fixture's client — and so everything scoped to it below — to the query planner.
         var environment = await database.Environments.AsNoTracking()
             .Include(candidate => candidate.Website)
-            .Where(candidate => candidate.DeletedAt == null)
+            .Where(candidate => candidate.DeletedAt == null
+                && candidate.IsActive
+                && candidate.Website.DeletedAt == null)
+            .OrderBy(candidate => candidate.CreatedAt)
             .FirstAsync();
 
         var created = await endpointService.CreateAsync(
             new(environment.Id, "https://reporting.test/status", null, true, null,
                 TargetAuthorizationKinds.Owned, "Reporting fixture owned by the project.", null),
             access);
-        created.Succeeded.Should().BeTrue();
+        created.Succeeded.Should().BeTrue(string.Join(" ", created.Errors));
         var endpointId = created.EntityId!.Value;
 
         var monitors = await database.EndpointMonitors.AsNoTracking()
@@ -490,6 +496,26 @@ internal static class ReportingQueryCoreAssertions
 
         // A certificate result, which is never an availability sample.
         await AddResultAsync(database, sslMonitorId, WindowStart.AddDays(1), "Healthy", 40, false);
+
+        // The active-incident selection is exercised against an incident this fixture owns.
+        // VerifyReminderEscalationSweepBoundariesAsync closes every active incident in the
+        // database before this runs, so anything still open here would be residue from an
+        // earlier stage rather than something this test arranged.
+        var ownerSubjectId = await database.OwnerSubjects.AsNoTracking()
+            .OrderBy(subject => subject.Id)
+            .Select(subject => subject.Id)
+            .FirstAsync();
+        database.Incidents.Add(new Incident
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = httpMonitorId,
+            OwnerSubjectId = ownerSubjectId,
+            IssueKey = HttpIssueIdentity.Create("Http.ServerError"),
+            Severity = IncidentSeverities.Critical,
+            Status = IncidentStatuses.Open,
+            OpenedAt = WindowStart.AddDays(3),
+            Version = 1
+        });
 
         await database.SaveChangesAsync();
 

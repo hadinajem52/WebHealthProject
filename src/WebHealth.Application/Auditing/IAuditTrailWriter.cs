@@ -52,6 +52,12 @@ public interface IAuditTrailWriter
         EndpointAuditSnapshot after,
         CancellationToken cancellationToken = default);
 
+    Task RecordRobotsPolicyMutationAsync(
+        AuditWriteContext context,
+        RobotsPolicyAuditSnapshot? before,
+        RobotsPolicyAuditSnapshot after,
+        CancellationToken cancellationToken = default);
+
     Task RecordMaintenanceMutationAsync(
         AuditWriteContext context,
         MaintenanceAuditAction action,
@@ -171,7 +177,24 @@ public sealed record EndpointAuditSnapshot(
     bool TargetAuthorizationChanged,
     int MonitorIntervalSeconds,
     bool HasIntervalOverride,
+    // BR-E03 to BR-E05: an SEO policy change alters what later checks are judged against, so it
+    // belongs in the audit trail like every other change to how a target is evaluated.
+    string SeoIndexingExpectation,
+    bool SeoDescriptionRequired,
+    bool HasSeoCanonicalHostOverride,
     bool IsDeleted,
+    long Version);
+
+/// <summary>
+/// BR-E07 and BR-E08: the origin-level policy an operator sets. The approved exception is recorded
+/// with who approved it, which is the point of having an exception rather than a flag.
+/// </summary>
+public sealed record RobotsPolicyAuditSnapshot(
+    string Origin,
+    bool SitemapRequired,
+    bool HasConfiguredSitemap,
+    bool HasApprovedException,
+    string? ExceptionReason,
     long Version);
 
 public enum MaintenanceAuditAction { Created, Updated, Cancelled }

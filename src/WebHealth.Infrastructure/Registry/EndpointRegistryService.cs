@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
+using WebHealth.Application.Seo;
 using WebHealth.Domain.Normalization;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Identity;
@@ -42,6 +43,11 @@ internal sealed class EndpointRegistryService(
         if (thresholds.Error is not null)
         {
             return Validation(thresholds.Error);
+        }
+
+        if (ValidateSeoPolicy(command.SeoIndexingExpectation, command.SeoExpectedCanonicalHost) is { } seoError)
+        {
+            return Validation(seoError);
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -146,6 +152,11 @@ internal sealed class EndpointRegistryService(
         if (thresholds.Error is not null)
         {
             return Validation(thresholds.Error);
+        }
+
+        if (ValidateSeoPolicy(command.SeoIndexingExpectation, command.SeoExpectedCanonicalHost) is { } seoError)
+        {
+            return Validation(seoError);
         }
 
         if (!await IsValidOwnerAsync(command.OwnerSubjectId, endpoint.OwnerSubjectId, cancellationToken))
@@ -434,12 +445,35 @@ internal sealed class EndpointRegistryService(
             HttpExceptionReason = exception.Reason,
             HttpExceptionApprovedByUserId = exception.ApprovedByUserId,
             HttpExceptionApprovedAt = exception.ApprovedAt,
+            SeoExpectedCanonicalHost = NormalizeExpectedHost(command.SeoExpectedCanonicalHost),
+            SeoIndexingExpectation = command.SeoIndexingExpectation,
+            SeoDescriptionRequired = command.SeoDescriptionRequired,
             CreatedAt = now,
             CreatedByUserId = actorId,
             UpdatedAt = now,
             UpdatedByUserId = actorId,
             Version = 1
         };
+
+    /// <summary>
+    /// BR-E04: an empty override means "the endpoint's own host", which is stored as null rather
+    /// than as an empty string so the default has exactly one representation.
+    /// </summary>
+    private static string? NormalizeExpectedHost(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+
+    private static string? ValidateSeoPolicy(string expectation, string? expectedHost)
+    {
+        if (!SeoIndexingExpectations.IsSupported(expectation))
+        {
+            return "Select a supported indexing expectation.";
+        }
+
+        var host = NormalizeExpectedHost(expectedHost);
+        return host is not null && (host.Length > 253 || Uri.CheckHostName(host) == UriHostNameType.Unknown)
+            ? "The expected canonical host must be a valid host name."
+            : null;
+    }
 
     private static EndpointMonitor CreateMonitor(
         Endpoint endpoint,
@@ -512,7 +546,7 @@ internal sealed class EndpointRegistryService(
     /// endpoint to HTTP retires its certificate monitor instead of leaving one that can never
     /// observe anything, and switching back to HTTPS creates a fresh one.
     /// </summary>
-    private static void ApplySslMonitorPresence(
+    private void ApplySslMonitorPresence(
         Endpoint endpoint,
         bool isProduction,
         bool schedulingEnabled,
@@ -537,7 +571,12 @@ internal sealed class EndpointRegistryService(
 
         if (required && existing is null)
         {
-            endpoint.Monitors.Add(CreateSslMonitor(endpoint, isProduction, schedulingEnabled, actorId, now));
+            // Added through the set rather than the navigation: the key is client-generated, so a
+            // monitor discovered only as a new member of a loaded collection is attached as an
+            // existing row and saved as an UPDATE against an id that was never inserted. Creation
+            // registers its monitors the same way for the same reason.
+            dbContext.EndpointMonitors.Add(
+                CreateSslMonitor(endpoint, isProduction, schedulingEnabled, actorId, now));
         }
     }
 
@@ -614,7 +653,7 @@ internal sealed class EndpointRegistryService(
         };
     }
 
-    private static void ApplyEndpointUpdate(
+    private void ApplyEndpointUpdate(
         Endpoint endpoint,
         UpdateEndpoint command,
         EndpointUrlNormalizationResult url,
@@ -638,6 +677,9 @@ internal sealed class EndpointRegistryService(
         endpoint.HttpExceptionReason = exception.Reason;
         endpoint.HttpExceptionApprovedByUserId = exception.ApprovedByUserId;
         endpoint.HttpExceptionApprovedAt = exception.ApprovedAt;
+        endpoint.SeoExpectedCanonicalHost = NormalizeExpectedHost(command.SeoExpectedCanonicalHost);
+        endpoint.SeoIndexingExpectation = command.SeoIndexingExpectation;
+        endpoint.SeoDescriptionRequired = command.SeoDescriptionRequired;
         Touch(endpoint, actorId, now);
         ApplySslMonitorPresence(
             endpoint, isProduction, command.SchedulingEnabled, actorId, now, tlsIdentityChanged);
@@ -776,6 +818,9 @@ internal sealed class EndpointRegistryService(
             httpExceptionChanged, HasCurrentAuthorization(endpoint, now), targetAuthorizationChanged,
             monitor.IntervalSeconds,
             MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides),
+            endpoint.SeoIndexingExpectation,
+            endpoint.SeoDescriptionRequired,
+            endpoint.SeoExpectedCanonicalHost is not null,
             endpoint.DeletedAt is not null, endpoint.Version);
     }
 

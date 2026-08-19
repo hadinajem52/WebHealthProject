@@ -53,6 +53,8 @@ internal sealed class SeoObservationConfiguration : IEntityTypeConfiguration<Seo
         builder.Property(observation => observation.CanonicalHref).HasMaxLength(SeoValueLimits.CanonicalHref);
         builder.Property(observation => observation.CanonicalAbsoluteUrl).HasMaxLength(SeoValueLimits.CanonicalHref);
         builder.Property(observation => observation.RobotsMeta).HasMaxLength(SeoValueLimits.RobotsMeta);
+        builder.Property(observation => observation.PolicyExpectedHost).HasMaxLength(253);
+        builder.Property(observation => observation.PolicyIndexingExpectation).HasMaxLength(20);
 
         // Reporting filters SEO history by monitor and measurement window, so both predicates are
         // served from this row rather than through a join to logical_check (the Phase 5 lesson).

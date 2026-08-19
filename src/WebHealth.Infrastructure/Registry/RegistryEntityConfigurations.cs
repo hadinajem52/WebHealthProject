@@ -1,3 +1,4 @@
+using WebHealth.Application.Seo;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using WebHealth.Domain.Normalization;
@@ -197,12 +198,22 @@ internal sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
             table.HasCheckConstraint(
                 "ck_endpoint_normalized_scheme",
                 "normalized_url LIKE 'http://%' OR normalized_url LIKE 'https://%'");
+            table.HasCheckConstraint(
+                "ck_endpoint_seo_indexing_expectation",
+                "seo_indexing_expectation IN ('Default', 'Indexable', 'NoIndex')");
+            table.HasCheckConstraint(
+                "ck_endpoint_seo_expected_canonical_host",
+                "seo_expected_canonical_host IS NULL OR length(seo_expected_canonical_host) > 0");
         });
         builder.Property(endpoint => endpoint.DisplayUrl).HasMaxLength(2048).IsRequired();
         builder.Property(endpoint => endpoint.NormalizedUrl).HasMaxLength(2048).IsRequired();
         builder.Property(endpoint => endpoint.NormalizedUrlHash).HasColumnType("bytea").IsRequired();
         builder.Property(endpoint => endpoint.NormalizedHost).HasMaxLength(253).IsRequired();
         builder.Property(endpoint => endpoint.HttpExceptionReason).HasMaxLength(500);
+        builder.Property(endpoint => endpoint.SeoExpectedCanonicalHost).HasMaxLength(253);
+        builder.Property(endpoint => endpoint.SeoIndexingExpectation).HasMaxLength(20).IsRequired()
+            .HasDefaultValue(SeoIndexingExpectations.Default);
+        builder.Property(endpoint => endpoint.SeoDescriptionRequired).HasDefaultValue(true);
         builder.Property(endpoint => endpoint.Version).IsConcurrencyToken();
         builder.HasIndex(endpoint => new
         {

@@ -203,6 +203,25 @@ public sealed class SeoValueExtractorTests
         }
     }
 
+    /// <summary>
+    /// Robots directives are cumulative. A page whose first tag says index and whose second says
+    /// noindex is noindex, so reading only the first would call it indexable.
+    /// </summary>
+    [Fact]
+    public void Extract_CombinesEveryRobotsMetaDirective()
+    {
+        var extraction = Extract("""
+            <html><head>
+            <meta name="robots" content="index, follow">
+            <meta name="robots" content="noindex">
+            </head></html>
+            """);
+
+        extraction.RobotsMetaCount.Should().Be(2);
+        extraction.RobotsMeta.Value.Should().Be("index, follow, noindex");
+        SeoRuleEvaluator.IsNoIndex(extraction.RobotsMeta.Value).Should().BeTrue();
+    }
+
     [Fact]
     public void Extract_DecodesUsingTheDeclaredCharset()
     {

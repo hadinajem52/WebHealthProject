@@ -128,7 +128,10 @@ internal sealed class TargetRegistryReader(
             endpoint.MonitorEnabled,
             endpoint.SchedulingEnabled,
             await monitoringEligibility.IsEndpointEligibleAsync(endpoint.Id, cancellationToken),
-            await targetAuthorization.CanTestEndpointAsync(endpoint.Id, access, cancellationToken));
+            await targetAuthorization.CanTestEndpointAsync(endpoint.Id, access, cancellationToken),
+            endpoint.SeoExpectedCanonicalHost,
+            endpoint.SeoIndexingExpectation,
+            endpoint.SeoDescriptionRequired);
     }
 
     public async Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
@@ -397,7 +400,10 @@ internal sealed class TargetRegistryReader(
                     .Select(monitor => monitor.IsEnabled).Single(),
                 endpoint.Monitors
                     .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
-                    .Select(monitor => monitor.SchedulingEnabled).Single()))
+                    .Select(monitor => monitor.SchedulingEnabled).Single(),
+                endpoint.SeoExpectedCanonicalHost,
+                endpoint.SeoIndexingExpectation,
+                endpoint.SeoDescriptionRequired))
             .ToListAsync(cancellationToken);
 
     private async Task<Dictionary<Guid, string>> LoadOwnerNamesAsync(
@@ -444,5 +450,6 @@ internal sealed class TargetRegistryReader(
         DateTimeOffset? TargetAuthorizationExpiresAt, long Version, string MonitorType,
         int IntervalSeconds, string BoundedOverrides, int? WarningThresholdMs,
         int? CriticalThresholdMs, int TimeoutSeconds, bool MonitorEnabled,
-        bool SchedulingEnabled);
+        bool SchedulingEnabled, string? SeoExpectedCanonicalHost, string SeoIndexingExpectation,
+        bool SeoDescriptionRequired);
 }

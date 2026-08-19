@@ -150,12 +150,19 @@ description and robots content are human-readable text and are collapsed.
 The base for resolution is the transport's **redacted** final URL, which carries no query string.
 The only case that changes is an empty canonical href, which resolves without the query. That is
 the accepted cost of not carrying query strings — which can hold secrets — into storage.
-| `robots_meta`, `robots_meta_length`, `robots_meta_count` | `<meta name="robots">` content, lowercased, for BR-E05 |
+| `robots_meta`, `robots_meta_length`, `robots_meta_count` | the content of **every** `<meta name="robots">` on the page, combined into one lowercased directive list, for BR-E05 — the directives are cumulative, so keeping only the first would read `index` on a page that also says `noindex` |
 
 Resolving the canonical href is a *fact* about the document plus the URL it was served from, so it
 belongs here. Whether that resolved host is acceptable is *policy*, and belongs to 6.3.
 
 ## 4.1 Extraction runs outside the finalization transaction
+
+**The trade-off, stated plainly.** Extraction happens before the transaction opens, which means it
+also happens for a command that turns out to be a duplicate or invalid — work that is then thrown
+away. That was chosen over the alternative: parsing inside the transaction would put an untrusted
+document of arbitrary shape inside the window where the logical-check row is locked. A wasted parse
+on a rare duplicate finalization is bounded and blocks nobody; lock time on the busiest path in the
+system is a cost every check pays.
 
 Parsing depends only on the evidence in hand, so it happens **before** the transaction opens.
 Running an untrusted document of arbitrary size and shape through a tree builder while the

@@ -48,6 +48,11 @@ public static class DependencyInjection
         ValidateNotificationOptions(notificationOptions);
         services.AddSingleton(notificationOptions);
 
+        var seoOptions = configuration.GetSection(SeoSchedulingOptions.SectionName)
+            .Get<SeoSchedulingOptions>() ?? new SeoSchedulingOptions();
+        ValidateSeoOptions(seoOptions);
+        services.AddSingleton(seoOptions);
+
         var maintenanceOptions = configuration.GetSection(MaintenanceSchedulingOptions.SectionName)
             .Get<MaintenanceSchedulingOptions>() ?? new MaintenanceSchedulingOptions();
         ValidateMaintenanceOptions(maintenanceOptions);
@@ -124,6 +129,9 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceReader, MaintenanceReader>();
         services.AddScoped<IMaintenanceEvaluator, MaintenanceEvaluator>();
         services.AddSingleton<ISeoValueExtractor, SeoValueExtractor>();
+        services.AddScoped<RobotsRefreshService>();
+        services.AddScoped<IRobotsPolicyService, RobotsPolicyService>();
+        services.AddScoped<RobotsRefreshJob>();
         services.AddScoped<IMaintenanceOccurrenceExpander, MaintenanceOccurrenceExpander>();
         services.AddScoped<MaintenanceExpansionJob>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
@@ -137,7 +145,8 @@ public static class DependencyInjection
         services.AddScoped<LogicalCheckJob>();
         services.AddScoped<MonitoringDispatchJob>();
         services.AddScoped<NotificationDispatchJob>();
-        var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled || maintenanceOptions.Enabled;
+        var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled
+            || maintenanceOptions.Enabled || seoOptions.Enabled;
         if (hangfireEnabled)
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -171,6 +180,11 @@ public static class DependencyInjection
                 if (maintenanceOptions.Enabled)
                 {
                     queues.Add(MaintenanceQueueNames.Maintenance);
+                }
+
+                if (seoOptions.Enabled)
+                {
+                    queues.Add(SeoQueueNames.Seo);
                 }
 
                 options.Queues = queues.ToArray();
@@ -244,6 +258,16 @@ public static class DependencyInjection
             || options.EscalationDelay < TimeSpan.FromMinutes(5))
         {
             throw new InvalidOperationException("Notification scheduling options are outside their safe bounds.");
+        }
+    }
+
+    private static void ValidateSeoOptions(SeoSchedulingOptions options)
+    {
+        if (options.RobotsTtlHours is < 1 or > 168
+            || options.RefreshBatchSize is < 1 or > 500
+            || options.FetchTimeoutSeconds is < 1 or > 120)
+        {
+            throw new InvalidOperationException("SEO scheduling options are outside their safe bounds.");
         }
     }
 

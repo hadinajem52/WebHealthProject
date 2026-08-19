@@ -24,6 +24,7 @@ internal sealed class LogicalCheckFinalizationService(
     IncidentAutomationService incidentAutomation,
     ISslUrgentCheckScheduler urgentCertificateChecks,
     ISeoValueExtractor seoValueExtractor,
+    SafeHttpTransportOptions httpOptions,
     TimeProvider timeProvider) : ILogicalCheckFinalizationService
 {
     public async Task<LogicalCheckFinalizationStatus> FinalizeAsync(
@@ -83,7 +84,8 @@ internal sealed class LogicalCheckFinalizationService(
         }
 
         var now = timeProvider.GetUtcNow();
-        var normalized = Normalize(check, command.Evidence, now);
+        var robotsFacts = await LoadRobotsFactsAsync(check, cancellationToken);
+        var normalized = Normalize(check, command.Evidence, seoExtraction, robotsFacts, now);
         var maintenance = await maintenanceEvaluator.FindActiveAsync(check.EndpointMonitorId, normalized.MeasuredAt, cancellationToken);
         AddHistory(check, normalized, command.Evidence, seoExtraction, maintenance, now);
         var counterMode = HealthConfirmationEngine.SelectCounterMode(
@@ -271,9 +273,32 @@ internal sealed class LogicalCheckFinalizationService(
             : LogicalCheckFinalizationStatus.InvalidTransportResult;
     }
 
-    private static NormalizedCheckResult Normalize(
+    /// <summary>
+    /// BR-E06: robots evidence belongs to the origin and is refreshed on its own schedule, so this
+    /// reads the stored snapshot. A check never fetches a second host before its own result can be
+    /// written, and an origin with no snapshot yet simply produces no robots findings.
+    /// </summary>
+    private async Task<RobotsSnapshotFacts?> LoadRobotsFactsAsync(
+        LogicalCheck check,
+        CancellationToken cancellationToken)
+    {
+        if (MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType)) return null;
+        var origin = RobotsRefreshService.OriginOf(check.EndpointMonitor.Endpoint.NormalizedUrl);
+
+        // An expired snapshot is not evidence. If the refresh is delayed or switched off, robots
+        // findings stop rather than continuing from a policy nobody has re-read — a cache that
+        // outlives its TTL on the read path is not a cache, it is stale data with a timestamp.
+        var now = timeProvider.GetUtcNow();
+        var snapshot = await dbContext.RobotsSnapshots.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Origin == origin && item.ExpiresAt > now, cancellationToken);
+        return snapshot?.ToFacts();
+    }
+
+    private NormalizedCheckResult Normalize(
         LogicalCheck check,
         LogicalCheckTerminalEvidence evidence,
+        SeoExtraction? seoExtraction,
+        RobotsSnapshotFacts? robotsFacts,
         DateTimeOffset now)
     {
         if (evidence is HttpTransportEvidence http)
@@ -282,8 +307,10 @@ internal sealed class LogicalCheckFinalizationService(
             return HttpResultNormalizer.Normalize(new(
                 http.Request,
                 http.Result,
-                CreatePolicy(check.ConfigurationSnapshot, statuses),
-                now));
+                CreatePolicy(check.ConfigurationSnapshot, statuses, CreateSeoPolicy(check)),
+                now,
+                seoExtraction,
+                robotsFacts));
         }
 
         if (evidence is SslCertificateEvidence ssl)
@@ -315,7 +342,8 @@ internal sealed class LogicalCheckFinalizationService(
     /// </summary>
     private static HttpResultPolicy CreatePolicy(
         CheckConfigurationSnapshot snapshot,
-        IReadOnlyCollection<int> statuses) => new(
+        IReadOnlyCollection<int> statuses,
+        SeoPolicy? seoPolicy = null) => new(
         statuses,
         snapshot.RequiredContentMarker,
         snapshot.ContentMarkerComparison == "Ordinal",
@@ -323,7 +351,27 @@ internal sealed class LogicalCheckFinalizationService(
         snapshot.MaxResponseBodyBytes,
         new ResponseTimeThresholds(
             snapshot.WarningThresholdMs ?? ResponseTimeThresholds.Default.WarningMs,
-            snapshot.CriticalThresholdMs ?? ResponseTimeThresholds.Default.CriticalMs));
+            snapshot.CriticalThresholdMs ?? ResponseTimeThresholds.Default.CriticalMs),
+        Seo: seoPolicy);
+
+    /// <summary>
+    /// BR-E04, BR-E05, BR-E09. Read from the endpoint and its environment rather than from the
+    /// fingerprinted snapshot: SEO settings do not shape the request, and a finding is judged once
+    /// and then frozen. The reasoning is recorded in
+    /// docs/phase-6/SEO_Canonical_And_Indexing_Policy.md.
+    /// </summary>
+    private SeoPolicy CreateSeoPolicy(LogicalCheck check)
+    {
+        var endpoint = check.EndpointMonitor.Endpoint;
+        return new(
+            endpoint.SeoExpectedCanonicalHost ?? endpoint.NormalizedHost,
+            endpoint.SeoIndexingExpectation,
+            endpoint.SeoDescriptionRequired,
+            endpoint.Environment.IsProduction,
+            // The agent the transport actually sends: a robots group naming this crawler must be
+            // the group that applies to it.
+            httpOptions.UserAgent);
+    }
 
     private static bool MatchesTarget(LogicalCheck check, SafeHttpTransportRequest request)
     {
@@ -515,7 +563,7 @@ internal sealed class LogicalCheckFinalizationService(
         }));
         if (!MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType) && seoExtraction is not null)
         {
-            AddSeoObservation(check, seoExtraction, normalized.MeasuredAt);
+            AddSeoObservation(check, seoExtraction, CreateSeoPolicy(check), normalized.MeasuredAt);
         }
 
         if (evidence is SslCertificateEvidence { Result.Certificate: { } certificate })
@@ -573,6 +621,7 @@ internal sealed class LogicalCheckFinalizationService(
     private void AddSeoObservation(
         LogicalCheck check,
         SeoExtraction extraction,
+        SeoPolicy policy,
         DateTimeOffset observedAt) =>
         dbContext.SeoObservations.Add(new SeoObservation
         {
@@ -594,6 +643,9 @@ internal sealed class LogicalCheckFinalizationService(
             RobotsMeta = extraction.RobotsMeta.Value,
             RobotsMetaLength = extraction.RobotsMeta.Length,
             RobotsMetaCount = extraction.RobotsMetaCount,
+            PolicyExpectedHost = policy.ExpectedCanonicalHost,
+            PolicyIndexingExpectation = policy.ResolvedExpectation,
+            PolicyDescriptionRequired = policy.DescriptionRequired,
             ObservedAt = observedAt
         });
 

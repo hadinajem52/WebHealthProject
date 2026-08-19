@@ -19,14 +19,20 @@ function Start-PostgresTestCluster {
         throw "PostgreSQL test work path must remain under $spikesRoot."
     }
 
+    $data = Join-Path $work 'data'
+    $log = Join-Path $work 'postgres.log'
+    $pgCtl = Join-Path $postgresBin 'pg_ctl.exe'
+
+    # An interrupted run leaves its postmaster alive, still holding the data directory open. The
+    # delete below would then block instead of failing, so stop the stale cluster first.
+    if (Test-Path -LiteralPath (Join-Path $data 'postmaster.pid')) {
+        & $pgCtl -D $data -m immediate -w stop *>&1 | Out-Null
+    }
+
     if (Test-Path -LiteralPath $work) {
         Remove-Item -LiteralPath $work -Recurse -Force
     }
     New-Item -ItemType Directory -Path $work | Out-Null
-
-    $data = Join-Path $work 'data'
-    $log = Join-Path $work 'postgres.log'
-    $pgCtl = Join-Path $postgresBin 'pg_ctl.exe'
 
     & (Join-Path $postgresBin 'initdb.exe') -D $data -U postgres -A trust --no-locale --encoding=UTF8
     if ($LASTEXITCODE -ne 0) { throw 'initdb failed.' }

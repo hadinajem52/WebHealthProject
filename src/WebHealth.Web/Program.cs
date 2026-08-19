@@ -13,6 +13,7 @@ using WebHealth.Web.Authorization;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Notifications;
+using WebHealth.Infrastructure.Seo;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -122,6 +123,7 @@ app.MapControllerRoute(
 app.UseMonitoringScheduling();
 app.UseNotificationScheduling();
 app.UseMaintenanceScheduling();
+app.UseSeoScheduling();
 
 app.Run();
 

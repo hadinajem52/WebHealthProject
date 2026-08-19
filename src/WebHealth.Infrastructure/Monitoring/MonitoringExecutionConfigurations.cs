@@ -186,7 +186,8 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
                 + "'ExecutionExhausted','TargetIneligible','Protocol',"
                 + "'SlowResponse','PageTooLarge',"
                 + "'SslExpired','SslNotYetValid','SslHostnameMismatch','SslUntrusted',"
-                + "'SslHandshakeFailed','SslExpiringSoon')");
+                + "'SslHandshakeFailed','SslExpiringSoon',"
+                + "'SeoTitle','SeoDescription','SeoCanonical','SeoIndexing','SeoRobots')");
             table.HasCheckConstraint(
                 "ck_check_result_outcome_category",
                 "(outcome = 'Healthy' AND failure_category IS NULL) OR "

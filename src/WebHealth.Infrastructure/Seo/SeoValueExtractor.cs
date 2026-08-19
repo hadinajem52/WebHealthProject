@@ -87,8 +87,11 @@ internal sealed class SeoValueExtractor : ISeoValueExtractor
             SeoExtractionRules.BoundedUrl(authoredCanonical, SeoValueLimits.CanonicalHref),
             canonicals.Length,
             BoundedAbsoluteUrl(SeoExtractionRules.ResolveAbsolute(authoredCanonical, input.FinalUrl)),
+            // Every robots meta on the page, combined into one directive list. A page whose
+            // first tag says "index" and whose second says "noindex" is noindex, and reading only
+            // the first would call it indexable — the directives are cumulative, not first-wins.
             SeoExtractionRules.BoundedText(
-                robots.FirstOrDefault(HasText)?.ToLowerInvariant(), SeoValueLimits.RobotsMeta),
+                string.Join(", ", robots.Where(HasText)).ToLowerInvariant(), SeoValueLimits.RobotsMeta),
             robots.Length);
     }
 

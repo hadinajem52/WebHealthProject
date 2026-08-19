@@ -36,6 +36,16 @@ public sealed class SeoObservation
     public string? RobotsMeta { get; set; }
     public int RobotsMetaLength { get; set; }
     public int RobotsMetaCount { get; set; }
+
+    /// <summary>
+    /// The policy this observation was judged against, resolved at finalization. Findings record
+    /// only what failed; without these a passing observation could never be explained later, and a
+    /// policy edited afterwards would silently rewrite the meaning of stored history.
+    /// </summary>
+    public string? PolicyExpectedHost { get; set; }
+    public string? PolicyIndexingExpectation { get; set; }
+    public bool PolicyDescriptionRequired { get; set; }
+
     public DateTimeOffset ObservedAt { get; set; }
 
     public LogicalCheck LogicalCheck { get; set; } = null!;

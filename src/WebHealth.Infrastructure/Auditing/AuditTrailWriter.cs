@@ -110,6 +110,14 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             after,
             cancellationToken);
 
+    public Task RecordRobotsPolicyMutationAsync(
+        AuditWriteContext context,
+        RobotsPolicyAuditSnapshot? before,
+        RobotsPolicyAuditSnapshot after,
+        CancellationToken cancellationToken = default) =>
+        RecordAsync(context, "robots_policy.updated", "robots_snapshot", after.Origin,
+            before, after, cancellationToken);
+
     public Task RecordMaintenanceMutationAsync(
         AuditWriteContext context,
         MaintenanceAuditAction action,
@@ -140,11 +148,26 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
     private static string ToAction(string entityType, string action) =>
         $"{entityType}.{action.ToLowerInvariant()}";
 
-    private async Task RecordAsync<TSnapshot>(
+    private Task RecordAsync<TSnapshot>(
         AuditWriteContext context,
         string action,
         string entityType,
         Guid entityId,
+        TSnapshot? before,
+        TSnapshot after,
+        CancellationToken cancellationToken)
+        where TSnapshot : class =>
+        RecordAsync(context, action, entityType, entityId.ToString(), before, after, cancellationToken);
+
+    /// <summary>
+    /// The identifier overload: an origin is a string key rather than a surrogate id, and the
+    /// audit trail records what the entity is actually keyed by.
+    /// </summary>
+    private async Task RecordAsync<TSnapshot>(
+        AuditWriteContext context,
+        string action,
+        string entityType,
+        string entityIdentifier,
         TSnapshot? before,
         TSnapshot after,
         CancellationToken cancellationToken)
@@ -158,7 +181,7 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             OccurredAt = context.OccurredAt,
             Action = action,
             EntityType = entityType,
-            EntityIdentifier = entityId.ToString(),
+            EntityIdentifier = entityIdentifier,
             Outcome = "succeeded",
             BeforeValues = before is null ? null : JsonSerializer.Serialize(before, SerializerOptions),
             AfterValues = JsonSerializer.Serialize(after, SerializerOptions)

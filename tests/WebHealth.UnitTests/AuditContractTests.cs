@@ -21,6 +21,7 @@ public sealed class AuditContractTests
             nameof(IAuditTrailWriter.RecordEnvironmentMutationAsync),
             nameof(IAuditTrailWriter.RecordEndpointMutationAsync),
             nameof(IAuditTrailWriter.RecordMaintenanceMutationAsync),
+            nameof(IAuditTrailWriter.RecordRobotsPolicyMutationAsync),
             nameof(IAuditTrailWriter.RecordIncidentMutationAsync));
         methods.SelectMany(method => method.GetParameters())
             .Select(parameter => parameter.ParameterType)
@@ -36,6 +37,7 @@ public sealed class AuditContractTests
                 || type == typeof(EnvironmentAuditSnapshot)
                 || type == typeof(EndpointAuditAction)
                 || type == typeof(EndpointAuditSnapshot)
+                || type == typeof(RobotsPolicyAuditSnapshot)
                 || type == typeof(MaintenanceAuditAction)
                 || type == typeof(MaintenanceAuditSnapshot)
                 || type == typeof(IncidentAuditWriteContext)
@@ -102,8 +104,19 @@ public sealed class AuditContractTests
                 nameof(EndpointAuditSnapshot.TargetAuthorizationChanged),
                 nameof(EndpointAuditSnapshot.MonitorIntervalSeconds),
                 nameof(EndpointAuditSnapshot.HasIntervalOverride),
+                nameof(EndpointAuditSnapshot.SeoIndexingExpectation),
+                nameof(EndpointAuditSnapshot.SeoDescriptionRequired),
+                nameof(EndpointAuditSnapshot.HasSeoCanonicalHostOverride),
                 nameof(EndpointAuditSnapshot.IsDeleted),
                 nameof(EndpointAuditSnapshot.Version));
+        typeof(RobotsPolicyAuditSnapshot).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(RobotsPolicyAuditSnapshot.Origin),
+                nameof(RobotsPolicyAuditSnapshot.SitemapRequired),
+                nameof(RobotsPolicyAuditSnapshot.HasConfiguredSitemap),
+                nameof(RobotsPolicyAuditSnapshot.HasApprovedException),
+                nameof(RobotsPolicyAuditSnapshot.ExceptionReason),
+                nameof(RobotsPolicyAuditSnapshot.Version));
         typeof(MaintenanceAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
                 nameof(MaintenanceAuditSnapshot.MaintenanceWindowId),

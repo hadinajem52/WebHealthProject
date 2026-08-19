@@ -174,7 +174,8 @@ public sealed class TargetsController(
             new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt,
                 model.IntervalMinutesOverride, model.SchedulingEnabled,
-                model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride),
+                model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
+                model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -209,6 +210,9 @@ public sealed class TargetsController(
             // freeze today's default into the endpoint as an explicit choice.
             WarningThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.WarningThresholdMs : null,
             CriticalThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.CriticalThresholdMs : null,
+            SeoExpectedCanonicalHost = endpoint.SeoExpectedCanonicalHost,
+            SeoIndexingExpectation = endpoint.SeoIndexingExpectation,
+            SeoDescriptionRequired = endpoint.SeoDescriptionRequired,
             Version = endpoint.Version
         }, cancellationToken));
     }
@@ -226,7 +230,8 @@ public sealed class TargetsController(
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
                 model.TargetAuthorizationExpiresAt, model.Version,
                 model.IntervalMinutesOverride, model.SchedulingEnabled,
-                model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride),
+                model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
+                model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {

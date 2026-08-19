@@ -1,4 +1,5 @@
 using System.Text;
+using WebHealth.Application.Seo;
 using WebHealth.Domain.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Normalization;
@@ -39,6 +40,35 @@ public static class HttpFailureCategories
 
     /// <summary>BR-P04: the page exceeded its size threshold.</summary>
     public const string PageTooLarge = "PageTooLarge";
+}
+
+/// <summary>
+/// Failure categories for the SEO configuration rules (BR-E02 to BR-E05, BR-E09). They are
+/// separate from the availability categories so a report can tell a misconfigured page from an
+/// unreachable one at a glance, without reading rule keys.
+/// </summary>
+/// <summary>
+/// A finding's observed and expected values are stored in bounded columns, and both can be built
+/// from remote input — a canonical href, a robots pattern. Bounding them here rather than at the
+/// column keeps a hostile value from failing the save and rolling back the whole check result.
+/// </summary>
+public static class FindingValues
+{
+    public const int MaxLength = 500;
+
+    public static string? Bound(string? value) =>
+        value is null || value.Length <= MaxLength ? value : value[..MaxLength];
+}
+
+public static class SeoFailureCategories
+{
+    public const string Title = "SeoTitle";
+    public const string Description = "SeoDescription";
+    public const string Canonical = "SeoCanonical";
+    public const string Indexing = "SeoIndexing";
+    public const string Robots = "SeoRobots";
+
+    public static IReadOnlyList<string> All => [Title, Description, Canonical, Indexing, Robots];
 }
 
 /// <summary>
@@ -119,7 +149,8 @@ public sealed record HttpResultPolicy(
     string ProductionHttpSeverity,
     int MaxResponseBodyBytes,
     ResponseTimeThresholds? ResponseTime = null,
-    long PageSizeWarningBytes = PerformanceEvaluation.DefaultPageSizeWarningBytes)
+    long PageSizeWarningBytes = PerformanceEvaluation.DefaultPageSizeWarningBytes,
+    SeoPolicy? Seo = null)
 {
     /// <summary>
     /// The thresholds this result is judged against. They come from the check's configuration
@@ -137,7 +168,9 @@ public sealed record NormalizeHttpResult(
     SafeHttpTransportRequest Request,
     SafeHttpTransportResult Transport,
     HttpResultPolicy Policy,
-    DateTimeOffset MeasuredAt);
+    DateTimeOffset MeasuredAt,
+    SeoExtraction? Seo = null,
+    RobotsSnapshotFacts? Robots = null);
 
 public sealed record NormalizedCheckResult(
     string Outcome,
@@ -256,6 +289,28 @@ public static class HttpResultNormalizer
                 HttpFailureCategories.ResponseTooLarge,
                 $">{input.Policy.MaxResponseBodyBytes} decoded bytes",
                 $"<={input.Policy.MaxResponseBodyBytes} decoded bytes");
+        }
+
+        // BR-E02 to BR-E05 and BR-E09 ride the same finding path as every other rule, so SEO
+        // incidents deduplicate, escalate and resolve without any machinery of their own.
+        if (input.Policy.Seo is { } seoPolicy)
+        {
+            if (input.Seo is { } seo)
+            {
+                foreach (var finding in SeoRuleEvaluator.Evaluate(seo, seoPolicy))
+                {
+                    yield return finding;
+                }
+            }
+
+            // BR-E06 to BR-E08 read the origin's stored snapshot; the refresh that produced it
+            // runs on its own schedule so a check never waits on a second host.
+            foreach (var finding in RobotsRuleEvaluator.Evaluate(
+                input.Robots, seoPolicy.RobotsUserAgent,
+                new Uri(input.Request.Url, UriKind.Absolute).AbsolutePath, seoPolicy))
+            {
+                yield return finding;
+            }
         }
 
         var statusFinding = EvaluateStatus(input.Transport.StatusCode, input.Policy.AcceptedStatusCodes);
@@ -425,6 +480,13 @@ public static class HttpResultNormalizer
             (FindingSeverities.Warning, HttpFailureCategories.HttpsRequired) => 300,
             (FindingSeverities.Warning, HttpFailureCategories.SlowResponse) => 250,
             (FindingSeverities.Warning, HttpFailureCategories.PageTooLarge) => 240,
+            // A misconfigured page ranks below every availability signal: the category on the
+            // result should say "unreachable" whenever the check was also unreachable.
+            (FindingSeverities.Warning, SeoFailureCategories.Robots) => 160,
+            (FindingSeverities.Warning, SeoFailureCategories.Canonical) => 150,
+            (FindingSeverities.Warning, SeoFailureCategories.Indexing) => 140,
+            (FindingSeverities.Warning, SeoFailureCategories.Title) => 130,
+            (FindingSeverities.Warning, SeoFailureCategories.Description) => 120,
             (FindingSeverities.Warning, _) => 200,
             _ => 0
         };

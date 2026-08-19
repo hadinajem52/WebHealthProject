@@ -1,3 +1,4 @@
+using WebHealth.Application.Seo;
 using WebHealth.Domain.Monitoring;
 
 namespace WebHealth.Application.Registry;
@@ -107,7 +108,10 @@ public sealed record EndpointDetails(
     bool MonitorEnabled,
     bool SchedulingEnabled,
     bool IsMonitoringEligible,
-    bool CanTest);
+    bool CanTest,
+    string? SeoExpectedCanonicalHost = null,
+    string SeoIndexingExpectation = SeoIndexingExpectations.Default,
+    bool SeoDescriptionRequired = true);
 
 /// <summary>
 /// What the UI shows for an endpoint's certificate. <paramref name="IsMonitored" /> false means
@@ -168,7 +172,10 @@ public sealed record CreateEndpoint(
     int? IntervalMinutesOverride = null,
     bool SchedulingEnabled = true,
     int? WarningThresholdMsOverride = null,
-    int? CriticalThresholdMsOverride = null);
+    int? CriticalThresholdMsOverride = null,
+    string? SeoExpectedCanonicalHost = null,
+    string SeoIndexingExpectation = SeoIndexingExpectations.Default,
+    bool SeoDescriptionRequired = true);
 
 
 public sealed record UpdateEndpoint(
@@ -184,4 +191,7 @@ public sealed record UpdateEndpoint(
     int? IntervalMinutesOverride = null,
     bool SchedulingEnabled = true,
     int? WarningThresholdMsOverride = null,
-    int? CriticalThresholdMsOverride = null);
+    int? CriticalThresholdMsOverride = null,
+    string? SeoExpectedCanonicalHost = null,
+    string SeoIndexingExpectation = SeoIndexingExpectations.Default,
+    bool SeoDescriptionRequired = true);
