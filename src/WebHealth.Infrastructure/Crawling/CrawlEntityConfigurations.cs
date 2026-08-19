@@ -10,6 +10,10 @@ internal sealed class CrawlRunConfiguration : IEntityTypeConfiguration<CrawlRun>
     /// <summary>Enough for a realistic seed list; a run is configured, not discovered.</summary>
     public const int MaxSeedUrlsLength = 8192;
 
+    public const int MaxScopeLength = 4096;
+
+    public const int MaxFailureReasonLength = 1000;
+
     public void Configure(EntityTypeBuilder<CrawlRun> builder)
     {
         builder.ToTable("crawl_run", table =>
@@ -54,6 +58,20 @@ internal sealed class CrawlRunConfiguration : IEntityTypeConfiguration<CrawlRun>
             table.HasCheckConstraint(
                 "ck_crawl_run_counts",
                 "pages_fetched >= 0 AND links_recorded >= 0");
+
+            table.HasCheckConstraint(
+                "ck_crawl_run_limits",
+                "max_pages > 0 AND max_depth >= 0");
+
+            table.HasCheckConstraint(
+                "ck_crawl_run_query_policy",
+                "query_policy IN ('Canonicalize', 'PreserveOrder', 'Ignore')");
+
+            // Only a failed run carries a failure reason, so the column cannot become a general
+            // notes field that a reader has to guess the meaning of.
+            table.HasCheckConstraint(
+                "ck_crawl_run_failure_reason",
+                "(status = 'Failed') OR (failure_reason IS NULL)");
         });
 
         builder.HasKey(run => run.Id);
@@ -61,6 +79,10 @@ internal sealed class CrawlRunConfiguration : IEntityTypeConfiguration<CrawlRun>
         builder.Property(run => run.StopReason).HasMaxLength(30).IsRequired();
         builder.Property(run => run.SeedUrls).HasMaxLength(MaxSeedUrlsLength).IsRequired();
         builder.Property(run => run.RobotsOverrideRefusedBecause).HasMaxLength(40);
+        builder.Property(run => run.QueryPolicy).HasMaxLength(20).IsRequired();
+        builder.Property(run => run.AllowedHosts).HasMaxLength(MaxScopeLength);
+        builder.Property(run => run.AllowedPathPrefixes).HasMaxLength(MaxScopeLength);
+        builder.Property(run => run.FailureReason).HasMaxLength(MaxFailureReasonLength);
 
         // The reports and the comparison both ask for an endpoint's runs newest first, so that is
         // the index. Descending on started_at so the ordering is served rather than sorted.
@@ -106,6 +128,12 @@ internal sealed class CrawlLinkResultConfiguration : IEntityTypeConfiguration<Cr
             // -1 is the recorded "no depth assigned", which happens when a run stops before the
             // frontier admitted the target. Anything below that is a bug, not a value.
             table.HasCheckConstraint("ck_crawl_link_result_depth", "depth >= -1");
+
+            // A skip was never requested, so it has no duration. Storing zero instead would read as
+            // an instant response rather than as no response at all.
+            table.HasCheckConstraint(
+                "ck_crawl_link_result_duration",
+                "duration_ms IS NULL OR duration_ms >= 0");
         });
 
         builder.HasKey(result => result.Id);

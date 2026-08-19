@@ -301,11 +301,13 @@ public sealed class CrawlExecutionTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_RefusesAnOverrideWhenOnlyOneOfSeveralSeedOriginsIsApproved()
+    public async Task ExecuteAsync_AppliesAnOverrideOnlyToTheSeedOriginThatApprovedIt()
     {
         var site = new FakeSiteTransport()
             .Page("https://approved.test/", CrawlTestHarness.LinkTo("/private/x"))
-            .Page("https://unapproved.test/", CrawlTestHarness.LinkTo("/private/x"));
+            .Page("https://approved.test/private/x", CrawlTestHarness.LinkTo())
+            .Page("https://unapproved.test/", CrawlTestHarness.LinkTo("/private/x"))
+            .Page("https://unapproved.test/private/x", CrawlTestHarness.LinkTo());
         var robots = new PerOriginRobotsReader(new()
         {
             ["https://approved.test"] = new(true, Blocking, true),
@@ -316,12 +318,18 @@ public sealed class CrawlExecutionTests
             RequestRobotsOverride = true
         };
 
-        var (outcome, _) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
+        var (outcome, sink) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
 
-        outcome.RobotsOverrideGranted.Should().BeFalse(
-            "one approved origin must not authorize bypassing a restriction on another");
-        outcome.RobotsOverrideRefusedBecause.Should().Be(CrawlOverrideRefusals.NoApprovedException);
-        site.Requested.Should().NotContain(url => url.Contains("/private/", StringComparison.Ordinal));
+        // The security property: approval is per origin, so it authorizes bypassing that origin's
+        // restrictions and no other's.
+        site.Requested.Should().Contain("https://approved.test/private/x");
+        site.Requested.Should().NotContain("https://unapproved.test/private/x",
+            "one origin's approval must never authorize bypassing another origin's robots");
+        sink.Links.Should().ContainSingle(link => link.TargetUrl == "https://unapproved.test/private/x")
+            .Which.SkipReason.Should().Be(CrawlSkipReasons.RobotsDisallowed);
+
+        outcome.RobotsOverrideGranted.Should().BeTrue(
+            "the run did bypass a published restriction somewhere, which is the fact worth recording");
     }
 
     [Fact]
@@ -365,6 +373,88 @@ public sealed class CrawlExecutionTests
             "a run that threw its way out would look like a run that never started");
     }
 
-    private static string? Classification(WebHealth.Infrastructure.Crawling.RecordingCrawlResultSink sink, string target) =>
+    [Fact]
+    public async Task ExecuteAsync_DoesNotOverrideRobotsOnADiscoveredOriginThatWasNeverApproved()
+    {
+        var site = new FakeSiteTransport()
+            .Page("https://approved.test/", CrawlTestHarness.LinkTo(
+                "/private/seed-side", "https://other.test/private/discovered"))
+            .Page("https://approved.test/private/seed-side", CrawlTestHarness.LinkTo())
+            .Page("https://other.test/private/discovered", CrawlTestHarness.LinkTo());
+        var robots = new PerOriginRobotsReader(new()
+        {
+            ["https://approved.test"] = new(true, Blocking, true),
+            ["https://other.test"] = new(true, Blocking, false)
+        });
+
+        // The scope reaches both hosts, but only one of them carries an approved exception.
+        var request = CrawlTestHarness.Request("https://approved.test/") with
+        {
+            RequestRobotsOverride = true,
+            AllowedHosts = [new("approved.test"), new("other.test")],
+            AllowedPathPrefixes = []
+        };
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
+
+        site.Requested.Should().Contain("https://approved.test/private/seed-side",
+            "the origin with an approved exception is the one the override applies to");
+        site.Requested.Should().NotContain("https://other.test/private/discovered",
+            "an approval for one origin must never authorize bypassing another origin's robots");
+        sink.Links.Should()
+            .ContainSingle(link => link.TargetUrl == "https://other.test/private/discovered")
+            .Which.SkipReason.Should().Be(CrawlSkipReasons.RobotsDisallowed);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoesNotFollowLinksOutOfAnErrorPage()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/missing"))
+            .With("https://site.test/missing", new(404, CrawlTestHarness.LinkTo("/from-error-page")))
+            .Page("https://site.test/from-error-page", CrawlTestHarness.LinkTo());
+
+        var (outcome, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        site.Requested.Should().NotContain("https://site.test/from-error-page",
+            "an error page's navigation must not expand the crawl");
+        outcome.PagesFetched.Should().Be(1, "a 404 is not a page that was fetched");
+        Classification(sink, "https://site.test/missing").Should().Be(CrawlLinkClassifications.Broken);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RecordsAnHrefThatCouldNotBeCanonicalised()
+    {
+        var overlong = $"https://site.test/{new string('a', CrawlUrlOptions.MaxUrlLength)}";
+        var site = Site().Page(Seed, CrawlTestHarness.LinkTo(
+            overlong, "mailto:someone@site.test", "tel:+15550100"));
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        sink.Links.Should().ContainSingle(link => link.SkipReason == CrawlUrlRejections.TooLong,
+            "a link the crawler refused to resolve is a decision, not an absence");
+        sink.Links.Should().NotContain(link => link.TargetUrl.StartsWith("mailto:", StringComparison.Ordinal),
+            "mailto and tel are ordinary page content, not defects worth reporting");
+        sink.Links.Should().NotContain(link => link.TargetUrl.StartsWith("tel:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReportsAPageLimitedInternalLinkAsInternal()
+    {
+        var site = Site().Page(Seed, CrawlTestHarness.LinkTo("/a", "/b"));
+        site.Page("https://site.test/a", CrawlTestHarness.LinkTo());
+        site.Page("https://site.test/b", CrawlTestHarness.LinkTo());
+
+        var request = CrawlTestHarness.Request() with { Limits = new() { MaxPages = 2 } };
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, request);
+
+        var refused = sink.Links.Should()
+            .ContainSingle(link => link.SkipReason == CrawlSkipReasons.PageLimit).Subject;
+        refused.IsInternal.Should().BeTrue("the link is internal whether or not the frontier took it");
+        refused.Depth.Should().Be(1, "its depth is known even though it was never queued");
+    }
+
+    private static string? Classification(RecordingCrawlResultSink sink, string target) =>
         sink.Links.SingleOrDefault(link => link.TargetUrl == target)?.Classification;
 }

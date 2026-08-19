@@ -70,7 +70,8 @@ internal static class DatabaseFoundationAssertions
         "20260819094132_RecurringMaintenanceOccurrences",
         "20260819101929_SeoValueExtraction",
         "20260819111509_SeoConfigurationAndRobotsPolicy",
-        "20260819162313_CrawlRunsAndLinkResults"
+        "20260819162313_CrawlRunsAndLinkResults",
+        "20260819165856_CrawlRunConfigurationSnapshot"
     ];
 
     private static readonly string[] ExpectedTables =

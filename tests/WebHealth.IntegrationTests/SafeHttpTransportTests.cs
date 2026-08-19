@@ -49,6 +49,29 @@ public sealed class SafeHttpTransportTests
         request.Should().NotContain("Cookie:");
     }
 
+    /// <summary>
+    /// BR-L09. Every outbound request identifies the project *and* carries a way to reach it, so a
+    /// site owner seeing our traffic in their logs can act on it. Asserted on the wire rather than
+    /// on the options object, because a header composed correctly and never sent proves nothing.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_SendsTheConfiguredContactAlongsideTheUserAgent()
+    {
+        await using var server = await HttpFixture.Start(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        await using var harness = CreateHarness(
+            new HostResolver(("contact.test", [IPAddress.Loopback])),
+            AuthorizeAll,
+            configure: defaults => defaults with { Contact = "https://example.test/contact" });
+
+        var result = await harness.Transport.SendAsync(new(
+            Guid.NewGuid(), $"http://contact.test:{server.Port}/", false));
+
+        result.Succeeded.Should().BeTrue();
+        (await server.Request).Should().Contain(
+            "User-Agent: WebHealthMonitor/1.0 (+https://example.test/contact)");
+    }
+
     [Fact]
     public async Task SendAsync_DoesNotTruncateBodyAtTheExactConfiguredLimit()
     {
@@ -479,7 +502,7 @@ public sealed class SafeHttpTransportTests
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
             {
                 client.Timeout = Timeout.InfiniteTimeSpan;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgentHeader);
             })
             .ConfigurePrimaryHttpMessageHandler(provider =>
             {

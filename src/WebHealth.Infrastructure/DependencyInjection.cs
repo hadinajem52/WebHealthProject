@@ -139,6 +139,13 @@ public static class DependencyInjection
         services.AddScoped<IRobotsPolicyService, RobotsPolicyService>();
         services.AddScoped<RobotsRefreshJob>();
         services.AddSingleton<IHtmlLinkExtractor, HtmlLinkExtractor>();
+
+        // Both are singletons on purpose. A budget or a rate limit that each run observes on its
+        // own bounds nothing about what several concurrent runs do together.
+        services.AddSingleton<CrawlRequestBudget>();
+        services.AddSingleton(provider => new HostRequestRateLimiter(
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<CrawlSchedulingOptions>().RequestsPerSecondPerHost));
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
         services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
@@ -227,12 +234,15 @@ public static class DependencyInjection
             services.AddScoped<ILogicalCheckQueue, DisabledLogicalCheckQueue>();
         }
         var configuredUserAgent = configuration[$"{SafeHttpTransportOptions.SectionName}:UserAgent"];
+        var configuredContact = configuration[$"{SafeHttpTransportOptions.SectionName}:Contact"];
         var safeHttpOptions = new SafeHttpTransportOptions
         {
             UserAgent = string.IsNullOrWhiteSpace(configuredUserAgent)
                 ? "WebHealthMonitor/1.0"
-                : configuredUserAgent.Trim()
+                : configuredUserAgent.Trim(),
+            Contact = string.IsNullOrWhiteSpace(configuredContact) ? null : configuredContact.Trim()
         };
+        ValidateContact(safeHttpOptions);
         services.AddSingleton(safeHttpOptions);
         ValidateCrawlOptions(crawlOptions, safeHttpOptions);
         services.TryAddSingleton(TimeProvider.System);
@@ -246,7 +256,7 @@ public static class DependencyInjection
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
             {
                 client.Timeout = Timeout.InfiniteTimeSpan;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd(safeHttpOptions.UserAgent);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(safeHttpOptions.UserAgentHeader);
             })
             .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
                 SafeHttpConnectionFactory.Create(
@@ -275,9 +285,16 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// The crawler's request budget is capped at half the transport's global concurrency. Without
-    /// that ceiling a saturated crawl would fill every shared HTTP slot and block scheduled checks
-    /// at the transport, which is the starvation the separate queue exists to prevent.
+    /// The crawler's request budget is capped at half the transport's global concurrency. The cap
+    /// is on <c>WorkerCount * RequestConcurrency</c>, not on <c>RequestConcurrency</c> alone: a
+    /// worker pool of eight, each run staying within its own budget, would together fill every
+    /// shared HTTP slot and block scheduled checks at the transport — which is exactly the
+    /// starvation the separate queue exists to prevent, arriving by a different route.
+    /// <para>
+    /// <see cref="CrawlRequestBudget" /> enforces the same ceiling at runtime. This check exists so
+    /// a configuration that could never respect it is refused at startup rather than silently
+    /// queueing behind a semaphore.
+    /// </para>
     /// </summary>
     private static void ValidateCrawlOptions(
         CrawlSchedulingOptions options,
@@ -285,7 +302,7 @@ public static class DependencyInjection
     {
         if (options.WorkerCount is < 1 or > 8
             || options.RequestConcurrency < 1
-            || options.RequestConcurrency > transportOptions.GlobalConcurrency / 2
+            || options.WorkerCount * options.RequestConcurrency > transportOptions.GlobalConcurrency / 2
             || options.RequestsPerSecondPerHost is <= 0 or > 10
             || options.MaxDuration < TimeSpan.FromMinutes(1)
             || options.MaxDuration > TimeSpan.FromHours(4)
@@ -294,6 +311,25 @@ public static class DependencyInjection
             || options.MaxPageBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes)
         {
             throw new InvalidOperationException("Crawl scheduling options are outside their safe bounds.");
+        }
+    }
+
+    /// <summary>
+    /// BR-L09 asks for a contact identifier, so a configured one has to be reachable rather than
+    /// decorative. It is optional; what is refused is a value that could not be acted on.
+    /// </summary>
+    private static void ValidateContact(SafeHttpTransportOptions options)
+    {
+        if (options.Contact is null) return;
+        var contact = options.Contact;
+        var usable = contact.Length <= 200
+            && Uri.TryCreate(contact, UriKind.Absolute, out var parsed)
+            && parsed.Scheme is "http" or "https" or "mailto";
+        if (!usable)
+        {
+            throw new InvalidOperationException(
+                $"{SafeHttpTransportOptions.SectionName}:Contact must be an absolute http, https or "
+                + "mailto URI of at most 200 characters.");
         }
     }
 

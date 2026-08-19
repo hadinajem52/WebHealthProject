@@ -47,8 +47,58 @@ public sealed class CrawlIsolationTests
         var transport = new SafeHttpTransportOptions();
         var crawl = new CrawlSchedulingOptions();
 
-        crawl.RequestConcurrency.Should().BeLessOrEqualTo(transport.GlobalConcurrency / 2,
-            "a saturated crawl must never hold the whole shared transport budget");
+        // The product, not the per-run figure: several runs each inside their own budget can still
+        // fill the shared one between them.
+        (crawl.WorkerCount * crawl.RequestConcurrency).Should()
+            .BeLessOrEqualTo(transport.GlobalConcurrency / 2,
+                "a saturated crawl must never hold the whole shared transport budget");
+    }
+
+    [Fact]
+    public async Task ConcurrentRuns_ShareOneCrawlBudgetRatherThanOneEach()
+    {
+        var transportOptions = new SafeHttpTransportOptions();
+        var budget = new CrawlRequestBudget(transportOptions);
+        budget.Capacity.Should().Be(transportOptions.GlobalConcurrency / 2);
+
+        var options = CrawlTestHarness.Options with { RequestConcurrency = budget.Capacity };
+        var sites = Enumerable.Range(0, 3).Select(_ =>
+        {
+            var site = new FakeSiteTransport().Page(CrawlTestHarness.Seed, CrawlTestHarness.LinkTo(
+                [.. Enumerable.Range(0, 60).Select(index => $"/page-{index}")]));
+            foreach (var index in Enumerable.Range(0, 60))
+            {
+                site.Page($"https://site.test/page-{index}", CrawlTestHarness.LinkTo());
+            }
+
+            return site;
+        }).ToArray();
+
+        // One shared budget handed to three runs at once. Without it each run would hold its own
+        // capacity and the three together would exceed the crawler's share of the transport.
+        var inFlight = 0;
+        var peak = 0;
+        var gate = new Lock();
+        foreach (var site in sites)
+        {
+            site.BeforeRespondAsync = _ =>
+            {
+                lock (gate)
+                {
+                    inFlight++;
+                    peak = Math.Max(peak, inFlight);
+                }
+
+                return Task.Delay(15).ContinueWith(_ => { lock (gate) inFlight--; }, TaskScheduler.Default);
+            };
+        }
+
+        await Task.WhenAll(sites.Select(site => CrawlTestHarness.RunAsync(
+            site, CrawlTestHarness.Request(), options, budget: budget)));
+
+        peak.Should().BeLessOrEqualTo(budget.Capacity,
+            "three concurrent runs must not exceed the crawler's single shared share of the budget");
+        budget.Available.Should().Be(budget.Capacity, "every slot must be returned");
     }
 
     [Fact]

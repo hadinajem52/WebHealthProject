@@ -38,22 +38,32 @@ internal sealed class CrawlReportReader(ApplicationDbContext dbContext) : ICrawl
                 run.FinishedAt))
             .ToArrayAsync(cancellationToken);
 
+    /// <summary>A page of a run's broken links. The bound is the reader's, not the caller's.</summary>
+    public const int MaxBrokenLinksListed = 500;
+
     public async Task<IReadOnlyList<CrawlBrokenLink>> ListBrokenLinksAsync(
         Guid runId,
+        int limit,
+        int offset = 0,
         CancellationToken cancellationToken = default) =>
         await BrokenLinksQuery(runId)
             .OrderBy(link => link.TargetUrl).ThenBy(link => link.SourceUrl)
+            .Skip(Math.Max(0, offset))
+            .Take(Math.Clamp(limit, 1, MaxBrokenLinksListed))
             .ToArrayAsync(cancellationToken);
 
     public async Task<CrawlComparison> CompareLatestAsync(
         Guid endpointId,
         CancellationToken cancellationToken = default)
     {
-        // Only completed runs take part. A cancelled run covered part of the site, so using it as
-        // the current side would report every link it never reached as resolved — a partial crawl
-        // manufacturing good news is the one failure this comparison must not have.
+        // Only **full-scope** runs take part. A run that stopped on any budget — cancelled, page
+        // limit, duration limit — covered part of the site, so every link it never reached would
+        // surface as resolved. A partial crawl manufacturing good news is the one failure this
+        // comparison must not have, and a page limit produces it just as readily as a cancellation.
         var runs = await dbContext.CrawlRuns.AsNoTracking()
-            .Where(run => run.EndpointId == endpointId && run.Status == CrawlRunStatuses.Completed)
+            .Where(run => run.EndpointId == endpointId
+                && run.Status == CrawlRunStatuses.Completed
+                && run.StopReason == CrawlStopReasons.FrontierExhausted)
             .OrderByDescending(run => run.StartedAt)
             .ThenByDescending(run => run.Id)
             .Select(run => run.Id)
@@ -68,25 +78,49 @@ internal sealed class CrawlReportReader(ApplicationDbContext dbContext) : ICrawl
             // A first crawl has nothing to compare against. Every broken link is reported as new,
             // and the null previous run is what lets a reader tell that from a run that introduced
             // them.
-            return new(runs[0], null, Ordered(current), [], []);
+            return new(runs[0], null, Ordered(current), [], [], []);
         }
 
         var previous = await BrokenLinksQuery(runs[1]).ToArrayAsync(cancellationToken);
         var previousPairs = previous.Select(Pair).ToHashSet(StringComparer.Ordinal);
         var currentPairs = current.Select(Pair).ToHashSet(StringComparer.Ordinal);
 
-        // Resolved folds two cases together on purpose: the pair was checked and is healthy now,
-        // and the source page stopped linking to it. Both are resolutions of that broken link, and
-        // separating them would report a removed link as still outstanding.
-        var resolved = previous.Where(link => !currentPairs.Contains(Pair(link)));
+        // A previously broken link that is no longer broken is only resolved if the current run
+        // actually established that. A timeout, a block, a skip or an unreached target says nothing
+        // about whether the link works — treating those as resolved would close findings on the
+        // strength of evidence the crawl never gathered.
+        var unproven = (await dbContext.CrawlLinkResults.AsNoTracking()
+            .Where(link => link.RunId == runs[0] && IndeterminateClassifications.Contains(link.Classification))
+            .Select(link => new { link.SourceUrl, link.TargetUrl })
+            .ToArrayAsync(cancellationToken))
+            .Select(link => $"{link.SourceUrl}\n{link.TargetUrl}")
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Resolved still folds two cases together on purpose: the pair was checked and is healthy
+        // now, and the source page stopped linking to it. Both are resolutions of that broken link,
+        // and separating them would report a removed link as still outstanding.
+        var noLongerBroken = previous.Where(link => !currentPairs.Contains(Pair(link))).ToArray();
 
         return new(
             runs[0],
             runs[1],
             Ordered(current.Where(link => !previousPairs.Contains(Pair(link)))),
             Ordered(current.Where(link => previousPairs.Contains(Pair(link)))),
-            Ordered(resolved));
+            Ordered(noLongerBroken.Where(link => !unproven.Contains(Pair(link)))),
+            Ordered(noLongerBroken.Where(link => unproven.Contains(Pair(link)))));
     }
+
+    /// <summary>
+    /// Classifications that leave a link's health unknown. A previously broken link in one of these
+    /// states has not been shown to work, so it is reported as indeterminate rather than resolved.
+    /// </summary>
+    private static readonly string[] IndeterminateClassifications =
+    [
+        CrawlLinkClassifications.Timeout,
+        CrawlLinkClassifications.Blocked,
+        CrawlLinkClassifications.Skipped,
+        CrawlLinkClassifications.Unknown
+    ];
 
     private IQueryable<CrawlBrokenLink> BrokenLinksQuery(Guid runId) =>
         dbContext.CrawlLinkResults.AsNoTracking()

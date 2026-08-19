@@ -38,16 +38,27 @@ so through the same global concurrency limiter. That limiter is the third place 
 starve monitoring: filling all twenty global slots would block checks at the transport rather than
 at the queue.
 
-So a run holds at most `CrawlSchedulingOptions.RequestConcurrency` requests in flight, and options
-validation refuses a value above **half** the transport's global concurrency. The crawler can never
-hold more than half the shared budget, whatever else is running.
+So `CrawlRequestBudget` — a **process-wide** semaphore sized at half the transport's global
+concurrency — is held across every crawl request, and options validation refuses a configuration
+whose `WorkerCount * RequestConcurrency` could exceed it.
+
+Both parts matter. A per-run limit bounds one run; it says nothing about several. With eight crawl
+workers each staying inside its own budget of ten, the crawler would hold all twenty shared slots
+between them and block checks at the transport — the same starvation arriving by a different route.
+The shared semaphore is the control; the validation is there so an impossible configuration is
+refused at startup rather than silently queueing.
+
+The per-host rate limiter is process-wide for the same reason: one owned by each run means two
+crawls of one host each politely observe two requests a second and together send four.
 
 ### 1.4 How this is verified
 
 By test, not by inspection:
 
-- a saturated crawl leaves at least half the global transport budget free
-  (`CrawlIsolationTests`);
+- three concurrent runs sharing one budget never exceed it together, and return every slot
+  (`ConcurrentRuns_ShareOneCrawlBudgetRatherThanOneEach`);
+- the default configuration's `WorkerCount * RequestConcurrency` leaves at least half the shared
+  budget for monitoring;
 - a crawl whose every request stalls for longer than a monitoring cadence does not delay a
   concurrent monitoring-shaped request beyond that cadence.
 
@@ -56,8 +67,12 @@ By test, not by inspection:
 - **Per-host rate limit**, default 2 requests/second/host, applied before the request and separately
   from concurrency. Concurrency bounds how many are in flight; the rate limit bounds how fast they
   start. A host needs both.
-- **User agent** from `Monitoring:HttpTransport:UserAgent`, the same identifier every other outbound
-  request carries, so a client's logs show one recognisable agent (BR-L09).
+- **User agent and contact** from `Monitoring:HttpTransport:UserAgent` and `:Contact`, composed once
+  into `WebHealthMonitor/1.0 (+https://…)` and sent by the shared transport, so a client's logs show
+  one recognisable agent *and* a way to reach us about it (BR-L09). The contact is validated at
+  startup as an absolute http, https or mailto URI — a contact nobody can act on is not a contact.
+  It is on the shared transport rather than the crawler alone because every request this project
+  makes to someone else's host should be traceable back to it.
 
 ## 3. Limits and stopping (BR-L05)
 
@@ -104,15 +119,23 @@ Every internal fetch is checked against the origin's stored `robots.txt` snapsho
 crawl performs no robots fetch of its own. An origin with no snapshot is crawled, for the same
 reason 6.4's rules raise no finding without one: absence of evidence is not evidence.
 
-**Overriding robots is granted only when all three hold:**
+**Overriding robots is decided per origin, and granted only when all three hold:**
 
 1. the run asked for it;
 2. the target is **non-production** — a production crawl never bypasses published restrictions;
-3. the origin carries an **approved exception** on its `robots_snapshot` row, with the reason and
-   approver 6.4 already records.
+3. **that origin** carries an **approved exception** on its `robots_snapshot` row, with the reason
+   and approver 6.4 already records.
 
-The granted-or-refused decision, and the reason it was refused, are recorded on the run outcome. An
-override that left no trace would be exactly the silent flag this project refuses to have.
+Per origin is the load-bearing word. A run's scope can reach a host the seeds never named — through
+`AllowedHosts`, through `IncludeSubdomains`, or simply through a second seed — and a decision taken
+once for the seeds and applied to everything afterwards would carry one origin's approval onto a
+host nobody approved. That is precisely what the approval exists to prevent, so the decision is
+re-evaluated against each origin's own facts at the moment that origin is first consulted.
+
+The run outcome records whether the run bypassed a restriction **anywhere**, and the reason when it
+did not. That is the security-relevant fact; where an origin's override was refused, its robots were
+enforced. An override that left no trace would be exactly the silent flag this project refuses to
+have.
 
 ## 7. SSRF and authorization (BR-L01, and the Phase 0 network policy)
 
@@ -139,8 +162,15 @@ log.
 ## 9. What this increment does not do
 
 No schema, no persistence, no comparison between runs, no views. The results go to
-`ICrawlResultSink`, which 6.7 implements against the crawl tables it owns; the in-memory
-implementation registered now is what the execution tests assert against.
+`ICrawlResultSink`, which 6.7 implements against the crawl tables it owns.
+
+**The durable entry point is not yet configurable.** `CrawlRunJob` takes seeds and the two policy
+flags, and uses `CrawlLimits.Default` with scope derived from the seeds — even though
+`CrawlRunRequest` supports custom limits, hosts, prefixes and query policy. Nothing enqueues the job
+yet, so the gap is inert; closing it properly means a stored crawl profile whose configuration is
+loaded server-side by id, which belongs with the surface that will enqueue crawls rather than here.
+Passing limits as loose job arguments would put the bounds that keep a crawl safe into the queue
+payload, where nothing validates them.
 
 ## 10. Evidence
 
@@ -151,7 +181,9 @@ implementation registered now is what the execution tests assert against.
 | BR-L06 classification from transport facts | `CrawlRun.Observe` | `CrawlExecutionTests` |
 | BR-L07 source-target pairs, deduplicated | `CrawlLinkLedger` | `CrawlLinkLedgerTests`, `CrawlExecutionTests` |
 | BR-L08 external checked, never explored | `CrawlFrontier`, `CrawlRun` | `CrawlExecutionTests` |
-| BR-L09 identifiable user agent | shared `SafeHttpTransportOptions.UserAgent` | covered by the transport's own tests |
+| BR-L09 identifiable agent and contact | `SafeHttpTransportOptions.UserAgentHeader` | `SafeHttpTransportTests` |
+| Only a 2xx response is a page to follow | `CrawlRunExecution.ShouldFollow` | `CrawlExecutionTests` |
+| A refused href is recorded, not dropped | `CrawlRunExecution.RecordRejectedHref` | `CrawlExecutionTests` |
 | BR-L10 cancellation preserves findings | `CrawlRun`, `CrawlLinkLedger.Flush` | `CrawlExecutionTests`, `CrawlLinkLedgerTests` |
 | Isolation (section 1) | queue, work kind, request budget | `CrawlIsolationTests` |
 

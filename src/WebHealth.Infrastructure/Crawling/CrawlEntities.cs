@@ -24,6 +24,24 @@ public sealed class CrawlRun
     /// <summary>The seeds as configured, for a report that has to explain what was crawled.</summary>
     public required string SeedUrls { get; set; }
 
+    /// <summary>
+    /// The configuration this run was launched with, stored so its results stay explainable. A
+    /// depth limit edited afterwards must not silently rewrite what an old result set meant. Empty
+    /// host and prefix values mean "derived from the seeds".
+    /// </summary>
+    public string? AllowedHosts { get; set; }
+    public string? AllowedPathPrefixes { get; set; }
+    public required string QueryPolicy { get; set; }
+    public int MaxPages { get; set; }
+    public int MaxDepth { get; set; }
+    public bool CheckExternalLinks { get; set; }
+
+    /// <summary>
+    /// Why a Failed run failed, bounded. A run recorded as failed with no reason tells a reader
+    /// only that something went wrong, which is the kind of dead end this project avoids elsewhere.
+    /// </summary>
+    public string? FailureReason { get; set; }
+
     public int PagesFetched { get; set; }
     public int LinksRecorded { get; set; }
 
@@ -73,6 +91,12 @@ public sealed class CrawlLinkResult
 
     /// <summary>Depth of first discovery; -1 where the run stopped before assigning one.</summary>
     public int Depth { get; set; }
+
+    /// <summary>
+    /// How long the request took, where one was made. Null for a skip, which is the difference
+    /// between "this took no time" and "this was never requested".
+    /// </summary>
+    public int? DurationMs { get; set; }
 
     public DateTimeOffset RecordedAt { get; set; }
 

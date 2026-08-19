@@ -141,17 +141,22 @@ internal static class CrawlTestHarness
         CrawlSchedulingOptions? options = null,
         ICrawlRobotsReader? robotsReader = null,
         IMonitoringTargetAuthorizer? authorizer = null,
+        CrawlRequestBudget? budget = null,
         CancellationToken cancellationToken = default)
     {
         var sink = new RecordingCrawlResultSink();
+        var transportOptions = new SafeHttpTransportOptions();
+        var effective = options ?? Options;
         var service = new CrawlExecutionService(
             transport,
             new HtmlLinkExtractor(),
             robotsReader ?? new FakeRobotsReader(),
             sink,
             authorizer ?? new FakeTargetAuthorizer(),
-            options ?? Options,
-            new SafeHttpTransportOptions(),
+            budget ?? new CrawlRequestBudget(transportOptions),
+            new HostRequestRateLimiter(TimeProvider.System, effective.RequestsPerSecondPerHost),
+            effective,
+            transportOptions,
             TimeProvider.System);
 
         var outcome = await service.ExecuteAsync(request, cancellationToken);

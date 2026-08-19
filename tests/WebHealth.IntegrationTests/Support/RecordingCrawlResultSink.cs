@@ -1,12 +1,13 @@
 using System.Collections.Concurrent;
 using WebHealth.Application.Crawling;
 
-namespace WebHealth.Infrastructure.Crawling;
+namespace WebHealth.IntegrationTests.Support;
 
 /// <summary>
-/// Holds a run's results in memory. Phase 6.7 owns the crawl schema and replaces this with the
-/// persistent sink; until then this is what the execution tests assert against, and it keeps the
-/// execution loop honest about writing results as they resolve rather than at the end.
+/// Holds a run's results in memory, for the execution tests. It lives in the test project rather
+/// than beside the real sink so it cannot be registered by accident: crawling is enabled by
+/// default, and a non-durable sink reachable from production configuration would mean results that
+/// vanish when the job's scope ends.
 /// </summary>
 internal sealed class RecordingCrawlResultSink : ICrawlResultSink
 {

@@ -11,7 +11,8 @@ public sealed record CrawlEdge(
     int? StatusCode,
     int RedirectCount,
     string? FinalUrl,
-    string? SkipReason);
+    string? SkipReason,
+    int? DurationMs);
 
 /// <summary>
 /// BR-L07. A target is fetched once, but it may be linked from many pages, and "which page contains
@@ -36,7 +37,8 @@ public sealed class CrawlLinkLedger
     private readonly HashSet<string> _emitted = new(StringComparer.Ordinal);
 
     private sealed record Resolution(
-        string Classification, int? StatusCode, int RedirectCount, string? FinalUrl, string? SkipReason);
+        string Classification, int? StatusCode, int RedirectCount, string? FinalUrl,
+        string? SkipReason, int? DurationMs);
 
     /// <summary>
     /// Records that <paramref name="sourceUrl" /> links to <paramref name="targetUrl" />, and
@@ -61,7 +63,8 @@ public sealed class CrawlLinkLedger
     public IReadOnlyList<CrawlEdge> RecordOutcome(
         string targetUrl,
         CrawlRequestObservation observation,
-        string? finalUrl = null)
+        string? finalUrl = null,
+        int? durationMs = null)
     {
         ArgumentNullException.ThrowIfNull(observation);
         return Resolve(targetUrl, new(
@@ -69,14 +72,15 @@ public sealed class CrawlLinkLedger
             observation.StatusCode,
             observation.RedirectCount,
             finalUrl,
-            null));
+            null,
+            durationMs));
     }
 
     /// <summary>Records a target that was deliberately never requested, with the reason.</summary>
     public IReadOnlyList<CrawlEdge> RecordSkip(string targetUrl, string skipReason)
     {
         ArgumentNullException.ThrowIfNull(skipReason);
-        return Resolve(targetUrl, new(CrawlLinkClassifications.Skipped, null, 0, null, skipReason));
+        return Resolve(targetUrl, new(CrawlLinkClassifications.Skipped, null, 0, null, skipReason, null));
     }
 
     /// <summary>
@@ -90,7 +94,7 @@ public sealed class CrawlLinkLedger
         foreach (var target in _sourcesByTarget.Keys.Where(target => !_resolved.ContainsKey(target)).ToArray())
         {
             edges.AddRange(Resolve(target, new(
-                CrawlLinkClassifications.Unknown, null, 0, null, CrawlSkipReasons.RunStopped)));
+                CrawlLinkClassifications.Unknown, null, 0, null, CrawlSkipReasons.RunStopped, null)));
         }
 
         return edges;
@@ -118,7 +122,8 @@ public sealed class CrawlLinkLedger
         {
             if (!_emitted.Add($"{source}\n{targetUrl}")) continue;
             edges.Add(new(source, targetUrl, resolution.Classification, resolution.StatusCode,
-                resolution.RedirectCount, resolution.FinalUrl, resolution.SkipReason));
+                resolution.RedirectCount, resolution.FinalUrl, resolution.SkipReason,
+                resolution.DurationMs));
         }
 
         return edges;

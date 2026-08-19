@@ -60,7 +60,8 @@ public sealed record CrawlLinkRecord(
     int? StatusCode,
     int RedirectCount,
     string? FinalUrl,
-    string? SkipReason);
+    string? SkipReason,
+    int? DurationMs);
 
 /// <summary>
 /// What a run is, before it has produced anything. Opening the run first means results always have
@@ -71,7 +72,41 @@ public sealed record CrawlRunStart(
     Guid RunId,
     Guid EndpointId,
     IReadOnlyList<string> SeedUrls,
+    CrawlRunSettings Settings,
     DateTimeOffset StartedAt);
+
+/// <summary>
+/// The configuration a run was launched with, stored beside its results. Without it a result set
+/// cannot be explained later: "no broken links past depth three" means nothing unless the depth
+/// limit that produced it is recorded, and a limit edited afterwards would silently rewrite the
+/// meaning of stored history — the same reason <c>seo_observation</c> stores the policy it was
+/// judged against.
+/// <para>
+/// Empty host and prefix lists mean "derived from the seeds", which is what the run was actually
+/// configured with rather than a value invented at write time.
+/// </para>
+/// </summary>
+public sealed record CrawlRunSettings(
+    IReadOnlyList<string> AllowedHosts,
+    IReadOnlyList<string> AllowedPathPrefixes,
+    string QueryPolicy,
+    int MaxPages,
+    int MaxDepth,
+    bool CheckExternalLinks)
+{
+    public static CrawlRunSettings From(CrawlRunRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return new(
+            [.. (request.AllowedHosts ?? []).Select(rule =>
+                rule.IncludeSubdomains ? $"*.{rule.Host}" : rule.Host)],
+            [.. request.AllowedPathPrefixes ?? []],
+            request.UrlOptions.QueryPolicy.ToString(),
+            request.Limits.MaxPages,
+            request.Limits.MaxDepth,
+            request.CheckExternalLinks);
+    }
+}
 
 /// <summary>
 /// Where results go as they resolve. Writing per result rather than batching at the end is what
@@ -148,9 +183,10 @@ public sealed record CrawlComparison(
     Guid? PreviousRunId,
     IReadOnlyList<CrawlBrokenLink> New,
     IReadOnlyList<CrawlBrokenLink> Continuing,
-    IReadOnlyList<CrawlBrokenLink> Resolved)
+    IReadOnlyList<CrawlBrokenLink> Resolved,
+    IReadOnlyList<CrawlBrokenLink> Indeterminate)
 {
-    public static CrawlComparison Empty { get; } = new(null, null, [], [], []);
+    public static CrawlComparison Empty { get; } = new(null, null, [], [], [], []);
 }
 
 public interface ICrawlReportReader
@@ -160,14 +196,22 @@ public interface ICrawlReportReader
         int limit,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// One bounded page of a run's broken links. A run may carry a thousand pages' worth of them,
+    /// so the bound is on the reader rather than left to the caller: an unbounded read here would
+    /// be a query the views could not safely issue.
+    /// </summary>
     Task<IReadOnlyList<CrawlBrokenLink>> ListBrokenLinksAsync(
         Guid runId,
+        int limit,
+        int offset = 0,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Compares the latest completed run for the endpoint against the completed run before it.
-    /// A cancelled run is never the current side: it covered only part of the site, so every link
-    /// it did not reach would surface as resolved and a partial crawl would manufacture good news.
+    /// Compares the latest **full-scope** run for the endpoint against the full-scope run before it.
+    /// A run that stopped on any budget is never used: it covered only part of the site, so every
+    /// link it did not reach would surface as resolved and a partial crawl would manufacture good
+    /// news.
     /// </summary>
     Task<CrawlComparison> CompareLatestAsync(
         Guid endpointId,

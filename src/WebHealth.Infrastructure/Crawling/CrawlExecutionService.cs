@@ -11,7 +11,9 @@ internal sealed record CrawlDependencies(
     IHtmlLinkExtractor LinkExtractor,
     ICrawlRobotsReader RobotsReader,
     ICrawlResultSink Sink,
-    IMonitoringTargetAuthorizer TargetAuthorizer);
+    IMonitoringTargetAuthorizer TargetAuthorizer,
+    CrawlRequestBudget RequestBudget,
+    HostRequestRateLimiter RateLimiter);
 
 /// <summary>
 /// BR-L01 to BR-L10. Drives the frontier from 6.5 through the same <see cref="ISafeHttpTransport" />
@@ -29,6 +31,8 @@ internal sealed class CrawlExecutionService(
     ICrawlRobotsReader robotsReader,
     ICrawlResultSink sink,
     IMonitoringTargetAuthorizer targetAuthorizer,
+    CrawlRequestBudget requestBudget,
+    HostRequestRateLimiter rateLimiter,
     CrawlSchedulingOptions options,
     SafeHttpTransportOptions transportOptions,
     TimeProvider timeProvider) : ICrawlExecutionService
@@ -43,7 +47,8 @@ internal sealed class CrawlExecutionService(
         // request that was refused is a fact worth keeping — recording the run only on the success
         // path would leave a misconfigured crawl indistinguishable from one nobody ever started.
         await sink.BeginRunAsync(
-            new(request.RunId, request.EndpointId, request.SeedUrls ?? [], timeProvider.GetUtcNow()),
+            new(request.RunId, request.EndpointId, request.SeedUrls ?? [],
+                CrawlRunSettings.From(request), timeProvider.GetUtcNow()),
             cancellationToken);
 
         var scope = BuildScope(request, out var seedErrors);
@@ -57,7 +62,7 @@ internal sealed class CrawlExecutionService(
 
         var run = new CrawlRunExecution(
             request, scope!, options, transportOptions.UserAgent, timeProvider,
-            new(transport, linkExtractor, robotsReader, sink, targetAuthorizer));
+            new(transport, linkExtractor, robotsReader, sink, targetAuthorizer, requestBudget, rateLimiter));
         return await run.ExecuteAsync(cancellationToken);
     }
 
@@ -99,7 +104,9 @@ internal sealed class CrawlExecutionService(
 
 /// <summary>
 /// One run's mutable state while it executes, separate from the service so the service stays a
-/// stateless scoped dependency: two runs share no frontier, no ledger and no rate-limiter budget.
+/// stateless scoped dependency: two runs share no frontier and no ledger. The request budget and
+/// the per-host rate limiter are deliberately **not** per run — they are process-wide, because a
+/// limit each run respects on its own does not bound what several runs do together.
 /// Distinct from the <c>CrawlRun</c> entity, which is what 6.7 stores once this has finished.
 /// </summary>
 internal sealed class CrawlRunExecution
@@ -113,8 +120,8 @@ internal sealed class CrawlRunExecution
     private readonly TimeProvider _timeProvider;
     private readonly CrawlFrontier _frontier;
     private readonly CrawlLinkLedger _ledger = new();
-    private readonly HostRequestRateLimiter _rateLimiter;
     private readonly Dictionary<string, CrawlRobotsFacts> _robotsByOrigin = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _overriddenOrigins = new(StringComparer.Ordinal);
     private readonly DateTimeOffset _deadline;
     private readonly string _userAgent;
 
@@ -133,10 +140,11 @@ internal sealed class CrawlRunExecution
     private readonly Dictionary<string, int> _depthByUrl = new(StringComparer.Ordinal);
     private readonly HashSet<string> _internalUrls = new(StringComparer.Ordinal);
 
-    private CrawlOverrideDecision _override = CrawlOverrideDecision.Refused(CrawlOverrideRefusals.NotRequested);
     private int _activeWorkers;
     private int _pagesFetched;
     private int _linksRecorded;
+    private int _originsOverridden;
+    private string? _firstOverrideRefusal;
     private volatile string? _budgetStopReason;
 
     public CrawlRunExecution(
@@ -153,7 +161,6 @@ internal sealed class CrawlRunExecution
         _dependencies = dependencies;
         _timeProvider = timeProvider;
         _frontier = new(scope, request.Limits);
-        _rateLimiter = new(timeProvider, options.RequestsPerSecondPerHost);
         _deadline = timeProvider.GetUtcNow() + options.MaxDuration;
         _userAgent = userAgent;
 
@@ -168,16 +175,27 @@ internal sealed class CrawlRunExecution
     {
         var cancelled = false;
         var failed = false;
+        var durationExceeded = false;
+
+        // The deadline is a cancellation token, not only a between-items check. A worker parked in
+        // the rate limiter or waiting on a slow host would otherwise run past the run's duration
+        // limit with nothing able to interrupt it (BR-L05).
+        using var deadlineSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadlineSource.CancelAfter(_options.MaxDuration);
+
         try
         {
-            await PrepareRobotsAsync(cancellationToken);
+            await PrepareRobotsAsync(deadlineSource.Token);
             await Task.WhenAll(Enumerable
                 .Range(0, Math.Max(1, _options.RequestConcurrency))
-                .Select(_ => WorkAsync(cancellationToken)));
+                .Select(_ => WorkAsync(deadlineSource.Token)));
         }
         catch (OperationCanceledException)
         {
-            cancelled = true;
+            // A run stopped by its own deadline has not been cancelled by anyone: it hit a budget,
+            // which is a completed run with a stop reason rather than an abandoned one.
+            if (cancellationToken.IsCancellationRequested) cancelled = true;
+            else durationExceeded = true;
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
@@ -187,39 +205,36 @@ internal sealed class CrawlRunExecution
             failed = true;
         }
 
-        // The flush runs on every path, cancellation included: a target that was discovered but
-        // never reached has to be visible as unreached rather than disappearing from the report.
-        lock (_lock) Buffer(_ledger.Flush());
-        await DrainAsync(CancellationToken.None);
+        // Flushing and recording the outcome happen on every path, and never under the run's own
+        // cancellation token: the work of preserving what was found must not itself be cancellable.
+        try
+        {
+            lock (_lock) Buffer(_ledger.Flush());
+            await DrainAsync(CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            failed = true;
+        }
 
-        var outcome = Summarize(cancelled || cancellationToken.IsCancellationRequested, failed);
+        var outcome = Summarize(
+            cancelled || cancellationToken.IsCancellationRequested, failed, durationExceeded);
         await _dependencies.Sink.RecordRunOutcomeAsync(outcome, CancellationToken.None);
         return outcome;
     }
 
     /// <summary>
-    /// The override decision is settled once, before the first request. Deciding it per request
-    /// would let a run that started as authorized drift as new origins are discovered.
-    /// <para>
-    /// A run spanning several seed origins needs an approved exception on **every** one of them.
-    /// Taking the first seed's approval and applying it to the rest would let one approved origin
-    /// authorize bypassing a restriction nobody approved.
-    /// </para>
+    /// Loads the seed origins' robots facts up front, so the first request cannot be made before the
+    /// policy governing it has been read. The override decision itself is **not** settled here: it
+    /// is made per origin, at the point each origin is first consulted.
     /// </summary>
     private async Task PrepareRobotsAsync(CancellationToken cancellationToken)
     {
-        var approvedEverywhere = true;
         foreach (var origin in _frontier.Scope.Seeds
             .Select(seed => seed.Origin).Distinct(StringComparer.Ordinal))
         {
-            var facts = await RobotsFactsAsync(origin, cancellationToken);
-            approvedEverywhere &= facts.HasApprovedException;
+            await RobotsFactsAsync(origin, cancellationToken);
         }
-
-        _override = CrawlRobotsGate.EvaluateOverride(
-            _request.RequestRobotsOverride,
-            _request.IsProduction,
-            new(true, null, approvedEverywhere));
     }
 
     /// <summary>
@@ -227,10 +242,11 @@ internal sealed class CrawlRunExecution
     /// reasons the run stopped early, and a budget that also happened to bind says less about what
     /// the reader is looking at.
     /// </summary>
-    private CrawlRunOutcome Summarize(bool cancelled, bool failed)
+    private CrawlRunOutcome Summarize(bool cancelled, bool failed, bool durationExceeded)
     {
         var stopReason = cancelled ? CrawlStopReasons.Cancelled
             : failed ? CrawlStopReasons.Failed
+            : durationExceeded ? CrawlStopReasons.DurationLimit
             : _budgetStopReason
                 ?? (_timeProvider.GetUtcNow() >= _deadline ? CrawlStopReasons.DurationLimit : null)
                 ?? CrawlStopReasons.FrontierExhausted;
@@ -239,14 +255,18 @@ internal sealed class CrawlRunExecution
             : failed ? CrawlRunStatuses.Failed
             : CrawlRunStatuses.Completed;
 
+        // BR-L02 reporting: the flag answers "did this run bypass a published restriction anywhere?",
+        // which is the security-relevant fact. Where an origin's override was refused its robots
+        // were enforced, so a refusal is not a failure of the run — but it must still be visible.
+        var granted = _originsOverridden > 0;
         return new(
             _request.RunId,
             status,
             stopReason,
             _pagesFetched,
             _linksRecorded,
-            _override.Granted,
-            _override.RefusedBecause,
+            granted,
+            granted ? null : _firstOverrideRefusal ?? CrawlOverrideRefusals.NotRequested,
             []);
     }
 
@@ -313,20 +333,31 @@ internal sealed class CrawlRunExecution
             return;
         }
 
-        await _rateLimiter.WaitAsync(item.Url.Host, cancellationToken);
+        await _dependencies.RateLimiter.WaitAsync(item.Url.Host, cancellationToken);
 
-        var result = await _dependencies.Transport.SendAsync(
-            new(_request.EndpointId, item.Url.Value, _request.IsProduction,
-                MaxResponseBodyBytes: _options.MaxPageBytes,
-                TimeoutSeconds: _options.FetchTimeoutSeconds),
-            cancellationToken);
+        // The crawler's share of the shared transport budget, held for exactly as long as the
+        // request. Acquired here rather than around the whole visit so parsing and bookkeeping do
+        // not hold a slot that monitoring could be using.
+        SafeHttpTransportResult result;
+        using (await _dependencies.RequestBudget.AcquireAsync(cancellationToken))
+        {
+            result = await _dependencies.Transport.SendAsync(
+                new(_request.EndpointId, item.Url.Value, _request.IsProduction,
+                    MaxResponseBodyBytes: _options.MaxPageBytes,
+                    TimeoutSeconds: _options.FetchTimeoutSeconds),
+                cancellationToken);
+        }
 
         lock (_lock)
         {
-            Buffer(_ledger.RecordOutcome(item.Url.Value, Observe(result), result.FinalDestination?.Url));
+            Buffer(_ledger.RecordOutcome(
+                item.Url.Value,
+                Observe(result),
+                result.FinalDestination?.Url,
+                (int)Math.Clamp(result.Duration.TotalMilliseconds, 0, int.MaxValue)));
         }
 
-        if (item.Mode != CrawlVisitMode.Follow || !result.Succeeded) return;
+        if (item.Mode != CrawlVisitMode.Follow || !ShouldFollow(result)) return;
 
         Interlocked.Increment(ref _pagesFetched);
 
@@ -334,6 +365,19 @@ internal sealed class CrawlRunExecution
         // can see the document (BR-E10).
         FollowLinks(item, _dependencies.LinkExtractor.ExtractHrefs(result.Body, result.ContentType));
     }
+
+    /// <summary>
+    /// Only a successful response is a page. A 404 or 500 that happens to carry an HTML error page
+    /// is not one: counting it would fill the page budget with error pages, and following its
+    /// navigation would expand the crawl out of a document the site does not consider a page.
+    /// <para>
+    /// A truncated body is not followed either. The parser will still read it, but its final
+    /// <c>href</c> may have been cut mid-URL, and a cut-off URL resolves to a target the page never
+    /// contained — which would then be reported as a broken link that does not exist.
+    /// </para>
+    /// </summary>
+    private static bool ShouldFollow(SafeHttpTransportResult result) =>
+        result.Succeeded && result.StatusCode is >= 200 and <= 299 && !result.BodyTruncated;
 
     /// <summary>
     /// Why this URL will not be requested, or null to request it. Robots and authorization are both
@@ -365,9 +409,36 @@ internal sealed class CrawlRunExecution
         if (!isInternal) return null;
 
         var facts = await RobotsFactsAsync(item.Url.Origin, cancellationToken);
-        return CrawlRobotsGate.IsAllowed(facts, _userAgent, item.Url.Path, _override.Granted)
+        var granted = OverrideFor(item.Url.Origin, facts);
+        return CrawlRobotsGate.IsAllowed(facts, _userAgent, item.Url.Path, granted)
             ? null
             : CrawlSkipReasons.RobotsDisallowed;
+    }
+
+    /// <summary>
+    /// BR-L02, decided **per origin**. An approved exception authorizes bypassing that origin's
+    /// published restrictions and no other: a run whose scope reaches a second host would otherwise
+    /// carry the seed's approval onto a host nobody approved, which is the whole thing the approval
+    /// exists to prevent.
+    /// </summary>
+    private bool OverrideFor(string origin, CrawlRobotsFacts facts)
+    {
+        var decision = CrawlRobotsGate.EvaluateOverride(
+            _request.RequestRobotsOverride, _request.IsProduction, facts);
+
+        lock (_lock)
+        {
+            if (decision.Granted)
+            {
+                if (_overriddenOrigins.Add(origin)) _originsOverridden++;
+            }
+            else
+            {
+                _firstOverrideRefusal ??= decision.RefusedBecause;
+            }
+        }
+
+        return decision.Granted;
     }
 
     /// <summary>
@@ -396,17 +467,21 @@ internal sealed class CrawlRunExecution
         foreach (var href in hrefs)
         {
             var resolved = CrawlUrlNormalizer.Resolve(href, item.Url, _request.UrlOptions);
-            if (resolved.Url is null) continue;
+            if (resolved.Url is null)
+            {
+                RecordRejectedHref(item, href, resolved.Rejection);
+                continue;
+            }
 
             lock (_lock)
             {
-                var admission = _frontier.Offer(resolved.Url, item.Depth + 1);
-                if (admission.Admitted)
-                {
-                    Track(resolved.Url, item.Depth + 1,
-                        _frontier.Scope.Decide(resolved.Url) == CrawlScopeDecision.Internal);
-                }
+                // Scope and depth are tracked whether or not the frontier admits the URL. Recording
+                // them only on admission made a page-limited internal link report as external at
+                // depth -1, which is a lie about a link the report exists to explain.
+                Track(resolved.Url, item.Depth + 1,
+                    _frontier.Scope.Decide(resolved.Url) == CrawlScopeDecision.Internal);
 
+                var admission = _frontier.Offer(resolved.Url, item.Depth + 1);
                 Buffer(_ledger.RecordDiscovery(item.Url.Value, resolved.Url.Value));
 
                 // A skip that is not "we already know about this" resolves the target here: the
@@ -421,6 +496,34 @@ internal sealed class CrawlRunExecution
                     Buffer(_ledger.RecordSkip(resolved.Url.Value, admission.SkipReason));
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// A URL that could not be canonicalised is recorded against the page that authored it, so the
+    /// query-parameter cap and a malformed or overlong href are visible rather than silently
+    /// dropped.
+    /// <para>
+    /// <c>UnsupportedScheme</c> is the deliberate exception. <c>mailto:</c>, <c>tel:</c> and
+    /// <c>javascript:</c> are ordinary page content rather than defects, and recording each one
+    /// would bury the broken links this report exists for under every contact link on the site.
+    /// </para>
+    /// </summary>
+    private void RecordRejectedHref(CrawlWorkItem item, string href, string? rejection)
+    {
+        if (rejection is null or CrawlUrlRejections.UnsupportedScheme) return;
+
+        var authored = href.Trim();
+        if (authored.Length == 0) return;
+        if (authored.Length > CrawlUrlOptions.MaxUrlLength)
+        {
+            authored = authored[..CrawlUrlOptions.MaxUrlLength];
+        }
+
+        lock (_lock)
+        {
+            Buffer(_ledger.RecordDiscovery(item.Url.Value, authored));
+            Buffer(_ledger.RecordSkip(authored, rejection));
         }
     }
 
@@ -461,13 +564,19 @@ internal sealed class CrawlRunExecution
                 edge.StatusCode,
                 edge.RedirectCount,
                 edge.FinalUrl,
-                edge.SkipReason));
+                edge.SkipReason,
+                edge.DurationMs));
         }
     }
 
     /// <summary>
     /// Hands buffered results to the sink outside the frontier lock. Writing them as they resolve
     /// rather than at the end is the whole of BR-L10's preservation guarantee.
+    /// <para>
+    /// Records leave the buffer only once the sink has taken them. A sink that fails part way
+    /// through — a lost connection, a constraint violation — puts the unwritten remainder back, so
+    /// a transient write failure costs a retry rather than the findings themselves.
+    /// </para>
     /// </summary>
     private async Task DrainAsync(CancellationToken cancellationToken)
     {
@@ -479,18 +588,24 @@ internal sealed class CrawlRunExecution
             _readyRecords.Clear();
         }
 
-        await _dataAccess.WaitAsync(cancellationToken);
+        var written = 0;
+        await _dataAccess.WaitAsync(CancellationToken.None);
         try
         {
             foreach (var record in pending)
             {
                 await _dependencies.Sink.RecordLinkAsync(record, cancellationToken);
+                written++;
                 Interlocked.Increment(ref _linksRecorded);
             }
         }
         finally
         {
             _dataAccess.Release();
+            if (written < pending.Length)
+            {
+                lock (_lock) _readyRecords.InsertRange(0, pending[written..]);
+            }
         }
     }
 }

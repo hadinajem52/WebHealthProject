@@ -57,7 +57,22 @@ kept in step between the writer, the constraint and every reader is a rule nobod
 ## 3. The run row
 
 `crawl_run` records what 6.6's `CrawlRunOutcome` already decides — status, stop reason, counts, and
-whether the robots override was granted or why it was refused.
+whether the robots override was granted or why it was refused — plus the **configuration the run was
+launched with**: seeds, allowed hosts and path prefixes, query policy, page and depth limits, and
+whether external links were checked.
+
+That snapshot is not redundancy. "No broken links past depth three" means nothing unless the depth
+limit that produced it is stored beside it, and a limit edited afterwards would silently rewrite
+what an old result set meant. It is the same reason `seo_observation` stores the policy it was
+judged against. Null host and prefix values mean "derived from the seeds", which is what the run was
+actually configured with rather than a value invented at write time.
+
+A `Failed` run also stores a bounded `failure_reason`, so a failed run explains itself instead of
+leaving a reader with only the fact that something went wrong. A check constraint keeps the column
+exclusive to failed runs, so it cannot drift into a general notes field.
+
+Per-link `duration_ms` is stored where a request was made, and null where one was not — the
+difference between "this took no time" and "this was never requested".
 
 Two constraints are worth naming because they encode BR-L10 and BR-L05 in the database rather than
 in a convention:
@@ -73,25 +88,35 @@ leaves a visibly unfinished run rather than one that looks complete.
 
 ## 4. Comparison between runs (new, continuing, resolved)
 
-Two runs are comparable when they crawled the **same endpoint** and both **completed**. The
-comparison is between the latest such run and the one before it. A first crawl has no previous run,
-so `PreviousRunId` is null and every broken link is reported as new — which a reader can tell apart
-from a run that genuinely introduced them precisely because the null is carried rather than hidden.
+Two runs are comparable when they crawled the **same endpoint** and both **covered its whole
+scope** — `Completed` with stop reason `FrontierExhausted`. The comparison is between the latest
+such run and the one before it. A first crawl has no previous run, so `PreviousRunId` is null and
+every broken link is reported as new — which a reader can tell apart from a run that genuinely
+introduced them precisely because the null is carried rather than hidden.
 
 | Bucket | Definition |
 |---|---|
 | **New** | Broken in the current run, not broken in the previous one |
 | **Continuing** | Broken in both |
-| **Resolved** | Broken in the previous run, not broken in the current one |
+| **Resolved** | Broken in the previous run, and the current run showed it is no longer broken |
+| **Indeterminate** | Broken in the previous run, and the current run could not tell |
 
-"Not broken in the current run" covers two different things, deliberately folded together: the pair
-was checked and is now healthy, and the pair no longer exists because the source page stopped
-linking to it. Both are resolutions of that broken link, and distinguishing them would report a
-removed link as still outstanding.
+**A partial run is never the current side of a comparison.** It covered only part of the site, so
+every link it did not reach would appear as resolved and a partial crawl would manufacture good
+news. That applies to a run stopped by its page or duration budget exactly as much as to a
+cancelled one — the reason is the missing coverage, not the label — so the filter is on
+`FrontierExhausted`, the only stop reason that means the site was covered. Partial runs are still
+readable on their own, labelled with their stop reason.
 
-**A cancelled run is never used as the current side of a comparison.** It covered only part of the
-site, so every link it did not reach would appear as resolved — a partial crawl would manufacture
-good news. It can still be read on its own, labelled with its stop reason.
+**Resolved requires evidence, not absence of evidence.** A previously broken pair that this run
+recorded as `Timeout`, `Blocked`, `Skipped` or `Unknown` has not been shown to work, so it goes to
+`Indeterminate`. Folding those into `Resolved` would close findings on the strength of a check the
+crawl never actually completed — which is the same mistake as trusting a partial run, one link at a
+time.
+
+Resolved still folds two cases together on purpose: the pair was checked and is now healthy, and the
+pair no longer exists because the source page stopped linking to it. Both are genuine resolutions,
+and distinguishing them would report a removed link as still outstanding.
 
 Comparison is a **query**, not a stored table. The buckets are derivable from two runs' rows at any
 time, and materialising them would add a second thing to keep correct for no gain a composite index
@@ -132,4 +157,7 @@ All of these run inside the database foundation gate, as the crawl stage that fo
 | A result never outlives its run | `ON DELETE CASCADE` | `VerifyResultsCascadeWithTheirRunAsync` |
 | Index actually serves the filter | `(run_id, classification)` | `VerifyReportingIndexServesTheFilterAsync` |
 | New/continuing/resolved | `CrawlReportReader` | `VerifyComparisonAsync` |
+| A partial run is never a baseline | `CrawlReportReader` | `VerifyPartialRunIsNeverABaselineAsync` |
+| An unchecked link is not "resolved" | `CrawlReportReader` | `VerifyUncheckedLinkIsNotReportedResolvedAsync` |
+| A replayed run start is a no-op | `CrawlResultSink` | `VerifyRunStartIsReplayableAsync` |
 | Results survive per link, not per run | `CrawlResultSink` | `VerifyComparisonAsync` |
