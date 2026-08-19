@@ -140,7 +140,8 @@ public static class DependencyInjection
         services.AddScoped<RobotsRefreshJob>();
         services.AddSingleton<IHtmlLinkExtractor, HtmlLinkExtractor>();
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
-        services.TryAddScoped<ICrawlResultSink, RecordingCrawlResultSink>();
+        services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
+        services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlExecutionService, CrawlExecutionService>();
         services.AddScoped<CrawlRunJob>();
         services.AddScoped<IMaintenanceOccurrenceExpander, MaintenanceOccurrenceExpander>();

@@ -69,7 +69,8 @@ internal static class DatabaseFoundationAssertions
         "20260818185101_ReportingSampleMonitorIndex",
         "20260819094132_RecurringMaintenanceOccurrences",
         "20260819101929_SeoValueExtraction",
-        "20260819111509_SeoConfigurationAndRobotsPolicy"
+        "20260819111509_SeoConfigurationAndRobotsPolicy",
+        "20260819162313_CrawlRunsAndLinkResults"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -118,6 +119,8 @@ internal static class DatabaseFoundationAssertions
         ,"notification_read_marker"
         ,"seo_observation"
         ,"robots_snapshot"
+        ,"crawl_run"
+        ,"crawl_link_result"
     ];
 
     // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
@@ -133,7 +136,8 @@ internal static class DatabaseFoundationAssertions
         "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
         "maintenance_occurrence", "incident", "incident_event", "incident_evidence",
         "notification_event", "notification_delivery", "notification_attempt",
-        "notification_read_marker", "certificate_observation", "seo_observation", "robots_snapshot"
+        "notification_read_marker", "certificate_observation", "seo_observation", "robots_snapshot",
+        "crawl_run", "crawl_link_result"
     ];
 
     private static readonly string[] ExpectedEntityTypeNames =
@@ -189,7 +193,10 @@ internal static class DatabaseFoundationAssertions
         "NotificationReadMarker",
         // SEO
         "SeoObservation",
-        "RobotsSnapshot"
+        "RobotsSnapshot",
+        // Crawler
+        "CrawlRun",
+        "CrawlLinkResult"
     ];
 
     public static async Task VerifyAsync(string connectionString)
@@ -231,6 +238,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyRecurringMaintenanceExpansionAsync(connectionString);
         await VerifySeoObservationContractAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
+        await VerifyCrawlResultContractAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(connectionString);
         await VerifyPhaseTwoUpgradeAsync(connectionString);
@@ -3704,6 +3712,33 @@ internal static class DatabaseFoundationAssertions
         var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
         exception.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
         exception.ConstraintName.Should().Be("ux_maintenance_occurrence_window_start");
+    }
+
+    /// <summary>
+    /// Phase 6 increment 6.7. The crawl schema owns its own endpoint fixture rather than reusing
+    /// one an earlier stage created, so nothing it asserts depends on what ran before it.
+    /// </summary>
+    private static async Task VerifyCrawlResultContractAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var schemaMonitor = await CreateOwnedMonitorAsync(
+            scope, database, "http://crawl-schema.test/status");
+        await CrawlSchemaAssertions.VerifyAsync(connectionString, schemaMonitor.EndpointId);
+
+        // A separate endpoint for the comparison: it asserts an endpoint's whole run history, and
+        // sharing the schema fixture would mix the rejected and plan-evidence runs into it.
+        var comparisonMonitor = await CreateOwnedMonitorAsync(
+            scope, database, "http://crawl-comparison.test/status");
+        await CrawlSchemaAssertions.VerifyComparisonAsync(
+            connectionString, comparisonMonitor.EndpointId);
     }
 
     /// <summary>

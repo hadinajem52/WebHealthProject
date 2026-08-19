@@ -1,0 +1,396 @@
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using WebHealth.Application.Crawling;
+using WebHealth.Domain.Crawling;
+using WebHealth.Infrastructure;
+using WebHealth.Infrastructure.Crawling;
+using WebHealth.Infrastructure.Persistence;
+using Xunit;
+
+namespace WebHealth.IntegrationTests.Support;
+
+/// <summary>
+/// Phase 6 increment 6.7. The crawl schema's contract, the source-target uniqueness BR-L07 depends
+/// on, the status/stop-reason pairing that keeps BR-L10 true in the database rather than by
+/// convention, and the plan evidence that the reporting index is actually the one PostgreSQL uses.
+/// </summary>
+internal static class CrawlSchemaAssertions
+{
+    /// <summary>
+    /// Enough rows that a sequential scan is not simply the cheapest plan. A plan assertion against
+    /// a table of ten rows proves nothing: PostgreSQL would scan it regardless of any index.
+    /// </summary>
+    private const int PlanEvidenceRuns = 12;
+    private const int PlanEvidenceLinksPerRun = 400;
+
+    public static async Task VerifyAsync(string connectionString, Guid endpointId)
+    {
+        await VerifyColumnsAsync(connectionString);
+        await VerifyRunStatusContractAsync(connectionString, endpointId);
+        await VerifyOverrideContractAsync(connectionString, endpointId);
+        await VerifySourceTargetUniquenessAsync(connectionString, endpointId);
+        await VerifyResultsCascadeWithTheirRunAsync(connectionString, endpointId);
+        await VerifyReportingIndexServesTheFilterAsync(connectionString, endpointId);
+    }
+
+    private static async Task VerifyColumnsAsync(string connectionString)
+    {
+        (await ColumnsOfAsync(connectionString, "crawl_run")).Should().BeEquivalentTo(
+            "id", "endpoint_id", "status", "stop_reason", "seed_urls", "pages_fetched",
+            "links_recorded", "robots_override_granted", "robots_override_refused_because",
+            "started_at", "finished_at");
+
+        (await ColumnsOfAsync(connectionString, "crawl_link_result")).Should().BeEquivalentTo(
+            "id", "run_id", "source_url", "source_url_hash", "target_url", "target_url_hash",
+            "classification", "skip_reason", "status_code", "redirect_count", "final_url",
+            "is_internal", "depth", "recorded_at");
+    }
+
+    /// <summary>
+    /// BR-L10 in the database. A cancelled run can never be stored as complete, whatever a future
+    /// caller does — a partial crawl reported as a clean completed run is worse than no crawl.
+    /// </summary>
+    private static async Task VerifyRunStatusContractAsync(string connectionString, Guid endpointId)
+    {
+        await RunInsertRejectedAsync(connectionString, endpointId,
+            CrawlRunStatuses.Completed, CrawlStopReasons.Cancelled,
+            "ck_crawl_run_status_stop_reason");
+        await RunInsertRejectedAsync(connectionString, endpointId,
+            CrawlRunStatuses.Cancelled, CrawlStopReasons.FrontierExhausted,
+            "ck_crawl_run_status_stop_reason");
+        await RunInsertRejectedAsync(connectionString, endpointId,
+            "Finished", CrawlStopReasons.FrontierExhausted,
+            "ck_crawl_run_status");
+
+        // A terminal run carries a finish time and a running one does not, so an interrupted
+        // process cannot leave a run that reads as ended.
+        await RunInsertRejectedAsync(connectionString, endpointId,
+            CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+            "ck_crawl_run_finished_when_terminal", finished: false);
+    }
+
+    private static async Task VerifyOverrideContractAsync(string connectionString, Guid endpointId)
+    {
+        await RunInsertRejectedAsync(connectionString, endpointId,
+            CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+            "ck_crawl_run_override", overrideGranted: true, refusedBecause: "ProductionTarget");
+        await RunInsertRejectedAsync(connectionString, endpointId,
+            CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+            "ck_crawl_run_override", overrideGranted: false, refusedBecause: null);
+    }
+
+    /// <summary>
+    /// BR-L07. One result per source-target pair per run, enforced by the index rather than by the
+    /// writer. The seed case is the one worth spelling out: its source is null, and a default
+    /// unique index treats every null as distinct, which would let one seed be stored repeatedly.
+    /// </summary>
+    private static async Task VerifySourceTargetUniquenessAsync(string connectionString, Guid endpointId)
+    {
+        var runId = await InsertRunAsync(connectionString, endpointId);
+        await InsertLinkAsync(connectionString, runId, "https://pairs.test/a", "https://pairs.test/gone");
+
+        var duplicate = await Assert.ThrowsAsync<PostgresException>(() =>
+            InsertLinkAsync(connectionString, runId, "https://pairs.test/a", "https://pairs.test/gone"));
+        duplicate.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+        duplicate.ConstraintName.Should().Be("ux_crawl_link_result_pair");
+
+        // A different source pointing at the same target is a different pair and is allowed: that
+        // is what makes "which pages contain this broken link" answerable.
+        await InsertLinkAsync(connectionString, runId, "https://pairs.test/b", "https://pairs.test/gone");
+
+        await InsertLinkAsync(connectionString, runId, null, "https://pairs.test/");
+        var duplicateSeed = await Assert.ThrowsAsync<PostgresException>(() =>
+            InsertLinkAsync(connectionString, runId, null, "https://pairs.test/"));
+        duplicateSeed.ConstraintName.Should().Be("ux_crawl_link_result_pair",
+            "NULLS NOT DISTINCT is what stops one seed being stored twice");
+
+        // The same pair in a different run is a different row: runs are compared, not merged.
+        var otherRun = await InsertRunAsync(connectionString, endpointId);
+        await InsertLinkAsync(connectionString, otherRun, "https://pairs.test/a", "https://pairs.test/gone");
+    }
+
+    /// <summary>
+    /// A result can never outlive the run that explains it, which is also what makes the Phase 7
+    /// retention rule expressible as "delete the run".
+    /// </summary>
+    private static async Task VerifyResultsCascadeWithTheirRunAsync(string connectionString, Guid endpointId)
+    {
+        var runId = await InsertRunAsync(connectionString, endpointId);
+        await InsertLinkAsync(connectionString, runId, "https://cascade.test/a", "https://cascade.test/gone");
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using (var delete = new NpgsqlCommand(
+            "DELETE FROM web_health.crawl_run WHERE id = @id;", connection))
+        {
+            delete.Parameters.AddWithValue("id", runId);
+            (await delete.ExecuteNonQueryAsync()).Should().Be(1);
+        }
+
+        await using var count = new NpgsqlCommand(
+            "SELECT count(*) FROM web_health.crawl_link_result WHERE run_id = @id;", connection);
+        count.Parameters.AddWithValue("id", runId);
+        (await count.ExecuteScalarAsync()).Should().Be(0L);
+    }
+
+    /// <summary>
+    /// The decision from docs/phase-6/Crawl_Schema_And_Comparison.md, verified rather than assumed:
+    /// the broken-link filter is served by <c>ix_crawl_link_result_run_classification</c> on the
+    /// result row, with no join back to <c>crawl_run</c>. Captured before the 6.8 views are written,
+    /// which is the whole point — Phase 5 lost time to finding this out afterwards.
+    /// </summary>
+    private static async Task VerifyReportingIndexServesTheFilterAsync(
+        string connectionString,
+        Guid endpointId)
+    {
+        await SeedPlanEvidenceAsync(connectionString, endpointId);
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using (var analyze = new NpgsqlCommand("ANALYZE web_health.crawl_link_result;", connection))
+        {
+            await analyze.ExecuteNonQueryAsync();
+        }
+
+        var runId = await LatestPlanRunAsync(connection);
+        var plan = await ExplainAsync(connection,
+            """
+            SELECT source_url, target_url, status_code
+            FROM web_health.crawl_link_result
+            WHERE run_id = @run AND classification = 'Broken';
+            """,
+            runId);
+
+        plan.Should().Contain("ix_crawl_link_result_run_classification",
+            $"the broken-link filter must be index-served. Plan was:\n{plan}");
+        plan.Should().NotContain("Seq Scan on crawl_link_result",
+            $"a sequential scan here is the Phase 5 shape repeating. Plan was:\n{plan}");
+    }
+
+    private static async Task SeedPlanEvidenceAsync(string connectionString, Guid endpointId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        for (var run = 0; run < PlanEvidenceRuns; run++)
+        {
+            var runId = await InsertRunAsync(connectionString, endpointId, seedPrefix: "plan");
+
+            // One statement per run rather than per row: this is fixture volume, and a round trip
+            // per row would add minutes to a gate that has to stay fast enough to be run.
+            await using var command = new NpgsqlCommand(
+                """
+                INSERT INTO web_health.crawl_link_result
+                    (id, run_id, source_url, source_url_hash, target_url, target_url_hash,
+                     classification, skip_reason, status_code, redirect_count, final_url,
+                     is_internal, depth, recorded_at)
+                SELECT
+                    gen_random_uuid(), @run,
+                    'https://plan.test/source-' || i,
+                    sha256(('https://plan.test/source-' || i)::bytea),
+                    'https://plan.test/target-' || i,
+                    sha256(('https://plan.test/target-' || i)::bytea),
+                    CASE WHEN i % 20 = 0 THEN 'Broken' ELSE 'Healthy' END,
+                    NULL,
+                    CASE WHEN i % 20 = 0 THEN 404 ELSE 200 END,
+                    0, NULL, true, 1, now()
+                FROM generate_series(1, @count) AS i;
+                """, connection);
+            command.Parameters.AddWithValue("run", runId);
+            command.Parameters.AddWithValue("count", PlanEvidenceLinksPerRun);
+            await command.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static async Task<Guid> LatestPlanRunAsync(NpgsqlConnection connection)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT id FROM web_health.crawl_run
+            WHERE seed_urls LIKE 'https://plan.%'
+            ORDER BY started_at DESC, id DESC
+            LIMIT 1;
+            """, connection);
+        return (Guid)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<string> ExplainAsync(NpgsqlConnection connection, string sql, Guid runId)
+    {
+        await using var command = new NpgsqlCommand($"EXPLAIN (COSTS OFF) {sql}", connection);
+        command.Parameters.AddWithValue("run", runId);
+        await using var reader = await command.ExecuteReaderAsync();
+
+        var lines = new List<string>();
+        while (await reader.ReadAsync()) lines.Add(reader.GetString(0));
+        return string.Join('\n', lines);
+    }
+
+    private static async Task<IReadOnlyList<string>> ColumnsOfAsync(string connectionString, string table)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'web_health' AND table_name = @table
+            ORDER BY column_name;
+            """, connection);
+        command.Parameters.AddWithValue("table", table);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        var columns = new List<string>();
+        while (await reader.ReadAsync()) columns.Add(reader.GetString(0));
+        return columns;
+    }
+
+    private static async Task<Guid> InsertRunAsync(
+        string connectionString,
+        Guid endpointId,
+        string seedPrefix = "https://pairs.test")
+    {
+        var runId = Guid.CreateVersion7();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO web_health.crawl_run
+                (id, endpoint_id, status, stop_reason, seed_urls, pages_fetched, links_recorded,
+                 robots_override_granted, robots_override_refused_because, started_at, finished_at)
+            VALUES (@id, @endpoint, 'Completed', 'FrontierExhausted', @seeds, 1, 1,
+                    false, 'NotRequested', now(), now());
+            """, connection);
+        command.Parameters.AddWithValue("id", runId);
+        command.Parameters.AddWithValue("endpoint", endpointId);
+        command.Parameters.AddWithValue("seeds", $"{seedPrefix}/");
+        await command.ExecuteNonQueryAsync();
+        return runId;
+    }
+
+    private static async Task InsertLinkAsync(
+        string connectionString,
+        Guid runId,
+        string? sourceUrl,
+        string targetUrl)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO web_health.crawl_link_result
+                (id, run_id, source_url, source_url_hash, target_url, target_url_hash,
+                 classification, skip_reason, status_code, redirect_count, final_url,
+                 is_internal, depth, recorded_at)
+            VALUES (@id, @run, @source, @source_hash, @target, @target_hash,
+                    'Broken', NULL, 404, 0, NULL, true, 1, now());
+            """, connection);
+        command.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        command.Parameters.AddWithValue("run", runId);
+        command.Parameters.AddWithValue("source", (object?)sourceUrl ?? DBNull.Value);
+        command.Parameters.AddWithValue("source_hash",
+            sourceUrl is null ? DBNull.Value : CrawlResultSink.Hash(sourceUrl));
+        command.Parameters.AddWithValue("target", targetUrl);
+        command.Parameters.AddWithValue("target_hash", CrawlResultSink.Hash(targetUrl));
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task RunInsertRejectedAsync(
+        string connectionString,
+        Guid endpointId,
+        string status,
+        string stopReason,
+        string expectedConstraint,
+        bool finished = true,
+        bool overrideGranted = false,
+        string? refusedBecause = "NotRequested")
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO web_health.crawl_run
+                (id, endpoint_id, status, stop_reason, seed_urls, pages_fetched, links_recorded,
+                 robots_override_granted, robots_override_refused_because, started_at, finished_at)
+            VALUES (@id, @endpoint, @status, @stop_reason, 'https://rejected.test/', 0, 0,
+                    @granted, @refused, now(), @finished);
+            """, connection);
+        command.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        command.Parameters.AddWithValue("endpoint", endpointId);
+        command.Parameters.AddWithValue("status", status);
+        command.Parameters.AddWithValue("stop_reason", stopReason);
+        command.Parameters.AddWithValue("granted", overrideGranted);
+        command.Parameters.AddWithValue("refused", (object?)refusedBecause ?? DBNull.Value);
+        command.Parameters.AddWithValue("finished", finished ? DateTimeOffset.UtcNow : DBNull.Value);
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
+        exception.ConstraintName.Should().Be(expectedConstraint);
+    }
+
+    /// <summary>
+    /// The sink and the reader against the real schema: results written per link survive the run
+    /// that wrote them (BR-L10), and two runs bucket into new, continuing and resolved.
+    /// </summary>
+    public static async Task VerifyComparisonAsync(string connectionString, Guid endpointId)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+
+        var previousRun = Guid.CreateVersion7();
+        var currentRun = Guid.CreateVersion7();
+        await WriteRunAsync(services, endpointId, previousRun,
+            ("https://cmp.test/a", "https://cmp.test/fixed", CrawlLinkClassifications.Broken),
+            ("https://cmp.test/a", "https://cmp.test/still", CrawlLinkClassifications.Broken));
+        await WriteRunAsync(services, endpointId, currentRun,
+            ("https://cmp.test/a", "https://cmp.test/fixed", CrawlLinkClassifications.Healthy),
+            ("https://cmp.test/a", "https://cmp.test/still", CrawlLinkClassifications.Broken),
+            ("https://cmp.test/a", "https://cmp.test/new", CrawlLinkClassifications.Broken));
+
+        await using var scope = services.CreateAsyncScope();
+        var reader = scope.ServiceProvider.GetRequiredService<ICrawlReportReader>();
+        var comparison = await reader.CompareLatestAsync(endpointId);
+
+        comparison.CurrentRunId.Should().Be(currentRun);
+        comparison.PreviousRunId.Should().Be(previousRun);
+        comparison.New.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/new");
+        comparison.Continuing.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/still");
+        comparison.Resolved.Select(link => link.TargetUrl).Should().Equal("https://cmp.test/fixed");
+
+        var broken = await reader.ListBrokenLinksAsync(currentRun);
+        broken.Should().HaveCount(2, "a healthy link is not a broken-link report row");
+        broken.Should().OnlyContain(link => link.SourceUrl == "https://cmp.test/a");
+
+        var runs = await reader.ListRunsAsync(endpointId, 2);
+        runs.Should().HaveCount(2);
+        runs[0].RunId.Should().Be(currentRun);
+        runs[0].BrokenLinkCount.Should().Be(2);
+        runs[0].CoveredWholeScope.Should().BeTrue();
+    }
+
+    private static async Task WriteRunAsync(
+        IServiceProvider services,
+        Guid endpointId,
+        Guid runId,
+        params (string Source, string Target, string Classification)[] links)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var sink = scope.ServiceProvider.GetRequiredService<ICrawlResultSink>();
+        await sink.BeginRunAsync(new(runId, endpointId, ["https://cmp.test/"], DateTimeOffset.UtcNow));
+
+        foreach (var (source, target, classification) in links)
+        {
+            await sink.RecordLinkAsync(new(
+                runId, source, target, true, 1, classification, null, 0, null, null));
+        }
+
+        await sink.RecordRunOutcomeAsync(new(
+            runId, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+            links.Length, links.Length, false, CrawlOverrideRefusals.NotRequested, []));
+    }
+}

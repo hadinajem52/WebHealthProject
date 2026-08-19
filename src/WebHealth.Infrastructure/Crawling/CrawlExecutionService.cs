@@ -38,6 +38,14 @@ internal sealed class CrawlExecutionService(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // The run is opened before validation, not after. Someone asked for this crawl, and a
+        // request that was refused is a fact worth keeping — recording the run only on the success
+        // path would leave a misconfigured crawl indistinguishable from one nobody ever started.
+        await sink.BeginRunAsync(
+            new(request.RunId, request.EndpointId, request.SeedUrls ?? [], timeProvider.GetUtcNow()),
+            cancellationToken);
+
         var scope = BuildScope(request, out var seedErrors);
         var errors = seedErrors.Concat(scope?.Validate() ?? []).ToArray();
         if (errors.Length > 0)
@@ -47,7 +55,7 @@ internal sealed class CrawlExecutionService(
             return invalid;
         }
 
-        var run = new CrawlRun(
+        var run = new CrawlRunExecution(
             request, scope!, options, transportOptions.UserAgent, timeProvider,
             new(transport, linkExtractor, robotsReader, sink, targetAuthorizer));
         return await run.ExecuteAsync(cancellationToken);
@@ -90,10 +98,11 @@ internal sealed class CrawlExecutionService(
 }
 
 /// <summary>
-/// One run's mutable state, separate from the service so the service stays a stateless scoped
-/// dependency: two runs share no frontier, no ledger and no rate-limiter budget.
+/// One run's mutable state while it executes, separate from the service so the service stays a
+/// stateless scoped dependency: two runs share no frontier, no ledger and no rate-limiter budget.
+/// Distinct from the <c>CrawlRun</c> entity, which is what 6.7 stores once this has finished.
 /// </summary>
-internal sealed class CrawlRun
+internal sealed class CrawlRunExecution
 {
     /// <summary>How long an idle worker waits before re-checking a frontier its peers are filling.</summary>
     private static readonly TimeSpan IdlePollInterval = TimeSpan.FromMilliseconds(20);
@@ -130,7 +139,7 @@ internal sealed class CrawlRun
     private int _linksRecorded;
     private volatile string? _budgetStopReason;
 
-    public CrawlRun(
+    public CrawlRunExecution(
         CrawlRunRequest request,
         CrawlScope scope,
         CrawlSchedulingOptions options,

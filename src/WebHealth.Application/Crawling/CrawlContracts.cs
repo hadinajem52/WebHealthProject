@@ -63,11 +63,24 @@ public sealed record CrawlLinkRecord(
     string? SkipReason);
 
 /// <summary>
+/// What a run is, before it has produced anything. Opening the run first means results always have
+/// something to belong to, and an interrupted process leaves a visibly unfinished run rather than
+/// no trace that a crawl was ever asked for.
+/// </summary>
+public sealed record CrawlRunStart(
+    Guid RunId,
+    Guid EndpointId,
+    IReadOnlyList<string> SeedUrls,
+    DateTimeOffset StartedAt);
+
+/// <summary>
 /// Where results go as they resolve. Writing per result rather than batching at the end is what
 /// makes BR-L10 need no special cancellation path: whatever was found is already recorded.
 /// </summary>
 public interface ICrawlResultSink
 {
+    Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default);
+
     Task RecordLinkAsync(CrawlLinkRecord record, CancellationToken cancellationToken = default);
 
     Task RecordRunOutcomeAsync(CrawlRunOutcome outcome, CancellationToken cancellationToken = default);
@@ -93,4 +106,70 @@ public interface ICrawlRobotsReader
 public interface IHtmlLinkExtractor
 {
     IReadOnlyList<string> ExtractHrefs(ReadOnlyMemory<byte> body, string? contentType);
+}
+
+/// <summary>One run, as a report row. No link detail: the views page that separately.</summary>
+public sealed record CrawlRunSummary(
+    Guid RunId,
+    Guid EndpointId,
+    string Status,
+    string StopReason,
+    int PagesFetched,
+    int LinksRecorded,
+    int BrokenLinkCount,
+    bool RobotsOverrideGranted,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? FinishedAt)
+{
+    /// <summary>
+    /// Only an exhausted frontier means the site was covered. The views must never render a run
+    /// that stopped on a budget as a clean result, so the distinction is carried, not inferred.
+    /// </summary>
+    public bool CoveredWholeScope =>
+        Status == Domain.Crawling.CrawlRunStatuses.Completed
+        && StopReason == Domain.Crawling.CrawlStopReasons.FrontierExhausted;
+}
+
+/// <summary>One broken source-target pair, which is what a report is actually for (AC-08).</summary>
+public sealed record CrawlBrokenLink(
+    string? SourceUrl,
+    string TargetUrl,
+    string Classification,
+    int? StatusCode,
+    bool IsInternal);
+
+/// <summary>
+/// Two runs of the same endpoint, bucketed. <c>PreviousRunId</c> is null for a first crawl, where
+/// every broken link is new because there is nothing to compare against — which is different from
+/// a run that genuinely introduced them, and is why the null is carried rather than hidden.
+/// </summary>
+public sealed record CrawlComparison(
+    Guid? CurrentRunId,
+    Guid? PreviousRunId,
+    IReadOnlyList<CrawlBrokenLink> New,
+    IReadOnlyList<CrawlBrokenLink> Continuing,
+    IReadOnlyList<CrawlBrokenLink> Resolved)
+{
+    public static CrawlComparison Empty { get; } = new(null, null, [], [], []);
+}
+
+public interface ICrawlReportReader
+{
+    Task<IReadOnlyList<CrawlRunSummary>> ListRunsAsync(
+        Guid endpointId,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<CrawlBrokenLink>> ListBrokenLinksAsync(
+        Guid runId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Compares the latest completed run for the endpoint against the completed run before it.
+    /// A cancelled run is never the current side: it covered only part of the site, so every link
+    /// it did not reach would surface as resolved and a partial crawl would manufacture good news.
+    /// </summary>
+    Task<CrawlComparison> CompareLatestAsync(
+        Guid endpointId,
+        CancellationToken cancellationToken = default);
 }

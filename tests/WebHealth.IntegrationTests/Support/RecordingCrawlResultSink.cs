@@ -16,6 +16,14 @@ internal sealed class RecordingCrawlResultSink : ICrawlResultSink
 
     public CrawlRunOutcome? Outcome { get; private set; }
 
+    public CrawlRunStart? Start { get; private set; }
+
+    public Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default)
+    {
+        Start = start;
+        return Task.CompletedTask;
+    }
+
     public Task RecordLinkAsync(CrawlLinkRecord record, CancellationToken cancellationToken = default)
     {
         _links.Enqueue(record);

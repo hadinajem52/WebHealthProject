@@ -4,6 +4,7 @@ using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Auditing;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Registry;
+using WebHealth.Infrastructure.Crawling;
 using WebHealth.Infrastructure.Seo;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Health;
@@ -88,6 +89,10 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<SeoObservation> SeoObservations => Set<SeoObservation>();
 
     public DbSet<RobotsSnapshot> RobotsSnapshots => Set<RobotsSnapshot>();
+
+    public DbSet<CrawlRun> CrawlRuns => Set<CrawlRun>();
+
+    public DbSet<CrawlLinkResult> CrawlLinkResults => Set<CrawlLinkResult>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
