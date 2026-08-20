@@ -76,10 +76,12 @@ internal static class ReportingQueryCoreAssertions
         row.Uptime.DownSamples.Should().Be(1);
         row.Uptime.ExcludedSamples.Should().Be(2);
 
-        // BR-U01 as written: healthy over eligible. The warning sample raises neither this
-        // figure nor the downtime, which is exactly why it is reported on its own.
-        row.Uptime.Percentage.Should().BeApproximately(66.6667, 0.001);
-        row.Uptime.CleanPercentage.Should().BeApproximately(83.3333, 0.001);
+        // BR-U01: uptime is every eligible sample where the endpoint answered, so the warning
+        // sample counts as up. CleanPercentage is the stricter figure beside it — eligible
+        // samples with nothing to report at all — and the gap between the two is the point: this
+        // endpoint is 83% up and 67% clean, which no single number can say.
+        row.Uptime.Percentage.Should().BeApproximately(83.3333, 0.001);
+        row.Uptime.CleanPercentage.Should().BeApproximately(66.6667, 0.001);
         (row.Uptime.HealthySamples + row.Uptime.WarningSamples + row.Uptime.DownSamples)
             .Should().Be(row.Uptime.EligibleSamples, "every eligible sample lands in exactly one category");
 
@@ -579,7 +581,15 @@ internal static class ReportingQueryCoreAssertions
             LogicalCheckId = check.Id,
             EndpointMonitorId = endpointMonitorId,
             Outcome = outcome,
-            FailureCategory = outcome == "Healthy" ? null : "ServerError",
+            // A Warning is up-but-imperfect, so it carries a category UptimeParticipation treats
+            // as non-availability. Giving it ServerError would make the reader count it as
+            // downtime, which is the opposite of what this fixture exists to show.
+            FailureCategory = outcome switch
+            {
+                "Healthy" => null,
+                "Warning" => HttpFailureCategories.SlowResponse,
+                _ => "ServerError"
+            },
             TotalDurationMs = totalDurationMs,
             MonitorSource = monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType
                 ? "WebHealthSslProbeV1"
