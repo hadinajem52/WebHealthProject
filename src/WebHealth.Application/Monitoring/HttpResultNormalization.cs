@@ -115,6 +115,14 @@ public static class PerformanceRules
     public const int SlowResponseConfirmationCount = 3;
 
     /// <summary>
+    /// A slow-response incident still opens immediately (so it is visible in history right
+    /// away), but its Opened email is held for this long before the incident is judged worth
+    /// notifying about. A response time that recovers on its own within this window never
+    /// reaches the user's inbox; one that is still open when the delay elapses notifies as usual.
+    /// </summary>
+    public static readonly TimeSpan OpenedNotificationDelay = TimeSpan.FromMinutes(15);
+
+    /// <summary>
     /// The confirmation count a finding needs before it can open an incident. Slow response
     /// carries its own BR-P03 minimum; every other rule uses the monitor's own confirmation
     /// policy. The monitor's count still wins when it is the stricter of the two, because an
@@ -124,6 +132,10 @@ public static class PerformanceRules
         ruleKey == SlowResponse
             ? Math.Max(monitorConfirmationCount, SlowResponseConfirmationCount)
             : monitorConfirmationCount;
+
+    /// <summary>Whether an incident's issue key is the slow-response rule's, for the Opened-notification delay above.</summary>
+    public static bool IsSlowResponseIssueKey(string issueKey) =>
+        issueKey == HttpIssueIdentity.Create(SlowResponse);
 }
 
 /// <summary>

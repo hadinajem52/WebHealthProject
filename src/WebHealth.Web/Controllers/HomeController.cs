@@ -174,7 +174,7 @@ public class HomeController(
         new ReportDataset(
             ReportQueryNormalizer.Normalize(new ReportQueryInput(), ReportMonitorTypes.All, asOf).Query!,
             new ReportSummary(
-                0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0,
                 new ReportUptime(0, 0, 0, 0, 0),
                 new ReportResponseTimes(null, null, 0),
                 PerformanceComparability.Evaluate([])),

@@ -288,7 +288,8 @@ internal sealed class IncidentAutomationService(
             NotificationOccurrenceKeys.Opening(incident.Id),
             isMaintenance,
             now,
-            cancellationToken);
+            cancellationToken,
+            PerformanceRules.IsSlowResponseIssueKey(issueKey) ? PerformanceRules.OpenedNotificationDelay : null);
         return incident;
     }
 
@@ -364,6 +365,7 @@ internal sealed class IncidentAutomationService(
             incident,
             now,
             cancellationToken);
+        await SuppressUndeliveredOpenedNotificationAsync(incident.Id, cancellationToken);
         await notificationEventWriter.WriteAsync(
             incident,
             statusEvent.Id,
@@ -374,6 +376,25 @@ internal sealed class IncidentAutomationService(
             now,
             cancellationToken);
     }
+
+    /// <summary>
+    /// A delayed Opened notification (see <see cref="PerformanceRules.OpenedNotificationDelay" />)
+    /// can still be sitting Pending when its incident resolves on its own. That delivery is worth
+    /// suppressing rather than sending: the incident is already over by the time anyone would read
+    /// the email. A delivery already Processing or Sent is left untouched — the dispatcher won the
+    /// race and the recovery email covers it either way.
+    /// </summary>
+    private Task SuppressUndeliveredOpenedNotificationAsync(Guid incidentId, CancellationToken cancellationToken) =>
+        dbContext.NotificationDeliveries
+            .Where(delivery => delivery.State == NotificationDeliveryStates.Pending
+                && delivery.NotificationEvent.IncidentId == incidentId
+                && delivery.NotificationEvent.SourceKind == NotificationSourceKinds.IncidentEvent
+                && delivery.NotificationEvent.EventType == NotificationEventTypes.Opened)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(delivery => delivery.State, NotificationDeliveryStates.Suppressed)
+                    .SetProperty(delivery => delivery.NextAttemptAt, (DateTimeOffset?)null),
+                cancellationToken);
 
     private async Task RecordEvidenceMutationAsync(
         Incident incident,

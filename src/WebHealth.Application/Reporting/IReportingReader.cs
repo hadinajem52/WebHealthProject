@@ -95,6 +95,12 @@ public sealed record ReportSummary(
     int WarningMonitorCount,
     int CriticalMonitorCount,
     int UnknownMonitorCount,
+    /// <summary>
+    /// Monitors that are switched off. Counted separately so the four health chips plus this one
+    /// account for every monitor in <see cref="MonitorCount" />: folding them into Unknown would
+    /// say "not yet checked" about an endpoint that will never be checked again.
+    /// </summary>
+    int DisabledMonitorCount,
     int ActiveIncidentCount,
     ReportUptime Uptime,
     ReportResponseTimes ResponseTimes,

@@ -67,6 +67,7 @@ public sealed class TargetsController(
         return View(new EndpointDetailsViewModel(
             endpoint,
             CanManage(access),
+            User.IsInRole(ApplicationRoles.Administrator),
             history?.Items.FirstOrDefault(),
             certificate ?? CertificateStatus.NotApplicable));
     }
@@ -281,6 +282,11 @@ public sealed class TargetsController(
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeStateAsync(id, version, endpointService.RestoreAsync, nameof(Archived), "Endpoint restored in a disabled state.", cancellationToken);
+
+    [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
+    public Task<IActionResult> PurgeEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
+        ChangeStateAsync(id, version, endpointService.PurgeAsync, nameof(Archived),
+            "Endpoint permanently deleted with all of its monitoring history.", cancellationToken);
 
     private RegistryAccessContext GetAccess()
     {

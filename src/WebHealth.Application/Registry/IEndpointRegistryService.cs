@@ -8,6 +8,14 @@ public interface IEndpointRegistryService
     Task<RegistryMutationResult> DeleteAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default);
     Task<RegistryMutationResult> RestoreAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Permanently removes an archived endpoint and everything recorded about it: checks,
+    /// results, findings, SEO observations, crawl runs, incidents, notifications, health,
+    /// leases, queued work, endpoint-scoped access grants and target authorizations. The audit
+    /// trail is retained. There is no restore.
+    /// </summary>
+    Task<RegistryMutationResult> PurgeAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default);
+
     /// <summary>Stops scheduled dispatch for the endpoint. Manual runs stay available.</summary>
     Task<RegistryMutationResult> PauseScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default);
 

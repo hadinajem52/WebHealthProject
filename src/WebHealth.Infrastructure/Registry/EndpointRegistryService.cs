@@ -12,6 +12,7 @@ namespace WebHealth.Infrastructure.Registry;
 internal sealed class EndpointRegistryService(
     ApplicationDbContext dbContext,
     RegistryMutationSupport mutationSupport,
+    EndpointPurgeCascade purgeCascade,
     IAuditTrailWriter auditTrail) : IEndpointRegistryService
 {
     private const string EndpointUrlIndex = "ux_endpoint_environment_url_hash_version_active";
@@ -228,6 +229,66 @@ internal sealed class EndpointRegistryService(
 
     public Task<RegistryMutationResult> RestoreAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
         ChangeStateAsync(command, access, EndpointAuditAction.Restored, cancellationToken);
+
+    /// <summary>
+    /// The irreversible counterpart to <see cref="DeleteAsync" />. Archiving hides an endpoint
+    /// and keeps its history; this removes both.
+    /// </summary>
+    /// <remarks>
+    /// It is Administrator-only and it refuses an endpoint that is not already archived. Those
+    /// two guards are what make the archive step a deliberate pause rather than a formality: an
+    /// endpoint cannot go from monitored to gone in one request, and archiving has already
+    /// stopped its monitors, so nothing can enqueue new work for it while the cascade runs.
+    /// </remarks>
+    public async Task<RegistryMutationResult> PurgeAsync(
+        RegistryVersionCommand command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        if (!access.Roles.Contains(ApplicationRoles.Administrator, StringComparer.Ordinal))
+        {
+            return Forbidden();
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // The row lock stands in for the concurrency token the change tracker would normally
+        // enforce: the cascade runs as set-based deletes rather than tracked saves, so the
+        // version has to be compared against a row nobody else can move underneath it.
+        var endpoint = await dbContext.Endpoints.FromSqlInterpolated($"""
+            SELECT * FROM web_health.endpoint WHERE id = {command.EntityId} FOR UPDATE
+            """)
+            .Include(candidate => candidate.Monitors)
+            .Include(candidate => candidate.TargetAuthorizations)
+            .AsNoTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+        if (endpoint is null)
+        {
+            return NotFound();
+        }
+
+        if (endpoint.DeletedAt is null)
+        {
+            return Validation("Archive the endpoint before deleting it permanently.");
+        }
+
+        if (endpoint.Version != command.Version)
+        {
+            return await RollBackConcurrencyAsync(transaction, cancellationToken);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Written before the cascade, and deliberately outside it: audit_event references the
+        // endpoint by identifier rather than by foreign key, so it outlives the row and stays
+        // the only remaining record that this endpoint existed.
+        var snapshot = ToAudit(endpoint, false, false, false, now);
+        await auditTrail.RecordEndpointMutationAsync(
+            new(access.UserId, now), EndpointAuditAction.Purged, snapshot, snapshot, cancellationToken);
+        await purgeCascade.ExecuteAsync(endpoint.Id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return RegistryMutationResult.Success(endpoint.Id);
+    }
 
     public Task<RegistryMutationResult> PauseScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
         ChangeScheduleAsync(command, access, scheduleEnabled: false, cancellationToken);

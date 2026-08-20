@@ -519,6 +519,7 @@ internal sealed class ReportingReader(
             health.GetValueOrDefault(EndpointHealthStatuses.Warning),
             health.GetValueOrDefault(EndpointHealthStatuses.Critical),
             health.GetValueOrDefault(EndpointHealthStatuses.Unknown),
+            health.GetValueOrDefault(EndpointHealthStatuses.Disabled),
             monitorIds.Count == 0 ? 0 : await CountActiveIncidentsAsync(monitorIds, cancellationToken),
             totals.ToUptime(),
             totals.ToResponseTimes(),

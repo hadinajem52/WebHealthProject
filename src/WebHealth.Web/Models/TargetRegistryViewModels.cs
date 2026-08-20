@@ -15,6 +15,7 @@ public sealed record EnvironmentDetailsViewModel(EnvironmentDetails Environment,
 public sealed record EndpointDetailsViewModel(
     EndpointDetails Endpoint,
     bool CanManage,
+    bool CanPurge,
     CheckHistoryItem? LatestCheck,
     CertificateStatus Certificate);
 public sealed record RegistryEndpointListViewModel(IReadOnlyList<RegistryEndpointItem> Endpoints, string? Search);

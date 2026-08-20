@@ -20,7 +20,7 @@ internal static class EmptyDashboard
     public static ReportDataset Dataset(DateTimeOffset asOf) => new(
         Query(asOf),
         new ReportSummary(
-            0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
             new ReportUptime(0, 0, 0, 0, 0),
             new ReportResponseTimes(null, null, 0),
             PerformanceComparability.Evaluate([])),

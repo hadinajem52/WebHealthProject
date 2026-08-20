@@ -159,6 +159,7 @@ public enum EndpointAuditAction
     Disabled,
     Deleted,
     Restored,
+    Purged,
     SchedulePaused,
     ScheduleResumed
 }

@@ -13,6 +13,22 @@
     var WIDE_VIEWPORT = '(min-width: 62em)';
     var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+    // An irreversible action asks once before it runs. The prompt is an
+    // enhancement rather than the guard: the server refuses the same request
+    // when the caller lacks the role or the endpoint is not archived.
+    function setUpConfirmedSubmission() {
+        document.addEventListener('submit', function (event) {
+            var form = event.target;
+            if (!form || !form.hasAttribute || !form.hasAttribute('data-shell-confirm')) {
+                return;
+            }
+
+            if (!window.confirm(form.getAttribute('data-shell-confirm'))) {
+                event.preventDefault();
+            }
+        });
+    }
+
     function onReady(callback) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', callback);
@@ -452,6 +468,8 @@
         if (schedulingToggle && intervalField && intervalInput) {
             setUpIntervalAvailability(schedulingToggle, intervalField, intervalInput);
         }
+
+        setUpConfirmedSubmission();
 
         // A failed submission re-renders the page; move focus to the summary so
         // keyboard and screen-reader users start at the reported problem.

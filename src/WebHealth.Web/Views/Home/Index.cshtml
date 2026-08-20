@@ -179,6 +179,12 @@
             <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("warning", $"{dataset.Summary.WarningMonitorCount} warning"))</li>
             <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("danger", $"{dataset.Summary.CriticalMonitorCount} critical"))</li>
             <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("info", $"{dataset.Summary.UnknownMonitorCount} not yet checked"))</li>
+            @if (dataset.Summary.DisabledMonitorCount > 0)
+            {
+                @* Shown only when there are any, but never folded into another chip: these five
+                   counts have to add up to the monitor total or the summary is lying by omission. *@
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("neutral", $"{dataset.Summary.DisabledMonitorCount} disabled"))</li>
+            }
         </ul>
 
         @if (uptime.ExcludedSamples > 0)

@@ -19,6 +19,9 @@ using WebHealth.Application.Monitoring;
 using WebHealth.Application.Maintenance;
 using WebHealth.Application.Incidents;
 using WebHealth.Domain.Monitoring;
+using WebHealth.Domain.Crawling;
+using WebHealth.Domain.Normalization;
+using WebHealth.Infrastructure.Crawling;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Incidents;
 using System.Text;
@@ -71,7 +74,8 @@ internal static class DatabaseFoundationAssertions
         "20260819101929_SeoValueExtraction",
         "20260819111509_SeoConfigurationAndRobotsPolicy",
         "20260819162313_CrawlRunsAndLinkResults",
-        "20260819165856_CrawlRunConfigurationSnapshot"
+        "20260819165856_CrawlRunConfigurationSnapshot",
+        "20260820083941_EndpointPurgeEvidenceRemoval"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -241,6 +245,7 @@ internal static class DatabaseFoundationAssertions
         await VerifySslCertificateMonitoringAsync(connectionString);
         await VerifyCrawlResultContractAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
+        await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(connectionString);
         await VerifyPhaseTwoUpgradeAsync(connectionString);
         await VerifyPhaseOneUpgradeAndRepeatabilityAsync(connectionString);
@@ -3719,6 +3724,460 @@ internal static class DatabaseFoundationAssertions
     /// Phase 6 increment 6.7. The crawl schema owns its own endpoint fixture rather than reusing
     /// one an earlier stage created, so nothing it asserts depends on what ran before it.
     /// </summary>
+
+    /// <summary>
+    /// Archiving an endpoint hides it; purging one removes it. This stage seeds a row in every
+    /// table that can reference an endpoint, purges it, and asserts each of them is empty
+    /// afterwards. Every foreign key here is RESTRICT, so a table the cascade forgot does not
+    /// leave a dangling reference - it aborts the purge with 23503, which is what makes an
+    /// inventory-shaped assertion the right one: the stage fails whether the cascade misses a
+    /// table or unwinds them in the wrong order.
+    /// </summary>
+    private static async Task VerifyEndpointPurgeRemovesEveryReferenceAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var administratorAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+        var operationsAccess = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Operations]);
+        var ownerSubjectId = await database.OwnerSubjects
+            .Where(owner => owner.UserId == administrator.Id).Select(owner => owner.Id).SingleAsync();
+
+        // HTTPS so the endpoint owns both monitor kinds: the certificate monitor carries the
+        // certificate observation and the still-held lease seeded below.
+        var monitor = await CreateOwnedMonitorAsync(
+            scope, database, "https://endpoint-purge.test/status");
+        var endpointId = monitor.EndpointId;
+        var certificateMonitor = await database.EndpointMonitors.SingleAsync(candidate =>
+            candidate.EndpointId == endpointId
+            && candidate.MonitorType == RegistryDefaults.SslCertificateMonitorType
+            && candidate.DeletedAt == null);
+
+        var now = DateTimeOffset.UtcNow;
+        var checkId = await FinalizeScheduledResultAsync(
+            database, monitor, 500,
+            htmlBody: "<html><head><title>Purge fixture</title></head><body>body</body></html>");
+        database.ChangeTracker.Clear();
+
+        database.RedirectHops.Add(new RedirectHop
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = checkId,
+            HopNumber = 1,
+            NormalizedFromUrl = "https://endpoint-purge.test/status",
+            NormalizedToUrl = "https://endpoint-purge.test/status/",
+            HttpStatus = 301,
+            IsLoop = false
+        });
+
+        // A lease is what an interrupted worker leaves behind, so the purge has to survive one
+        // rather than assume every check reached a clean finalization.
+        var certificateCheckId = Guid.NewGuid();
+        var certificateCheckCreatedAt = now.AddMinutes(-3);
+        var certificateCheck = new LogicalCheck
+        {
+            Id = certificateCheckId,
+            EndpointMonitorId = certificateMonitor.Id,
+            Source = LogicalCheckSources.Scheduled,
+            ScheduledFor = certificateCheckCreatedAt,
+            State = LogicalCheckStates.Running,
+            CadenceKey = MonitorCadence.CreateCadenceKey(certificateMonitor.Id, certificateCheckCreatedAt),
+            PolicyFingerprint = certificateMonitor.ConfigurationFingerprint,
+            CreatedAt = certificateCheckCreatedAt,
+            QueuedAt = certificateCheckCreatedAt,
+            StartedAt = certificateCheckCreatedAt
+        };
+        certificateCheck.ConfigurationSnapshot = new CheckConfigurationSnapshot
+        {
+            LogicalCheckId = certificateCheckId,
+            SchemaVersion = 2,
+            MonitorType = certificateMonitor.MonitorType,
+            ConfigurationFingerprint = certificateMonitor.ConfigurationFingerprint,
+            IntervalSeconds = certificateMonitor.IntervalSeconds,
+            TimeoutSeconds = certificateMonitor.TimeoutSeconds,
+            FailureConfirmationCount = certificateMonitor.FailureConfirmationCount,
+            RecoveryConfirmationCount = certificateMonitor.RecoveryConfirmationCount,
+            IntervalSource = ConfigurationValueSources.EnvironmentDefault,
+            TimeoutSource = ConfigurationValueSources.PolicyProfile,
+            ConfirmationSource = ConfigurationValueSources.PolicyProfile,
+            ThresholdSource = ConfigurationValueSources.PolicyProfile,
+            CreatedAt = certificateCheckCreatedAt
+        };
+        database.LogicalChecks.Add(certificateCheck);
+        database.ExecutionLeases.Add(new ExecutionLease
+        {
+            EndpointMonitorId = certificateMonitor.Id,
+            LogicalCheckId = certificateCheckId,
+            OwnerToken = Guid.NewGuid(),
+            FencingGeneration = 1,
+            AcquiredAt = certificateCheckCreatedAt,
+            ExpiresAt = certificateCheckCreatedAt.AddMinutes(5)
+        });
+        database.EndpointHealth.Add(new EndpointHealth
+        {
+            EndpointMonitorId = certificateMonitor.Id,
+            EvidenceLogicalCheckId = certificateCheckId,
+            ConfirmedStatus = "Critical",
+            ConfirmedAt = now,
+            Version = 1
+        });
+        database.CertificateObservations.Add(new CertificateObservation
+        {
+            LogicalCheckId = certificateCheckId,
+            EndpointMonitorId = certificateMonitor.Id,
+            Subject = "CN=endpoint-purge.test",
+            Issuer = "CN=Purge Fixture CA",
+            SerialNumber = "01",
+            Sha256Fingerprint = new string('a', 64),
+            NotBefore = now.AddDays(-10),
+            NotAfter = now.AddDays(30),
+            DaysRemaining = 30,
+            ValidationCategory = TlsValidationCategory.Valid.ToString(),
+            HostnameMatched = true,
+            ChainTrusted = true,
+            ObservedAt = now
+        });
+        await database.SaveChangesAsync();
+
+        var (incident, openedEvent) = await CreateOpenIncidentAsync(
+            database, monitor.Id, ownerSubjectId, "purge-fixture:unreachable", now);
+        database.IncidentEvidence.Add(new IncidentEvidence
+        {
+            Id = Guid.NewGuid(),
+            IncidentId = incident.Id,
+            EndpointMonitorId = monitor.Id,
+            LogicalCheckId = checkId,
+            EvidenceType = IncidentEvidenceTypes.Opening,
+            EvidenceRole = "CheckResult",
+            BoundedSnapshot = "{}",
+            CapturedAt = now
+        });
+
+        // A recurrence chain, so the self-reference the cascade has to detach is really present.
+        var previousIncident = new Incident
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = monitor.Id,
+            OwnerSubjectId = ownerSubjectId,
+            IssueKey = "purge-fixture:recurred",
+            Severity = IncidentSeverities.Critical,
+            Status = IncidentStatuses.Closed,
+            OpenedAt = now.AddHours(-2),
+            ResolvedAt = now.AddHours(-1),
+            ClosedAt = now.AddHours(-1),
+            ResolutionCategory = "AutomaticRecovery",
+            ResolutionNote = "Recovered before the purge fixture archived the endpoint.",
+            Version = 1
+        };
+        database.Incidents.Add(previousIncident);
+        await database.SaveChangesAsync();
+
+        var chained = await database.Incidents.SingleAsync(candidate => candidate.Id == incident.Id);
+        chained.PreviousIncidentId = previousIncident.Id;
+        chained.RecurrenceCount = 1;
+
+        var notificationEventId = Guid.NewGuid();
+        database.NotificationEvents.Add(new NotificationEvent
+        {
+            Id = notificationEventId,
+            IncidentId = incident.Id,
+            IncidentEventId = openedEvent.Id,
+            SourceKind = NotificationSourceKinds.IncidentEvent,
+            EventType = NotificationEventTypes.Opened,
+            OccurrenceKey = $"purge-fixture|{incident.Id:N}|opened",
+            TemplateVersion = "v1",
+            IsSuppressed = false,
+            OccurredAt = now
+        });
+        var deliveryId = Guid.NewGuid();
+        database.NotificationDeliveries.Add(new NotificationDelivery
+        {
+            Id = deliveryId,
+            NotificationEventId = notificationEventId,
+            Channel = NotificationChannels.Email,
+            NormalizedRecipient = "purge-fixture@example.test",
+            RecipientNormalizationVersion = RecipientNormalizer.Version,
+            State = NotificationDeliveryStates.Sent,
+            AttemptCount = 1,
+            SentAt = now
+        });
+        database.NotificationAttempts.Add(new NotificationAttempt
+        {
+            Id = Guid.NewGuid(),
+            NotificationDeliveryId = deliveryId,
+            AttemptNumber = 1,
+            TransportOutcome = NotificationTransportOutcomes.Sent,
+            AttemptedAt = now
+        });
+
+        var runId = Guid.NewGuid();
+        database.CrawlRuns.Add(new CrawlRun
+        {
+            Id = runId,
+            EndpointId = endpointId,
+            Status = CrawlRunStatuses.Completed,
+            StopReason = CrawlStopReasons.FrontierExhausted,
+            SeedUrls = "https://endpoint-purge.test/",
+            QueryPolicy = "Canonicalize",
+            MaxPages = 10,
+            MaxDepth = 2,
+            CheckExternalLinks = false,
+            PagesFetched = 1,
+            LinksRecorded = 1,
+            RobotsOverrideGranted = false,
+            RobotsOverrideRefusedBecause = "NotRequested",
+            StartedAt = now.AddMinutes(-5),
+            FinishedAt = now
+        });
+        database.CrawlLinkResults.Add(new CrawlLinkResult
+        {
+            Id = Guid.NewGuid(),
+            RunId = runId,
+            SourceUrl = "https://endpoint-purge.test/",
+            SourceUrlHash = new byte[32],
+            TargetUrl = "https://endpoint-purge.test/missing",
+            TargetUrlHash = Enumerable.Repeat((byte)1, 32).ToArray(),
+            Classification = CrawlLinkClassifications.Broken,
+            StatusCode = 404,
+            RedirectCount = 0,
+            IsInternal = true,
+            Depth = 1,
+            DurationMs = 12,
+            RecordedAt = now
+        });
+
+        var windowId = Guid.NewGuid();
+        database.MaintenanceWindows.Add(new MaintenanceWindow
+        {
+            Id = windowId,
+            CreatedByUserId = administrator.Id,
+            Reason = "Purge fixture window",
+            TimezoneId = "UTC",
+            SuppressionPolicy = MaintenanceSuppressionPolicies.SuppressAll,
+            ScheduleStartsAt = now.AddHours(1),
+            ScheduleDurationSeconds = 3600,
+            RecurrencePattern = MaintenanceRecurrencePatterns.None,
+            PauseEscalation = true,
+            ContinueFailureCounter = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+            UpdatedByUserId = administrator.Id
+        });
+        database.MaintenanceTargets.Add(new MaintenanceTarget
+        {
+            Id = Guid.NewGuid(),
+            MaintenanceWindowId = windowId,
+            EndpointId = endpointId
+        });
+        database.MaintenanceOccurrences.Add(new MaintenanceOccurrence
+        {
+            Id = Guid.NewGuid(),
+            MaintenanceWindowId = windowId,
+            StartsAt = now.AddHours(1),
+            EndsAt = now.AddHours(2),
+            CreatedAt = now
+        });
+
+        database.AccessGrants.Add(new AccessGrant
+        {
+            Id = Guid.NewGuid(),
+            UserId = administrator.Id,
+            AccessLevel = "Read",
+            EndpointId = endpointId,
+            EffectiveFrom = now,
+            CreatedAt = now,
+            CreatedByUserId = administrator.Id
+        });
+        await database.SaveChangesAsync();
+        database.ChangeTracker.Clear();
+
+        // BR-E06 keeps one robots policy per origin, shared by every endpoint on the host, so a
+        // purge may only take it once it has taken the last of them. A second endpoint on the
+        // same origin is what makes both halves of that rule observable.
+        var neighbour = await CreateOwnedMonitorAsync(
+            scope, database, "https://endpoint-purge.test/second");
+        database.RobotsSnapshots.Add(new RobotsSnapshot
+        {
+            Origin = "https://endpoint-purge.test",
+            Host = "endpoint-purge.test",
+            Port = 443,
+            Status = "Fetched",
+            Content = "User-agent: *\nAllow: /",
+            SitemapRequired = false,
+            SitemapAvailable = false,
+            Version = 1,
+            FetchedAt = now,
+            ExpiresAt = now.AddHours(6),
+            UpdatedAt = now
+        });
+        await database.SaveChangesAsync();
+        database.ChangeTracker.Clear();
+
+        var seeded = await CountEndpointReferencesAsync(database, endpointId, windowId);
+        seeded.Should().OnlyContain(entry => entry.Value > 0,
+            "the purge assertion is only evidence if every table it clears held a row first");
+
+        // The purge is the only caller exempt from the evidence-immutability triggers, and the
+        // exemption is what makes an ordinary delete against these tables still impossible.
+        await VerifyEvidenceDeleteRejectedAsync(
+            connectionString, "incident_event", openedEvent.Id, "incident_event rows are immutable");
+        await VerifyEvidenceDeleteRejectedAsync(
+            connectionString, "check_configuration_snapshot", checkId,
+            "check_configuration_snapshot rows are immutable", "logical_check_id");
+
+        // The archive step is a precondition, not a formality: purging a live endpoint is refused.
+        var live = await database.Endpoints.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == endpointId);
+        (await endpointService.PurgeAsync(new(endpointId, live.Version), administratorAccess))
+            .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
+
+        var archived = await endpointService.DeleteAsync(new(endpointId, live.Version), administratorAccess);
+        archived.Succeeded.Should().BeTrue(string.Join(" ", archived.Errors));
+        database.ChangeTracker.Clear();
+
+        var archivedVersion = await database.Endpoints.AsNoTracking()
+            .Where(candidate => candidate.Id == endpointId)
+            .Select(candidate => candidate.Version).SingleAsync();
+
+        // Managing the registry is not enough. A purge is irreversible, so it is Administrator-only.
+        (await endpointService.PurgeAsync(new(endpointId, archivedVersion), operationsAccess))
+            .Status.Should().Be(RegistryMutationStatus.Forbidden);
+        (await endpointService.PurgeAsync(new(endpointId, archivedVersion - 1), administratorAccess))
+            .Status.Should().Be(RegistryMutationStatus.ConcurrencyConflict);
+
+        var purged = await endpointService.PurgeAsync(new(endpointId, archivedVersion), administratorAccess);
+        purged.Succeeded.Should().BeTrue(string.Join(" ", purged.Errors));
+        database.ChangeTracker.Clear();
+
+        var remaining = await CountEndpointReferencesAsync(database, endpointId, windowId);
+        remaining.Should().OnlyContain(entry => entry.Value == 0,
+            "a purged endpoint leaves nothing behind for the dashboard, SEO, incident, crawl or "
+            + "notification surfaces to read");
+
+        // The audit trail is keyed by identifier rather than by foreign key, so it outlives the
+        // endpoint and stays the only remaining evidence that it ever existed.
+        (await database.AuditEvents.AsNoTracking().CountAsync(item =>
+            item.EntityType == "endpoint"
+            && item.EntityIdentifier == endpointId.ToString()
+            && item.Action == "endpoint.purged"))
+            .Should().Be(1);
+
+        // The neighbour still holds the origin, so its robots policy is not the purged endpoint's
+        // to take with it.
+        (await database.RobotsSnapshots.AsNoTracking()
+            .CountAsync(snapshot => snapshot.Host == "endpoint-purge.test"))
+            .Should().Be(1, "an origin shared with a surviving endpoint keeps its robots policy");
+
+        var neighbourLive = await database.Endpoints.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == neighbour.EndpointId);
+        (await endpointService.DeleteAsync(
+            new(neighbour.EndpointId, neighbourLive.Version), administratorAccess))
+            .Succeeded.Should().BeTrue();
+        database.ChangeTracker.Clear();
+        var neighbourVersion = await database.Endpoints.AsNoTracking()
+            .Where(candidate => candidate.Id == neighbour.EndpointId)
+            .Select(candidate => candidate.Version).SingleAsync();
+        var neighbourPurged = await endpointService.PurgeAsync(
+            new(neighbour.EndpointId, neighbourVersion), administratorAccess);
+        neighbourPurged.Succeeded.Should().BeTrue(string.Join(" ", neighbourPurged.Errors));
+        database.ChangeTracker.Clear();
+
+        // Nothing sits on the origin now. Leaving the policy would hand a future endpoint on this
+        // host a cached decision - an approved robots exception included - that nobody granted it.
+        (await database.RobotsSnapshots.AsNoTracking()
+            .CountAsync(snapshot => snapshot.Host == "endpoint-purge.test"))
+            .Should().Be(0, "the last endpoint on an origin takes its robots policy with it");
+
+        // Other origins are untouched: the rule is scoped to the host that was emptied.
+        (await database.RobotsSnapshots.AsNoTracking().CountAsync()).Should().BeGreaterThan(0);
+    }
+
+    /// <summary>
+    /// A delete against an evidence table outside an endpoint purge is still rejected. The purge
+    /// opens its exemption with <c>SET LOCAL</c>, so a connection that never set it - which is
+    /// every other caller - sees the trigger unchanged.
+    /// </summary>
+    private static async Task VerifyEvidenceDeleteRejectedAsync(
+        string connectionString,
+        string table,
+        Guid id,
+        string expectedMessage,
+        string keyColumn = "id")
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"DELETE FROM web_health.{table} WHERE {keyColumn} = @id", connection);
+        command.Parameters.AddWithValue("id", id);
+        var rejection = await Assert.ThrowsAsync<PostgresException>(
+            () => command.ExecuteNonQueryAsync());
+        rejection.SqlState.Should().Be(PostgresErrorCodes.RaiseException);
+        rejection.MessageText.Should().Be(expectedMessage);
+    }
+
+    /// <summary>
+    /// Every table that can reach an endpoint, counted by name. Returned as a map rather than
+    /// asserted one call at a time so a missed table reads as a named non-zero entry instead of
+    /// as a bare false.
+    /// </summary>
+    private static async Task<Dictionary<string, int>> CountEndpointReferencesAsync(
+        ApplicationDbContext database,
+        Guid endpointId,
+        Guid maintenanceWindowId)
+    {
+        var monitors = database.EndpointMonitors
+            .Where(monitor => monitor.EndpointId == endpointId).Select(monitor => monitor.Id);
+        var checks = database.LogicalChecks
+            .Where(check => monitors.Contains(check.EndpointMonitorId)).Select(check => check.Id);
+        var incidents = database.Incidents
+            .Where(incident => monitors.Contains(incident.EndpointMonitorId)).Select(incident => incident.Id);
+        var notifications = database.NotificationEvents
+            .Where(notification => incidents.Contains(notification.IncidentId)).Select(notification => notification.Id);
+        var deliveries = database.NotificationDeliveries
+            .Where(delivery => notifications.Contains(delivery.NotificationEventId)).Select(delivery => delivery.Id);
+        var runs = database.CrawlRuns
+            .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
+
+        return new Dictionary<string, int>
+        {
+            ["endpoint"] = await database.Endpoints.CountAsync(item => item.Id == endpointId),
+            ["endpoint_monitor"] = await database.EndpointMonitors.CountAsync(item => item.EndpointId == endpointId),
+            ["target_authorization"] = await database.TargetAuthorizations.CountAsync(item => item.EndpointId == endpointId),
+            ["access_grant"] = await database.AccessGrants.CountAsync(item => item.EndpointId == endpointId),
+            ["logical_check"] = await database.LogicalChecks.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
+            ["check_configuration_snapshot"] = await database.CheckConfigurationSnapshots.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["execution_attempt"] = await database.ExecutionAttempts.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["durable_work"] = await database.DurableWork.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["execution_lease"] = await database.ExecutionLeases.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
+            ["check_result"] = await database.CheckResults.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["redirect_hop"] = await database.RedirectHops.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["finding"] = await database.Findings.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["seo_observation"] = await database.SeoObservations.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["certificate_observation"] = await database.CertificateObservations.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["endpoint_health"] = await database.EndpointHealth.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
+            ["issue_state"] = await database.IssueStates.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
+            ["incident"] = await database.Incidents.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
+            ["incident_event"] = await database.IncidentEvents.CountAsync(item => incidents.Contains(item.IncidentId)),
+            ["incident_evidence"] = await database.IncidentEvidence.CountAsync(item => incidents.Contains(item.IncidentId)),
+            ["notification_event"] = await database.NotificationEvents.CountAsync(item => incidents.Contains(item.IncidentId)),
+            ["notification_delivery"] = await database.NotificationDeliveries.CountAsync(item => notifications.Contains(item.NotificationEventId)),
+            ["notification_attempt"] = await database.NotificationAttempts.CountAsync(item => deliveries.Contains(item.NotificationDeliveryId)),
+            ["crawl_run"] = await database.CrawlRuns.CountAsync(item => item.EndpointId == endpointId),
+            ["crawl_link_result"] = await database.CrawlLinkResults.CountAsync(item => runs.Contains(item.RunId)),
+            ["maintenance_window"] = await database.MaintenanceWindows.CountAsync(item => item.Id == maintenanceWindowId),
+            ["maintenance_target"] = await database.MaintenanceTargets.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId),
+            ["maintenance_occurrence"] = await database.MaintenanceOccurrences.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId)
+        };
+    }
+
     private static async Task VerifyCrawlResultContractAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>

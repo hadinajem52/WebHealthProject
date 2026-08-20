@@ -23,7 +23,8 @@ internal sealed class NotificationEventWriter(ApplicationDbContext dbContext)
         string occurrenceKey,
         bool isMaintenance,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? notifyDelay = null)
     {
         var notificationEvent = new NotificationEvent
         {
@@ -52,7 +53,7 @@ internal sealed class NotificationEventWriter(ApplicationDbContext dbContext)
                 RecipientNormalizationVersion = RecipientNormalizer.Version,
                 State = isMaintenance ? NotificationDeliveryStates.Suppressed : NotificationDeliveryStates.Pending,
                 AttemptCount = 0,
-                NextAttemptAt = isMaintenance ? null : now
+                NextAttemptAt = isMaintenance ? null : now + (notifyDelay ?? TimeSpan.Zero)
             });
         }
 

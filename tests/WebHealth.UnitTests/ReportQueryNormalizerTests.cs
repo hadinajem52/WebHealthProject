@@ -84,18 +84,26 @@ public sealed class ReportQueryNormalizerTests
     [InlineData("Warning")]
     [InlineData("Critical")]
     [InlineData("Unknown")]
+    [InlineData("Disabled")]
     public void EverySelectableHealthStatusIsAccepted(string status)
     {
         Normalize(new ReportQueryInput(HealthStatus: status)).Query!.HealthStatus.Should().Be(status);
     }
 
+    /// <summary>
+    /// Disabled was previously rejected as "a registry state rather than a monitoring outcome".
+    /// That held while the dashboard never reported it — but a disabled monitor now reports
+    /// Disabled instead of the state it was in when checking stopped, so it is a bucket a reader
+    /// can see. A status that appears on the page and cannot be filtered for is the contradiction
+    /// this test now guards against.
+    /// </summary>
     [Fact]
-    public void ADisabledEndpointStatusIsNotSelectable()
+    public void ADisabledMonitorCanBeFilteredForBecauseItIsReported()
     {
-        // Disabled is a registry state rather than a monitoring outcome, so it is not one of
-        // the report's status buckets.
-        Normalize(new ReportQueryInput(HealthStatus: EndpointHealthStatuses.Disabled))
-            .Succeeded.Should().BeFalse();
+        var result = Normalize(new ReportQueryInput(HealthStatus: EndpointHealthStatuses.Disabled));
+
+        result.Succeeded.Should().BeTrue(string.Join(" ", result.Errors));
+        result.Query!.HealthStatus.Should().Be(EndpointHealthStatuses.Disabled);
     }
 
     [Fact]
