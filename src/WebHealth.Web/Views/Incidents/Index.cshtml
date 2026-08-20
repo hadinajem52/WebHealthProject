@@ -1,4 +1,4 @@
-@model IncidentListViewModel
+﻿@model IncidentListViewModel
 @{
     ViewData.SetTitle("Incidents");
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Incidents"));
@@ -112,7 +112,7 @@
                                         <span class="data-table__secondary">Unacknowledged</span>
                                     }
                                 </td>
-                                <td data-label="Opened">@item.OpenedAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</td>
+                                <td data-label="Opened">@Html.Timestamp(item.OpenedAt)</td>
                                 <td data-label="Owner">@item.OwnerDisplayName</td>
                                 <td data-label="Details">
                                     <a class="button button--secondary" asp-action="Details" asp-route-id="@item.Id">

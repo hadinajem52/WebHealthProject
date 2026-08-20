@@ -1,4 +1,4 @@
-@model AuditIndexViewModel
+﻿@model AuditIndexViewModel
 @{
     ViewData.SetTitle("Audit history");
     ViewData.SetBreadcrumbs(Breadcrumbs.Administration(Url), new BreadcrumbItem("Audit"));
@@ -99,7 +99,7 @@
                         {
                             <tr>
                                 <td data-label="Time / actor">
-                                    <span class="data-table__primary">@auditEvent.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</span>
+                                    <span class="data-table__primary">@Html.TimestampWithSeconds(auditEvent.OccurredAt)</span>
                                     <span class="data-table__secondary">@auditEvent.ActorDisplayName</span>
                                 </td>
                                 <td data-label="Action">

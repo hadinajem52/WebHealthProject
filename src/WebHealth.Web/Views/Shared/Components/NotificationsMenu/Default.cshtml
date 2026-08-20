@@ -1,4 +1,4 @@
-@model WebHealth.Application.Notifications.NotificationFeed
+﻿@model WebHealth.Application.Notifications.NotificationFeed
 @{
     var returnUrl = ViewContext.HttpContext.Request.Path + ViewContext.HttpContext.Request.QueryString;
     var unread = Model.UnreadCount;
@@ -55,7 +55,7 @@
                            asp-controller="Incidents" asp-action="Details" asp-route-id="@item.IncidentId">
                             <span class="app-notifications__card-top">
                                 <span class="badge" data-status="@(item.EventType == "Recovered" ? StatusBadges.Success : StatusBadges.ForSeverity(item.Severity))">@item.EventType</span>
-                                <span class="app-notifications__time">@item.OccurredAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</span>
+                                <span class="app-notifications__time">@Html.Timestamp(item.OccurredAt)</span>
                             </span>
                             <span class="app-notifications__target">@item.EndpointDisplayUrl</span>
                             <span class="app-notifications__meta">

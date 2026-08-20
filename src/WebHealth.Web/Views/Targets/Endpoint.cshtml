@@ -1,4 +1,4 @@
-@model EndpointDetailsViewModel
+﻿@model EndpointDetailsViewModel
 @{
     ViewData.SetTitle("Endpoint");
     ViewData.SetBreadcrumbs(
@@ -92,11 +92,11 @@
                     }
                 </dd>
             </div>
-            <div><dt>Valid until</dt><dd>@certificate.NotAfter.ToString("yyyy-MM-dd HH:mm 'UTC'") (@certificate.DaysRemaining days remaining)</dd></div>
+            <div><dt>Valid until</dt><dd>@Html.Timestamp(certificate.NotAfter) (@certificate.DaysRemaining days remaining)</dd></div>
             <div><dt>Hostname</dt><dd>@(certificate.HostnameMatched ? "Matches" : "Does not match")</dd></div>
             <div><dt>Chain</dt><dd>@(certificate.ChainTrusted ? "Trusted" : "Not trusted")</dd></div>
             <div><dt>Fingerprint (SHA-256)</dt><dd class="target-url">@certificate.Sha256Fingerprint</dd></div>
-            <div><dt>Observed</dt><dd>@certificate.ObservedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
+            <div><dt>Observed</dt><dd>@Html.TimestampWithSeconds(certificate.ObservedAt)</dd></div>
         </dl>
     }
 </section>
@@ -129,7 +129,7 @@
                     }
                 </dd>
             </div>
-            <div><dt>Time</dt><dd>@((latest.CompletedAt ?? latest.ScheduledFor ?? latest.RequestedAt)?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+            <div><dt>Time</dt><dd>@Html.TimestampWithSeconds((latest.CompletedAt ?? latest.ScheduledFor ?? latest.RequestedAt), "—")</dd></div>
             <div><dt>Source</dt><dd>@latest.Source @(latest.InitiatedByDisplayName is not null ? $"({latest.InitiatedByDisplayName})" : "")</dd></div>
             <div><dt>HTTP status</dt><dd>@(latest.HttpStatus?.ToString() ?? "—")</dd></div>
             <div><dt>Duration</dt><dd>@(latest.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</dd></div>

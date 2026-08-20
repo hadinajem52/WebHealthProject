@@ -1,4 +1,4 @@
-@model CheckHistoryViewModel
+﻿@model CheckHistoryViewModel
 @{
     ViewData.SetTitle("Check history");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Endpoints(Url), Breadcrumbs.Endpoint(Url, Model.Page.EndpointId, Model.Page.EndpointDisplayUrl), new BreadcrumbItem("Check history"));
@@ -63,7 +63,7 @@
                         @foreach (var item in history.Items)
                         {
                             <tr>
-                                <td data-label="Time">@((item.ScheduledFor ?? item.RequestedAt)?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</td>
+                                <td data-label="Time">@Html.TimestampWithSeconds((item.ScheduledFor ?? item.RequestedAt), "—")</td>
                                 <td data-label="Source"><span class="tag">@item.Source</span></td>
                                 <td data-label="Initiator">@(item.InitiatedByDisplayName ?? "—")</td>
                                 <td data-label="Outcome">

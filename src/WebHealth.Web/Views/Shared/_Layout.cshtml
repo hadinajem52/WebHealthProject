@@ -98,10 +98,53 @@
                             </div>
                         </div>
 
-                        <button type="button" class="app-header__icon">
-                            @await Html.PartialAsync("_Icon", "settings")
-                            <span class="visually-hidden">Settings &mdash; available in Phase 2</span>
-                        </button>
+                        @*
+                            Display preferences only. Nothing here is sent to the server or stored
+                            against the account: the instants themselves stay UTC everywhere, and
+                            the choice is which zone this browser renders them in.
+                        *@
+                        <div class="app-settings" data-shell-settings data-open="false">
+                            <button type="button"
+                                    class="app-header__icon"
+                                    data-shell-settings-toggle
+                                    aria-controls="app-settings-menu"
+                                    aria-expanded="false">
+                                @await Html.PartialAsync("_Icon", "settings")
+                                <span class="visually-hidden">Settings</span>
+                            </button>
+
+                            <div class="app-settings__menu" id="app-settings-menu" data-shell-settings-menu>
+                                <p class="app-settings__title">Display</p>
+
+                                <fieldset class="app-settings__group">
+                                    <legend class="app-settings__legend">Show times in</legend>
+
+                                    <label class="app-settings__option">
+                                        <input type="radio" name="shell-timezone" value="local"
+                                               data-shell-timezone-option />
+                                        <span class="app-settings__option-text">
+                                            <span class="app-settings__option-name">Local time</span>
+                                            <span class="app-settings__option-hint" data-shell-timezone-name>
+                                                Your computer&rsquo;s time zone
+                                            </span>
+                                        </span>
+                                    </label>
+
+                                    <label class="app-settings__option">
+                                        <input type="radio" name="shell-timezone" value="utc"
+                                               data-shell-timezone-option />
+                                        <span class="app-settings__option-text">
+                                            <span class="app-settings__option-name">UTC</span>
+                                            <span class="app-settings__option-hint">As stored and recorded</span>
+                                        </span>
+                                    </label>
+                                </fieldset>
+
+                                <p class="app-settings__note">
+                                    Times are always stored in UTC. This only changes how they are shown here.
+                                </p>
+                            </div>
+                        </div>
 
                         @await Component.InvokeAsync("NotificationsMenu")
 

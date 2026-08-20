@@ -154,9 +154,10 @@ public class HomeController(
             asOf,
             filters,
             // Stated as half-open, because that is what it is: a sample at the end instant
-            // belongs to the next period (BR-U04).
-            FormattableString.Invariant(
-                $"{query.WindowStart.UtcDateTime:yyyy-MM-dd HH:mm} UTC (inclusive) to {query.WindowEnd.UtcDateTime:yyyy-MM-dd HH:mm} UTC (exclusive)"),
+            // belongs to the next period (BR-U04). The instants are passed through rather than
+            // formatted here: a sentence built in the controller cannot be re-rendered in the
+            // reader's time zone.
+            new FilterSummaryWindow(query.WindowStart, query.WindowEnd),
             comparabilityWarning);
     }
 

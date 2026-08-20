@@ -1,4 +1,4 @@
-@model DashboardViewModel
+﻿@model DashboardViewModel
 @{
     ViewData.SetTitle("Dashboard");
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Dashboard"));
@@ -304,7 +304,7 @@
                                     <span class="data-table__secondary">@row.Uptime.EligibleSamples.ToString("N0") samples</span>
                                 </td>
                                 <td data-label="P95">@Milliseconds(row.ResponseTimes.P95Ms)</td>
-                                <td data-label="Last checked">@(row.LastMeasuredAt?.UtcDateTime.ToString("yyyy-MM-dd HH:mm") ?? "—")</td>
+                                <td data-label="Last checked">@Html.Timestamp(row.LastMeasuredAt, "—")</td>
                                 <td data-label="Incidents">@row.ActiveIncidentCount</td>
                             </tr>
                         }
@@ -445,7 +445,7 @@
                 </div>
                 <div class="data-list__row">
                     <dt>Last completed check</dt>
-                    <dd>@(Model.Diagnostics.LastCompletedCheckAt is { } lastCheck ? $"{lastCheck.UtcDateTime:yyyy-MM-dd HH:mm:ss} UTC" : "Never")</dd>
+                    <dd>@Html.TimestampWithSeconds(Model.Diagnostics.LastCompletedCheckAt, "Never")</dd>
                 </div>
                 <div class="data-list__row">
                     <dt>Runtime</dt>
@@ -502,7 +502,7 @@
                                         StatusBadges.ForSeverity(incident.Severity), incident.Severity))
                                 </td>
                                 <td data-label="Status">@incident.Status</td>
-                                <td data-label="Opened">@incident.OpenedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td data-label="Opened">@Html.Timestamp(incident.OpenedAt)</td>
                                 <td data-label="Owner">@incident.OwnerName</td>
                                 <td data-label="Details">
                                     <a class="button button--secondary" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.Id">

@@ -1008,3 +1008,112 @@ html:not(.js) .app-header__toggle {
     height: 1rem;
     flex: 0 0 auto;
 }
+
+/*
+ * Settings menu.
+ *
+ * Same popup mechanics as the account and notification menus: rendered in the
+ * document so it works without script, collapsed to a button-triggered popup
+ * once shell.js marks the page.
+ */
+.app-settings {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.js .app-settings__menu {
+    display: none;
+}
+
+.js .app-settings[data-open="true"] .app-settings__menu {
+    display: block;
+}
+
+.app-settings__menu {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    width: 17rem;
+    padding: var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+}
+
+.app-settings__title {
+    margin: 0 0 var(--space-3);
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.app-settings__group {
+    padding: 0;
+    border: 0;
+    margin: 0;
+}
+
+.app-settings__legend {
+    padding: 0;
+    margin-bottom: var(--space-2);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.app-settings__option {
+    display: flex;
+    align-items: flex-start;
+    padding: var(--space-2);
+    border-radius: var(--radius-tile);
+    cursor: pointer;
+    gap: var(--space-3);
+}
+
+.app-settings__option:hover {
+    background-color: var(--surface-accent-soft);
+}
+
+.app-settings__option input {
+    margin-top: 0.2rem;
+    accent-color: var(--color-teal-600);
+    flex: 0 0 auto;
+}
+
+.app-settings__option-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.app-settings__option-name {
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.app-settings__option-hint {
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.app-settings__note {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-subtle);
+    margin: var(--space-3) 0 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+}
+
+/* A rendered instant is one token: the zone suffix must not wrap onto its own
+   line, which is what the longer local-time strings would otherwise do in a
+   narrow table cell. */
+time[data-utc-time] {
+    white-space: nowrap;
+}

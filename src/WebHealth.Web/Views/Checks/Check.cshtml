@@ -1,4 +1,4 @@
-@model CheckDetailsViewModel
+﻿@model CheckDetailsViewModel
 @{
     ViewData.SetTitle("Check details");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Endpoints(Url), Breadcrumbs.Endpoint(Url, Model.Check.EndpointId, Model.Check.EndpointDisplayUrl), new BreadcrumbItem("Check history", Url.Action("History", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check details"));
@@ -24,9 +24,9 @@
             <div><dt>Source</dt><dd>@check.Source</dd></div>
             <div><dt>Initiator</dt><dd>@(check.InitiatedByDisplayName ?? "System schedule")</dd></div>
             <div><dt>State</dt><dd>@check.State</dd></div>
-            <div><dt>@(check.ScheduledFor is not null ? "Scheduled for" : "Requested at")</dt><dd>@((check.ScheduledFor ?? check.RequestedAt)?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
-            <div><dt>Started</dt><dd>@(check.StartedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not started")</dd></div>
-            <div><dt>Completed</dt><dd>@(check.CompletedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not completed")</dd></div>
+            <div><dt>@(check.ScheduledFor is not null ? "Scheduled for" : "Requested at")</dt><dd>@Html.TimestampWithSeconds(check.ScheduledFor ?? check.RequestedAt)</dd></div>
+            <div><dt>Started</dt><dd>@Html.TimestampWithSeconds(check.StartedAt, "Not started")</dd></div>
+            <div><dt>Completed</dt><dd>@Html.TimestampWithSeconds(check.CompletedAt, "Not completed")</dd></div>
             <div><dt>Outcome</dt><dd>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? "Pending"))</dd></div>
             <div><dt>Failure category</dt><dd>@(check.FailureCategory ?? "None")</dd></div>
             <div><dt>HTTP status</dt><dd>@(check.HttpStatus?.ToString() ?? "—")</dd></div>
@@ -49,7 +49,7 @@
                 <div><dt>Transferred length</dt><dd>@(check.TransferredLength is { } transferred ? $"{transferred:N0} bytes" : "Not advertised")</dd></div>
                 <div><dt>Response truncated</dt><dd>@(check.ResponseTruncated ? "Yes" : "No")</dd></div>
                 <div><dt>Monitor source</dt><dd>@(check.MonitorSource ?? "—")</dd></div>
-                <div><dt>Measured at</dt><dd>@(check.MeasuredAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+                <div><dt>Measured at</dt><dd>@Html.TimestampWithSeconds(check.MeasuredAt)</dd></div>
             </dl>
         </section>
     }

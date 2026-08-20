@@ -205,6 +205,150 @@
         });
     }
 
+    /*
+     * Time zone display.
+     *
+     * The server renders every instant as <time datetime="{iso}">…  UTC</time>. The stored value
+     * is UTC and stays UTC; this only decides which zone the reader sees, so it is a browser
+     * preference held in localStorage rather than anything sent back.
+     *
+     * The ISO attribute is the source of truth for the conversion. Reparsing the rendered text
+     * would mean turning a display string back into a moment, which breaks the first time a
+     * format changes.
+     */
+    var TIMEZONE_STORAGE_KEY = 'webhealth.display-timezone';
+    var UTC_ZONE = 'utc';
+    var LOCAL_ZONE = 'local';
+
+    function readStoredTimezone() {
+        try {
+            var stored = window.localStorage.getItem(TIMEZONE_STORAGE_KEY);
+            return stored === UTC_ZONE || stored === LOCAL_ZONE ? stored : null;
+        } catch (error) {
+            // Private browsing and blocked storage both throw here. The preference is a
+            // convenience, so losing it must not take the page down with it.
+            return null;
+        }
+    }
+
+    function storeTimezone(zone) {
+        try {
+            window.localStorage.setItem(TIMEZONE_STORAGE_KEY, zone);
+        } catch (error) {
+            // Ignored for the same reason.
+        }
+    }
+
+    function pad(value) {
+        return value < 10 ? '0' + value : String(value);
+    }
+
+    // The zone's own short name, taken from the formatter rather than assumed, so a zone that
+    // shifts for daylight saving is labelled correctly for the instant being shown.
+    function zoneAbbreviation(date) {
+        try {
+            var parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' })
+                .formatToParts(date);
+            for (var index = 0; index < parts.length; index++) {
+                if (parts[index].type === 'timeZoneName') {
+                    return parts[index].value;
+                }
+            }
+        } catch (error) {
+            // Fall through to the offset below.
+        }
+
+        var offsetMinutes = -date.getTimezoneOffset();
+        var sign = offsetMinutes < 0 ? '-' : '+';
+        var absolute = Math.abs(offsetMinutes);
+        return 'UTC' + sign + pad(Math.floor(absolute / 60)) + ':' + pad(absolute % 60);
+    }
+
+    function formatLocal(date, withSeconds) {
+        var text = date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+            + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+
+        if (withSeconds) {
+            text += ':' + pad(date.getSeconds());
+        }
+
+        return text + ' ' + zoneAbbreviation(date);
+    }
+
+    function formatUtc(date, withSeconds) {
+        var text = date.getUTCFullYear() + '-' + pad(date.getUTCMonth() + 1) + '-' + pad(date.getUTCDate())
+            + ' ' + pad(date.getUTCHours()) + ':' + pad(date.getUTCMinutes());
+
+        if (withSeconds) {
+            text += ':' + pad(date.getUTCSeconds());
+        }
+
+        return text + ' UTC';
+    }
+
+    function applyTimezone(zone, root) {
+        var elements = (root || document).querySelectorAll('time[data-utc-time]');
+
+        Array.prototype.forEach.call(elements, function (element) {
+            var instant = element.getAttribute('datetime');
+            if (!instant) {
+                return;
+            }
+
+            var date = new Date(instant);
+            if (isNaN(date.getTime())) {
+                return;
+            }
+
+            var withSeconds = element.getAttribute('data-utc-time') === 'seconds';
+            element.textContent = zone === UTC_ZONE
+                ? formatUtc(date, withSeconds)
+                : formatLocal(date, withSeconds);
+
+            // The other reading stays available on hover, so a reader comparing against a log
+            // or a notification never has to convert by hand.
+            element.title = zone === UTC_ZONE
+                ? formatLocal(date, withSeconds)
+                : formatUtc(date, withSeconds);
+        });
+    }
+
+    function setUpTimezonePreference(options, zoneNameLabel) {
+        var zone = readStoredTimezone() || LOCAL_ZONE;
+
+        if (zoneNameLabel) {
+            try {
+                var resolved = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (resolved) {
+                    zoneNameLabel.textContent = resolved.replace(/_/g, ' ');
+                }
+            } catch (error) {
+                // The default wording already describes it well enough.
+            }
+        }
+
+        function sync() {
+            Array.prototype.forEach.call(options, function (option) {
+                option.checked = option.value === zone;
+            });
+            applyTimezone(zone);
+        }
+
+        Array.prototype.forEach.call(options, function (option) {
+            option.addEventListener('change', function () {
+                if (!option.checked) {
+                    return;
+                }
+
+                zone = option.value;
+                storeTimezone(zone);
+                applyTimezone(zone);
+            });
+        });
+
+        sync();
+    }
+
     // Flash messages are transient, so dismissal is client-only: nothing is
     // persisted and the next request renders whatever the server sends.
     function setUpFlashDismissal(container) {
@@ -279,6 +423,21 @@
 
         if (notifications && notificationsToggle && notificationsMenu) {
             setUpPopupMenu(notifications, notificationsToggle, notificationsMenu);
+        }
+
+        var settings = document.querySelector('[data-shell-settings]');
+        var settingsToggle = document.querySelector('[data-shell-settings-toggle]');
+        var settingsMenu = document.querySelector('[data-shell-settings-menu]');
+
+        if (settings && settingsToggle && settingsMenu) {
+            setUpPopupMenu(settings, settingsToggle, settingsMenu);
+        }
+
+        var timezoneOptions = document.querySelectorAll('[data-shell-timezone-option]');
+        if (timezoneOptions.length > 0) {
+            setUpTimezonePreference(
+                timezoneOptions,
+                document.querySelector('[data-shell-timezone-name]'));
         }
 
         var flashMessages = document.querySelector('.flash-messages');

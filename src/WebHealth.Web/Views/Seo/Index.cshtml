@@ -1,4 +1,4 @@
-@model SeoListViewModel
+﻿@model SeoListViewModel
 @using WebHealth.Application.Seo
 @using WebHealth.Domain.Seo
 @{
@@ -143,7 +143,7 @@
                                         <span class="data-table__secondary">Response was truncated</span>
                                     }
                                 </td>
-                                <td data-label="Observed">@item.ObservedAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</td>
+                                <td data-label="Observed">@Html.Timestamp(item.ObservedAt)</td>
                             </tr>
                         }
                     </tbody>

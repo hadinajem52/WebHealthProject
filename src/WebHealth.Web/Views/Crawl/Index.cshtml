@@ -1,4 +1,4 @@
-@model CrawlIndexViewModel
+﻿@model CrawlIndexViewModel
 @{
     ViewData.SetTitle("Broken links");
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Broken links"));
@@ -67,7 +67,7 @@
                         @foreach (var run in Model.Runs)
                         {
                             <tr>
-                                <td data-label="Started">@run.StartedAt.ToString("yyyy-MM-dd HH:mm 'UTC'")</td>
+                                <td data-label="Started">@Html.Timestamp(run.StartedAt)</td>
                                 <td data-label="Status">
                                     <span class="badge" data-status="@CrawlRunDisplay.StatusTone(run)">@CrawlRunDisplay.DescribeStatus(run)</span>
                                 </td>

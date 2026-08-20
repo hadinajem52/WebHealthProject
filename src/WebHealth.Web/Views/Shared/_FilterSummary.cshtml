@@ -1,4 +1,4 @@
-@model FilterSummaryViewModel
+﻿@model FilterSummaryViewModel
 @*
     BR-R01. Rendered as a definition list rather than as prose so a screen reader can move
     term-by-term through the applied filters instead of hearing one long sentence.
@@ -9,7 +9,7 @@
         {
             <div class="filter-summary__item">
                 <dt>Window</dt>
-                <dd>@Model.Window</dd>
+                <dd>@Html.Timestamp(Model.Window.Start) (inclusive) to @Html.Timestamp(Model.Window.End) (exclusive)</dd>
             </div>
         }
         @if (Model.IsUnfiltered)
@@ -31,7 +31,7 @@
         }
         <div class="filter-summary__item">
             <dt>As of</dt>
-            <dd><time datetime="@Model.AsOf.UtcDateTime.ToString("O")">@Model.AsOf.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss") UTC</time></dd>
+            <dd>@Html.TimestampWithSeconds(Model.AsOf)</dd>
         </div>
     </dl>
     @if (Model.Note is not null)

@@ -1,4 +1,4 @@
-@model CrawlRunViewModel
+﻿@model CrawlRunViewModel
 @{
     ViewData.SetTitle("Crawl run");
     ViewData.SetBreadcrumbs(
@@ -18,8 +18,8 @@
         </div>
 
         <dl class="registry-facts">
-            <div><dt>Started (UTC)</dt><dd>@run.StartedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
-            <div><dt>Finished (UTC)</dt><dd>@(run.FinishedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Still running")</dd></div>
+            <div><dt>Started</dt><dd>@Html.TimestampWithSeconds(run.StartedAt)</dd></div>
+            <div><dt>Finished</dt><dd>@Html.TimestampWithSeconds(run.FinishedAt, "Still running")</dd></div>
             <div><dt>Pages fetched</dt><dd>@run.PagesFetched</dd></div>
             <div><dt>Links recorded</dt><dd>@run.LinksRecorded</dd></div>
             <div><dt>Broken links</dt><dd>@run.BrokenLinkCount</dd></div>

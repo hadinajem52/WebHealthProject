@@ -1,4 +1,4 @@
-@model IncidentDetailsViewModel
+﻿@model IncidentDetailsViewModel
 @using WebHealth.Application.Incidents
 @{
     ViewData.SetTitle("Incident details");
@@ -42,11 +42,11 @@
 
         <dl class="registry-facts">
             <div><dt>Owner</dt><dd>@incident.OwnerDisplayName</dd></div>
-            <div><dt>Opened</dt><dd>@incident.OpenedAt.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</dd></div>
-            <div><dt>Acknowledged</dt><dd>@(incident.AcknowledgedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "Not yet")</dd></div>
-            <div><dt>Recovery started</dt><dd>@(incident.RecoveryStartedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
-            <div><dt>Resolved</dt><dd>@(incident.ResolvedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
-            <div><dt>Closed</dt><dd>@(incident.ClosedAt?.ToString("yyyy-MM-dd HH:mm:ss 'UTC'") ?? "—")</dd></div>
+            <div><dt>Opened</dt><dd>@Html.TimestampWithSeconds(incident.OpenedAt)</dd></div>
+            <div><dt>Acknowledged</dt><dd>@Html.TimestampWithSeconds(incident.AcknowledgedAt, "Not yet")</dd></div>
+            <div><dt>Recovery started</dt><dd>@Html.TimestampWithSeconds(incident.RecoveryStartedAt, "—")</dd></div>
+            <div><dt>Resolved</dt><dd>@Html.TimestampWithSeconds(incident.ResolvedAt, "—")</dd></div>
+            <div><dt>Closed</dt><dd>@Html.TimestampWithSeconds(incident.ClosedAt, "—")</dd></div>
             <div><dt>Outage duration</dt><dd>@(incident.OutageDurationMs is { } outage ? $"{TimeSpan.FromMilliseconds(outage):g}" : "—")</dd></div>
             <div><dt>Recurrence</dt><dd>@incident.RecurrenceCount</dd></div>
             <div><dt>Resolution</dt><dd>@(incident.ResolutionCategory ?? "—")@(incident.ResolutionNote is null ? "" : $" — {incident.ResolutionNote}")</dd></div>
@@ -150,7 +150,7 @@
                     <caption class="visually-hidden">Incident timeline</caption>
                     <thead>
                         <tr>
-                            <th scope="col">When (UTC)</th>
+                            <th scope="col">When</th>
                             <th scope="col">Event</th>
                             <th scope="col">Detail</th>
                             <th scope="col">Actor</th>
@@ -160,7 +160,7 @@
                         @foreach (var entry in incident.Timeline)
                         {
                             <tr>
-                                <td data-label="When (UTC)">@entry.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td data-label="When">@Html.TimestampWithSeconds(entry.OccurredAt)</td>
                                 <td data-label="Event"><span class="tag">@entry.EventType</span></td>
                                 <td data-label="Detail">
                                     @if (entry.EventType == "StatusChanged")
@@ -200,12 +200,12 @@
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table">
                     <caption class="visually-hidden">Incident evidence</caption>
-                    <thead><tr><th scope="col">Captured (UTC)</th><th scope="col">Type</th><th scope="col">Role</th></tr></thead>
+                    <thead><tr><th scope="col">Captured</th><th scope="col">Type</th><th scope="col">Role</th></tr></thead>
                     <tbody>
                         @foreach (var item in incident.Evidence)
                         {
                             <tr>
-                                <td data-label="Captured (UTC)">@item.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td data-label="Captured">@Html.TimestampWithSeconds(item.CapturedAt)</td>
                                 <td data-label="Type"><span class="tag">@item.EvidenceType</span></td>
                                 <td data-label="Role">@item.EvidenceRole</td>
                             </tr>
@@ -229,7 +229,7 @@
                     <caption class="visually-hidden">Notifications triggered by this incident</caption>
                     <thead>
                         <tr>
-                            <th scope="col">When (UTC)</th>
+                            <th scope="col">When</th>
                             <th scope="col">Event</th>
                             <th scope="col">Suppressed</th>
                             <th scope="col">Recipients</th>
@@ -239,7 +239,7 @@
                         @foreach (var notification in incident.Notifications)
                         {
                             <tr>
-                                <td data-label="When (UTC)">@notification.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td data-label="When">@Html.TimestampWithSeconds(notification.OccurredAt)</td>
                                 <td data-label="Event"><span class="tag">@notification.EventType</span></td>
                                 <td data-label="Suppressed">
                                     @if (notification.IsSuppressed)
