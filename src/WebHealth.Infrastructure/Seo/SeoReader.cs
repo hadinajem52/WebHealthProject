@@ -76,6 +76,18 @@ internal sealed class SeoReader(
                     finding.RuleKey.StartsWith(SeoRuleKeyPrefix)));
         }
 
+        if (SeoFindingGroups.IsSelectable(query.Subject))
+        {
+            // Expressed as the subject's rule keys rather than as a call to SeoFindingGroups.Of:
+            // the grouping is a method, so the database cannot run it, and applying it in memory
+            // would mean reading every row before narrowing it. An unrecognised subject is ignored
+            // here rather than matching nothing, matching how the other filters degrade.
+            var subjectRuleKeys = SeoFindingGroups.RuleKeysFor(query.Subject);
+            latest = latest.Where(observation =>
+                observation.LogicalCheck.Result!.Findings.Any(finding =>
+                    subjectRuleKeys.Contains(finding.RuleKey)));
+        }
+
         var totalCount = await latest.CountAsync(cancellationToken);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)SeoQuery.PageSize));
         var boundedPage = Math.Clamp(page, 1, totalPages);

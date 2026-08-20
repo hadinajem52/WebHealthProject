@@ -12,8 +12,8 @@ namespace WebHealth.Application.Seo;
 /// <para>
 /// The group is derived from the rule key rather than stored beside it: the key is already the
 /// stable identity a finding carries everywhere, and a second stored field would be one more thing
-/// that can disagree with it. Findings do persist a category, but only the rule key reaches the
-/// database, so this is the one place that translation happens.
+/// that can disagree with it. Findings do carry a category in memory, but only the rule key reaches
+/// the database, so this is the one place that translation happens.
 /// </para>
 /// </summary>
 public static class SeoFindingGroups
@@ -27,22 +27,66 @@ public static class SeoFindingGroups
     public const string Other = "SEO";
 
     /// <summary>
+    /// The single mapping. <see cref="Of" /> reads it forwards and <see cref="RuleKeysFor" />
+    /// reads it backwards, so a rule cannot be described as one subject and filtered as another.
+    /// </summary>
+    private static readonly (string RuleKey, string Group)[] Membership =
+    [
+        (RobotsRules.BlocksSite, Robots),
+        (RobotsRules.BlocksEndpoint, Robots),
+        (RobotsRules.Unavailable, Robots),
+        (RobotsRules.SitemapMissing, Sitemap),
+        (SeoRules.TitleMissing, Title),
+        (SeoRules.TitleDuplicate, Title),
+        (SeoRules.DescriptionMissing, Description),
+        (SeoRules.CanonicalNotAbsolute, Canonical),
+        (SeoRules.CanonicalInvalid, Canonical),
+        (SeoRules.CanonicalDuplicate, Canonical),
+        (SeoRules.CanonicalUnexpectedHost, Canonical),
+        (SeoRules.NoIndexUnexpected, Indexing),
+        (SeoRules.IndexableUnexpected, Indexing),
+    ];
+
+    /// <summary>
     /// The origin-level groups. These describe the site as a whole rather than the one page that
     /// happened to be checked, which is why they are worth telling apart from the page rules.
     /// </summary>
     public static IReadOnlyList<string> SiteWide => [Robots, Sitemap];
 
-    public static string Of(string? ruleKey) => ruleKey switch
+    /// <summary>
+    /// The subjects a reader may filter by, in the order §11.2 names them.
+    /// <para>
+    /// <see cref="Other" /> is deliberately absent: it exists so a rule added later still groups
+    /// sensibly, and its membership cannot be enumerated. Offering it as a filter would promise a
+    /// query that has no rule keys to run against.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> Selectable =>
+        [Title, Description, Canonical, Indexing, Robots, Sitemap];
+
+    public static string Of(string? ruleKey)
     {
-        RobotsRules.SitemapMissing => Sitemap,
-        RobotsRules.BlocksSite or RobotsRules.BlocksEndpoint or RobotsRules.Unavailable => Robots,
-        SeoRules.TitleMissing or SeoRules.TitleDuplicate => Title,
-        SeoRules.DescriptionMissing => Description,
-        SeoRules.CanonicalNotAbsolute or SeoRules.CanonicalInvalid
-            or SeoRules.CanonicalDuplicate or SeoRules.CanonicalUnexpectedHost => Canonical,
-        SeoRules.NoIndexUnexpected or SeoRules.IndexableUnexpected => Indexing,
-        _ => Other
-    };
+        foreach (var (key, group) in Membership)
+        {
+            if (string.Equals(key, ruleKey, StringComparison.Ordinal)) return group;
+        }
+
+        return Other;
+    }
+
+    /// <summary>
+    /// The rule keys belonging to a subject, for callers that must express the filter as data.
+    /// The reader needs this because <see cref="Of" /> is a method: a database cannot run it, and
+    /// evaluating it in memory would mean reading rows before filtering them.
+    /// </summary>
+    public static IReadOnlyList<string> RuleKeysFor(string? group) =>
+        [.. Membership
+            .Where(entry => string.Equals(entry.Group, group, StringComparison.Ordinal))
+            .Select(entry => entry.RuleKey)];
+
+    /// <summary>Whether a value names a subject that can be filtered on.</summary>
+    public static bool IsSelectable(string? group) =>
+        group is not null && Selectable.Contains(group, StringComparer.Ordinal);
 
     /// <summary>Whether the rule describes the origin rather than the individual page.</summary>
     public static bool IsSiteWide(string? ruleKey) => SiteWide.Contains(Of(ruleKey));

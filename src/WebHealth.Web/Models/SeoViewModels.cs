@@ -13,6 +13,7 @@ public sealed record SeoListViewModel(
     string? Applicability,
     string? Environment,
     bool ProblemsOnly,
+    string? Subject,
     string FilterSummary)
 {
     /// <summary>
@@ -24,15 +25,24 @@ public sealed record SeoListViewModel(
     public bool HasFilters =>
         !string.IsNullOrWhiteSpace(Applicability)
         || !string.IsNullOrWhiteSpace(Environment)
+        || !string.IsNullOrWhiteSpace(Subject)
         || ProblemsOnly;
 
-    public static string Describe(string? applicability, string? environment, bool problemsOnly)
+    public static string Describe(
+        string? applicability,
+        string? environment,
+        bool problemsOnly,
+        string? subject = null)
     {
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(applicability)) parts.Add(applicability);
         if (environment == SeoQuery.Production) parts.Add("production only");
         if (environment == SeoQuery.NonProduction) parts.Add("non-production only");
-        if (problemsOnly) parts.Add("with SEO findings");
+        // The subject is the narrower statement, so it replaces the general one rather than
+        // reading as two conditions: "with SEO findings, with robots findings" says one thing
+        // twice.
+        if (!string.IsNullOrWhiteSpace(subject)) parts.Add($"with {subject.ToLowerInvariant()} findings");
+        else if (problemsOnly) parts.Add("with SEO findings");
         return parts.Count == 0 ? "All endpoints" : string.Join(", ", parts);
     }
 

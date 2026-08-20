@@ -84,6 +84,47 @@ public sealed class SeoFindingGroupTests
         item.FindingGroups.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// The reader filters by rule key because a database cannot run <see cref="SeoFindingGroups.Of" />.
+    /// That leaves two paths through the same mapping, and a subject whose keys disagreed with its
+    /// description would filter to rows the page then labels as something else.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(SelectableSubjects))]
+    public void FilteringKeysAndDescribedGroupAgree(string subject)
+    {
+        var keys = SeoFindingGroups.RuleKeysFor(subject);
+
+        keys.Should().NotBeEmpty("a selectable subject must have rules to filter on");
+        keys.Should().OnlyContain(key => SeoFindingGroups.Of(key) == subject);
+    }
+
+    [Fact]
+    public void EverySelectableSubjectIsRecognised() =>
+        SeoFindingGroups.Selectable.Should().OnlyContain(subject => SeoFindingGroups.IsSelectable(subject));
+
+    /// <summary>
+    /// "SEO" is the fallback for a rule added later, and its membership cannot be enumerated.
+    /// Offering it as a filter would promise a query with no rule keys behind it.
+    /// </summary>
+    [Fact]
+    public void TheFallbackGroupIsNotOfferedAsAFilter()
+    {
+        SeoFindingGroups.IsSelectable(SeoFindingGroups.Other).Should().BeFalse();
+        SeoFindingGroups.RuleKeysFor(SeoFindingGroups.Other).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Everything")]
+    [InlineData("robots")]
+    public void AnUnrecognisedSubjectIsNotSelectable(string? subject) =>
+        SeoFindingGroups.IsSelectable(subject).Should().BeFalse(
+            "an unrecognised value becomes no filter rather than a query matching nothing");
+
+    public static TheoryData<string> SelectableSubjects => [.. SeoFindingGroups.Selectable];
+
     private static SeoListItem Item(string[] ruleKeys) =>
         new(Guid.NewGuid(), Guid.NewGuid(), "https://example.test/", "Site", "Production",
             IsProduction: true, SeoApplicabilities.Applicable, NotApplicableReason: null,

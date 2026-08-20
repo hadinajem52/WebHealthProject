@@ -24,6 +24,7 @@ public sealed class SeoController(ISeoReader seoReader) : Controller
         string? applicability,
         string? environment,
         bool problemsOnly,
+        string? subject,
         int page = 1,
         CancellationToken cancellationToken = default)
     {
@@ -37,9 +38,10 @@ public sealed class SeoController(ISeoReader seoReader) : Controller
         var normalizedEnvironment = environment is SeoQuery.Production or SeoQuery.NonProduction
             ? environment
             : null;
+        var normalizedSubject = SeoFindingGroups.IsSelectable(subject) ? subject : null;
 
         var results = await seoReader.ListAsync(
-            new(normalizedApplicability, normalizedEnvironment, problemsOnly),
+            new(normalizedApplicability, normalizedEnvironment, problemsOnly, Subject: normalizedSubject),
             GetAccess(),
             page,
             cancellationToken);
@@ -49,7 +51,9 @@ public sealed class SeoController(ISeoReader seoReader) : Controller
             normalizedApplicability,
             normalizedEnvironment,
             problemsOnly,
-            SeoListViewModel.Describe(normalizedApplicability, normalizedEnvironment, problemsOnly)));
+            normalizedSubject,
+            SeoListViewModel.Describe(
+                normalizedApplicability, normalizedEnvironment, problemsOnly, normalizedSubject)));
     }
 
     private RegistryAccessContext GetAccess()

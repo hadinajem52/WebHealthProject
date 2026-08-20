@@ -14,9 +14,11 @@ public sealed record NotificationReminderSweepResult(int RemindersWritten, int E
 /// Sweeps unacknowledged critical incidents for the 60-minute reminder and the single 30-minute
 /// escalation level. Acknowledgement stops both automatically — an incident with
 /// AcknowledgedAt set no longer matches the candidate query, so nothing further is written for
-/// it. Each incident is written in its own transaction and a duplicate unique-key write (a
-/// second sweep tick racing this one) is treated as an idempotent no-op, matching how the
-/// deterministic occurrence key is meant to be used.
+/// it. Each incident is written in its own transaction. Once a slot's notification has been
+/// sent, every later tick for that same incident matches the same deterministic occurrence key
+/// until the next boundary, so an existence check short-circuits the common case before it ever
+/// reaches the database's unique index; the unique-key catch stays only as the backstop for an
+/// actual race (a second sweep tick landing between the check and the insert).
 /// </summary>
 internal sealed class NotificationReminderService(
     ApplicationDbContext dbContext,
@@ -86,6 +88,17 @@ internal sealed class NotificationReminderService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var alreadySent = await dbContext.NotificationEvents.AsNoTracking().AnyAsync(
+            candidate => candidate.IncidentId == incidentId
+                && candidate.SourceKind == sourceKind
+                && candidate.EventType == eventType
+                && candidate.OccurrenceKey == occurrenceKey,
+            cancellationToken);
+        if (alreadySent)
+        {
+            return false;
+        }
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {

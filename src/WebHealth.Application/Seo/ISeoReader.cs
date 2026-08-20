@@ -7,11 +7,18 @@ namespace WebHealth.Application.Seo;
 /// list the caller already fetched: a filter applied after the fact would still have read rows the
 /// requester is not entitled to see.
 /// </summary>
+/// <param name="Subject">
+/// Narrows to endpoints whose latest observation has a finding about this part of the SEO
+/// configuration — one of <see cref="SeoFindingGroups.Selectable" />. It answers "show me only the
+/// robots problems", which <see cref="ProblemsOnly" /> cannot: that flag asks whether there is any
+/// SEO finding at all, and every SEO rule shares one key prefix.
+/// </param>
 public sealed record SeoQuery(
     string? Applicability = null,
     string? Environment = null,
     bool ProblemsOnly = false,
-    Guid? WebsiteId = null)
+    Guid? WebsiteId = null,
+    string? Subject = null)
 {
     public const int PageSize = 25;
 

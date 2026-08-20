@@ -38,6 +38,16 @@
                     <option value="@SeoQuery.NonProduction">Non-production</option>
                 </select>
             </div>
+            <div class="form-field">
+                <label asp-for="Subject">Finding subject</label>
+                <select asp-for="Subject" name="subject">
+                    <option value="">Any</option>
+                    @foreach (var group in SeoFindingGroups.Selectable)
+                    {
+                        <option value="@group">@group</option>
+                    }
+                </select>
+            </div>
             <label class="switch-field">
                 @* No name override: asp-for emits a hidden false companion under the model
                    property's own name, so renaming only the visible input submits the value
@@ -170,14 +180,14 @@
                 <span class="pagination__actions">
                     @if (hasPrevious)
                     {
-                        <a class="button button--secondary" asp-route-page="@(listPage.Page - 1)" asp-route-applicability="@Model.Applicability" asp-route-environment="@Model.Environment" asp-route-problemsOnly="@Model.ProblemsOnly">
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page - 1)" asp-route-applicability="@Model.Applicability" asp-route-environment="@Model.Environment" asp-route-problemsOnly="@Model.ProblemsOnly" asp-route-subject="@Model.Subject">
                             @await Html.PartialAsync("_Icon", "arrow-left")
                             <span>Previous</span>
                         </a>
                     }
                     @if (hasNext)
                     {
-                        <a class="button button--secondary" asp-route-page="@(listPage.Page + 1)" asp-route-applicability="@Model.Applicability" asp-route-environment="@Model.Environment" asp-route-problemsOnly="@Model.ProblemsOnly">
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page + 1)" asp-route-applicability="@Model.Applicability" asp-route-environment="@Model.Environment" asp-route-problemsOnly="@Model.ProblemsOnly" asp-route-subject="@Model.Subject">
                             <span>Next</span>
                             @await Html.PartialAsync("_Icon", "arrow-right")
                         </a>
