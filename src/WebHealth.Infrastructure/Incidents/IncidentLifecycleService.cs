@@ -6,8 +6,10 @@ using NpgsqlTypes;
 using WebHealth.Application.Assignments;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Incidents;
+using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Domain.Incidents;
+using WebHealth.Domain.Notifications;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
 
@@ -208,6 +210,10 @@ internal sealed class IncidentLifecycleService(
             before.Status, incident.Status, note: request.NoteOrReason?.Trim());
         AddResolutionEvidence(incident, access.UserId, request.Action, now);
         await WriteAuditAsync(access.UserId, now, AuditAction(request.Action), before, incident, cancellationToken);
+        if (request.Action is IncidentLifecycleAction.ResolveManually or IncidentLifecycleAction.ForceClose)
+        {
+            await SuppressDelayedOpenedNotificationAsync(incident, now, cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
         return IncidentMutationResult.Success(incident.Id);
     }
@@ -379,6 +385,29 @@ internal sealed class IncidentLifecycleService(
             before,
             Snapshot(incident),
             cancellationToken);
+
+    private Task SuppressDelayedOpenedNotificationAsync(
+        Incident incident,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (!PerformanceRules.IsSlowResponseIssueKey(incident.IssueKey))
+        {
+            return Task.CompletedTask;
+        }
+
+        return dbContext.NotificationDeliveries
+            .Where(delivery => delivery.State == NotificationDeliveryStates.Pending
+                && delivery.NextAttemptAt > now
+                && delivery.NotificationEvent.IncidentId == incident.Id
+                && delivery.NotificationEvent.SourceKind == NotificationSourceKinds.IncidentEvent
+                && delivery.NotificationEvent.EventType == NotificationEventTypes.Opened)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(delivery => delivery.State, NotificationDeliveryStates.Suppressed)
+                    .SetProperty(delivery => delivery.NextAttemptAt, (DateTimeOffset?)null),
+                cancellationToken);
+    }
 
     internal static IncidentAuditSnapshot Snapshot(Incident incident) => new(
         incident.Id,

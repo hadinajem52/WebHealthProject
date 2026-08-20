@@ -22,15 +22,30 @@ internal sealed class WebsitePurgeCascade(
 {
     public async Task ExecuteAsync(Guid websiteId, CancellationToken cancellationToken)
     {
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "SET LOCAL web_health.endpoint_purge = 'on'", cancellationToken);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT 1 FROM web_health.website WHERE id = {websiteId} FOR UPDATE
+            """, cancellationToken);
+
         var environmentIds = await dbContext.Environments.AsNoTracking()
             .Where(environment => environment.WebsiteId == websiteId)
+            .OrderBy(environment => environment.Id)
             .Select(environment => environment.Id)
             .ToArrayAsync(cancellationToken);
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT 1 FROM web_health.environment
+            WHERE website_id = {websiteId}
+            ORDER BY id FOR UPDATE
+            """, cancellationToken);
 
         // Read in full before anything is deleted: each purge below removes the endpoint row that
         // this query selects over, so a lazily re-evaluated version would shrink as it ran.
         var endpointIds = await dbContext.Endpoints.AsNoTracking()
             .Where(endpoint => environmentIds.Contains(endpoint.EnvironmentId))
+            .OrderBy(endpoint => endpoint.Id)
             .Select(endpoint => endpoint.Id)
             .ToArrayAsync(cancellationToken);
 
@@ -53,14 +68,20 @@ internal sealed class WebsitePurgeCascade(
             .ToArrayAsync(cancellationToken);
         if (maintenanceWindowIds.Length > 0)
         {
-            await dbContext.MaintenanceOccurrences
-                .Where(occurrence => maintenanceWindowIds.Contains(occurrence.MaintenanceWindowId))
-                .ExecuteDeleteAsync(cancellationToken);
             await dbContext.MaintenanceTargets
-                .Where(target => maintenanceWindowIds.Contains(target.MaintenanceWindowId))
+                .Where(target => target.WebsiteId == websiteId
+                    || (target.EnvironmentId != null && environmentIds.Contains(target.EnvironmentId.Value)))
+                .ExecuteDeleteAsync(cancellationToken);
+            var orphanedWindowIds = await dbContext.MaintenanceWindows.AsNoTracking()
+                .Where(window => maintenanceWindowIds.Contains(window.Id)
+                    && !dbContext.MaintenanceTargets.Any(target => target.MaintenanceWindowId == window.Id))
+                .Select(window => window.Id)
+                .ToArrayAsync(cancellationToken);
+            await dbContext.MaintenanceOccurrences
+                .Where(occurrence => orphanedWindowIds.Contains(occurrence.MaintenanceWindowId))
                 .ExecuteDeleteAsync(cancellationToken);
             await dbContext.MaintenanceWindows
-                .Where(window => maintenanceWindowIds.Contains(window.Id))
+                .Where(window => orphanedWindowIds.Contains(window.Id))
                 .ExecuteDeleteAsync(cancellationToken);
         }
 

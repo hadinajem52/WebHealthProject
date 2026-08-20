@@ -135,7 +135,29 @@ public sealed class MonitorDisplayStatusTests
             DisplayUrl = "https://display-status.test/",
             NormalizedUrl = "https://display-status.test/",
             NormalizedUrlHash = new byte[32],
-            NormalizedHost = "display-status.test"
+            NormalizedHost = "display-status.test",
+            Environment = new WebsiteEnvironment
+            {
+                Id = Guid.NewGuid(),
+                Name = "Production",
+                NormalizedName = "PRODUCTION",
+                EnvironmentType = "Production",
+                IsActive = true,
+                Website = new Website
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Display status",
+                    NormalizedName = "DISPLAY STATUS",
+                    IsEnabled = true,
+                    Client = new Client
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = "Client",
+                        NormalizedName = "CLIENT",
+                        IsActive = true
+                    }
+                }
+            }
         },
         EndpointHealth = confirmedStatus is null
             ? null

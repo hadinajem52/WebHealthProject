@@ -188,7 +188,9 @@ internal sealed class TargetRegistryReader(
             .ToArrayAsync(cancellationToken);
         var modes = schedules.ToDictionary(
             monitor => monitor.EndpointId,
-            monitor => !monitor.SchedulingEnabled
+            monitor => !testable.Contains(monitor.EndpointId)
+                ? EndpointMonitoringMode.Disabled
+                : !monitor.SchedulingEnabled
                 ? EndpointMonitoringMode.ManualOnly
                 : monitor.IsEnabled
                     ? EndpointMonitoringMode.Scheduled
@@ -198,7 +200,7 @@ internal sealed class TargetRegistryReader(
             row.Id, row.ClientId, row.ClientName, row.WebsiteId, row.WebsiteName,
             row.EnvironmentId, row.EnvironmentName, row.DisplayUrl, row.IsEnabled,
             testable.Contains(row.Id), row.Version,
-            modes.GetValueOrDefault(row.Id, EndpointMonitoringMode.ManualOnly))).ToArray();
+            modes.GetValueOrDefault(row.Id, EndpointMonitoringMode.Disabled))).ToArray();
     }
 
     public async Task<CertificateStatus?> FindCertificateStatusAsync(

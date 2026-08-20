@@ -84,6 +84,9 @@ public sealed record RegistryEndpointItem(
 /// </summary>
 public enum EndpointMonitoringMode
 {
+    /// <summary>The endpoint or one of its owning records is disabled.</summary>
+    Disabled,
+
     /// <summary>Scheduled checks are configured and running.</summary>
     Scheduled,
 

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WebHealth.Infrastructure.Seo;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Registry;
@@ -35,12 +36,24 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
         await dbContext.Database.ExecuteSqlRawAsync(
             "SET LOCAL web_health.endpoint_purge = 'on'", cancellationToken);
 
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT 1 FROM web_health.endpoint WHERE id = {endpointId} FOR UPDATE
+            """, cancellationToken);
+
         // Read before the endpoint row goes, because the question it answers - is this the last
         // endpoint on the origin - can only be asked once the row is gone.
-        var origin = await dbContext.Endpoints.AsNoTracking()
+        var normalizedUrl = await dbContext.Endpoints.AsNoTracking()
             .Where(endpoint => endpoint.Id == endpointId)
-            .Select(endpoint => new { endpoint.NormalizedHost, endpoint.EffectivePort })
-            .SingleAsync(cancellationToken);
+            .Select(endpoint => endpoint.NormalizedUrl)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (normalizedUrl is null)
+        {
+            return;
+        }
+
+        var origin = RobotsRefreshService.OriginOf(normalizedUrl);
+
+        await RobotsOriginLock.AcquireAsync(dbContext, origin, cancellationToken);
 
         // Each of these stays an unexecuted query, re-evaluated by the statement that uses it.
         // That is safe only because every statement below runs before the rows it selects over
@@ -56,11 +69,7 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
         var deliveries = dbContext.NotificationDeliveries
             .Where(delivery => notifications.Contains(delivery.NotificationEventId)).Select(delivery => delivery.Id);
 
-        // A window scoped to this endpoint or one of its monitors targets nothing else - the
-        // exactly-one-scope constraint guarantees it - so the window goes with the endpoint
-        // rather than being left behind with no target for the reader to describe. The
-        // identifiers are read now because the target rows that answer this question are deleted
-        // before the window rows that need the answer.
+        // Read the affected windows before their endpoint and monitor targets are removed.
         var maintenanceWindowIds = await dbContext.MaintenanceTargets.AsNoTracking()
             .Where(target => target.EndpointId == endpointId
                 || (target.EndpointMonitorId != null && monitors.Contains(target.EndpointMonitorId.Value)))
@@ -150,14 +159,20 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
 
         if (maintenanceWindowIds.Length > 0)
         {
-            await dbContext.MaintenanceOccurrences
-                .Where(occurrence => maintenanceWindowIds.Contains(occurrence.MaintenanceWindowId))
-                .ExecuteDeleteAsync(cancellationToken);
             await dbContext.MaintenanceTargets
-                .Where(target => maintenanceWindowIds.Contains(target.MaintenanceWindowId))
+                .Where(target => target.EndpointId == endpointId
+                    || (target.EndpointMonitorId != null && monitors.Contains(target.EndpointMonitorId.Value)))
+                .ExecuteDeleteAsync(cancellationToken);
+            var orphanedWindowIds = await dbContext.MaintenanceWindows.AsNoTracking()
+                .Where(window => maintenanceWindowIds.Contains(window.Id)
+                    && !dbContext.MaintenanceTargets.Any(target => target.MaintenanceWindowId == window.Id))
+                .Select(window => window.Id)
+                .ToArrayAsync(cancellationToken);
+            await dbContext.MaintenanceOccurrences
+                .Where(occurrence => orphanedWindowIds.Contains(occurrence.MaintenanceWindowId))
                 .ExecuteDeleteAsync(cancellationToken);
             await dbContext.MaintenanceWindows
-                .Where(window => maintenanceWindowIds.Contains(window.Id))
+                .Where(window => orphanedWindowIds.Contains(window.Id))
                 .ExecuteDeleteAsync(cancellationToken);
         }
 
@@ -183,14 +198,12 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
         // left, keeping the row would mean a future endpoint on the same host silently inheriting
         // a cached policy - including an approved robots exception - that nobody granted it.
         var originStillInUse = await dbContext.Endpoints.AsNoTracking().AnyAsync(
-            endpoint => endpoint.NormalizedHost == origin.NormalizedHost
-                && endpoint.EffectivePort == origin.EffectivePort,
+            endpoint => endpoint.NormalizedUrl.StartsWith(origin + "/"),
             cancellationToken);
         if (!originStillInUse)
         {
             await dbContext.RobotsSnapshots
-                .Where(snapshot => snapshot.Host == origin.NormalizedHost
-                    && snapshot.Port == origin.EffectivePort)
+                .Where(snapshot => snapshot.Origin == origin)
                 .ExecuteDeleteAsync(cancellationToken);
         }
     }

@@ -27,8 +27,11 @@ internal sealed class LogicalCheckExecutionService(
         CancellationToken cancellationToken = default)
     {
         Validate(command);
-        var check = await LoadCheckAsync(command.LogicalCheckId, cancellationToken)
-            ?? throw new InvalidOperationException("The logical check does not exist.");
+        var check = await LoadCheckAsync(command.LogicalCheckId, cancellationToken);
+        if (check is null)
+        {
+            return LogicalCheckExecutionStatus.AlreadyCompleted;
+        }
         using var scope = BeginLogScope(check, command);
         if (check.State == LogicalCheckStates.Completed)
         {
@@ -69,6 +72,19 @@ internal sealed class LogicalCheckExecutionService(
             return LogicalCheckExecutionStatus.AlreadyCompleted;
         }
 
+        if (!isEligible)
+        {
+            return await FinalizeAsync(
+                claim, attempt.Id, command.DurableWorkId,
+                new ExecutionTerminalEvidence(ExecutionTerminalReason.TargetIneligible),
+                isFinalAttempt, cancellationToken);
+        }
+
+        isEligible = check.Source == LogicalCheckSources.Scheduled
+            ? await eligibilityService.IsEndpointEligibleAsync(
+                check.EndpointMonitor.EndpointId, cancellationToken)
+            : await eligibilityService.IsEndpointTestableAsync(
+                check.EndpointMonitor.EndpointId, cancellationToken);
         if (!isEligible)
         {
             return await FinalizeAsync(

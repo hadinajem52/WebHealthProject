@@ -183,7 +183,7 @@
             {
                 @* Shown only when there are any, but never folded into another chip: these five
                    counts have to add up to the monitor total or the summary is lying by omission. *@
-                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("neutral", $"{dataset.Summary.DisabledMonitorCount} disabled"))</li>
+                <li>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.Info, $"{dataset.Summary.DisabledMonitorCount} disabled"))</li>
             }
         </ul>
 

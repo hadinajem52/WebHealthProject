@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using System.Data;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Seo;
 using WebHealth.Domain.Seo;
@@ -36,6 +37,9 @@ internal sealed class RobotsRefreshService(
         var refreshed = 0;
         foreach (var origin in await FindDueOriginsAsync(now, cancellationToken))
         {
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(
+                IsolationLevel.ReadCommitted, cancellationToken);
+            await RobotsOriginLock.AcquireAsync(dbContext, origin.Origin, cancellationToken);
             if (!await TryClaimAsync(origin, now, cancellationToken))
             {
                 // Another worker holds this origin for this TTL. One fetch per origin is the whole
@@ -44,6 +48,7 @@ internal sealed class RobotsRefreshService(
             }
 
             await RefreshOriginAsync(origin, now, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             refreshed++;
         }
 

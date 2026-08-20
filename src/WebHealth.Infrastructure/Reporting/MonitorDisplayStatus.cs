@@ -50,7 +50,16 @@ public static class MonitorDisplayStatus
 
     /// <summary>The rule as a projection, for grouping the health totals in the database.</summary>
     public static Expression<Func<EndpointMonitor, string>> Projection => monitor =>
-        !monitor.IsEnabled || !monitor.Endpoint.IsEnabled ? EndpointHealthStatuses.Disabled
+        !monitor.IsEnabled
+            || !monitor.Endpoint.IsEnabled
+            || monitor.Endpoint.DeletedAt != null
+            || !monitor.Endpoint.Environment.IsActive
+            || monitor.Endpoint.Environment.DeletedAt != null
+            || !monitor.Endpoint.Environment.Website.IsEnabled
+            || monitor.Endpoint.Environment.Website.DeletedAt != null
+            || !monitor.Endpoint.Environment.Website.Client.IsActive
+            || monitor.Endpoint.Environment.Website.Client.DeletedAt != null
+            ? EndpointHealthStatuses.Disabled
         : monitor.EndpointHealth == null ? EndpointHealthStatuses.Unknown
         : monitor.EndpointHealth.ConfirmedStatus;
 
@@ -62,15 +71,35 @@ public static class MonitorDisplayStatus
     public static Expression<Func<EndpointMonitor, bool>> Matches(string status) => status switch
     {
         EndpointHealthStatuses.Disabled => monitor =>
-            !monitor.IsEnabled || !monitor.Endpoint.IsEnabled,
+            !monitor.IsEnabled
+            || !monitor.Endpoint.IsEnabled
+            || monitor.Endpoint.DeletedAt != null
+            || !monitor.Endpoint.Environment.IsActive
+            || monitor.Endpoint.Environment.DeletedAt != null
+            || !monitor.Endpoint.Environment.Website.IsEnabled
+            || monitor.Endpoint.Environment.Website.DeletedAt != null
+            || !monitor.Endpoint.Environment.Website.Client.IsActive
+            || monitor.Endpoint.Environment.Website.Client.DeletedAt != null,
 
         // Unknown is the absence of a confirmation, so it is the one status that also matches a
         // monitor with no health row at all.
         EndpointHealthStatuses.Unknown => monitor => monitor.IsEnabled && monitor.Endpoint.IsEnabled
+            && monitor.Endpoint.DeletedAt == null
+            && monitor.Endpoint.Environment.IsActive && monitor.Endpoint.Environment.DeletedAt == null
+            && monitor.Endpoint.Environment.Website.IsEnabled
+            && monitor.Endpoint.Environment.Website.DeletedAt == null
+            && monitor.Endpoint.Environment.Website.Client.IsActive
+            && monitor.Endpoint.Environment.Website.Client.DeletedAt == null
             && (monitor.EndpointHealth == null
                 || monitor.EndpointHealth.ConfirmedStatus == EndpointHealthStatuses.Unknown),
 
         _ => monitor => monitor.IsEnabled && monitor.Endpoint.IsEnabled
+            && monitor.Endpoint.DeletedAt == null
+            && monitor.Endpoint.Environment.IsActive && monitor.Endpoint.Environment.DeletedAt == null
+            && monitor.Endpoint.Environment.Website.IsEnabled
+            && monitor.Endpoint.Environment.Website.DeletedAt == null
+            && monitor.Endpoint.Environment.Website.Client.IsActive
+            && monitor.Endpoint.Environment.Website.Client.DeletedAt == null
             && monitor.EndpointHealth != null
             && monitor.EndpointHealth.ConfirmedStatus == status
     };

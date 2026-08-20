@@ -209,18 +209,23 @@ internal sealed class ReportingReader(
             .Where(monitor => monitorIds.Contains(monitor.Id))
             .Select(monitor => new
             {
-                Scheduled = monitor.SchedulingEnabled && monitor.IsEnabled,
-                Paused = monitor.SchedulingEnabled && !monitor.IsEnabled,
+                LifecycleEnabled = monitor.Endpoint.IsEnabled
+                    && monitor.Endpoint.DeletedAt == null
+                    && monitor.Endpoint.Environment.IsActive
+                    && monitor.Endpoint.Environment.DeletedAt == null
+                    && monitor.Endpoint.Environment.Website.IsEnabled
+                    && monitor.Endpoint.Environment.Website.DeletedAt == null
+                    && monitor.Endpoint.Environment.Website.Client.IsActive
+                    && monitor.Endpoint.Environment.Website.Client.DeletedAt == null,
+                monitor.SchedulingEnabled,
+                monitor.IsEnabled,
                 // Run on demand only. IsEnabled is the pause switch for a scheduled monitor and
                 // carries no meaning once scheduling is off, so it is not read here: a monitor
                 // paused before scheduling was turned off would otherwise land in none of the
                 // three states, and the total would silently fall short of what it claims.
-                ManualOnly = !monitor.SchedulingEnabled,
                 // A monitor is late only once its slot has been missed by more than the grace
                 // period; the moment a slot arrives it is merely due.
-                Overdue = monitor.SchedulingEnabled
-                    && monitor.IsEnabled
-                    && monitor.NextDueAt < overdueBefore
+                monitor.NextDueAt
             })
             .ToArrayAsync(cancellationToken);
 
@@ -243,10 +248,14 @@ internal sealed class ReportingReader(
             .FirstOrDefaultAsync(cancellationToken);
 
         return new(
-            scheduling.Count(monitor => monitor.Scheduled),
-            scheduling.Count(monitor => monitor.Paused),
-            scheduling.Count(monitor => monitor.ManualOnly),
-            scheduling.Count(monitor => monitor.Overdue),
+            scheduling.Count(monitor => monitor.LifecycleEnabled
+                && monitor.SchedulingEnabled && monitor.IsEnabled),
+            scheduling.Count(monitor => !monitor.LifecycleEnabled
+                || monitor.SchedulingEnabled && !monitor.IsEnabled),
+            scheduling.Count(monitor => monitor.LifecycleEnabled && !monitor.SchedulingEnabled),
+            scheduling.Count(monitor => monitor.LifecycleEnabled
+                && monitor.SchedulingEnabled && monitor.IsEnabled
+                && monitor.NextDueAt < overdueBefore),
             inFlight,
             work.Where(item => item.State == DurableWorkStates.Failed).Sum(item => item.Count),
             lastCompleted);
@@ -397,12 +406,28 @@ internal sealed class ReportingReader(
                 // "Healthy" about an endpoint nobody is checking. The stored value is carried in
                 // the next column so the row can still say what it was.
                 // Mirrors MonitorDisplayStatus, which the filter and the health totals use.
-                !monitor.IsEnabled || !monitor.Endpoint.IsEnabled
+                !monitor.IsEnabled
+                    || !monitor.Endpoint.IsEnabled
+                    || monitor.Endpoint.DeletedAt != null
+                    || !monitor.Endpoint.Environment.IsActive
+                    || monitor.Endpoint.Environment.DeletedAt != null
+                    || !monitor.Endpoint.Environment.Website.IsEnabled
+                    || monitor.Endpoint.Environment.Website.DeletedAt != null
+                    || !monitor.Endpoint.Environment.Website.Client.IsActive
+                    || monitor.Endpoint.Environment.Website.Client.DeletedAt != null
                     ? EndpointHealthStatuses.Disabled
                     : monitor.EndpointHealth == null
                         ? EndpointHealthStatuses.Unknown
                         : monitor.EndpointHealth.ConfirmedStatus,
-                (monitor.IsEnabled && monitor.Endpoint.IsEnabled) || monitor.EndpointHealth == null
+                (monitor.IsEnabled && monitor.Endpoint.IsEnabled
+                    && monitor.Endpoint.DeletedAt == null
+                    && monitor.Endpoint.Environment.IsActive
+                    && monitor.Endpoint.Environment.DeletedAt == null
+                    && monitor.Endpoint.Environment.Website.IsEnabled
+                    && monitor.Endpoint.Environment.Website.DeletedAt == null
+                    && monitor.Endpoint.Environment.Website.Client.IsActive
+                    && monitor.Endpoint.Environment.Website.Client.DeletedAt == null)
+                    || monitor.EndpointHealth == null
                     ? null
                     : monitor.EndpointHealth.ConfirmedStatus,
                 monitor.EndpointHealth == null

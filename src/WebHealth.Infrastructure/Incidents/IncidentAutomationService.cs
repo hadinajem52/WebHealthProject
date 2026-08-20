@@ -365,7 +365,10 @@ internal sealed class IncidentAutomationService(
             incident,
             now,
             cancellationToken);
-        await SuppressUndeliveredOpenedNotificationAsync(incident.Id, cancellationToken);
+        if (PerformanceRules.IsSlowResponseIssueKey(incident.IssueKey))
+        {
+            await SuppressDelayedOpenedNotificationAsync(incident.Id, now, cancellationToken);
+        }
         await notificationEventWriter.WriteAsync(
             incident,
             statusEvent.Id,
@@ -384,9 +387,13 @@ internal sealed class IncidentAutomationService(
     /// the email. A delivery already Processing or Sent is left untouched — the dispatcher won the
     /// race and the recovery email covers it either way.
     /// </summary>
-    private Task SuppressUndeliveredOpenedNotificationAsync(Guid incidentId, CancellationToken cancellationToken) =>
+    private Task SuppressDelayedOpenedNotificationAsync(
+        Guid incidentId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
         dbContext.NotificationDeliveries
             .Where(delivery => delivery.State == NotificationDeliveryStates.Pending
+                && delivery.NextAttemptAt > now
                 && delivery.NotificationEvent.IncidentId == incidentId
                 && delivery.NotificationEvent.SourceKind == NotificationSourceKinds.IncidentEvent
                 && delivery.NotificationEvent.EventType == NotificationEventTypes.Opened)
