@@ -354,9 +354,10 @@ internal sealed class EndpointRegistryService(
             active.IsEnabled = scheduleEnabled;
             if (scheduleEnabled)
             {
-                // Rejoin the cadence grid rather than firing every slot missed while paused.
-                active.NextDueAt = MonitorCadence.GetFirstSlotAfter(
-                    active.ScheduleAnchor, active.IntervalSeconds, now);
+                // Rejoin the cadence grid rather than firing every slot missed while paused, and
+                // check straight away if a slot was missed. The dispatcher never advances a paused
+                // monitor, so its due time is exactly where the pause left it.
+                active.NextDueAt = MonitorCadence.GetResumeDueAt(active.NextDueAt, now);
             }
 
             active.UpdatedAt = now;
@@ -667,8 +668,7 @@ internal sealed class EndpointRegistryService(
             if (schedulingEnabled)
             {
                 monitor.IsEnabled = true;
-                monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
-                    monitor.ScheduleAnchor, monitor.IntervalSeconds, now);
+                monitor.NextDueAt = MonitorCadence.GetResumeDueAt(monitor.NextDueAt, now);
             }
         }
 
@@ -752,6 +752,9 @@ internal sealed class EndpointRegistryService(
                 continue;
             }
 
+            var resumeDueAt = !monitor.SchedulingEnabled && command.SchedulingEnabled
+                ? MonitorCadence.GetResumeDueAt(monitor.NextDueAt, now)
+                : (DateTimeOffset?)null;
             var interval = intervalOverrideSeconds ?? RegistryDefaults.GetHttpIntervalSeconds(isProduction);
             if (monitor.IntervalSeconds != interval)
             {
@@ -765,10 +768,8 @@ internal sealed class EndpointRegistryService(
                 monitor.SchedulingEnabled = command.SchedulingEnabled;
                 if (command.SchedulingEnabled)
                 {
-                    // Turning scheduling back on clears any earlier pause and rejoins the grid.
                     monitor.IsEnabled = true;
-                    monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
-                        monitor.ScheduleAnchor, interval, now);
+                    monitor.NextDueAt = resumeDueAt!.Value;
                 }
             }
 

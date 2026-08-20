@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
+using WebHealth.Domain.Incidents;
+using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Persistence;
 using WebHealth.Infrastructure.Registry;
 
@@ -8,9 +10,47 @@ namespace WebHealth.Infrastructure.Monitoring;
 
 internal sealed class CheckHistoryReader(
     ApplicationDbContext dbContext,
-    RegistryVisibility visibility) : ICheckHistoryReader
+    RegistryVisibility visibility,
+    IncidentVisibility incidentVisibility,
+    TimeProvider timeProvider) : ICheckHistoryReader
 {
     private const int PageSize = 25;
+
+    public async Task<CheckHistoryItem?> FindLatestForEndpointAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var now = timeProvider.GetUtcNow();
+        var canManage = RegistryVisibility.CanManage(access);
+        var isVisible = await visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
+            .Where(endpoint => canManage || endpoint.DeletedAt == null)
+            .AnyAsync(endpoint => endpoint.Id == endpointId, cancellationToken);
+        if (!isVisible)
+        {
+            return null;
+        }
+
+        return await dbContext.LogicalChecks.AsNoTracking()
+            .Where(check => check.EndpointMonitor.EndpointId == endpointId)
+            .OrderByDescending(check => check.CreatedAt)
+            .ThenByDescending(check => check.Id)
+            .Select(check => new CheckHistoryItem(
+                check.Id,
+                check.Source,
+                check.State,
+                check.ScheduledFor,
+                check.RequestedAt,
+                check.InitiatedByUser == null ? null : check.InitiatedByUser.DisplayName,
+                check.CompletedAt,
+                check.Result == null ? null : check.Result.Outcome,
+                check.Result == null ? null : check.Result.FailureCategory,
+                check.Result == null ? null : check.Result.HttpStatus,
+                check.Result == null ? null : check.Result.TotalDurationMs,
+                check.Result == null ? null : check.Result.MonitorSource,
+                check.Result != null && check.Result.CountsForUptime))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 
     public async Task<CheckHistoryPage?> ListForEndpointAsync(
         Guid endpointId,
@@ -18,7 +58,7 @@ internal sealed class CheckHistoryReader(
         int page = 1,
         CancellationToken cancellationToken = default)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
         var canManage = RegistryVisibility.CanManage(access);
         var endpoint = await visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
             .Where(candidate => canManage || candidate.DeletedAt == null)
@@ -67,10 +107,17 @@ internal sealed class CheckHistoryReader(
             .Select(row => new PerformanceSampleContext(
                 row.Item.MonitorSource!, row.ConfigurationFingerprint)));
 
+        var historyItems = items.Select(row => row.Item).ToArray();
+        var knownIncidents = await LoadKnownIncidentsAsync(
+            historyItems.Select(item => item.LogicalCheckId), access, cancellationToken);
+
         return new(
             endpoint.Id,
             endpoint.DisplayUrl,
-            items.Select(row => row.Item).ToArray(),
+            historyItems.Select(item => item with
+            {
+                KnownIncidents = knownIncidents.GetValueOrDefault(item.LogicalCheckId, [])
+            }).ToArray(),
             boundedPage,
             PageSize,
             totalCount,
@@ -92,7 +139,7 @@ internal sealed class CheckHistoryReader(
             return null;
         }
 
-        var now = DateTimeOffset.UtcNow;
+        var now = timeProvider.GetUtcNow();
         var canManage = RegistryVisibility.CanManage(access);
         var visible = await visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
             .Where(candidate => canManage || candidate.DeletedAt == null)
@@ -110,7 +157,7 @@ internal sealed class CheckHistoryReader(
             .SingleAsync(candidate => candidate.Id == logicalCheckId, cancellationToken);
 
         var result = check.Result;
-        return new CheckDetails(
+        var details = new CheckDetails(
             check.Id,
             endpointId.Value,
             check.EndpointMonitor.Endpoint.DisplayUrl,
@@ -144,5 +191,54 @@ internal sealed class CheckHistoryReader(
             result?.RedirectHops.OrderBy(hop => hop.HopNumber).Select(hop => new CheckRedirectHopItem(
                 hop.HopNumber, hop.NormalizedFromUrl, hop.NormalizedToUrl, hop.HttpStatus, hop.IsLoop))
                 .ToArray() ?? []);
+
+        var knownIncidents = await LoadKnownIncidentsAsync([logicalCheckId], access, cancellationToken);
+        return details with
+        {
+            KnownIncidents = knownIncidents.GetValueOrDefault(logicalCheckId, [])
+        };
+    }
+
+    private async Task<Dictionary<Guid, IReadOnlyList<KnownIncidentItem>>> LoadKnownIncidentsAsync(
+        IEnumerable<Guid> logicalCheckIds,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken)
+    {
+        var checkIds = logicalCheckIds.Distinct().ToArray();
+        if (checkIds.Length == 0)
+        {
+            return [];
+        }
+
+        var visibleIncidentIds = incidentVisibility
+            .Apply(dbContext.Incidents.AsNoTracking(), access, timeProvider.GetUtcNow())
+            .Select(incident => incident.Id);
+        var rows = await dbContext.IncidentEvidence.AsNoTracking()
+            .Where(evidence => evidence.LogicalCheckId != null
+                && checkIds.Contains(evidence.LogicalCheckId.Value)
+                && visibleIncidentIds.Contains(evidence.IncidentId)
+                && evidence.Incident.AcknowledgedAt != null
+                && IncidentStatuses.Active.Contains(evidence.Incident.Status))
+            .Select(evidence => new
+            {
+                LogicalCheckId = evidence.LogicalCheckId!.Value,
+                evidence.IncidentId,
+                evidence.Incident.IssueKey,
+                evidence.Incident.Status,
+                AcknowledgedAt = evidence.Incident.AcknowledgedAt!.Value
+            })
+            .Distinct()
+            .OrderByDescending(row => row.AcknowledgedAt)
+            .ThenBy(row => row.IncidentId)
+            .ToArrayAsync(cancellationToken);
+
+        return rows
+            .GroupBy(row => row.LogicalCheckId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<KnownIncidentItem>)group
+                    .Select(row => new KnownIncidentItem(
+                        row.IncidentId, row.IssueKey, row.Status, row.AcknowledgedAt))
+                    .ToArray());
     }
 }

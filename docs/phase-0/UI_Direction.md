@@ -83,6 +83,7 @@ The navigation is a convenience, not an authorization boundary. Direct requests 
 - Filterable list by severity, state, owner, client, environment, and age.
 - Details show issue, status, assignment, evidence, timestamps, duration, recurrence, and append-only timeline.
 - Acknowledge, assign, investigate, resolve, close, force-close, and reopen actions appear only when relevant, but are always protected server-side.
+- Check history keeps the measured outcome unchanged and labels evidence linked to an acknowledged active incident as a known issue, with a direct incident link.
 - Resolution and exceptional transitions require labels, reason/note, confirmation, validation, and concurrency handling.
 
 ### Reports

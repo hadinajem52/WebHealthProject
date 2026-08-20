@@ -2657,6 +2657,56 @@ internal static class DatabaseFoundationAssertions
         (await database.CheckResults.AsNoTracking().SingleAsync(result => result.LogicalCheckId == manualCheckId))
             .CountsForUptime.Should().BeFalse();
 
+        var acknowledgedIncident = new Incident
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = ownedMonitor.Id,
+            OwnerSubjectId = developerOwnerId,
+            IssueKey = $"v1|HttpAvailability|known-issue|{Guid.NewGuid():N}",
+            Severity = IncidentSeverities.Critical,
+            Status = IncidentStatuses.Acknowledged,
+            OpenedAt = manualCheck.CreatedAt,
+            AcknowledgedAt = manualCheck.CreatedAt.AddSeconds(1),
+            Version = 1
+        };
+        var acknowledgedEvidence = new IncidentEvidence
+        {
+            Id = Guid.NewGuid(),
+            IncidentId = acknowledgedIncident.Id,
+            EndpointMonitorId = ownedMonitor.Id,
+            LogicalCheckId = manualCheckId,
+            EvidenceType = IncidentEvidenceTypes.Failure,
+            EvidenceRole = "ConfirmedFailure",
+            BoundedSnapshot = "{}",
+            CapturedAt = acknowledgedIncident.AcknowledgedAt.Value
+        };
+        var reassignedIncident = new Incident
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = ownedMonitor.Id,
+            OwnerSubjectId = administratorOwnerId,
+            IssueKey = $"v1|HttpAvailability|reassigned-issue|{Guid.NewGuid():N}",
+            Severity = IncidentSeverities.Critical,
+            Status = IncidentStatuses.Acknowledged,
+            OpenedAt = manualCheck.CreatedAt,
+            AcknowledgedAt = manualCheck.CreatedAt.AddSeconds(2),
+            Version = 1
+        };
+        var reassignedEvidence = new IncidentEvidence
+        {
+            Id = Guid.NewGuid(),
+            IncidentId = reassignedIncident.Id,
+            EndpointMonitorId = ownedMonitor.Id,
+            LogicalCheckId = manualCheckId,
+            EvidenceType = IncidentEvidenceTypes.Failure,
+            EvidenceRole = "ConfirmedFailure",
+            BoundedSnapshot = "{}",
+            CapturedAt = reassignedIncident.AcknowledgedAt.Value
+        };
+        database.Incidents.AddRange(acknowledgedIncident, reassignedIncident);
+        database.IncidentEvidence.AddRange(acknowledgedEvidence, reassignedEvidence);
+        await database.SaveChangesAsync();
+
         // History and check detail are assignment-filtered exactly like the endpoint they belong to.
         (await historyReader.ListForEndpointAsync(ownedEndpointId, viewerAccess)).Should().BeNull();
         var historyPage = await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess);
@@ -2667,7 +2717,12 @@ internal static class DatabaseFoundationAssertions
             && item.Source == LogicalCheckSources.Manual
             && item.InitiatedByDisplayName == developer.DisplayName
             && item.Outcome == HttpResultOutcomes.Healthy
-            && item.CountsForUptime == false);
+            && item.CountsForUptime == false
+            && item.KnownIncidents.Count == 2);
+        var developerHistory = await historyReader.ListForEndpointAsync(ownedEndpointId, developerAccess);
+        developerHistory!.Items.Single(item => item.LogicalCheckId == manualCheckId)
+            .KnownIncidents.Should().ContainSingle()
+            .Which.IncidentId.Should().Be(acknowledgedIncident.Id);
 
         (await historyReader.FindCheckAsync(manualCheckId, viewerAccess)).Should().BeNull();
         var details = await historyReader.FindCheckAsync(manualCheckId, administratorAccess);
@@ -2677,6 +2732,19 @@ internal static class DatabaseFoundationAssertions
         details.CountsForUptime.Should().BeFalse();
         details.TotalDurationMs.Should().NotBeNull();
         details.EndpointDisplayUrl.Should().Be("HTTPS://Manual-Checks.EXAMPLE.test/Owned");
+        details.KnownIncidents.Select(incident => incident.IncidentId)
+            .Should().Equal(reassignedIncident.Id, acknowledgedIncident.Id);
+        var developerDetails = await historyReader.FindCheckAsync(manualCheckId, developerAccess);
+        developerDetails!.KnownIncidents.Should().ContainSingle()
+            .Which.IncidentId.Should().Be(acknowledgedIncident.Id);
+
+        var latestCheck = await historyReader.FindLatestForEndpointAsync(ownedEndpointId, administratorAccess);
+        latestCheck.Should().NotBeNull();
+        latestCheck!.KnownIncidents.Should().BeEmpty();
+
+        database.IncidentEvidence.RemoveRange(acknowledgedEvidence, reassignedEvidence);
+        database.Incidents.RemoveRange(acknowledgedIncident, reassignedIncident);
+        await database.SaveChangesAsync();
 
         // Pagination clamps out-of-range requests instead of overflowing or returning nonsense.
         (await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess, page: 0))!

@@ -34,6 +34,17 @@
             <div><dt>Counts toward uptime</dt><dd>@(check.CountsForUptime ? "Yes" : "No")</dd></div>
             <div><dt>Safe diagnostic</dt><dd>@(check.SafeDiagnostic ?? "None recorded")</dd></div>
         </dl>
+
+        @foreach (var incident in check.KnownIncidents)
+        {
+            <div class="known-issue-banner" role="status">
+                <span>
+                    <strong>@IssueDisplay.Describe(incident.IssueKey) · @IncidentStatusDisplay.Name(incident.Status)</strong>
+                    This result is evidence for an acknowledged incident. The check remains @check.Outcome because the issue is still present.
+                </span>
+                <a asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.IncidentId">View incident</a>
+            </div>
+        }
     </section>
 
     @if (hasResult)

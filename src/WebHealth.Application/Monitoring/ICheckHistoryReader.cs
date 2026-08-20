@@ -14,6 +14,11 @@ public interface ICheckHistoryReader
         Guid logicalCheckId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
+
+    Task<CheckHistoryItem?> FindLatestForEndpointAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -43,7 +48,10 @@ public sealed record CheckHistoryItem(
     int? HttpStatus,
     int? TotalDurationMs,
     string? MonitorSource,
-    bool CountsForUptime);
+    bool CountsForUptime)
+{
+    public IReadOnlyList<KnownIncidentItem> KnownIncidents { get; init; } = [];
+}
 
 public sealed record CheckDetails(
     Guid LogicalCheckId,
@@ -74,7 +82,16 @@ public sealed record CheckDetails(
     string? SafeDiagnostic,
     bool CountsForUptime,
     IReadOnlyList<CheckFindingItem> Findings,
-    IReadOnlyList<CheckRedirectHopItem> RedirectHops);
+    IReadOnlyList<CheckRedirectHopItem> RedirectHops)
+{
+    public IReadOnlyList<KnownIncidentItem> KnownIncidents { get; init; } = [];
+}
+
+public sealed record KnownIncidentItem(
+    Guid IncidentId,
+    string IssueKey,
+    string Status,
+    DateTimeOffset AcknowledgedAt);
 
 public sealed record CheckFindingItem(
     string RuleKey,

@@ -83,6 +83,13 @@
                                     {
                                         <span class="data-table__secondary">@item.FailureCategory</span>
                                     }
+                                    @foreach (var incident in item.KnownIncidents)
+                                    {
+                                        <a class="known-issue" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.IncidentId"
+                                           title="Acknowledged @incident.AcknowledgedAt.ToString("u") · Current incident status: @incident.Status">
+                                            @IssueDisplay.Describe(incident.IssueKey) · @IncidentStatusDisplay.Name(incident.Status)
+                                        </a>
+                                    }
                                 </td>
                                 <td data-label="Duration">@(item.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</td>
                                 <td data-label="Monitor source" title="@item.MonitorSource">@MonitorSourceDisplay.Name(item.MonitorSource)</td>

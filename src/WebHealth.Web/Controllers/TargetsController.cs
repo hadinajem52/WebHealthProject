@@ -62,13 +62,13 @@ public sealed class TargetsController(
             return NotFound();
         }
 
-        var history = await checkHistoryReader.ListForEndpointAsync(id, access, page: 1, cancellationToken);
+        var latestCheck = await checkHistoryReader.FindLatestForEndpointAsync(id, access, cancellationToken);
         var certificate = await targetReader.FindCertificateStatusAsync(id, access, cancellationToken);
         return View(new EndpointDetailsViewModel(
             endpoint,
             CanManage(access),
             User.IsInRole(ApplicationRoles.Administrator),
-            history?.Items.FirstOrDefault(),
+            latestCheck,
             certificate ?? CertificateStatus.NotApplicable));
     }
 

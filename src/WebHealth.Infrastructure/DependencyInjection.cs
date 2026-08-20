@@ -157,6 +157,7 @@ public static class DependencyInjection
         services.AddScoped<IMaintenanceOccurrenceExpander, MaintenanceOccurrenceExpander>();
         services.AddScoped<MaintenanceExpansionJob>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
+        services.AddScoped<IncidentVisibility>();
         services.AddScoped<IIncidentReader, IncidentReader>();
         services.AddScoped<INotificationFeedReader, NotificationFeedReader>();
         services.AddScoped<NotificationEventWriter>();

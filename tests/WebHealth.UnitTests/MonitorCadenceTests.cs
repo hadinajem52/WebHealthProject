@@ -53,6 +53,53 @@ public sealed class MonitorCadenceTests
         MonitorCadence.GetFirstSlotAfter(anchor, 300, anchor.AddMinutes(-1)).Should().Be(anchor);
     }
 
+    /// <summary>
+    /// The defect this covers: resuming a monitor rejoined the grid with
+    /// <see cref="MonitorCadence.GetFirstSlotAfter" />, which always returns a slot strictly after
+    /// now. A daily certificate monitor resumed a minute after its slot therefore reported nothing
+    /// for the next 23 hours and 59 minutes, and its dashboard row sat on Unknown.
+    /// </summary>
+    [Fact]
+    public void GetResumeDueAt_ChecksImmediatelyWhenADueTimeWasMissed()
+    {
+        var slot = new DateTimeOffset(2026, 8, 20, 12, 30, 33, TimeSpan.Zero);
+        var resumedAt = slot.AddSeconds(32);
+
+        MonitorCadence.GetResumeDueAt(slot, resumedAt).Should().Be(resumedAt);
+    }
+
+    [Fact]
+    public void GetResumeDueAt_CollapsesEveryMissedDueTimeIntoOneCheck()
+    {
+        var slot = new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
+        var resumedAt = slot.AddDays(3);
+
+        MonitorCadence.GetResumeDueAt(slot, resumedAt).Should().Be(resumedAt);
+    }
+
+    /// <summary>
+    /// A pause shorter than the remaining wait missed nothing, so it must not turn into an extra
+    /// check the cadence never asked for.
+    /// </summary>
+    [Fact]
+    public void GetResumeDueAt_KeepsAnUnreachedDueTime()
+    {
+        var slot = new DateTimeOffset(2026, 8, 20, 12, 30, 0, TimeSpan.Zero);
+
+        MonitorCadence.GetResumeDueAt(slot, slot.AddMinutes(-2)).Should().Be(slot);
+    }
+
+    [Fact]
+    public void GetResumeDueAt_NormalizesToUtc()
+    {
+        var slot = new DateTimeOffset(2026, 8, 20, 15, 30, 0, TimeSpan.FromHours(3));
+
+        // Be compares instants, so the offset is asserted separately: next_due_at is stored as
+        // timestamptz and every other cadence value is written in UTC.
+        MonitorCadence.GetResumeDueAt(slot, slot.AddMinutes(-2))
+            .Offset.Should().Be(TimeSpan.Zero);
+    }
+
     [Fact]
     public void CreateCadenceKey_NormalizesOffsetAndIsStable()
     {

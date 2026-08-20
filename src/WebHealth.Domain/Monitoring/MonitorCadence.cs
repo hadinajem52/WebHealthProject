@@ -95,6 +95,17 @@ public static class MonitorCadence
         return utcAnchor.AddTicks(checked(nextSlot * intervalTicks));
     }
 
+    /// <summary>
+    /// Returns the due time when scheduling resumes. A missed due time becomes one immediate
+    /// check; an upcoming due time is preserved. Normal cadence advancement after that check is
+    /// still calculated separately from the monitor's anchor and interval.
+    /// </summary>
+    public static DateTimeOffset GetResumeDueAt(DateTimeOffset nextDueAt, DateTimeOffset instant)
+    {
+        var utcInstant = instant.ToUniversalTime();
+        return nextDueAt.ToUniversalTime() <= utcInstant ? utcInstant : nextDueAt.ToUniversalTime();
+    }
+
     public static string CreateCadenceKey(Guid endpointMonitorId, DateTimeOffset scheduledFor) =>
         $"v{KeyVersion}|{endpointMonitorId:N}|{scheduledFor.ToUniversalTime().Ticks}";
 }

@@ -596,6 +596,43 @@ code,
     color: var(--color-gray-500);
 }
 
+.known-issue {
+    display: block;
+    width: fit-content;
+    margin-top: var(--space-1);
+    color: var(--status-info-text);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.known-issue:hover {
+    text-decoration: underline;
+}
+
+.known-issue-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-top: var(--space-5);
+    padding: var(--space-4);
+    border: 1px solid var(--status-info);
+    border-radius: var(--radius-tile);
+    background: var(--status-info-surface);
+    color: var(--status-info-text);
+}
+
+.known-issue-banner strong {
+    display: block;
+}
+
+.known-issue-banner a {
+    flex: 0 0 auto;
+    color: inherit;
+    font-weight: 700;
+}
+
 .data-table__action {
     text-align: right !important;
 }

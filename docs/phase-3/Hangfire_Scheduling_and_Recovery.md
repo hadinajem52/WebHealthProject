@@ -25,6 +25,14 @@ The old due slot produces one catch-up check. Advancing directly to the first fu
 
 New monitors are immediately due. HTTP defaults are five minutes for Production and fifteen minutes for non-Production environments. An Administrator can set a one-minute-to-24-hour endpoint override; the typed effective interval and override marker are snapshotted and audited. Environment type changes update inherited defaults without replacing endpoint overrides.
 
+## Resuming a suspended cadence
+
+A monitor's cadence is suspended in two ways: pausing scheduled checks on the endpoint, and creating or editing an endpoint with scheduled checks switched off. The dispatcher claims only monitors that are enabled and scheduling-enabled, so a suspended monitor's due time stays exactly where the suspension left it.
+
+Resuming rejoins the grid through `MonitorCadence.GetResumeSlot`, which is due immediately when a slot passed during the suspension and keeps the existing slot when none did. Every slot missed during the suspension still collapses into a single check, so a long pause creates no backlog.
+
+The earlier rule advanced the due time with `GetFirstSlotAfter`, which returns a slot strictly after the resume instant. That waited one further whole interval before the first check: five minutes for availability and a full day for the certificate monitor, whose `SslCertificate` row sat on `Unknown` in the current-health table until the following day. An endpoint created without scheduled checks and edited to enable them seconds later reproduced it exactly. `MonitorCadenceTests` pins the three cases, and the interval-change branch reads the pre-edit due time so that an edit changing the interval and enabling scheduling at once still resumes promptly.
+
 ## Durable hand-off and recovery
 
 After the application transaction commits, the dispatcher enqueues the existing logical-check and durable-work IDs. A successful enqueue changes only that work row from `Dispatching` to `Enqueued`. If enqueueing or acknowledgement is interrupted, the committed row remains recoverable.

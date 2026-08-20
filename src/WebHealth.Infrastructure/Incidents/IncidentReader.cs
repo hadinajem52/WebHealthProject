@@ -11,7 +11,7 @@ namespace WebHealth.Infrastructure.Incidents;
 
 internal sealed class IncidentReader(
     ApplicationDbContext dbContext,
-    RegistryVisibility registryVisibility,
+    IncidentVisibility incidentVisibility,
     IAssignmentAccessEvaluator assignmentAccess,
     TimeProvider timeProvider) : IIncidentReader
 {
@@ -24,7 +24,7 @@ internal sealed class IncidentReader(
         CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
-        var query = ApplyVisibility(dbContext.Incidents.AsNoTracking(), access, now);
+        var query = incidentVisibility.Apply(dbContext.Incidents.AsNoTracking(), access, now);
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
             query = query.Where(incident => incident.Status == filter.Status);
@@ -80,7 +80,7 @@ internal sealed class IncidentReader(
         CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
-        var visible = await ApplyVisibility(dbContext.Incidents.AsNoTracking(), access, now)
+        var visible = await incidentVisibility.Apply(dbContext.Incidents.AsNoTracking(), access, now)
             .AnyAsync(incident => incident.Id == incidentId, cancellationToken);
         if (!visible)
         {
@@ -171,24 +171,6 @@ internal sealed class IncidentReader(
             timeline,
             evidence,
             notifications);
-    }
-
-    private IQueryable<Incident> ApplyVisibility(IQueryable<Incident> incidents, RegistryAccessContext access, DateTimeOffset now)
-    {
-        if (RegistryVisibility.CanManage(access))
-        {
-            return incidents;
-        }
-
-        var isDeveloper = access.Roles.Contains(ApplicationRoles.DeveloperSupport);
-        var isViewer = access.Roles.Contains(ApplicationRoles.Viewer);
-        var assignedOwnerIds = registryVisibility.AssignedOwnerIds(access.UserId, now);
-        var visibleEndpointIds = registryVisibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
-            .Select(endpoint => endpoint.Id);
-
-        return incidents.Where(incident =>
-            (isDeveloper && assignedOwnerIds.Contains(incident.OwnerSubjectId))
-            || (isViewer && visibleEndpointIds.Contains(incident.EndpointMonitor.EndpointId)));
     }
 
     private async Task<Dictionary<Guid, string>> ResolveOwnerNamesAsync(

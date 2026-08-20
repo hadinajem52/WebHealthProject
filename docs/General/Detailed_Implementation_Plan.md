@@ -440,6 +440,7 @@ Do not begin Phase 1 until normalization, authorization, audit, and database con
 - [x] Keep closed incidents immutable except controlled reopening.
 - [x] Link matching recurrence within the inclusive 30-day boundary.
 - [x] Append acknowledgement, assignment, note, evidence, and state events to the timeline and safe audit trail.
+- [x] Keep repeated findings critical while identifying checks linked to an acknowledged active incident as a known issue.
 - [x] Calculate recovery time and outage duration from persisted evidence.
 
 ### 11.4 Durable notifications
