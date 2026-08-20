@@ -72,7 +72,7 @@ public static class ReportCsv
         CsvField.Count(row.Uptime.DownSamples),
         CsvField.Count(row.Uptime.ExcludedSamples),
         CsvField.Number(row.Uptime.Percentage),
-        CsvField.Number(row.Uptime.ReachablePercentage),
+        CsvField.Number(row.Uptime.CleanPercentage),
         CsvField.Number(row.ResponseTimes.P50Ms),
         CsvField.Number(row.ResponseTimes.P95Ms),
         CsvField.Count(row.ResponseTimes.MeasuredSamples),
