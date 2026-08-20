@@ -6,6 +6,12 @@ $root = Split-Path -Parent $PSScriptRoot
 $solution = Join-Path $root 'WebHealthProject.sln'
 $infrastructure = Join-Path $root 'src\WebHealth.Infrastructure'
 
+npm ci --prefix $root --ignore-scripts
+if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency restore failed.' }
+
+npm run vendor --prefix $root
+if ($LASTEXITCODE -ne 0) { throw 'Frontend asset vendoring failed.' }
+
 dotnet tool restore
 if ($LASTEXITCODE -ne 0) { throw 'Tool restore failed.' }
 

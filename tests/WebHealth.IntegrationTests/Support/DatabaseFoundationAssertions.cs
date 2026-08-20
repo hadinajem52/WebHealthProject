@@ -4908,6 +4908,7 @@ internal static class DatabaseFoundationAssertions
         var users = scope.ServiceProvider.GetRequiredService<IUserAdministrationService>();
         var clients = scope.ServiceProvider.GetRequiredService<IClientRegistryService>();
         var websites = scope.ServiceProvider.GetRequiredService<IWebsiteRegistryService>();
+        var endpoints = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
         var reader = scope.ServiceProvider.GetRequiredService<IRegistryReader>();
 
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
@@ -5002,9 +5003,10 @@ internal static class DatabaseFoundationAssertions
         database.ChangeTracker.Clear();
         persistedWebsite = await database.Websites.SingleAsync(website => website.Id == firstWebsiteId);
         var now = DateTimeOffset.UtcNow;
+        var environmentId = Guid.NewGuid();
         database.Environments.Add(new WebsiteEnvironment
         {
-            Id = Guid.NewGuid(),
+            Id = environmentId,
             WebsiteId = persistedWebsite.Id,
             Name = "Production",
             NormalizedName = "production",
@@ -5020,6 +5022,25 @@ internal static class DatabaseFoundationAssertions
             Version = 1
         });
         await database.SaveChangesAsync();
+        var endpointResult = await endpoints.CreateAsync(
+            new CreateEndpoint(
+                environmentId,
+                "https://rearm-on-enable.test/",
+                developerOwnerId,
+                true,
+                null,
+                TargetAuthorizationKinds.Owned,
+                "Registry fixture owned by the project.",
+                null),
+            administratorAccess);
+        endpointResult.Succeeded.Should().BeTrue(string.Join(" ", endpointResult.Errors));
+        var endpointId = endpointResult.EntityId
+            ?? throw new InvalidOperationException("Endpoint id was not returned.");
+        var deferredDueAt = now.AddDays(1);
+        await database.EndpointMonitors
+            .Where(monitor => monitor.EndpointId == endpointId)
+            .ExecuteUpdateAsync(updates => updates.SetProperty(monitor => monitor.NextDueAt, deferredDueAt));
+        var enabledAtOrAfter = DateTimeOffset.UtcNow;
         (await websites.UpdateAsync(
             new UpdateWebsite(
                 persistedWebsite.Id,
@@ -5030,6 +5051,13 @@ internal static class DatabaseFoundationAssertions
                 persistedWebsite.Version,
                 ["ASP.NET", "Europe"]),
             administratorAccess)).Succeeded.Should().BeTrue();
+        var rearmedMonitors = await database.EndpointMonitors.AsNoTracking()
+            .Where(monitor => monitor.EndpointId == endpointId)
+            .OrderBy(monitor => monitor.MonitorType)
+            .ToArrayAsync();
+        rearmedMonitors.Should().HaveCount(2);
+        rearmedMonitors.Should().OnlyContain(monitor => monitor.NextDueAt >= enabledAtOrAfter);
+        rearmedMonitors.Should().OnlyContain(monitor => monitor.NextDueAt < deferredDueAt);
 
         database.AccessGrants.Add(new AccessGrant
         {

@@ -317,7 +317,7 @@ public sealed class SeoValueExtractorTests
             <meta name="robots" content="index, follow">
             <meta name="author" content="{Marker}">
             <!-- {Marker} -->
-            <script>var secret = "{Marker}";</script>
+            <script>var payloadMarker = "{Marker}";</script>
             </head><body><h1>{Marker}</h1><p>{Marker}</p></body></html>
             """);
 

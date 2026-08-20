@@ -154,7 +154,9 @@ public static class SeoRuleEvaluator
             yield break;
         }
 
-        if (!Uri.TryCreate(authored, UriKind.Absolute, out _))
+        if (!Uri.TryCreate(authored, UriKind.Absolute, out var authoredUri)
+            || authoredUri.Scheme != Uri.UriSchemeHttp
+            && authoredUri.Scheme != Uri.UriSchemeHttps)
         {
             yield return Finding(SeoRules.CanonicalNotAbsolute, SeoFailureCategories.Canonical,
                 authored, resolved, FindingSeverities.Warning);

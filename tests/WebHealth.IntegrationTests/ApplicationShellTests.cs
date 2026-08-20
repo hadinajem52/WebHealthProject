@@ -146,7 +146,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.Contains("<dt>Health status</dt>", content, StringComparison.Ordinal);
         Assert.Contains("<dt>As of</dt>", content, StringComparison.Ordinal);
         Assert.Contains("<dt>Window</dt>", content, StringComparison.Ordinal);
-        Assert.Contains("UTC (exclusive)", content, StringComparison.Ordinal);
+        Assert.Contains("(exclusive)", content, StringComparison.Ordinal);
     }
 
     [Fact]

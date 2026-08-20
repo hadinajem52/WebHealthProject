@@ -71,7 +71,7 @@
                             <th scope="col">Severity</th>
                             <th scope="col">Observed</th>
                             <th scope="col">Expected</th>
-                            <th scope="col">Issue key</th>
+                            <th scope="col">Issue</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -82,7 +82,7 @@
                                 <td data-label="Severity">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(finding.Severity), finding.Severity))</td>
                                 <td data-label="Observed">@(finding.ObservedValue ?? "—")</td>
                                 <td data-label="Expected">@(finding.ExpectedValue ?? "—")</td>
-                                <td data-label="Issue key" class="code">@finding.IssueKey</td>
+                                <td data-label="Issue" title="@finding.IssueKey">@IssueDisplay.Describe(finding.IssueKey)</td>
                             </tr>
                         }
                     </tbody>

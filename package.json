@@ -1,0 +1,10 @@
+{
+  "name": "web-health-project",
+  "private": true,
+  "scripts": {
+    "vendor": "node scripts/vendor-frontend-assets.mjs"
+  },
+  "dependencies": {
+    "chart.js": "4.4.4"
+  }
+}

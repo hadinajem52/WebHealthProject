@@ -140,11 +140,16 @@ internal sealed class WebsiteRegistryService(
         dbContext.Entry(website).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var before = ToAuditSnapshot(website);
         var now = DateTimeOffset.UtcNow;
+        var isBeingEnabled = !website.IsEnabled && command.IsEnabled;
         website.Name = name;
         website.NormalizedName = RegistryMutationSupport.NormalizeName(name);
         website.OwnerSubjectId = command.OwnerSubjectId;
         website.TechnologyCms = NormalizeTechnology(command.TechnologyCms);
         website.IsEnabled = command.IsEnabled;
+        if (isBeingEnabled)
+        {
+            await RearmMonitorsAsync(website.Id, access.UserId, now, cancellationToken);
+        }
         await ReplaceTagsAsync(website, tags, access.UserId, now, cancellationToken);
         Touch(website, access.UserId, now);
 
@@ -169,6 +174,23 @@ internal sealed class WebsiteRegistryService(
             return await RollBackDuplicateAsync(transaction, cancellationToken);
         }
     }
+
+    private Task RearmMonitorsAsync(
+        Guid websiteId,
+        Guid actorId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) =>
+        dbContext.EndpointMonitors
+            .Where(monitor => monitor.Endpoint.Environment.WebsiteId == websiteId
+                && monitor.DeletedAt == null
+                && monitor.IsEnabled
+                && monitor.SchedulingEnabled)
+            .ExecuteUpdateAsync(updates => updates
+                .SetProperty(monitor => monitor.NextDueAt, now)
+                .SetProperty(monitor => monitor.UpdatedAt, now)
+                .SetProperty(monitor => monitor.UpdatedByUserId, actorId)
+                .SetProperty(monitor => monitor.Version, monitor => monitor.Version + 1),
+                cancellationToken);
 
     public Task<RegistryMutationResult> DisableAsync(
         RegistryVersionCommand command,
