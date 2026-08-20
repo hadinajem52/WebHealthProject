@@ -1,0 +1,33 @@
+{
+  "captchaResult": "CAPTCHA_NOT_NEEDED",
+  "kind": "pagespeedonline#result",
+  "id": "https://example.com/slow",
+  "analysisUTCTimestamp": "2026-08-19T11:31:07.912Z",
+  "lighthouseResult": {
+    "requestedUrl": "https://example.com/slow",
+    "finalUrl": "https://example.com/slow",
+    "lighthouseVersion": "11.4.0",
+    "fetchTime": "2026-08-19T11:31:07.912Z",
+    "runWarnings": [],
+    "runtimeError": {
+      "code": "NO_FCP",
+      "message": "The page did not paint any content. Please ensure you keep the browser window in the foreground during the load and try again."
+    },
+    "configSettings": {
+      "emulatedFormFactor": "mobile",
+      "formFactor": "mobile",
+      "locale": "en-US",
+      "onlyCategories": ["seo"]
+    },
+    "audits": {},
+    "categories": {
+      "seo": {
+        "id": "seo",
+        "title": "SEO",
+        "score": null,
+        "auditRefs": []
+      }
+    }
+  },
+  "version": { "major": 11, "minor": 4 }
+}

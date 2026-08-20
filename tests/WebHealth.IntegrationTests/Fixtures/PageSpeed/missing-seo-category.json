@@ -1,0 +1,40 @@
+{
+  "captchaResult": "CAPTCHA_NOT_NEEDED",
+  "kind": "pagespeedonline#result",
+  "id": "https://example.com/",
+  "analysisUTCTimestamp": "2026-08-19T12:05:44.008Z",
+  "lighthouseResult": {
+    "requestedUrl": "https://example.com/",
+    "finalUrl": "https://example.com/",
+    "lighthouseVersion": "11.4.0",
+    "fetchTime": "2026-08-19T12:05:44.008Z",
+    "runWarnings": [],
+    "configSettings": {
+      "emulatedFormFactor": "mobile",
+      "formFactor": "mobile",
+      "locale": "en-US",
+      "onlyCategories": ["performance"]
+    },
+    "audits": {
+      "first-contentful-paint": {
+        "id": "first-contentful-paint",
+        "title": "First Contentful Paint",
+        "description": "First Contentful Paint marks the time at which the first text or image is painted.",
+        "score": 0.91,
+        "scoreDisplayMode": "numeric",
+        "displayValue": "1.2 s"
+      }
+    },
+    "categories": {
+      "performance": {
+        "id": "performance",
+        "title": "Performance",
+        "score": 0.91,
+        "auditRefs": [
+          { "id": "first-contentful-paint", "weight": 10, "group": "metrics" }
+        ]
+      }
+    }
+  },
+  "version": { "major": 11, "minor": 4 }
+}

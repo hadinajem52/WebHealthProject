@@ -18,6 +18,9 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-q939-rpr3-3284" />
   </ItemGroup>
   <ItemGroup>
