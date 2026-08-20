@@ -5,6 +5,7 @@ using WebHealth.Infrastructure.Auditing;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Registry;
 using WebHealth.Infrastructure.Crawling;
+using WebHealth.Infrastructure.PageAudits;
 using WebHealth.Infrastructure.Seo;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Health;
@@ -93,6 +94,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<CrawlRun> CrawlRuns => Set<CrawlRun>();
 
     public DbSet<CrawlLinkResult> CrawlLinkResults => Set<CrawlLinkResult>();
+
+    public DbSet<PageAuditTarget> PageAuditTargets => Set<PageAuditTarget>();
+
+    public DbSet<PageAuditRun> PageAuditRuns => Set<PageAuditRun>();
+
+    public DbSet<PageAuditItem> PageAuditItems => Set<PageAuditItem>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

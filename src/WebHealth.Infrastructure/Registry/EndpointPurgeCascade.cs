@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using WebHealth.Infrastructure.PageAudits;
 using WebHealth.Infrastructure.Seo;
 using WebHealth.Infrastructure.Persistence;
 
@@ -146,6 +147,21 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
             .ExecuteDeleteAsync(cancellationToken);
         await dbContext.LogicalChecks
             .Where(check => monitors.Contains(check.EndpointMonitorId))
+            .ExecuteDeleteAsync(cancellationToken);
+
+        // Items first, then runs, then the configuration: every foreign key here is RESTRICT, so
+        // each delete has to have left nothing pointing at it. page_audit_run carries endpoint_id
+        // itself, so its rows go without reaching through the target.
+        var pageAuditRuns = dbContext.PageAuditRuns
+            .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
+        await dbContext.PageAuditItems
+            .Where(item => pageAuditRuns.Contains(item.RunId))
+            .ExecuteDeleteAsync(cancellationToken);
+        await dbContext.PageAuditRuns
+            .Where(run => run.EndpointId == endpointId)
+            .ExecuteDeleteAsync(cancellationToken);
+        await dbContext.PageAuditTargets
+            .Where(target => target.EndpointId == endpointId)
             .ExecuteDeleteAsync(cancellationToken);
 
         var runs = dbContext.CrawlRuns
