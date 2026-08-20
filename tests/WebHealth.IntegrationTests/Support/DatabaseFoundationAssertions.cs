@@ -20,8 +20,10 @@ using WebHealth.Application.Maintenance;
 using WebHealth.Application.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Crawling;
+using WebHealth.Domain.PageAudits;
 using WebHealth.Domain.Normalization;
 using WebHealth.Infrastructure.Crawling;
+using WebHealth.Infrastructure.PageAudits;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Incidents;
 using System.Text;
@@ -75,7 +77,8 @@ internal static class DatabaseFoundationAssertions
         "20260819111509_SeoConfigurationAndRobotsPolicy",
         "20260819162313_CrawlRunsAndLinkResults",
         "20260819165856_CrawlRunConfigurationSnapshot",
-        "20260820083941_EndpointPurgeEvidenceRemoval"
+        "20260820083941_EndpointPurgeEvidenceRemoval",
+        "20260820184410_PageAuditFoundation"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -126,6 +129,9 @@ internal static class DatabaseFoundationAssertions
         ,"robots_snapshot"
         ,"crawl_run"
         ,"crawl_link_result"
+        ,"page_audit_target"
+        ,"page_audit_run"
+        ,"page_audit_item"
     ];
 
     // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
@@ -142,7 +148,8 @@ internal static class DatabaseFoundationAssertions
         "maintenance_occurrence", "incident", "incident_event", "incident_evidence",
         "notification_event", "notification_delivery", "notification_attempt",
         "notification_read_marker", "certificate_observation", "seo_observation", "robots_snapshot",
-        "crawl_run", "crawl_link_result"
+        "crawl_run", "crawl_link_result",
+        "page_audit_target", "page_audit_run", "page_audit_item"
     ];
 
     private static readonly string[] ExpectedEntityTypeNames =
@@ -201,6 +208,9 @@ internal static class DatabaseFoundationAssertions
         "RobotsSnapshot",
         // Crawler
         "CrawlRun",
+        "PageAuditTarget",
+        "PageAuditRun",
+        "PageAuditItem",
         "CrawlLinkResult"
     ];
 
@@ -244,6 +254,7 @@ internal static class DatabaseFoundationAssertions
         await VerifySeoObservationContractAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
         await VerifyCrawlResultContractAsync(connectionString);
+        await VerifyPageAuditContractAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(connectionString);
@@ -2742,9 +2753,18 @@ internal static class DatabaseFoundationAssertions
         latestCheck.Should().NotBeNull();
         latestCheck!.KnownIncidents.Should().BeEmpty();
 
-        database.IncidentEvidence.RemoveRange(acknowledgedEvidence, reassignedEvidence);
-        database.Incidents.RemoveRange(acknowledgedIncident, reassignedIncident);
-        await database.SaveChangesAsync();
+        // This stage owns the two incidents it seeded and must not leave them for a later stage
+        // to inherit. incident_evidence is immutable to ordinary callers, and the endpoint purge
+        // is the one exemption, so the teardown opens the same exemption. SET LOCAL scopes it to
+        // this transaction, which is what keeps an ordinary delete against the table impossible.
+        await using (var evidenceCleanup = await database.Database.BeginTransactionAsync())
+        {
+            await database.Database.ExecuteSqlRawAsync("SET LOCAL web_health.endpoint_purge = 'on'");
+            database.IncidentEvidence.RemoveRange(acknowledgedEvidence, reassignedEvidence);
+            database.Incidents.RemoveRange(acknowledgedIncident, reassignedIncident);
+            await database.SaveChangesAsync();
+            await evidenceCleanup.CommitAsync();
+        }
 
         // Pagination clamps out-of-range requests instead of overflowing or returning nonsense.
         (await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess, page: 0))!
@@ -4034,6 +4054,58 @@ internal static class DatabaseFoundationAssertions
             RecordedAt = now
         });
 
+        var pageAuditTargetId = Guid.NewGuid();
+        var pageAuditRunId = Guid.NewGuid();
+        database.PageAuditTargets.Add(new PageAuditTarget
+        {
+            Id = pageAuditTargetId,
+            EndpointId = endpointId,
+            Provider = PageAuditProviders.PageSpeedInsights,
+            Category = PageAuditCategories.Seo,
+            Strategy = PageAuditStrategies.Mobile,
+            IsEnabled = true,
+            SchedulingEnabled = true,
+            IntervalSeconds = 86400,
+            ScheduleAnchor = now,
+            NextDueAt = now.AddDays(1),
+            CreatedAt = now,
+            UpdatedAt = now,
+            Version = 1
+        });
+        database.PageAuditRuns.Add(new PageAuditRun
+        {
+            Id = pageAuditRunId,
+            PageAuditTargetId = pageAuditTargetId,
+            EndpointId = endpointId,
+            Source = PageAuditSources.Scheduled,
+            Status = PageAuditRunStatuses.Completed,
+            RequestedUrl = "https://endpoint-purge.test/",
+            FinalUrl = "https://endpoint-purge.test/",
+            RawScore = 0.82m,
+            Provider = PageAuditProviders.PageSpeedInsights,
+            Category = PageAuditCategories.Seo,
+            Strategy = PageAuditStrategies.Mobile,
+            Locale = "en-US",
+            LighthouseVersion = "11.4.0",
+            AttemptCount = 1,
+            QueuedAt = now.AddMinutes(-2),
+            AnalysisAt = now.AddMinutes(-1),
+            FinishedAt = now,
+            UpdatedAt = now
+        });
+        database.PageAuditItems.Add(new PageAuditItem
+        {
+            Id = Guid.NewGuid(),
+            RunId = pageAuditRunId,
+            AuditId = "meta-description",
+            Status = PageAuditItemStatuses.Failed,
+            Score = 0m,
+            ScoreDisplayMode = PageAuditScoreDisplayModes.Binary,
+            Weight = 10,
+            GroupName = "seo-content",
+            Title = "Document does not have a meta description"
+        });
+
         var windowId = Guid.NewGuid();
         database.MaintenanceWindows.Add(new MaintenanceWindow
         {
@@ -4243,6 +4315,8 @@ internal static class DatabaseFoundationAssertions
             .Where(delivery => notifications.Contains(delivery.NotificationEventId)).Select(delivery => delivery.Id);
         var runs = database.CrawlRuns
             .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
+        var pageAuditRuns = database.PageAuditRuns
+            .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
 
         return new Dictionary<string, int>
         {
@@ -4270,10 +4344,34 @@ internal static class DatabaseFoundationAssertions
             ["notification_attempt"] = await database.NotificationAttempts.CountAsync(item => deliveries.Contains(item.NotificationDeliveryId)),
             ["crawl_run"] = await database.CrawlRuns.CountAsync(item => item.EndpointId == endpointId),
             ["crawl_link_result"] = await database.CrawlLinkResults.CountAsync(item => runs.Contains(item.RunId)),
+            ["page_audit_target"] = await database.PageAuditTargets.CountAsync(item => item.EndpointId == endpointId),
+            ["page_audit_run"] = await database.PageAuditRuns.CountAsync(item => item.EndpointId == endpointId),
+            ["page_audit_item"] = await database.PageAuditItems.CountAsync(item => pageAuditRuns.Contains(item.RunId)),
             ["maintenance_window"] = await database.MaintenanceWindows.CountAsync(item => item.Id == maintenanceWindowId),
             ["maintenance_target"] = await database.MaintenanceTargets.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId),
             ["maintenance_occurrence"] = await database.MaintenanceOccurrences.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId)
         };
+    }
+
+    /// <summary>
+    /// The page-audit tables enforce their own contract, on their own fixture endpoint. The
+    /// stage owns the endpoint it seeds so nothing it inserts has to be cleaned up, and so no
+    /// later stage inherits an active run this one left open.
+    /// </summary>
+    private static async Task VerifyPageAuditContractAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var monitor = await CreateOwnedMonitorAsync(
+            scope, database, "https://page-audit-schema.test/status");
+        await PageAuditSchemaAssertions.VerifyAsync(connectionString, database, monitor.EndpointId);
     }
 
     private static async Task VerifyCrawlResultContractAsync(string connectionString)
