@@ -298,6 +298,12 @@
                                 <td data-label="Status">
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                         StatusBadges.ForHealthStatus(row.ConfirmedStatus), row.ConfirmedStatus))
+                                    @if (row.StatusBeforeDisabled is { } lastKnown)
+                                    {
+                                        @* Nothing is checking this monitor, so the state it stopped
+                                           in is history rather than a current reading. *@
+                                        <span class="data-table__secondary">Was @lastKnown when checks stopped</span>
+                                    }
                                 </td>
                                 <td data-label="Uptime">
                                     @Percent(row.Uptime.Percentage)
@@ -418,6 +424,12 @@
                 <div class="data-list__row">
                     <dt>Paused monitors</dt>
                     <dd>@Model.Diagnostics.PausedMonitorCount.ToString("N0")</dd>
+                </div>
+                @* Enabled but unscheduled. Listed so scheduled + paused + manual accounts for
+                   every monitor the filter selected, instead of silently falling short. *@
+                <div class="data-list__row">
+                    <dt>Manual-only monitors</dt>
+                    <dd>@Model.Diagnostics.ManualOnlyMonitorCount.ToString("N0")</dd>
                 </div>
                 <div class="data-list__row">
                     <dt>Overdue monitors</dt>

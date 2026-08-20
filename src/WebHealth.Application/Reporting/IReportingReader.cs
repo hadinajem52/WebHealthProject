@@ -162,6 +162,12 @@ public sealed record ReportRow(
     string MonitorType,
     string OwnerName,
     string ConfirmedStatus,
+    /// <summary>
+    /// The state a disabled monitor was in when checking stopped, and null for a monitor that is
+    /// still running. It exists so the row can say "Disabled · was Healthy" rather than losing
+    /// what the endpoint looked like the last time anything actually looked at it.
+    /// </summary>
+    string? StatusBeforeDisabled,
     DateTimeOffset? ConfirmedAt,
     ReportUptime Uptime,
     ReportResponseTimes ResponseTimes,
@@ -234,13 +240,19 @@ public sealed record CertificateExpiryItem(
 /// a grace period ago: a monitor is not late the moment its slot arrives, only once the
 /// scheduler has demonstrably failed to pick it up.
 /// </summary>
+/// <param name="ManualOnlyMonitorCount">
+/// Monitors that are enabled but have scheduling switched off, so they run only when someone asks.
+/// They belong to neither of the counts above, and without a line of their own the panel accounts
+/// for fewer monitors than the view holds — leaving a reader to wonder which ones went missing.
+/// </param>
 public sealed record ReportDiagnostics(
     int ScheduledMonitorCount,
     int PausedMonitorCount,
+    int ManualOnlyMonitorCount,
     int OverdueMonitorCount,
     int WorkInFlightCount,
     int FailedWorkCount,
     DateTimeOffset? LastCompletedCheckAt)
 {
-    public static ReportDiagnostics Empty { get; } = new(0, 0, 0, 0, 0, null);
+    public static ReportDiagnostics Empty { get; } = new(0, 0, 0, 0, 0, 0, null);
 }

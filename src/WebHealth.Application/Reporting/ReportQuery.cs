@@ -128,7 +128,10 @@ public static class ReportQueryNormalizer
         EndpointHealthStatuses.Healthy,
         EndpointHealthStatuses.Warning,
         EndpointHealthStatuses.Critical,
-        EndpointHealthStatuses.Unknown
+        EndpointHealthStatuses.Unknown,
+        // Selectable because it is now a status the dashboard reports: without it, filtering for
+        // the monitors nobody is checking was a query that could only ever return nothing.
+        EndpointHealthStatuses.Disabled
     ];
 
     internal static int BoundPage(int page) => Math.Max(page, 1);

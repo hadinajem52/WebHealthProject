@@ -211,6 +211,9 @@ internal sealed class ReportingReader(
             {
                 Scheduled = monitor.SchedulingEnabled && monitor.IsEnabled,
                 Paused = monitor.SchedulingEnabled && !monitor.IsEnabled,
+                // Enabled, but only ever run on demand. Counted so the three states add up to
+                // every monitor the filter selected.
+                ManualOnly = !monitor.SchedulingEnabled && monitor.IsEnabled,
                 // A monitor is late only once its slot has been missed by more than the grace
                 // period; the moment a slot arrives it is merely due.
                 Overdue = monitor.SchedulingEnabled
@@ -240,6 +243,7 @@ internal sealed class ReportingReader(
         return new(
             scheduling.Count(monitor => monitor.Scheduled),
             scheduling.Count(monitor => monitor.Paused),
+            scheduling.Count(monitor => monitor.ManualOnly),
             scheduling.Count(monitor => monitor.Overdue),
             inFlight,
             work.Where(item => item.State == DurableWorkStates.Failed).Sum(item => item.Count),
@@ -355,13 +359,7 @@ internal sealed class ReportingReader(
 
         if (query.HealthStatus is { } healthStatus)
         {
-            // Unknown is the absence of a confirmation, so it is the one status that also
-            // matches a monitor with no health row at all.
-            monitors = healthStatus == EndpointHealthStatuses.Unknown
-                ? monitors.Where(monitor => monitor.EndpointHealth == null
-                    || monitor.EndpointHealth.ConfirmedStatus == EndpointHealthStatuses.Unknown)
-                : monitors.Where(monitor => monitor.EndpointHealth != null
-                    && monitor.EndpointHealth.ConfirmedStatus == healthStatus);
+            monitors = monitors.Where(MonitorDisplayStatus.Matches(healthStatus));
         }
 
         // The ordering is applied to the monitor's own columns before anything is projected.
@@ -391,8 +389,19 @@ internal sealed class ReportingReader(
                 // monitor, so it is read through the navigation as a join rather than as two
                 // correlated subqueries per row. A monitor that has never confirmed anything is
                 // Unknown, which is a state to show rather than a row to hide.
-                monitor.EndpointHealth == null
-                    ? EndpointHealthStatuses.Unknown
+                //
+                // A disabled monitor reports Disabled instead: its stored status is the state it
+                // was in when checking stopped, and presenting that as current would say
+                // "Healthy" about an endpoint nobody is checking. The stored value is carried in
+                // the next column so the row can still say what it was.
+                // Mirrors MonitorDisplayStatus, which the filter and the health totals use.
+                !monitor.IsEnabled
+                    ? EndpointHealthStatuses.Disabled
+                    : monitor.EndpointHealth == null
+                        ? EndpointHealthStatuses.Unknown
+                        : monitor.EndpointHealth.ConfirmedStatus,
+                monitor.IsEnabled || monitor.EndpointHealth == null
+                    ? null
                     : monitor.EndpointHealth.ConfirmedStatus,
                 monitor.EndpointHealth == null
                     ? null
@@ -478,6 +487,7 @@ internal sealed class ReportingReader(
                 monitor.MonitorType,
                 names.GetValueOrDefault(monitor.OwnerSubjectId, "Unknown owner"),
                 monitor.ConfirmedStatus,
+                monitor.StatusBeforeDisabled,
                 monitor.ConfirmedAt,
                 sample.ToUptime(),
                 sample.ToResponseTimes(),
@@ -525,10 +535,7 @@ internal sealed class ReportingReader(
     {
         var counts = await dbContext.EndpointMonitors.AsNoTracking()
             .Where(monitor => monitorIds.Contains(monitor.Id))
-            .GroupBy(monitor => dbContext.EndpointHealth
-                .Where(health => health.EndpointMonitorId == monitor.Id)
-                .Select(health => health.ConfirmedStatus)
-                .FirstOrDefault() ?? EndpointHealthStatuses.Unknown)
+            .GroupBy(MonitorDisplayStatus.Projection)
             .Select(group => new { Status = group.Key, Count = group.Count() })
             .ToArrayAsync(cancellationToken);
         return counts.ToDictionary(item => item.Status, item => item.Count, StringComparer.Ordinal);
@@ -806,6 +813,7 @@ internal sealed class ReportingReader(
         string MonitorType,
         Guid OwnerSubjectId,
         string ConfirmedStatus,
+        string? StatusBeforeDisabled,
         DateTimeOffset? ConfirmedAt,
         int ActiveIncidentCount);
 
