@@ -177,7 +177,8 @@ public sealed class TargetsController(
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt,
                 model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
-                model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired),
+                model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
+                model.PageAuditEnabled, model.PageAuditSchedulingEnabled, model.PageAuditIntervalHours),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -215,6 +216,9 @@ public sealed class TargetsController(
             SeoExpectedCanonicalHost = endpoint.SeoExpectedCanonicalHost,
             SeoIndexingExpectation = endpoint.SeoIndexingExpectation,
             SeoDescriptionRequired = endpoint.SeoDescriptionRequired,
+            PageAuditEnabled = endpoint.PageAuditEnabled,
+            PageAuditSchedulingEnabled = endpoint.PageAuditSchedulingEnabled,
+            PageAuditIntervalHours = endpoint.PageAuditIntervalHours,
             Version = endpoint.Version
         }, cancellationToken));
     }
@@ -233,7 +237,8 @@ public sealed class TargetsController(
                 model.TargetAuthorizationExpiresAt, model.Version,
                 model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
-                model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired),
+                model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
+                model.PageAuditEnabled, model.PageAuditSchedulingEnabled, model.PageAuditIntervalHours),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {

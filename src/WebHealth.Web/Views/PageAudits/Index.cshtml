@@ -1,0 +1,318 @@
+@model PageAuditIndexViewModel
+@using WebHealth.Domain.PageAudits
+@{
+    ViewData.SetTitle("PageSpeed");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("PageSpeed"));
+    var summary = Model.Summary;
+    var run = summary?.LatestRun;
+    var comparison = summary?.Comparison;
+}
+
+<div class="stack">
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">PageSpeed</h2>
+                <p class="card__subtitle">
+                    Google PageSpeed Insights runs Lighthouse against a public page and returns a
+                    technical SEO score. It is an automated audit of the page's markup, not a
+                    prediction of search ranking or traffic.
+                </p>
+            </div>
+        </div>
+
+        <form method="get" class="filter-grid">
+            <div class="form-field form-field--full">
+                <label for="endpointId">Endpoint</label>
+                <select id="endpointId" name="endpointId">
+                    <option value="">Select an endpoint</option>
+                    @foreach (var option in Model.Endpoints)
+                    {
+                        <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="filter-grid__actions">
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>Show audits</span>
+                </button>
+            </div>
+        </form>
+
+        @if (summary is null)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "Select an endpoint",
+                "PageSpeed audits are configured and recorded per endpoint. Choose one to see its score.",
+                "reports"))
+        }
+        else if (!summary.IsConfigured || !summary.IsEnabled)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "PageSpeed auditing is off for this endpoint",
+                "Enable it on the endpoint to have Google audit this page. Enabling sends the URL to Google and asks Google infrastructure to load it, so it is only suitable for public pages.",
+                "reports"))
+        }
+        else
+        {
+            <dl class="registry-facts">
+                <div>
+                    <dt>Lighthouse technical SEO score</dt>
+                    <dd>
+                        @if (run is not null && run.HasScore)
+                        {
+                            <span class="badge" data-status="@PageAuditDisplay.ScoreTone(run.Score)">@run.Score / 100</span>
+                        }
+                        else
+                        {
+                            <span class="badge" data-status="neutral">Not measured</span>
+                        }
+                    </dd>
+                </div>
+                <div>
+                    <dt>Latest run</dt>
+                    <dd>
+                        @if (run is null)
+                        {
+                            <span>No audit has run yet</span>
+                        }
+                        else
+                        {
+                            <span class="badge" data-status="@PageAuditDisplay.StatusTone(run)">@PageAuditDisplay.DescribeStatus(run)</span>
+                        }
+                    </dd>
+                </div>
+                <div><dt>Strategy</dt><dd>@summary.Strategy</dd></div>
+                <div>
+                    <dt>Scheduled</dt>
+                    <dd>
+                        @if (summary.SchedulingEnabled)
+                        {
+                            <span>Every @summary.IntervalHours hours</span>
+                            @if (summary.NextDueAt is { } due)
+                            {
+                                <span class="form-field__hint">Next @Html.Timestamp(due)</span>
+                            }
+                        }
+                        else
+                        {
+                            <span>On demand only</span>
+                        }
+                    </dd>
+                </div>
+                @if (run?.AnalysisAt is { } analysedAt)
+                {
+                    <div><dt>Audited</dt><dd>@Html.Timestamp(analysedAt)</dd></div>
+                }
+                @if (run?.LighthouseVersion is { } version)
+                {
+                    <div><dt>Lighthouse version</dt><dd>@version</dd></div>
+                }
+            </dl>
+
+            @if (Model.CanRunNow)
+            {
+                <form method="post" asp-action="RunNow">
+                    <input type="hidden" name="endpointId" value="@Model.SelectedEndpointId" />
+                    <button class="button button--primary" type="submit">
+                        @await Html.PartialAsync("_Icon", "play")
+                        <span>Run now</span>
+                    </button>
+                    <span class="form-field__hint">Asks Google to audit this page now. The score appears once Google answers.</span>
+                </form>
+            }
+        }
+    </section>
+
+    @if (summary is not null && run is not null)
+    {
+        @if (run.IsActive)
+        {
+            <section class="card">
+                <h3 class="card__title">Audit in progress</h3>
+                <p class="card__subtitle">
+                    Google is running this audit. Reload the page in a moment to see the score.
+                    @if (run.AttemptCount > 1)
+                    {
+                        <span>This is attempt @run.AttemptCount.</span>
+                    }
+                </p>
+            </section>
+        }
+
+        @if (run.Status == PageAuditRunStatuses.Failed)
+        {
+            <section class="card">
+                <h3 class="card__title">This audit produced no score</h3>
+                <p class="card__subtitle">@PageAuditDisplay.DescribeFailure(run.FailureCategory)</p>
+                @if (run.SafeDiagnostic is { } diagnostic)
+                {
+                    <p class="card__subtitle">@diagnostic</p>
+                }
+                <p class="card__subtitle">
+                    A failed audit is not a finding about the page. Nothing here changes the last
+                    score that was measured.
+                </p>
+            </section>
+        }
+
+        @if (run.HasScore && comparison is not null)
+        {
+            <section class="card">
+                <div class="page-intro">
+                    <div>
+                        <h3 class="card__title">Change since the previous audit</h3>
+                        <p class="card__subtitle">@PageAuditDisplay.DescribeComparison(comparison)</p>
+                    </div>
+                </div>
+                @if (comparison.PreviousRunId is not null)
+                {
+                    <dl class="registry-facts">
+                        <div><dt>Current</dt><dd>@comparison.CurrentScore</dd></div>
+                        <div><dt>Previous</dt><dd>@comparison.PreviousScore</dd></div>
+                        <div><dt>Change</dt><dd>@(comparison.Delta > 0 ? "+" : null)@comparison.Delta</dd></div>
+                    </dl>
+                }
+            </section>
+        }
+
+        @if (run.WarningSummary is { } warnings)
+        {
+            <section class="card">
+                <h3 class="card__title">Provider warnings</h3>
+                <p class="card__subtitle">Google reported these while running the audit. The score is still usable.</p>
+                <p>@warnings</p>
+            </section>
+        }
+
+        @if (run.RedirectedTo is { } finalUrl)
+        {
+            <section class="card">
+                <h3 class="card__title">Google audited a different URL</h3>
+                <p class="card__subtitle">
+                    The request asked for <span class="target-url">@run.RequestedUrl</span> and Google
+                    followed a redirect to <span class="target-url">@finalUrl</span>. The score describes
+                    the page it landed on.
+                </p>
+            </section>
+        }
+
+        <section class="card">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title">Audits</h3>
+                    <p class="card__subtitle">
+                        Manual and not-applicable audits are listed apart from passed ones: neither is
+                        a check this page passed, and neither counts against the score.
+                    </p>
+                </div>
+            </div>
+
+            <dl class="registry-facts">
+                <div><dt>Failed</dt><dd>@summary.Counts.Failed</dd></div>
+                <div><dt>Passed</dt><dd>@summary.Counts.Passed</dd></div>
+                <div><dt>Manual</dt><dd>@summary.Counts.Manual</dd></div>
+                <div><dt>Not applicable</dt><dd>@summary.Counts.NotApplicable</dd></div>
+                <div><dt>Informative</dt><dd>@summary.Counts.Informative</dd></div>
+                <div><dt>Errors</dt><dd>@summary.Counts.Error</dd></div>
+            </dl>
+
+            @foreach (var auditGroup in Model.Sections.Where(candidate => candidate.Items.Count > 0))
+            {
+                <details class="disclosure" open="@(auditGroup.Status == PageAuditItemStatuses.Failed)">
+                    <summary>
+                        <span class="badge" data-status="@PageAuditDisplay.ItemTone(auditGroup.Status)">@auditGroup.Items.Count</span>
+                        <span>@auditGroup.Title</span>
+                    </summary>
+                    <p class="card__subtitle">@auditGroup.Description</p>
+                    <div class="table-scroll table-scroll--flush">
+                        <table class="data-table">
+                            <caption class="visually-hidden">@auditGroup.Title</caption>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Audit</th>
+                                    <th scope="col">What it checks</th>
+                                    <th scope="col">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in auditGroup.Items)
+                                {
+                                    <tr>
+                                        @* Provider text, rendered as plain text. Lighthouse
+                                           descriptions carry Markdown-style links, which stay
+                                           visible as text rather than becoming markup. *@
+                                        <td data-label="Audit">@(item.Title ?? item.AuditId)</td>
+                                        <td data-label="What it checks">@item.Description</td>
+                                        <td data-label="Value">
+                                            @(item.DisplayValue ?? item.Explanation ?? item.ErrorMessage)
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            }
+        </section>
+    }
+
+    @if (Model.Runs.Count > 0)
+    {
+        <section class="card">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title">Run history</h3>
+                    <p class="card__subtitle">Select a run to see the audits it recorded.</p>
+                </div>
+            </div>
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">PageSpeed runs for the selected endpoint</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Queued</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Score</th>
+                            <th scope="col">Source</th>
+                            <th scope="col">Lighthouse</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var historyRun in Model.Runs)
+                        {
+                            <tr>
+                                <td data-label="Queued">@Html.Timestamp(historyRun.QueuedAt)</td>
+                                <td data-label="Status">
+                                    <span class="badge" data-status="@PageAuditDisplay.StatusTone(historyRun)">@PageAuditDisplay.DescribeStatus(historyRun)</span>
+                                </td>
+                                <td data-label="Score">
+                                    @if (historyRun.HasScore)
+                                    {
+                                        <span class="badge" data-status="@PageAuditDisplay.ScoreTone(historyRun.Score)">@historyRun.Score</span>
+                                    }
+                                    else
+                                    {
+                                        <span>—</span>
+                                    }
+                                </td>
+                                <td data-label="Source">@historyRun.Source</td>
+                                <td data-label="Lighthouse">@(historyRun.LighthouseVersion ?? "—")</td>
+                                <td data-label="Details">
+                                    <a class="button button--secondary"
+                                       asp-action="Index"
+                                       asp-route-endpointId="@Model.SelectedEndpointId"
+                                       asp-route-runId="@historyRun.RunId">
+                                        <span>View</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</div>

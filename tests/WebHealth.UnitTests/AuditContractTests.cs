@@ -107,6 +107,8 @@ public sealed class AuditContractTests
                 nameof(EndpointAuditSnapshot.SeoIndexingExpectation),
                 nameof(EndpointAuditSnapshot.SeoDescriptionRequired),
                 nameof(EndpointAuditSnapshot.HasSeoCanonicalHostOverride),
+                nameof(EndpointAuditSnapshot.PageAuditEnabled),
+                nameof(EndpointAuditSnapshot.PageAuditSchedulingEnabled),
                 nameof(EndpointAuditSnapshot.IsDeleted),
                 nameof(EndpointAuditSnapshot.Version));
         typeof(RobotsPolicyAuditSnapshot).GetProperties().Select(property => property.Name)

@@ -167,6 +167,8 @@ public static class DependencyInjection
         services.AddScoped<IPageAuditProvider, PageSpeedInsightsProvider>();
         services.AddScoped<PageAuditExecutionService>();
         services.AddScoped<PageAuditSchedulingService>();
+        services.AddScoped<IPageAuditRunner>(provider =>
+            provider.GetRequiredService<PageAuditSchedulingService>());
         services.AddScoped<IPageAuditReader, PageAuditReader>();
         services.AddScoped<PageAuditRunJob>();
         services.AddScoped<PageAuditDispatchJob>();
