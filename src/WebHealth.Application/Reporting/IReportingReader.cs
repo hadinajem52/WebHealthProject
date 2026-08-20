@@ -115,13 +115,22 @@ public sealed record ReportSummary(
 /// Manual runs, maintenance-suppressed runs, cancelled runs and certificate checks are excluded
 /// by <c>counts_for_uptime</c> at write time.
 /// </param>
-/// <param name="HealthySamples">Eligible samples whose outcome was <c>Healthy</c>.</param>
-/// <param name="WarningSamples">
-/// Eligible samples that answered but carried a warning finding — a slow response, an oversized
-/// page. Reported separately because they are neither uptime nor downtime: the endpoint was
-/// reachable, and something about the answer was still worth flagging.
+/// <param name="HealthySamples">
+/// Eligible samples that answered and carried no finding at all. The strictest reading: nothing
+/// about the response was worth reporting.
 /// </param>
-/// <param name="DownSamples">Eligible samples whose outcome was <c>Critical</c>.</param>
+/// <param name="WarningSamples">
+/// Eligible samples where the endpoint answered but something about the answer was worth
+/// flagging — a slow response, an oversized page, a robots or canonical rule. These count as
+/// <em>up</em>: the visitor got the page. They are still counted apart from
+/// <see cref="HealthySamples" /> so "up" and "flawless" never have to be inferred from one
+/// number.
+/// </param>
+/// <param name="DownSamples">
+/// Eligible samples with an availability failure — DNS, connection, TLS, timeout, an HTTP error
+/// status, a content mismatch, a redirect fault. See <c>UptimeParticipation</c> for the
+/// categories that do and do not land here.
+/// </param>
 /// <param name="ExcludedSamples">Results in the window that were not eligible at all.</param>
 public sealed record ReportUptime(
     long EligibleSamples,
@@ -131,22 +140,25 @@ public sealed record ReportUptime(
     long ExcludedSamples)
 {
     /// <summary>
-    /// BR-U01 as written: healthy eligible samples over eligible samples. A warning sample is
-    /// not healthy, so it does not raise this figure; it is visible in
-    /// <see cref="WarningSamples" /> instead of being folded into either side.
+    /// BR-U01: healthy <em>availability</em> samples over eligible <em>availability</em>
+    /// samples. Every sample where the endpoint answered counts, whether or not the answer
+    /// satisfied every rule, because that is what availability means — see
+    /// <c>UptimeParticipation</c> for why a robots or canonical fault is not downtime.
     /// </summary>
     public double? Percentage => EligibleSamples == 0
         ? null
-        : Math.Round(HealthySamples * 100d / EligibleSamples, 4, MidpointRounding.AwayFromZero);
+        : Math.Round(
+            (HealthySamples + WarningSamples) * 100d / EligibleSamples, 4, MidpointRounding.AwayFromZero);
 
     /// <summary>
-    /// Eligible samples where the endpoint answered at all, healthy or warning. It is the
-    /// reachability figure some operators mean by "uptime", reported beside the BR-U01 one
-    /// rather than instead of it so neither reading has to be inferred.
+    /// The stricter figure: eligible samples that answered with nothing to report at all. It sits
+    /// beside <see cref="Percentage" /> rather than replacing it because the gap between the two
+    /// is the interesting part — an endpoint at 100% uptime and 12% clean is up and misconfigured,
+    /// which no single number can say.
     /// </summary>
-    public double? ReachablePercentage => EligibleSamples == 0
+    public double? CleanPercentage => EligibleSamples == 0
         ? null
-        : Math.Round((HealthySamples + WarningSamples) * 100d / EligibleSamples, 4, MidpointRounding.AwayFromZero);
+        : Math.Round(HealthySamples * 100d / EligibleSamples, 4, MidpointRounding.AwayFromZero);
 }
 
 /// <summary>
@@ -184,7 +196,8 @@ public sealed record ReportRow(
 public sealed record ReportTrendPoint(
     DateOnly Day,
     long EligibleSamples,
-    long HealthySamples,
+    /// <summary>Eligible samples where the endpoint answered, matching the summary's uptime.</summary>
+    long UpSamples,
     double? UptimePercentage,
     double? P50Ms,
     double? P95Ms);

@@ -730,10 +730,29 @@ internal sealed class ReportingReader(
         return aggregates;
     }
 
+    /// <summary>
+    /// Reachability, as SQL. The category list is passed as a parameter rather than inlined so
+    /// <c>UptimeParticipation</c> stays the only place that decides what counts as unavailable;
+    /// a category added there reaches this query without anyone editing SQL.
+    /// </summary>
+    private const string Available =
+        "(result.failure_category IS NULL "
+        + "OR result.failure_category = ANY(@non_availability_categories))";
+
     private const string EligibleSample = "result.counts_for_uptime";
+
+    /// <summary>The uptime numerator: eligible samples where the endpoint answered.</summary>
+    private const string UpSample = "result.counts_for_uptime AND " + Available;
+
     private const string HealthySample = "result.counts_for_uptime AND result.outcome = 'Healthy'";
-    private const string WarningSample = "result.counts_for_uptime AND result.outcome = 'Warning'";
-    private const string DownSample = "result.counts_for_uptime AND result.outcome = 'Critical'";
+
+    // Up, but with something worth reporting. A Healthy outcome carries no finding and therefore
+    // no category, so it is always available and never lands here - the three buckets stay
+    // disjoint and still add up to the eligible count.
+    private const string WarningSample =
+        "result.counts_for_uptime AND " + Available + " AND result.outcome <> 'Healthy'";
+
+    private const string DownSample = "result.counts_for_uptime AND NOT " + Available + "";
 
     private const string RespondedSample =
         "result.counts_for_uptime AND result.outcome IN ('Healthy', 'Warning')";
@@ -757,7 +776,7 @@ internal sealed class ReportingReader(
             SELECT
                 (result.measured_at AT TIME ZONE 'UTC')::date AS day,
                 count(*) FILTER (WHERE {EligibleSample}) AS eligible,
-                count(*) FILTER (WHERE {HealthySample}) AS healthy_samples,
+                count(*) FILTER (WHERE {UpSample}) AS up_samples,
                 percentile_cont(0.5) WITHIN GROUP (ORDER BY result.total_duration_ms)
                     FILTER (WHERE {RespondedSample}) AS p50_ms,
                 percentile_cont(0.95) WITHIN GROUP (ORDER BY result.total_duration_ms)
@@ -776,12 +795,12 @@ internal sealed class ReportingReader(
         while (await reader.ReadAsync(cancellationToken))
         {
             var eligible = reader.GetInt64(1);
-            var healthy = reader.GetInt64(2);
+            var up = reader.GetInt64(2);
             points.Add(new(
                 DateOnly.FromDateTime(reader.GetDateTime(0)),
                 eligible,
-                healthy,
-                eligible == 0 ? null : Math.Round(healthy * 100d / eligible, 4, MidpointRounding.AwayFromZero),
+                up,
+                eligible == 0 ? null : Math.Round(up * 100d / eligible, 4, MidpointRounding.AwayFromZero),
                 reader.IsDBNull(3) ? null : reader.GetDouble(3),
                 reader.IsDBNull(4) ? null : reader.GetDouble(4)));
         }
@@ -814,6 +833,10 @@ internal sealed class ReportingReader(
             "monitor_ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid, monitorIds.ToArray());
         command.Parameters.AddWithValue("window_start", NpgsqlDbType.TimestampTz, query.WindowStart);
         command.Parameters.AddWithValue("window_end", NpgsqlDbType.TimestampTz, query.WindowEnd);
+        command.Parameters.AddWithValue(
+            "non_availability_categories",
+            NpgsqlDbType.Array | NpgsqlDbType.Text,
+            UptimeParticipation.NonAvailabilityCategories.ToArray());
         return new(command, wasClosed ? dbContext : null);
     }
 

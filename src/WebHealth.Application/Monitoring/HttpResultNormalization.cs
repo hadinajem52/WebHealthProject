@@ -72,6 +72,47 @@ public static class SeoFailureCategories
 }
 
 /// <summary>
+/// Which failure categories mean the site was <em>unavailable</em>, as opposed to reachable but
+/// misconfigured or slow.
+/// <para>
+/// BR-U01 measures healthy <em>availability</em> samples over eligible <em>availability</em>
+/// samples, and that word is the whole rule: uptime answers "could a visitor load the page", not
+/// "was every rule satisfied". A production <c>Disallow: /</c> is critical under BR-E07 and must
+/// keep raising an incident and driving endpoint health - but the server answering 200 while it
+/// happens is up, and reporting it as downtime makes the headline figure describe SEO compliance
+/// instead of availability.
+/// </para>
+/// <para>
+/// The set below is the exception list rather than the availability list, so a newly added
+/// availability category counts against uptime by default. That is the safe direction to fail:
+/// a new transport failure silently ignored would overstate uptime, while a new advisory
+/// category wrongly counted is visible the moment anyone reads the number.
+/// </para>
+/// </summary>
+public static class UptimeParticipation
+{
+    /// <summary>
+    /// Categories that describe the page rather than the connection. Slow and oversized
+    /// responses sit here because the endpoint did answer; a response so slow that nothing came
+    /// back is a <see cref="HttpFailureCategories.Timeout" />, which is not on this list.
+    /// </summary>
+    public static IReadOnlyList<string> NonAvailabilityCategories =>
+    [
+        .. SeoFailureCategories.All,
+        HttpFailureCategories.SlowResponse,
+        HttpFailureCategories.PageTooLarge
+    ];
+
+    /// <summary>
+    /// Whether a result's category leaves the endpoint counting as reachable. A result with no
+    /// category at all passed everything and is available by definition.
+    /// </summary>
+    public static bool IsAvailable(string? failureCategory) =>
+        failureCategory is null
+        || NonAvailabilityCategories.Contains(failureCategory, StringComparer.Ordinal);
+}
+
+/// <summary>
 /// The severity a finding reports. These are aliases of <see cref="IncidentSeverities" />
 /// rather than a parallel set: a finding severity is carried straight onto the incident it
 /// confirms, so the two vocabularies have to be the same one.
