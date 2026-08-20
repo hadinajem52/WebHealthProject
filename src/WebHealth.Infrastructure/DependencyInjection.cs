@@ -22,6 +22,8 @@ using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Seo;
 using WebHealth.Application.Crawling;
 using WebHealth.Infrastructure.Crawling;
+using WebHealth.Application.PageAudits;
+using WebHealth.Infrastructure.PageAudits;
 using WebHealth.Application.Incidents;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Application.Notifications;
@@ -58,6 +60,14 @@ public static class DependencyInjection
         var crawlOptions = configuration.GetSection(CrawlSchedulingOptions.SectionName)
             .Get<CrawlSchedulingOptions>() ?? new CrawlSchedulingOptions();
         services.AddSingleton(crawlOptions);
+
+        var pageAuditOptions = configuration.GetSection(PageAuditSchedulingOptions.SectionName)
+            .Get<PageAuditSchedulingOptions>() ?? new PageAuditSchedulingOptions();
+        var pageSpeedOptions = configuration.GetSection(PageSpeedInsightsOptions.SectionName)
+            .Get<PageSpeedInsightsOptions>() ?? new PageSpeedInsightsOptions();
+        ValidatePageAuditOptions(pageAuditOptions, pageSpeedOptions);
+        services.AddSingleton(pageAuditOptions);
+        services.AddSingleton(pageSpeedOptions);
 
         var maintenanceOptions = configuration.GetSection(MaintenanceSchedulingOptions.SectionName)
             .Get<MaintenanceSchedulingOptions>() ?? new MaintenanceSchedulingOptions();
@@ -154,6 +164,12 @@ public static class DependencyInjection
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlExecutionService, CrawlExecutionService>();
         services.AddScoped<CrawlRunJob>();
+        services.AddScoped<IPageAuditProvider, PageSpeedInsightsProvider>();
+        services.AddScoped<PageAuditExecutionService>();
+        services.AddScoped<PageAuditSchedulingService>();
+        services.AddScoped<IPageAuditReader, PageAuditReader>();
+        services.AddScoped<PageAuditRunJob>();
+        services.AddScoped<PageAuditDispatchJob>();
         services.AddScoped<IMaintenanceOccurrenceExpander, MaintenanceOccurrenceExpander>();
         services.AddScoped<MaintenanceExpansionJob>();
         services.AddScoped<IIncidentLifecycleService, IncidentLifecycleService>();
@@ -169,7 +185,8 @@ public static class DependencyInjection
         services.AddScoped<MonitoringDispatchJob>();
         services.AddScoped<NotificationDispatchJob>();
         var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled
-            || maintenanceOptions.Enabled || seoOptions.Enabled || crawlOptions.Enabled;
+            || maintenanceOptions.Enabled || seoOptions.Enabled || crawlOptions.Enabled
+            || pageAuditOptions.Enabled;
         if (hangfireEnabled)
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -227,6 +244,20 @@ public static class DependencyInjection
                     options.WorkerCount = crawlOptions.WorkerCount;
                 });
             }
+
+            // A third server, serving only the page-audit queue, for the same reason the crawl
+            // queue has its own: a PageSpeed call can take ninety seconds, and Hangfire's queue
+            // order decides what a free worker picks up next rather than reserving any worker.
+            // Only a separate pool keeps a long third-party call away from scheduled checks.
+            if (pageAuditOptions.Enabled)
+            {
+                services.AddHangfireServer(options =>
+                {
+                    options.ServerName = $"{Environment.MachineName}-page-audits";
+                    options.Queues = [PageAuditQueueNames.PageAudits];
+                    options.WorkerCount = pageAuditOptions.WorkerCount;
+                });
+            }
         }
 
         if (schedulingOptions.Enabled)
@@ -236,6 +267,15 @@ public static class DependencyInjection
         else
         {
             services.AddScoped<ILogicalCheckQueue, DisabledLogicalCheckQueue>();
+        }
+
+        if (pageAuditOptions.Enabled)
+        {
+            services.AddScoped<IPageAuditQueue, HangfirePageAuditQueue>();
+        }
+        else
+        {
+            services.AddScoped<IPageAuditQueue, DisabledPageAuditQueue>();
         }
         var configuredUserAgent = configuration[$"{SafeHttpTransportOptions.SectionName}:UserAgent"];
         var configuredContact = configuration[$"{SafeHttpTransportOptions.SectionName}:Contact"];
@@ -268,6 +308,27 @@ public static class DependencyInjection
                     serviceProvider.GetRequiredService<IDestinationAddressPolicy>(),
                     serviceProvider.GetRequiredService<SafeHttpConcurrencyLimiter>(),
                     safeHttpOptions));
+
+        // A dedicated client on a fixed Google origin. Deliberately not SafeHttpTransport: that
+        // exists to contact user-configured targets under DNS and SSRF rules because the URL comes
+        // from a user, and here the URL is one constant host with the monitored URL as a query
+        // value. Redirects are off — this API does not redirect, and following one would be
+        // following it with the API key still attached.
+        services.AddHttpClient(PageSpeedInsightsOptions.ClientName, client =>
+            {
+                client.BaseAddress = new Uri(PageSpeedInsightsProvider.ServiceOrigin);
+
+                // The provider applies its own timeout through a linked token, so it can tell a
+                // timeout apart from a cancellation. A second one here would surface as an
+                // ambiguous TaskCanceledException instead.
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(safeHttpOptions.UserAgentHeader);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.All
+            });
 
         services.AddHealthChecks()
             .AddCheck<PostgreSqlReadinessCheck>("postgresql", tags: ["ready"]);
@@ -334,6 +395,49 @@ public static class DependencyInjection
             throw new InvalidOperationException(
                 $"{SafeHttpTransportOptions.SectionName}:Contact must be an absolute http, https or "
                 + "mailto URI of at most 200 characters.");
+        }
+    }
+
+    /// <summary>
+    /// Refuses a configuration that could not work rather than letting it fail one run at a time.
+    /// The API key is required only when scheduling is on: with the feature off the key is
+    /// absent by design, and demanding one would make the disabled default unstartable.
+    /// </summary>
+    private static void ValidatePageAuditOptions(
+        PageAuditSchedulingOptions options,
+        PageSpeedInsightsOptions providerOptions)
+    {
+        if (options.WorkerCount is < 1 or > 4
+            || options.DispatchBatchSize is < 1 or > 200
+            || options.ReconciliationBatchSize is < 1 or > 500
+            || options.ReconciliationDelay < TimeSpan.FromMinutes(1)
+            || options.ReconciliationDelay > TimeSpan.FromHours(1)
+            || options.DefaultInterval < TimeSpan.FromHours(6)
+            || options.DefaultInterval > TimeSpan.FromDays(30)
+            || options.MaximumAttempts is < 1 or > 5
+            || options.LeaseDuration < providerOptions.RequestTimeout
+            || options.LeaseDuration > TimeSpan.FromHours(1))
+        {
+            throw new InvalidOperationException(
+                "Page audit scheduling options are outside their safe bounds.");
+        }
+
+        if (providerOptions.RequestTimeout < TimeSpan.FromSeconds(10)
+            || providerOptions.RequestTimeout > TimeSpan.FromMinutes(5)
+            || providerOptions.MaximumResponseBytes < 256 * 1024
+            || providerOptions.MaximumResponseBytes > 64 * 1024 * 1024
+            || providerOptions.MaximumAuditCount is < 1 or > 5000
+            || string.IsNullOrWhiteSpace(providerOptions.Locale))
+        {
+            throw new InvalidOperationException(
+                "PageSpeed Insights options are outside their safe bounds.");
+        }
+
+        if (options.Enabled && !providerOptions.HasApiKey)
+        {
+            throw new InvalidOperationException(
+                "Page audit scheduling is enabled but no PageSpeed Insights API key is "
+                + "configured. Set PageAudits__PageSpeedInsights__ApiKey.");
         }
     }
 

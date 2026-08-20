@@ -20,6 +20,7 @@ using WebHealth.Application.Maintenance;
 using WebHealth.Application.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.Crawling;
+using WebHealth.Application.PageAudits;
 using WebHealth.Domain.PageAudits;
 using WebHealth.Domain.Normalization;
 using WebHealth.Infrastructure.Crawling;
@@ -255,6 +256,7 @@ internal static class DatabaseFoundationAssertions
         await VerifySslCertificateMonitoringAsync(connectionString);
         await VerifyCrawlResultContractAsync(connectionString);
         await VerifyPageAuditContractAsync(connectionString);
+        await VerifyPageAuditExecutionAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(connectionString);
@@ -4358,6 +4360,53 @@ internal static class DatabaseFoundationAssertions
     /// stage owns the endpoint it seeds so nothing it inserts has to be cleaned up, and so no
     /// later stage inherits an active run this one left open.
     /// </summary>
+    /// <summary>
+    /// The scheduling, lease, retry and finalization rules, on this stage's own endpoint and its
+    /// own audit target. The provider and the queue are replaced so nothing here reaches Google or
+    /// Hangfire; everything else - the database, the services, the constraints - is real.
+    /// </summary>
+    private static async Task VerifyPageAuditExecutionAsync(string connectionString)
+    {
+        var provider = new ScriptedPageAuditProvider();
+        var queue = new RecordingPageAuditQueue();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString,
+
+            // The dispatcher refuses to open runs with no key configured, which is the correct
+            // production behaviour and would make this stage assert nothing.
+            ["PageAudits:PageSpeedInsights:ApiKey"] = "stage-key"
+        }).Build();
+
+        var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration);
+
+        // Registered after AddInfrastructure so these win: the real provider would call Google,
+        // and the disabled queue throws because scheduling is off in this configuration.
+        services.AddSingleton<IPageAuditProvider>(provider);
+        services.AddSingleton<IPageAuditQueue>(queue);
+        await using var built = services.BuildServiceProvider();
+        await using var scope = built.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // A public-looking host on purpose. The .test suffix every other fixture uses is refused
+        // by PageAuditEligibility, because a name reserved for testing never resolves publicly and
+        // sending one to Google would disclose an internal hostname for nothing.
+        const string url = "https://page-audit-exec.example.com/status";
+        var monitor = await CreateOwnedMonitorAsync(scope, database, url);
+        var endpoint = await database.Endpoints.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == monitor.EndpointId);
+
+        await PageAuditExecutionAssertions.VerifyAsync(
+            connectionString,
+            database,
+            scope.ServiceProvider.GetRequiredService<PageAuditSchedulingService>(),
+            scope.ServiceProvider.GetRequiredService<PageAuditExecutionService>(),
+            provider,
+            queue,
+            monitor.EndpointId,
+            endpoint.NormalizedUrl);
+    }
+
     private static async Task VerifyPageAuditContractAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
