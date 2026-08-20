@@ -118,9 +118,9 @@
             </div>
             <div class="form-field">
                 <label asp-for="Filter.WindowEnd"></label>
-                <input asp-for="Filter.WindowEnd" name="WindowEnd" type="date" />
-                <span class="form-field__hint">The end date is excluded, so a check at midnight belongs to the next day.</span>
+                <input asp-for="Filter.WindowEnd" name="WindowEnd" type="date" aria-describedby="dashboard-window-hint" />
             </div>
+            <p class="filter-grid__hint" id="dashboard-window-hint">The end date is excluded, so a check at midnight belongs to the next day.</p>
             <div class="filter-grid__actions">
                 <button class="button button--primary" type="submit">
                     @await Html.PartialAsync("_Icon", "filter")

@@ -158,12 +158,21 @@ public sealed record CrawlRunSummary(
     DateTimeOffset? FinishedAt)
 {
     /// <summary>
-    /// Only an exhausted frontier means the site was covered. The views must never render a run
-    /// that stopped on a budget as a clean result, so the distinction is carried, not inferred.
+    /// Covered means the crawler actually examined the site: the frontier drained <em>and</em> at
+    /// least one page was fetched. The views must never render a run that stopped on a budget as a
+    /// clean result, so the distinction is carried, not inferred.
+    /// <para>
+    /// The page count is part of the test because an exhausted frontier is not evidence on its own.
+    /// A run refused at every door — robots disallowing the origin, every target unauthorized —
+    /// drains its frontier too, having looked at nothing. Treating that as full coverage lets it
+    /// stand as the baseline a later comparison is drawn against, and every previously broken link
+    /// then surfaces as resolved on the strength of a crawl that checked nothing.
+    /// </para>
     /// </summary>
     public bool CoveredWholeScope =>
         Status == Domain.Crawling.CrawlRunStatuses.Completed
-        && StopReason == Domain.Crawling.CrawlStopReasons.FrontierExhausted;
+        && StopReason == Domain.Crawling.CrawlStopReasons.FrontierExhausted
+        && PagesFetched > 0;
 }
 
 /// <summary>One broken source-target pair, which is what a report is actually for (AC-08).</summary>

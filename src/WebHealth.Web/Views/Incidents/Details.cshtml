@@ -29,7 +29,10 @@
         <div class="page-intro">
             <div>
                 <h2 class="card__title target-url">@incident.EndpointDisplayUrl</h2>
-                <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName · @incident.IssueKey</p>
+                <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName · @IssueDisplay.Describe(incident.IssueKey)</p>
+                @* The detail page is where an operator correlates with logs or a notification, so
+                   the exact deduplication key stays on the page in full. *@
+                <p class="card__subtitle code">@incident.IssueKey</p>
             </div>
             <div class="form-actions">
                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(incident.Severity), incident.Severity))

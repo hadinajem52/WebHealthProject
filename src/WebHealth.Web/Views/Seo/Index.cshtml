@@ -39,7 +39,10 @@
                 </select>
             </div>
             <label class="switch-field">
-                <input asp-for="ProblemsOnly" name="problemsOnly" type="checkbox" />
+                @* No name override: asp-for emits a hidden false companion under the model
+                   property's own name, so renaming only the visible input submits the value
+                   twice under two spellings of one case-insensitive parameter. *@
+                <input asp-for="ProblemsOnly" type="checkbox" />
                 <span>With SEO findings only</span>
             </label>
             <div class="filter-grid__actions">
@@ -59,7 +62,9 @@
         @if (listPage.Items.Count == 0)
         {
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
-                "No SEO observations match these filters",
+                Model.HasFilters
+                    ? "No SEO observations match these filters"
+                    : "No SEO observations recorded yet",
                 "SEO values are extracted from successful HTML responses during ordinary checks.",
                 "reports"))
         }

@@ -36,7 +36,7 @@ public sealed class DashboardFilterViewModel
     [DataType(DataType.Date), Display(Name = "From (UTC)")]
     public DateTime? WindowStart { get; set; }
 
-    [DataType(DataType.Date), Display(Name = "To (UTC, exclusive)")]
+    [DataType(DataType.Date), Display(Name = "To (UTC)")]
     public DateTime? WindowEnd { get; set; }
 
     public int Page { get; set; } = 1;

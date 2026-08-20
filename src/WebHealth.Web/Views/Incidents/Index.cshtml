@@ -98,7 +98,12 @@
                                     <span class="data-table__primary target-url">@item.EndpointDisplayUrl</span>
                                     <span class="data-table__secondary">@item.ClientName / @item.WebsiteName / @item.EnvironmentName</span>
                                 </td>
-                                <td data-label="Issue">@item.IssueKey @if (item.RecurrenceCount > 0) { <span class="tag">Recurrence @item.RecurrenceCount</span> }</td>
+                                @* The key stays in the title so it can still be read and copied
+                                   for a lookup; the cell leads with what is actually wrong. *@
+                                <td data-label="Issue" title="@item.IssueKey">
+                                    <span class="data-table__primary">@IssueDisplay.Describe(item.IssueKey)</span>
+                                    @if (item.RecurrenceCount > 0) { <span class="tag">Recurrence @item.RecurrenceCount</span> }
+                                </td>
                                 <td data-label="Severity">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(item.Severity), item.Severity))</td>
                                 <td data-label="Status">
                                     <span class="badge" data-status="@StatusBadge(item.Status)">@item.Status</span>

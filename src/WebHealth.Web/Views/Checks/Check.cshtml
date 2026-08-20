@@ -78,7 +78,7 @@
                         @foreach (var finding in check.Findings)
                         {
                             <tr>
-                                <td data-label="Rule">@finding.RuleKey</td>
+                                <td data-label="Rule" title="@finding.RuleKey">@IssueDisplay.DescribeRule(finding.RuleKey)</td>
                                 <td data-label="Severity">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(finding.Severity), finding.Severity))</td>
                                 <td data-label="Observed">@(finding.ObservedValue ?? "—")</td>
                                 <td data-label="Expected">@(finding.ExpectedValue ?? "—")</td>

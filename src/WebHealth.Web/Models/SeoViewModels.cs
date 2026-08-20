@@ -15,6 +15,17 @@ public sealed record SeoListViewModel(
     bool ProblemsOnly,
     string FilterSummary)
 {
+    /// <summary>
+    /// Whether the request narrowed the list at all. An empty result means something different in
+    /// each case — "nothing matched what you asked for" against "nothing has been observed yet" —
+    /// and telling a reader to relax filters they never set sends them looking for a control that
+    /// is already cleared.
+    /// </summary>
+    public bool HasFilters =>
+        !string.IsNullOrWhiteSpace(Applicability)
+        || !string.IsNullOrWhiteSpace(Environment)
+        || ProblemsOnly;
+
     public static string Describe(string? applicability, string? environment, bool problemsOnly)
     {
         var parts = new List<string>();

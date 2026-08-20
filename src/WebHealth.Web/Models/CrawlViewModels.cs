@@ -49,7 +49,12 @@ public static class CrawlRunDisplay
         ArgumentNullException.ThrowIfNull(run);
         return run.StopReason switch
         {
-            CrawlStopReasons.FrontierExhausted => "Covered the whole scope",
+            // An exhausted frontier with nothing fetched is a refusal, not a sweep. Saying
+            // "covered the whole scope" beside a zero page count is the reading that turns a
+            // blocked crawl into a clean bill of health.
+            CrawlStopReasons.FrontierExhausted => run.PagesFetched > 0
+                ? "Covered the whole scope"
+                : "Fetched no pages — nothing on the site was examined",
             CrawlStopReasons.PageLimit => "Stopped at the page limit — the site was not fully covered",
             CrawlStopReasons.DurationLimit => "Stopped at the time limit — the site was not fully covered",
             CrawlStopReasons.Cancelled => "Cancelled — partial results only",

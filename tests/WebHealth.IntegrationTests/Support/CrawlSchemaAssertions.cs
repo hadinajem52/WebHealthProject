@@ -382,6 +382,7 @@ internal static class CrawlSchemaAssertions
         await VerifyRunsAreInvisibleWithoutAccessAsync(services, endpointId, currentRun);
         await VerifyComparisonIsBoundedAsync(services, endpointId);
         await VerifyPartialRunIsNeverABaselineAsync(services, endpointId);
+        await VerifyRunThatFetchedNothingIsNeverABaselineAsync(services, endpointId);
         await VerifyUncheckedLinkIsNotReportedResolvedAsync(services, endpointId);
         await VerifyRunStartIsReplayableAsync(services, endpointId);
     }
@@ -474,6 +475,58 @@ internal static class CrawlSchemaAssertions
 
         comparison.CurrentRunId.Should().Be(fullScopeRun,
             "a page-limited run must not displace the last full-scope run as the current side");
+    }
+
+    /// <summary>
+    /// A crawl refused at every door drains its frontier without fetching a page, so the stop
+    /// reason alone cannot tell it apart from a real sweep. Observed against a site whose
+    /// robots.txt disallowed the whole origin: the run completed, counted as full scope, became the
+    /// baseline, and reported all 33 previously broken links as resolved on the strength of a crawl
+    /// that examined nothing.
+    /// </summary>
+    private static async Task VerifyRunThatFetchedNothingIsNeverABaselineAsync(
+        IServiceProvider services,
+        Guid endpointId)
+    {
+        var fullScopeRun = Guid.CreateVersion7();
+        await WriteRunAsync(services, endpointId, fullScopeRun, CrawlStopReasons.FrontierExhausted,
+            ("https://blocked.test/a", "https://blocked.test/broken", CrawlLinkClassifications.Broken));
+
+        var refusedRun = Guid.CreateVersion7();
+        await using (var writing = services.CreateAsyncScope())
+        {
+            var sink = writing.ServiceProvider.GetRequiredService<ICrawlResultSink>();
+            await sink.BeginRunAsync(new(
+                refusedRun, endpointId, ["https://blocked.test/"],
+                new([], [], "Canonicalize", 1000, 5, false), DateTimeOffset.UtcNow));
+
+            // The seed itself was refused, which is the only row such a run writes: no status
+            // code, because no request was ever made.
+            await sink.RecordLinkAsync(new(
+                refusedRun, null, "https://blocked.test/", true, 0,
+                CrawlLinkClassifications.Skipped, null, 0, null,
+                CrawlSkipReasons.RobotsDisallowed, null));
+
+            // Zero pages fetched against one link recorded — the shape that reproduced the defect.
+            await sink.RecordRunOutcomeAsync(new(
+                refusedRun, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+                0, 1, false, CrawlOverrideRefusals.NotRequested, []));
+        }
+
+        await using var scope = services.CreateAsyncScope();
+        var reader = scope.ServiceProvider.GetRequiredService<ICrawlReportReader>();
+        var access = await AdministratorAccessAsync(scope);
+
+        var refused = await reader.FindRunAsync(refusedRun, access);
+        refused!.CoveredWholeScope.Should().BeFalse(
+            "a run that fetched no pages examined nothing, whatever its stop reason");
+
+        var comparison = await reader.CompareLatestAsync(endpointId, access);
+        comparison.CurrentRunId.Should().Be(fullScopeRun,
+            "a run that fetched nothing must not displace the last run that actually looked");
+        comparison.Resolved.Sample.Should().NotContain(
+            link => link.TargetUrl == "https://blocked.test/broken",
+            "a link is only resolved when a crawl re-checked it, not when a crawl was refused");
     }
 
     /// <summary>

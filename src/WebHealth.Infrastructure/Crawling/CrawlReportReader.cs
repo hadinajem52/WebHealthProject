@@ -72,10 +72,17 @@ internal sealed class CrawlReportReader(
         // limit, duration limit — covered part of the site, so every link it never reached would
         // surface as resolved. A partial crawl manufacturing good news is the one failure this
         // comparison must not have, and a page limit produces it just as readily as a cancellation.
+        //
+        // The page count carries the same weight as the stop reason. A run refused at every door
+        // exhausts its frontier without fetching anything, so it passes the stop-reason test while
+        // having examined nothing; as a baseline it reports every previously broken link as
+        // resolved. This mirrors CrawlRunSummary.CoveredWholeScope, which cannot be used directly
+        // because the predicate has to translate to SQL.
         var runs = await VisibleRuns(access)
             .Where(run => run.EndpointId == endpointId
                 && run.Status == CrawlRunStatuses.Completed
-                && run.StopReason == CrawlStopReasons.FrontierExhausted)
+                && run.StopReason == CrawlStopReasons.FrontierExhausted
+                && run.PagesFetched > 0)
             .OrderByDescending(run => run.StartedAt)
             .ThenByDescending(run => run.Id)
             .Select(run => run.Id)
