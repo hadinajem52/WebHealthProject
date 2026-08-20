@@ -79,7 +79,7 @@ internal static class ReportingQueryCoreAssertions
         // BR-U01 as written: healthy over eligible. The warning sample raises neither this
         // figure nor the downtime, which is exactly why it is reported on its own.
         row.Uptime.Percentage.Should().BeApproximately(66.6667, 0.001);
-        row.Uptime.ReachablePercentage.Should().BeApproximately(83.3333, 0.001);
+        row.Uptime.CleanPercentage.Should().BeApproximately(83.3333, 0.001);
         (row.Uptime.HealthySamples + row.Uptime.WarningSamples + row.Uptime.DownSamples)
             .Should().Be(row.Uptime.EligibleSamples, "every eligible sample lands in exactly one category");
 
@@ -154,8 +154,8 @@ internal static class ReportingQueryCoreAssertions
         dataset.Trend.Select(point => point.Day).Should().OnlyHaveUniqueItems();
         dataset.Trend.Sum(point => point.EligibleSamples)
             .Should().Be(dataset.Summary.Uptime.EligibleSamples);
-        dataset.Trend.Sum(point => point.HealthySamples)
-            .Should().Be(dataset.Summary.Uptime.HealthySamples);
+        dataset.Trend.Sum(point => point.UpSamples)
+            .Should().Be(dataset.Summary.Uptime.HealthySamples + dataset.Summary.Uptime.WarningSamples);
         dataset.Trend.Should().OnlyContain(point =>
             point.Day >= DateOnly.FromDateTime(WindowStart.UtcDateTime)
             && point.Day < DateOnly.FromDateTime(WindowEnd.UtcDateTime));
@@ -164,7 +164,7 @@ internal static class ReportingQueryCoreAssertions
         // the 15,000 ms timeout must not report it as a percentile either.
         var timeoutDay = dataset.Trend.Single(point =>
             point.Day == DateOnly.FromDateTime(WindowStart.AddDays(5).UtcDateTime));
-        timeoutDay.HealthySamples.Should().Be(0);
+        timeoutDay.UpSamples.Should().Be(0);
         timeoutDay.P95Ms.Should().BeNull("the only sample that day was a failed exchange");
     }
 
