@@ -78,7 +78,8 @@ public sealed class TargetsController(
         var access = GetAccess();
         return View(new TargetArchiveViewModel(
             await targetReader.ListDeletedEnvironmentsAsync(access, cancellationToken),
-            await targetReader.ListDeletedEndpointsAsync(access, cancellationToken)));
+            await targetReader.ListDeletedEndpointsAsync(access, cancellationToken),
+            User.IsInRole(ApplicationRoles.Administrator)));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]

@@ -75,7 +75,24 @@ public sealed record RegistryEndpointItem(
     bool IsEnabled,
     bool CanTest,
     long Version,
-    bool IsMonitored);
+    EndpointMonitoringMode MonitoringMode);
+
+/// <summary>
+/// How an endpoint is monitored, as three distinct states rather than a monitored/not flag. A
+/// manual-only target is not a paused one: nobody paused it, and telling an operator it is paused
+/// invites them to look for a resume button that does not apply.
+/// </summary>
+public enum EndpointMonitoringMode
+{
+    /// <summary>Scheduled checks are configured and running.</summary>
+    Scheduled,
+
+    /// <summary>Scheduled checks are configured but paused. Manual runs still work.</summary>
+    Paused,
+
+    /// <summary>No schedule was ever configured; the target runs on demand only.</summary>
+    ManualOnly
+}
 
 public sealed record EndpointDetails(
     Guid Id,

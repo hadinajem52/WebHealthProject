@@ -48,7 +48,7 @@
                 <tbody>
                 @foreach (var website in Model.Websites)
                 {
-                    <tr><td data-label="Website"><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">Version @website.Version</span></td><td data-label="Client">@website.ClientName</td><td data-label="Owner">@website.OwnerName</td><td data-label="Deleted status"><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action" data-label="Actions"><a asp-action="Website" asp-route-id="@website.Id">Review</a></td></tr>
+                    <tr><td data-label="Website"><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">Version @website.Version</span></td><td data-label="Client">@website.ClientName</td><td data-label="Owner">@website.OwnerName</td><td data-label="Deleted status"><span class="badge" data-status="danger">Deleted</span></td><td class="data-table__action" data-label="Actions"><div class="data-table__action-group"><a asp-action="Website" asp-route-id="@website.Id">Review</a>@if (Model.CanPurge){<form asp-action="PurgeWebsite" method="post" data-shell-confirm="Permanently delete this website, every environment and endpoint under it, and all of their checks, results, SEO observations, crawls, incidents and notifications? This cannot be undone."><input type="hidden" name="id" value="@website.Id"/><input type="hidden" name="version" value="@website.Version"/><button class="button button--danger" type="submit">Delete permanently</button></form>}</div></td></tr>
                 }
                 </tbody>
             </table>

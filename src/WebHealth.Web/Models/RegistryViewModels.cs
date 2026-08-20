@@ -16,7 +16,8 @@ public sealed record WebsiteDetailsViewModel(WebsiteDetails Website, bool CanMan
 
 public sealed record RegistryArchiveViewModel(
     IReadOnlyList<ClientListItem> Clients,
-    IReadOnlyList<WebsiteListItem> Websites);
+    IReadOnlyList<WebsiteListItem> Websites,
+    bool CanPurge);
 
 public sealed class ClientFormViewModel
 {

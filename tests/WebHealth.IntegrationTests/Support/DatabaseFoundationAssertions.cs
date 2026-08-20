@@ -4018,6 +4018,20 @@ internal static class DatabaseFoundationAssertions
             ExpiresAt = now.AddHours(6),
             UpdatedAt = now
         });
+        database.RobotsSnapshots.Add(new RobotsSnapshot
+        {
+            Origin = "https://endpoint-purge-bystander.test",
+            Host = "endpoint-purge-bystander.test",
+            Port = 443,
+            Status = "Fetched",
+            Content = "User-agent: *\nAllow: /",
+            SitemapRequired = false,
+            SitemapAvailable = false,
+            Version = 1,
+            FetchedAt = now,
+            ExpiresAt = now.AddHours(6),
+            UpdatedAt = now
+        });
         await database.SaveChangesAsync();
         database.ChangeTracker.Clear();
 
@@ -4096,8 +4110,12 @@ internal static class DatabaseFoundationAssertions
             .CountAsync(snapshot => snapshot.Host == "endpoint-purge.test"))
             .Should().Be(0, "the last endpoint on an origin takes its robots policy with it");
 
-        // Other origins are untouched: the rule is scoped to the host that was emptied.
-        (await database.RobotsSnapshots.AsNoTracking().CountAsync()).Should().BeGreaterThan(0);
+        // The rule is scoped to the host that was emptied. Asserted against an origin this stage
+        // seeded rather than a total count: no other stage creates a robots snapshot, so a total
+        // count here only ever described this stage's own rows.
+        (await database.RobotsSnapshots.AsNoTracking()
+            .CountAsync(snapshot => snapshot.Host == "endpoint-purge-bystander.test"))
+            .Should().Be(1, "purging one origin leaves every other origin's policy in place");
     }
 
     /// <summary>

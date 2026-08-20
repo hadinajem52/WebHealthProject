@@ -46,7 +46,8 @@ public sealed class RegistryController(
         var access = GetAccess();
         return View(new RegistryArchiveViewModel(
             await registryReader.ListDeletedClientsAsync(access, cancellationToken),
-            await registryReader.ListDeletedWebsitesAsync(access, cancellationToken)));
+            await registryReader.ListDeletedWebsitesAsync(access, cancellationToken),
+            User.IsInRole(ApplicationRoles.Administrator)));
     }
 
     [HttpGet]
@@ -257,6 +258,25 @@ public sealed class RegistryController(
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreWebsite(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeWebsiteStateAsync(id, version, websiteService.RestoreAsync, "Website restored in a disabled state.", cancellationToken);
+
+    [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
+    public async Task<IActionResult> PurgeWebsite(Guid id, long version, CancellationToken cancellationToken)
+    {
+        // Unlike the other lifecycle actions this cannot fall back to the website's own page,
+        // which no longer exists once the purge succeeds.
+        var result = await websiteService.PurgeAsync(new(id, version), GetAccess(), cancellationToken);
+        if (result.Status == RegistryMutationStatus.NotFound)
+        {
+            return NotFound();
+        }
+
+        TempData.AddFlashMessage(
+            result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
+            result.Succeeded
+                ? "Website permanently deleted with its environments, endpoints and monitoring history."
+                : string.Join(" ", result.Errors));
+        return RedirectToAction(nameof(Archived));
+    }
 
     private RegistryAccessContext GetAccess()
     {

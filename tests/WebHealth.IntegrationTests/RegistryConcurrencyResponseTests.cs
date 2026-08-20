@@ -164,5 +164,10 @@ public sealed class RegistryConcurrencyResponseTests
             RegistryVersionCommand command,
             RegistryAccessContext access,
             CancellationToken cancellationToken) => Task.FromResult(Conflict);
+
+        Task<RegistryMutationResult> IWebsiteRegistryService.PurgeAsync(
+            RegistryVersionCommand command,
+            RegistryAccessContext access,
+            CancellationToken cancellationToken) => Task.FromResult(Conflict);
     }
 }

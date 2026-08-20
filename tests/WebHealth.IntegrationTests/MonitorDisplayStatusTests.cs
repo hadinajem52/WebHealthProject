@@ -20,21 +20,27 @@ namespace WebHealth.IntegrationTests;
 /// </summary>
 public sealed class MonitorDisplayStatusTests
 {
-    public static TheoryData<bool, string?> Combinations()
+    public static TheoryData<bool, bool, string?> Combinations()
     {
-        var data = new TheoryData<bool, string?>();
-        foreach (var isEnabled in new[] { true, false })
+        var data = new TheoryData<bool, bool, string?>();
+        foreach (var monitorEnabled in new[] { true, false })
         {
-            foreach (var status in new string?[]
+            // Both switches, because either one being off means nothing is being checked. The
+            // endpoint dimension is the one that used to be missing here, which is exactly why
+            // the rule could read the monitor alone without a test noticing.
+            foreach (var endpointEnabled in new[] { true, false })
             {
-                null,
-                EndpointHealthStatuses.Healthy,
-                EndpointHealthStatuses.Warning,
-                EndpointHealthStatuses.Critical,
-                EndpointHealthStatuses.Unknown
-            })
-            {
-                data.Add(isEnabled, status);
+                foreach (var status in new string?[]
+                {
+                    null,
+                    EndpointHealthStatuses.Healthy,
+                    EndpointHealthStatuses.Warning,
+                    EndpointHealthStatuses.Critical,
+                    EndpointHealthStatuses.Unknown
+                })
+                {
+                    data.Add(monitorEnabled, endpointEnabled, status);
+                }
             }
         }
 
@@ -43,12 +49,12 @@ public sealed class MonitorDisplayStatusTests
 
     [Theory]
     [MemberData(nameof(Combinations))]
-    public void ProjectionAgreesWithTheRule(bool isEnabled, string? confirmedStatus)
+    public void ProjectionAgreesWithTheRule(bool monitorEnabled, bool endpointEnabled, string? confirmedStatus)
     {
-        var monitor = Monitor(isEnabled, confirmedStatus);
+        var monitor = Monitor(monitorEnabled, endpointEnabled, confirmedStatus);
 
         MonitorDisplayStatus.Projection.Compile()(monitor)
-            .Should().Be(MonitorDisplayStatus.Of(isEnabled, confirmedStatus));
+            .Should().Be(MonitorDisplayStatus.Of(monitorEnabled, endpointEnabled, confirmedStatus));
     }
 
     /// <summary>
@@ -58,9 +64,10 @@ public sealed class MonitorDisplayStatusTests
     /// </summary>
     [Theory]
     [MemberData(nameof(Combinations))]
-    public void FilterSelectsExactlyWhatTheProjectionReports(bool isEnabled, string? confirmedStatus)
+    public void FilterSelectsExactlyWhatTheProjectionReports(
+        bool monitorEnabled, bool endpointEnabled, string? confirmedStatus)
     {
-        var monitor = Monitor(isEnabled, confirmedStatus);
+        var monitor = Monitor(monitorEnabled, endpointEnabled, confirmedStatus);
         var reported = MonitorDisplayStatus.Projection.Compile()(monitor);
 
         foreach (var candidate in new[]
@@ -88,22 +95,48 @@ public sealed class MonitorDisplayStatusTests
     [InlineData(EndpointHealthStatuses.Critical)]
     [InlineData(null)]
     public void ADisabledMonitorNeverReportsItsLastState(string? lastConfirmed) =>
-        MonitorDisplayStatus.Projection.Compile()(Monitor(isEnabled: false, lastConfirmed))
+        MonitorDisplayStatus.Projection.Compile()(
+            Monitor(monitorEnabled: false, endpointEnabled: true, lastConfirmed))
+            .Should().Be(EndpointHealthStatuses.Disabled);
+
+    /// <summary>
+    /// Disabling the endpoint stops dispatch just as surely as pausing the monitor does -
+    /// <c>MonitoringEligibility</c> requires both - so the dashboard must not keep reporting the
+    /// last confirmed state of an endpoint somebody switched off.
+    /// </summary>
+    [Theory]
+    [InlineData(EndpointHealthStatuses.Healthy)]
+    [InlineData(EndpointHealthStatuses.Warning)]
+    [InlineData(EndpointHealthStatuses.Critical)]
+    [InlineData(null)]
+    public void AMonitorOnADisabledEndpointNeverReportsItsLastState(string? lastConfirmed) =>
+        MonitorDisplayStatus.Projection.Compile()(
+            Monitor(monitorEnabled: true, endpointEnabled: false, lastConfirmed))
             .Should().Be(EndpointHealthStatuses.Disabled);
 
     [Fact]
     public void AnEnabledMonitorWithNoConfirmationIsUnknown() =>
-        MonitorDisplayStatus.Projection.Compile()(Monitor(isEnabled: true, null))
+        MonitorDisplayStatus.Projection.Compile()(
+            Monitor(monitorEnabled: true, endpointEnabled: true, null))
             .Should().Be(EndpointHealthStatuses.Unknown);
 
-    // Only the two fields the rule reads matter; the rest are required members of the entity.
-    private static EndpointMonitor Monitor(bool isEnabled, string? confirmedStatus) => new()
+    // Only the three fields the rule reads matter; the rest are required members of the entities.
+    private static EndpointMonitor Monitor(bool monitorEnabled, bool endpointEnabled, string? confirmedStatus) => new()
     {
         Id = Guid.NewGuid(),
-        IsEnabled = isEnabled,
+        IsEnabled = monitorEnabled,
         BoundedOverrides = "{}",
         ConfigurationFingerprint = string.Empty,
         MonitorType = HttpIssueIdentity.MonitorType,
+        Endpoint = new Endpoint
+        {
+            Id = Guid.NewGuid(),
+            IsEnabled = endpointEnabled,
+            DisplayUrl = "https://display-status.test/",
+            NormalizedUrl = "https://display-status.test/",
+            NormalizedUrlHash = new byte[32],
+            NormalizedHost = "display-status.test"
+        },
         EndpointHealth = confirmedStatus is null
             ? null
             : new EndpointHealth { ConfirmedStatus = confirmedStatus }

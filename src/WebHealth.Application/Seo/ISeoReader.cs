@@ -75,8 +75,7 @@ public sealed record SeoListItem(
     /// extractor already combined. Presented as a fact rather than as a judgement: whether it is
     /// *wrong* depends on the environment's expectation, which is the finding's job to say.
     /// </summary>
-    public bool DeclaresNoIndex =>
-        RobotsMeta is not null && RobotsMeta.Contains("noindex", StringComparison.OrdinalIgnoreCase);
+    public bool DeclaresNoIndex => SeoRuleEvaluator.IsNoIndex(RobotsMeta);
 }
 
 /// <summary>How many findings one subject of the SEO configuration has (§11.2).</summary>

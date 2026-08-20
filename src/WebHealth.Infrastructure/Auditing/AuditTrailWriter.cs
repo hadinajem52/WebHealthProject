@@ -72,6 +72,7 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
                 WebsiteAuditAction.Disabled => "website.disabled",
                 WebsiteAuditAction.Deleted => "website.deleted",
                 WebsiteAuditAction.Restored => "website.restored",
+                WebsiteAuditAction.Purged => "website.purged",
                 _ => throw new ArgumentOutOfRangeException(nameof(action))
             },
             "website",

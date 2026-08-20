@@ -211,9 +211,11 @@ internal sealed class ReportingReader(
             {
                 Scheduled = monitor.SchedulingEnabled && monitor.IsEnabled,
                 Paused = monitor.SchedulingEnabled && !monitor.IsEnabled,
-                // Enabled, but only ever run on demand. Counted so the three states add up to
-                // every monitor the filter selected.
-                ManualOnly = !monitor.SchedulingEnabled && monitor.IsEnabled,
+                // Run on demand only. IsEnabled is the pause switch for a scheduled monitor and
+                // carries no meaning once scheduling is off, so it is not read here: a monitor
+                // paused before scheduling was turned off would otherwise land in none of the
+                // three states, and the total would silently fall short of what it claims.
+                ManualOnly = !monitor.SchedulingEnabled,
                 // A monitor is late only once its slot has been missed by more than the grace
                 // period; the moment a slot arrives it is merely due.
                 Overdue = monitor.SchedulingEnabled
@@ -395,12 +397,12 @@ internal sealed class ReportingReader(
                 // "Healthy" about an endpoint nobody is checking. The stored value is carried in
                 // the next column so the row can still say what it was.
                 // Mirrors MonitorDisplayStatus, which the filter and the health totals use.
-                !monitor.IsEnabled
+                !monitor.IsEnabled || !monitor.Endpoint.IsEnabled
                     ? EndpointHealthStatuses.Disabled
                     : monitor.EndpointHealth == null
                         ? EndpointHealthStatuses.Unknown
                         : monitor.EndpointHealth.ConfirmedStatus,
-                monitor.IsEnabled || monitor.EndpointHealth == null
+                (monitor.IsEnabled && monitor.Endpoint.IsEnabled) || monitor.EndpointHealth == null
                     ? null
                     : monitor.EndpointHealth.ConfirmedStatus,
                 monitor.EndpointHealth == null

@@ -118,7 +118,8 @@ public enum WebsiteAuditAction
     Updated,
     Disabled,
     Deleted,
-    Restored
+    Restored,
+    Purged
 }
 
 public sealed record WebsiteAuditSnapshot(

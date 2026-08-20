@@ -7,6 +7,13 @@ namespace WebHealth.Infrastructure.Reporting;
 /// <summary>
 /// The status a monitor reports on the dashboard.
 /// <para>
+/// A monitor is switched off by either of two switches, and the rule below reads both. Its own
+/// <c>IsEnabled</c> is the pause; the endpoint's <c>IsEnabled</c> is the lifecycle state, which
+/// <c>MonitoringEligibility</c> requires before anything is dispatched at all. Reading only the
+/// monitor left a disabled endpoint reporting the state it was in when checking stopped, which
+/// is the one thing this rule exists to prevent.
+/// </para>
+/// <para>
 /// A disabled monitor keeps its last confirmed state in the database — that history is worth
 /// keeping — but showing it as the current status says "Healthy" about an endpoint nobody is
 /// checking, which is the most misleading thing a monitoring dashboard can say. §5.1 already has a
@@ -28,14 +35,22 @@ namespace WebHealth.Infrastructure.Reporting;
 /// </summary>
 public static class MonitorDisplayStatus
 {
+    /// <summary>
+    /// Whether checks actually run for this monitor. Both switches have to be on, and the phrase
+    /// is repeated inline in every expression below rather than called, because Entity Framework
+    /// cannot compose one stored expression inside another.
+    /// </summary>
+    public static bool IsLive(bool monitorEnabled, bool endpointEnabled) =>
+        monitorEnabled && endpointEnabled;
+
     /// <summary>The rule itself, for callers holding values rather than a query.</summary>
-    public static string Of(bool isEnabled, string? confirmedStatus) =>
-        !isEnabled ? EndpointHealthStatuses.Disabled
+    public static string Of(bool monitorEnabled, bool endpointEnabled, string? confirmedStatus) =>
+        !IsLive(monitorEnabled, endpointEnabled) ? EndpointHealthStatuses.Disabled
         : confirmedStatus ?? EndpointHealthStatuses.Unknown;
 
     /// <summary>The rule as a projection, for grouping the health totals in the database.</summary>
     public static Expression<Func<EndpointMonitor, string>> Projection => monitor =>
-        !monitor.IsEnabled ? EndpointHealthStatuses.Disabled
+        !monitor.IsEnabled || !monitor.Endpoint.IsEnabled ? EndpointHealthStatuses.Disabled
         : monitor.EndpointHealth == null ? EndpointHealthStatuses.Unknown
         : monitor.EndpointHealth.ConfirmedStatus;
 
@@ -46,15 +61,16 @@ public static class MonitorDisplayStatus
     /// </summary>
     public static Expression<Func<EndpointMonitor, bool>> Matches(string status) => status switch
     {
-        EndpointHealthStatuses.Disabled => monitor => !monitor.IsEnabled,
+        EndpointHealthStatuses.Disabled => monitor =>
+            !monitor.IsEnabled || !monitor.Endpoint.IsEnabled,
 
         // Unknown is the absence of a confirmation, so it is the one status that also matches a
         // monitor with no health row at all.
-        EndpointHealthStatuses.Unknown => monitor => monitor.IsEnabled
+        EndpointHealthStatuses.Unknown => monitor => monitor.IsEnabled && monitor.Endpoint.IsEnabled
             && (monitor.EndpointHealth == null
                 || monitor.EndpointHealth.ConfirmedStatus == EndpointHealthStatuses.Unknown),
 
-        _ => monitor => monitor.IsEnabled
+        _ => monitor => monitor.IsEnabled && monitor.Endpoint.IsEnabled
             && monitor.EndpointHealth != null
             && monitor.EndpointHealth.ConfirmedStatus == status
     };

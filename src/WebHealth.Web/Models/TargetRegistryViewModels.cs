@@ -21,7 +21,8 @@ public sealed record EndpointDetailsViewModel(
 public sealed record RegistryEndpointListViewModel(IReadOnlyList<RegistryEndpointItem> Endpoints, string? Search);
 public sealed record TargetArchiveViewModel(
     IReadOnlyList<EnvironmentListItem> Environments,
-    IReadOnlyList<EndpointListItem> Endpoints);
+    IReadOnlyList<EndpointListItem> Endpoints,
+    bool CanPurge);
 
 public sealed class EnvironmentFormViewModel
 {

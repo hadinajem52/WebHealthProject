@@ -172,19 +172,33 @@ internal sealed class TargetRegistryReader(
         var testable = await targetAuthorization.FilterTestableEndpointsAsync(
             rows.Select(row => row.Id).ToArray(), access, cancellationToken);
         var endpointIds = rows.Select(row => row.Id).ToArray();
-        var monitoredEndpointIds = await dbContext.EndpointMonitors.AsNoTracking()
+
+        // The availability monitor is the one that carries the schedule; a certificate monitor
+        // follows it and would otherwise vote twice on the same endpoint.
+        var schedules = await dbContext.EndpointMonitors.AsNoTracking()
             .Where(monitor => monitor.DeletedAt == null
-                && monitor.IsEnabled
-                && monitor.SchedulingEnabled
+                && monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType
                 && endpointIds.Contains(monitor.EndpointId))
-            .Select(monitor => monitor.EndpointId)
-            .Distinct()
+            .Select(monitor => new
+            {
+                monitor.EndpointId,
+                monitor.SchedulingEnabled,
+                monitor.IsEnabled
+            })
             .ToArrayAsync(cancellationToken);
-        var monitored = monitoredEndpointIds.ToHashSet();
+        var modes = schedules.ToDictionary(
+            monitor => monitor.EndpointId,
+            monitor => !monitor.SchedulingEnabled
+                ? EndpointMonitoringMode.ManualOnly
+                : monitor.IsEnabled
+                    ? EndpointMonitoringMode.Scheduled
+                    : EndpointMonitoringMode.Paused);
+
         return rows.Select(row => new RegistryEndpointItem(
             row.Id, row.ClientId, row.ClientName, row.WebsiteId, row.WebsiteName,
             row.EnvironmentId, row.EnvironmentName, row.DisplayUrl, row.IsEnabled,
-            testable.Contains(row.Id), row.Version, monitored.Contains(row.Id))).ToArray();
+            testable.Contains(row.Id), row.Version,
+            modes.GetValueOrDefault(row.Id, EndpointMonitoringMode.ManualOnly))).ToArray();
     }
 
     public async Task<CertificateStatus?> FindCertificateStatusAsync(
