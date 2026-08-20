@@ -4,6 +4,8 @@ using WebHealth.Infrastructure.Persistence;
 
 using WebHealth.Domain.Monitoring;
 
+using WebHealth.Infrastructure.PageAudits;
+
 namespace WebHealth.Infrastructure.Registry;
 
 internal sealed class TargetRegistryReader(
@@ -95,6 +97,7 @@ internal sealed class TargetRegistryReader(
         }
 
         var ownerNames = await LoadOwnerNamesAsync([endpoint.EffectiveOwnerSubjectId], cancellationToken);
+        var pageAudit = await PageAuditConfiguration.ReadAsync(dbContext, endpoint.Id, cancellationToken);
         return new EndpointDetails(
             endpoint.Id,
             endpoint.EnvironmentId,
@@ -131,7 +134,10 @@ internal sealed class TargetRegistryReader(
             await targetAuthorization.CanTestEndpointAsync(endpoint.Id, access, cancellationToken),
             endpoint.SeoExpectedCanonicalHost,
             endpoint.SeoIndexingExpectation,
-            endpoint.SeoDescriptionRequired);
+            endpoint.SeoDescriptionRequired,
+            pageAudit.Enabled,
+            pageAudit.SchedulingEnabled,
+            pageAudit.IntervalHours);
     }
 
     public async Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(

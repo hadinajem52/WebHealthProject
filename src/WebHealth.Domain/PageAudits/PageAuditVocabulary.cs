@@ -167,3 +167,18 @@ public static class PageAuditScoreDisplayModes
     public const string Informative = "informative";
     public const string Error = "error";
 }
+
+/// <summary>
+/// How often an audit may run. The floor is a courtesy limit rather than a performance one: each
+/// run asks Google to load somebody's page, and a tighter cadence spends quota faster than a
+/// technical SEO score can meaningfully change.
+/// </summary>
+public static class PageAuditCadence
+{
+    public const int DefaultIntervalHours = 24;
+    public const int MinimumIntervalHours = 6;
+    public const int MaximumIntervalHours = 30 * 24;
+
+    public static bool IsSupported(int intervalHours) =>
+        intervalHours is >= MinimumIntervalHours and <= MaximumIntervalHours;
+}

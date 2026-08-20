@@ -132,7 +132,10 @@ public sealed record EndpointDetails(
     bool CanTest,
     string? SeoExpectedCanonicalHost = null,
     string SeoIndexingExpectation = SeoIndexingExpectations.Default,
-    bool SeoDescriptionRequired = true);
+    bool SeoDescriptionRequired = true,
+    bool PageAuditEnabled = false,
+    bool PageAuditSchedulingEnabled = false,
+    int PageAuditIntervalHours = 24);
 
 /// <summary>
 /// What the UI shows for an endpoint's certificate. <paramref name="IsMonitored" /> false means
@@ -196,7 +199,10 @@ public sealed record CreateEndpoint(
     int? CriticalThresholdMsOverride = null,
     string? SeoExpectedCanonicalHost = null,
     string SeoIndexingExpectation = SeoIndexingExpectations.Default,
-    bool SeoDescriptionRequired = true);
+    bool SeoDescriptionRequired = true,
+    bool PageAuditEnabled = false,
+    bool PageAuditSchedulingEnabled = false,
+    int PageAuditIntervalHours = 24);
 
 
 public sealed record UpdateEndpoint(
@@ -215,4 +221,7 @@ public sealed record UpdateEndpoint(
     int? CriticalThresholdMsOverride = null,
     string? SeoExpectedCanonicalHost = null,
     string SeoIndexingExpectation = SeoIndexingExpectations.Default,
-    bool SeoDescriptionRequired = true);
+    bool SeoDescriptionRequired = true,
+    bool PageAuditEnabled = false,
+    bool PageAuditSchedulingEnabled = false,
+    int PageAuditIntervalHours = 24);

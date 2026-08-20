@@ -7,6 +7,8 @@ using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
 
+using WebHealth.Infrastructure.PageAudits;
+
 namespace WebHealth.Infrastructure.Registry;
 
 internal sealed class EndpointRegistryService(
@@ -51,6 +53,15 @@ internal sealed class EndpointRegistryService(
             return Validation(seoError);
         }
 
+        if (PageAuditConfiguration.Validate(
+            command.PageAuditEnabled,
+            command.PageAuditSchedulingEnabled,
+            command.PageAuditIntervalHours,
+            url.NormalizedUrl!) is { } pageAuditError)
+        {
+            return Validation(pageAuditError);
+        }
+
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var environment = await LockEnvironmentAsync(command.EnvironmentId, cancellationToken);
         if (environment is null)
@@ -89,13 +100,18 @@ internal sealed class EndpointRegistryService(
                 endpoint, environment.IsProduction, command.SchedulingEnabled, access.UserId, now));
         }
         await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
+        await PageAuditConfiguration.ApplyAsync(
+            dbContext, endpoint.Id, command.PageAuditEnabled, command.PageAuditSchedulingEnabled,
+            command.PageAuditIntervalHours, now, cancellationToken);
+        var pageAudit = new PageAuditConfigurationState(
+            command.PageAuditEnabled, command.PageAuditSchedulingEnabled, command.PageAuditIntervalHours);
 
         try
         {
             await auditTrail.RecordEndpointMutationAsync(
                 new(access.UserId, now), EndpointAuditAction.Created, null,
                 ToAudit(endpoint, urlChanged: true, httpExceptionChanged: exception.Reason is not null,
-                    targetAuthorizationChanged: authorization.Changed, now),
+                    targetAuthorizationChanged: authorization.Changed, now, pageAudit),
                 cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
@@ -160,6 +176,15 @@ internal sealed class EndpointRegistryService(
             return Validation(seoError);
         }
 
+        if (PageAuditConfiguration.Validate(
+            command.PageAuditEnabled,
+            command.PageAuditSchedulingEnabled,
+            command.PageAuditIntervalHours,
+            url.NormalizedUrl!) is { } pageAuditError)
+        {
+            return Validation(pageAuditError);
+        }
+
         if (!await IsValidOwnerAsync(command.OwnerSubjectId, endpoint.OwnerSubjectId, cancellationToken))
         {
             return Validation("Select an enabled user or team owner, or inherit the website owner.");
@@ -189,11 +214,16 @@ internal sealed class EndpointRegistryService(
             return Validation(authorization.Error);
         }
 
+        var pageAuditBefore = await PageAuditConfiguration.ReadAsync(
+            dbContext, endpoint.Id, cancellationToken);
         var before = ToAudit(endpoint, urlChanged: false, httpExceptionChanged: false,
-            targetAuthorizationChanged: false, now);
+            targetAuthorizationChanged: false, now, pageAuditBefore);
         try
         {
             await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
+            await PageAuditConfiguration.ApplyAsync(
+                dbContext, endpoint.Id, command.PageAuditEnabled, command.PageAuditSchedulingEnabled,
+                command.PageAuditIntervalHours, now, cancellationToken);
             ApplyEndpointUpdate(
                 endpoint,
                 command,
@@ -206,7 +236,10 @@ internal sealed class EndpointRegistryService(
                 now);
             await auditTrail.RecordEndpointMutationAsync(
                 new(access.UserId, now), EndpointAuditAction.Updated, before,
-                ToAudit(endpoint, urlChanged, exceptionChanged, authorization.Changed, now), cancellationToken);
+                ToAudit(endpoint, urlChanged, exceptionChanged, authorization.Changed, now,
+                    new(command.PageAuditEnabled, command.PageAuditSchedulingEnabled,
+                        command.PageAuditIntervalHours)),
+                cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
         }
@@ -282,7 +315,12 @@ internal sealed class EndpointRegistryService(
         // Written before the cascade, and deliberately outside it: audit_event references the
         // endpoint by identifier rather than by foreign key, so it outlives the row and stays
         // the only remaining record that this endpoint existed.
-        var snapshot = ToAudit(endpoint, false, false, false, now);
+        // The page-audit configuration is read rather than changed here: these actions
+        // change the endpoint's state, not what it is configured to audit, and the snapshot
+        // has to show what was true at the time either way.
+        var pageAuditState = await PageAuditConfiguration.ReadAsync(
+            dbContext, endpoint.Id, cancellationToken);
+        var snapshot = ToAudit(endpoint, false, false, false, now, pageAuditState);
         await auditTrail.RecordEndpointMutationAsync(
             new(access.UserId, now), EndpointAuditAction.Purged, snapshot, snapshot, cancellationToken);
         await purgeCascade.ExecuteAsync(endpoint.Id, cancellationToken);
@@ -345,7 +383,12 @@ internal sealed class EndpointRegistryService(
         var action = scheduleEnabled
             ? EndpointAuditAction.ScheduleResumed
             : EndpointAuditAction.SchedulePaused;
-        var before = ToAudit(endpoint, false, false, false, now);
+        // The page-audit configuration is read rather than changed here: these actions
+        // change the endpoint's state, not what it is configured to audit, and the snapshot
+        // has to show what was true at the time either way.
+        var pageAuditState = await PageAuditConfiguration.ReadAsync(
+            dbContext, endpoint.Id, cancellationToken);
+        var before = ToAudit(endpoint, false, false, false, now, pageAuditState);
 
         // Pausing an endpoint pauses every monitor on it, certificate checks included: a
         // "paused" endpoint that still raised SSL incidents would not be paused at all.
@@ -370,7 +413,7 @@ internal sealed class EndpointRegistryService(
         try
         {
             await auditTrail.RecordEndpointMutationAsync(
-                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now), cancellationToken);
+                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now, pageAuditState), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
         }
@@ -408,13 +451,18 @@ internal sealed class EndpointRegistryService(
 
         dbContext.Entry(endpoint).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var now = DateTimeOffset.UtcNow;
-        var before = ToAudit(endpoint, false, false, false, now);
+        // The page-audit configuration is read rather than changed here: these actions
+        // change the endpoint's state, not what it is configured to audit, and the snapshot
+        // has to show what was true at the time either way.
+        var pageAuditState = await PageAuditConfiguration.ReadAsync(
+            dbContext, endpoint.Id, cancellationToken);
+        var before = ToAudit(endpoint, false, false, false, now, pageAuditState);
         ApplyState(endpoint, action, endpoint.Environment.IsProduction, access.UserId, now);
 
         try
         {
             await auditTrail.RecordEndpointMutationAsync(
-                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now), cancellationToken);
+                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now, pageAuditState), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
         }
@@ -870,7 +918,8 @@ internal sealed class EndpointRegistryService(
         bool urlChanged,
         bool httpExceptionChanged,
         bool targetAuthorizationChanged,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        PageAuditConfigurationState pageAudit)
     {
         var monitor = AuditedAvailabilityMonitor(endpoint);
         return new(
@@ -883,6 +932,8 @@ internal sealed class EndpointRegistryService(
             endpoint.SeoIndexingExpectation,
             endpoint.SeoDescriptionRequired,
             endpoint.SeoExpectedCanonicalHost is not null,
+            pageAudit.Enabled,
+            pageAudit.SchedulingEnabled,
             endpoint.DeletedAt is not null, endpoint.Version);
     }
 

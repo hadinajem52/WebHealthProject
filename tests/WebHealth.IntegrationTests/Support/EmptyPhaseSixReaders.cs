@@ -1,6 +1,8 @@
 using WebHealth.Application.Crawling;
+using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Seo;
+using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -52,4 +54,81 @@ internal sealed class EmptyCrawlReportReader : ICrawlReportReader
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(CrawlComparison.Empty);
+}
+
+/// <summary>
+/// The PageSpeed page's reader. It answers for every caller, so a refusal in these tests is
+/// authorization refusing the request rather than the page simply having nothing to render.
+/// </summary>
+internal sealed class EmptyPageAuditReader : IPageAuditReader
+{
+    /// <summary>
+    /// A configured, enabled endpoint, so the page renders its whole surface — including the
+    /// Run now control, whose authorization is what several of these tests are about.
+    /// </summary>
+    public Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
+        Guid endpointId,
+        Guid? runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<PageAuditEndpointSummary?>(new(
+            endpointId,
+            "https://example.com/",
+            "Example",
+            "Production",
+            IsConfigured: true,
+            IsEnabled: true,
+            SchedulingEnabled: true,
+            PageAuditStrategies.Mobile,
+            24,
+            null,
+            null,
+            PageAuditItemCounts.Empty,
+            PageAuditComparison.None));
+
+    public Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
+        Guid endpointId,
+        int limit,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PageAuditRunSummary>>([]);
+
+    public Task<IReadOnlyList<PageAuditItemView>> ListAuditItemsAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PageAuditItemView>>([]);
+}
+
+/// <summary>Records what the controller asked for instead of opening a run.</summary>
+internal sealed class RecordingPageAuditRunner : IPageAuditRunner
+{
+    public List<Guid> Requested { get; } = [];
+
+    public Task<PageAuditManualResult> QueueManualAsync(
+        Guid endpointId,
+        Guid requestedByUserId,
+        CancellationToken cancellationToken = default)
+    {
+        Requested.Add(endpointId);
+        return Task.FromResult(PageAuditManualResult.Queued(Guid.NewGuid()));
+    }
+}
+
+/// <summary>
+/// Authorizes every endpoint. The tests that matter here are the ones asserting a refusal, and a
+/// stub that refused everything would make those pass for the wrong reason.
+/// </summary>
+internal sealed class PermissiveTargetAuthorizationService : ITargetAuthorizationService
+{
+    public Task<bool> CanTestEndpointAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) => Task.FromResult(true);
+
+    public Task<IReadOnlySet<Guid>> FilterTestableEndpointsAsync(
+        IReadOnlyCollection<Guid> endpointIds,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlySet<Guid>>(endpointIds.ToHashSet());
 }

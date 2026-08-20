@@ -38,6 +38,13 @@ public static class ShellNavigation
                 "Crawl",
                 "Index",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"]),
+
+            new NavigationItem(
+                "PageSpeed",
+                "reports",
+                "PageAudits",
+                "Index",
+                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
             new NavigationItem("Reports", "reports")
         ]),
         new("Administration",

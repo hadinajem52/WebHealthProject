@@ -1,4 +1,5 @@
 @using WebHealth.Application.Seo
+@using WebHealth.Domain.PageAudits
 @model EndpointFormViewModel
 @using WebHealth.Application.Registry
 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
@@ -13,6 +14,11 @@
 <div class="form-field"><label asp-for="SeoIndexingExpectation"></label><select asp-for="SeoIndexingExpectation" class="form-select"><option value="@SeoIndexingExpectations.Default">Default for this environment</option><option value="@SeoIndexingExpectations.Indexable">Must be indexable</option><option value="@SeoIndexingExpectations.NoIndex">Must carry noindex</option></select><span class="form-field__hint">Default expects a production page to be indexable and a non-production page to carry <code>noindex</code>.</span><span asp-validation-for="SeoIndexingExpectation"></span></div>
 <div class="form-field"><label asp-for="SeoExpectedCanonicalHost"></label><input asp-for="SeoExpectedCanonicalHost" autocomplete="off" /><span class="form-field__hint">Leave blank to expect the endpoint's own host.</span><span asp-validation-for="SeoExpectedCanonicalHost"></span></div>
 <div class="form-check"><input asp-for="SeoDescriptionRequired" /><label asp-for="SeoDescriptionRequired"></label><span class="form-field__hint">Clear to disable the missing meta description rule for this endpoint.</span></div>
+<label class="switch-field"><input asp-for="PageAuditEnabled" type="checkbox" /><span>Enable Google PageSpeed SEO audits</span></label>
+<span class="form-field__hint">PageSpeed auditing sends this public URL to Google PageSpeed Insights and asks Google infrastructure to load it. Do not enable it for private, secret, authenticated or internal-only URLs.</span>
+<label class="switch-field"><input asp-for="PageAuditSchedulingEnabled" type="checkbox" /><span>Run PageSpeed audits on a schedule</span></label>
+<span class="form-field__hint">Leave this off to keep audits on demand only. Turning it off keeps the configuration and every score already recorded.</span>
+<div class="form-field"><label asp-for="PageAuditIntervalHours"></label><input asp-for="PageAuditIntervalHours" type="number" min="@PageAuditCadence.MinimumIntervalHours" max="@PageAuditCadence.MaximumIntervalHours" /><span class="form-field__hint">Between @PageAuditCadence.MinimumIntervalHours hours and @(PageAuditCadence.MaximumIntervalHours / 24) days. Each run asks Google to load the page, so a daily cadence is usually enough for a technical SEO score.</span><span asp-validation-for="PageAuditIntervalHours"></span></div>
 <div class="form-grid form-grid--two">
     <div class="form-field"><label asp-for="TargetAuthorizationKind"></label><select asp-for="TargetAuthorizationKind"><option value="">No evidence recorded</option><option value="@TargetAuthorizationKinds.Owned">I own this target</option><option value="@TargetAuthorizationKinds.ExplicitPermission">I have explicit testing permission</option></select><span asp-validation-for="TargetAuthorizationKind"></span></div>
     <div class="form-field"><label asp-for="TargetAuthorizationExpiresAt"></label><input asp-for="TargetAuthorizationExpiresAt" type="datetime-local" /><span class="form-field__hint">Optional. Expired evidence makes monitoring ineligible.</span><span asp-validation-for="TargetAuthorizationExpiresAt"></span></div>

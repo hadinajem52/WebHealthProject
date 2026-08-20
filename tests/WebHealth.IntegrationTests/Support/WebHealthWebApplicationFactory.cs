@@ -9,6 +9,7 @@ using WebHealth.Application.Incidents;
 using WebHealth.Application.Notifications;
 using WebHealth.Application.Seo;
 using WebHealth.Application.Crawling;
+using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Reporting;
 
@@ -50,6 +51,17 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddScoped<ISeoReader, EmptySeoReader>();
             services.RemoveAll<ICrawlReportReader>();
             services.AddScoped<ICrawlReportReader, EmptyCrawlReportReader>();
+            services.RemoveAll<IPageAuditReader>();
+            services.AddScoped<IPageAuditReader, EmptyPageAuditReader>();
+
+            // The PageSpeed page decides whether to offer Run now, and the action itself checks
+            // the same thing. Both reach the database in production, so both are stubbed here.
+            services.RemoveAll<IPageAuditRunner>();
+            services.AddSingleton<RecordingPageAuditRunner>();
+            services.AddScoped<IPageAuditRunner>(provider =>
+                provider.GetRequiredService<RecordingPageAuditRunner>());
+            services.RemoveAll<ITargetAuthorizationService>();
+            services.AddScoped<ITargetAuthorizationService, PermissiveTargetAuthorizationService>();
 
             services.RemoveAll<IAuthorizationDenialAuditWriter>();
             services.AddSingleton<RecordingAuthorizationDenialAuditWriter>();

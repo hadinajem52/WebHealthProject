@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using WebHealth.Application.Seo;
+using WebHealth.Domain.PageAudits;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 
@@ -102,6 +103,18 @@ public sealed class EndpointFormViewModel
 
     [Display(Name = "Require a meta description")]
     public bool SeoDescriptionRequired { get; set; } = true;
+
+    // Enabling this sends the endpoint URL to Google and asks Google to load it, which is why
+    // the form states that beside the switch rather than only in documentation.
+    [Display(Name = "Enable Google PageSpeed SEO audits")]
+    public bool PageAuditEnabled { get; set; }
+
+    [Display(Name = "Run PageSpeed audits on a schedule")]
+    public bool PageAuditSchedulingEnabled { get; set; }
+
+    [Range(PageAuditCadence.MinimumIntervalHours, PageAuditCadence.MaximumIntervalHours)]
+    [Display(Name = "PageSpeed audit interval (hours)")]
+    public int PageAuditIntervalHours { get; set; } = PageAuditCadence.DefaultIntervalHours;
 
     public bool CanConfigureInterval { get; set; }
 

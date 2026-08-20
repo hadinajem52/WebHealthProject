@@ -26,7 +26,7 @@ public sealed class PageAuditSchedulingService(
     PageAuditSchedulingOptions options,
     PageSpeedInsightsOptions providerOptions,
     TimeProvider timeProvider,
-    ILogger<PageAuditSchedulingService> logger)
+    ILogger<PageAuditSchedulingService> logger) : IPageAuditRunner
 {
     public async Task<int> DispatchDueAsync(CancellationToken cancellationToken = default)
     {
@@ -324,19 +324,4 @@ public sealed class PageAuditSchedulingService(
             "Only http and https pages can be audited.",
         _ => "This endpoint URL cannot be audited."
     };
-}
-
-/// <summary>
-/// What happened to a request somebody made by hand. An existing run is a distinct answer from a
-/// new one, so the page can say "already running" rather than implying it started something.
-/// </summary>
-public sealed record PageAuditManualResult(Guid? RunId, bool WasAlreadyRunning, string? Error)
-{
-    public bool Succeeded => RunId is not null;
-
-    public static PageAuditManualResult Queued(Guid runId) => new(runId, false, null);
-
-    public static PageAuditManualResult AlreadyRunning(Guid runId) => new(runId, true, null);
-
-    public static PageAuditManualResult Rejected(string error) => new(null, false, error);
 }

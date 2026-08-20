@@ -111,3 +111,31 @@ public sealed record PageAuditExecutionOutcome(
     /// <summary>Nothing to do: the run was already terminal, or another worker holds it.</summary>
     public static PageAuditExecutionOutcome NotClaimed(Guid runId) => new(runId, "NotClaimed", null, null);
 }
+
+/// <summary>
+/// What happened to a run somebody asked for by hand. An existing run is a distinct answer from
+/// a new one, so the page can say "already running" rather than implying it started something.
+/// </summary>
+public sealed record PageAuditManualResult(Guid? RunId, bool WasAlreadyRunning, string? Error)
+{
+    public bool Succeeded => RunId is not null;
+
+    public static PageAuditManualResult Queued(Guid runId) => new(runId, false, null);
+
+    public static PageAuditManualResult AlreadyRunning(Guid runId) => new(runId, true, null);
+
+    public static PageAuditManualResult Rejected(string error) => new(null, false, error);
+}
+
+/// <summary>
+/// Opening a run on request. The web layer needs this one operation and nothing else the
+/// scheduler does, so it is the seam rather than the whole scheduling service - which would drag
+/// a database context into every page that renders a button.
+/// </summary>
+public interface IPageAuditRunner
+{
+    Task<PageAuditManualResult> QueueManualAsync(
+        Guid endpointId,
+        Guid requestedByUserId,
+        CancellationToken cancellationToken = default);
+}

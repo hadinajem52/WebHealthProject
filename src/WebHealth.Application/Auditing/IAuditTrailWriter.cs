@@ -184,6 +184,10 @@ public sealed record EndpointAuditSnapshot(
     string SeoIndexingExpectation,
     bool SeoDescriptionRequired,
     bool HasSeoCanonicalHostOverride,
+    // Enabling a page audit sends this endpoint's URL to Google and asks Google to load
+    // it. That is a disclosure decision, so who made it and when belongs in the trail.
+    bool PageAuditEnabled,
+    bool PageAuditSchedulingEnabled,
     bool IsDeleted,
     long Version);
 

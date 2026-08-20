@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
 using WebHealth.Infrastructure;
+using WebHealth.Infrastructure.PageAudits;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Middleware;
 using WebHealth.Application.Authorization;
@@ -124,6 +125,7 @@ app.UseMonitoringScheduling();
 app.UseNotificationScheduling();
 app.UseMaintenanceScheduling();
 app.UseSeoScheduling();
+app.UsePageAuditScheduling();
 
 app.Run();
 
