@@ -2610,6 +2610,8 @@ internal static class DatabaseFoundationAssertions
         // Developer/Support can run now only for an assigned target with active testing evidence.
         var developerOwnedRun = await manualCheckService.RunNowAsync(ownedEndpointId, developerAccess);
         developerOwnedRun.Status.Should().Be(ManualCheckStatus.Queued);
+        var certificateRun = await manualCheckService.RunCertificateNowAsync(ownedEndpointId, developerAccess);
+        certificateRun.Status.Should().Be(ManualCheckStatus.Queued);
         (await manualCheckService.RunNowAsync(unownedEndpointId, developerAccess)).Status
             .Should().Be(ManualCheckStatus.Forbidden);
 
@@ -2639,6 +2641,13 @@ internal static class DatabaseFoundationAssertions
         var manualWork = await database.DurableWork.AsNoTracking()
             .SingleAsync(work => work.LogicalCheckId == manualCheckId);
         manualWork.State.Should().Be(DurableWorkStates.Enqueued);
+        var certificateWork = await database.DurableWork.AsNoTracking()
+            .SingleAsync(work => work.LogicalCheckId == certificateRun.LogicalCheckId);
+        certificateWork.WorkKind.Should().Be(DurableWorkKinds.SslCheck);
+        (await database.LogicalChecks.AsNoTracking()
+            .Where(check => check.Id == certificateRun.LogicalCheckId)
+            .Select(check => check.EndpointMonitor.MonitorType)
+            .SingleAsync()).Should().Be(RegistryDefaults.SslCertificateMonitorType);
 
         // Executing the manual check completes it without counting toward uptime.
         var manualTransport = new RecordingSafeHttpTransport(Success);
@@ -2652,7 +2661,7 @@ internal static class DatabaseFoundationAssertions
         (await historyReader.ListForEndpointAsync(ownedEndpointId, viewerAccess)).Should().BeNull();
         var historyPage = await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess);
         historyPage.Should().NotBeNull();
-        historyPage!.TotalCount.Should().Be(2);
+        historyPage!.TotalCount.Should().Be(3);
         historyPage.EndpointDisplayUrl.Should().Be("HTTPS://Manual-Checks.EXAMPLE.test/Owned");
         historyPage.Items.Should().Contain(item => item.LogicalCheckId == manualCheckId
             && item.Source == LogicalCheckSources.Manual
@@ -2675,7 +2684,7 @@ internal static class DatabaseFoundationAssertions
         var clampedToLastPage = await historyReader.ListForEndpointAsync(
             ownedEndpointId, administratorAccess, page: int.MaxValue);
         clampedToLastPage!.Page.Should().Be(1);
-        clampedToLastPage.Items.Should().HaveCount(2);
+        clampedToLastPage.Items.Should().HaveCount(3);
 
         // The enqueue acknowledgement must never regress a durable work row that a racing worker
         // has already advanced past Dispatching, on a separate connection, before Enqueue returns.
@@ -2746,6 +2755,9 @@ internal static class DatabaseFoundationAssertions
         var result = await manualCheckService.RunNowAsync(endpointId, administratorAccess);
         result.Status.Should().Be(ManualCheckStatus.SchedulingUnavailable);
         result.LogicalCheckId.Should().BeNull();
+        var certificateResult = await manualCheckService.RunCertificateNowAsync(endpointId, administratorAccess);
+        certificateResult.Status.Should().Be(ManualCheckStatus.SchedulingUnavailable);
+        certificateResult.LogicalCheckId.Should().BeNull();
         (await database.LogicalChecks.CountAsync()).Should().Be(checkCountBefore);
     }
 

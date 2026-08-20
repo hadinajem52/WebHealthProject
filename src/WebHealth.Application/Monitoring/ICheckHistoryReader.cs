@@ -16,6 +16,10 @@ public interface ICheckHistoryReader
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Check history with BR-P05 comparability assessed over the results actually shown, so the
+/// warning appears on exactly the pages where the mixture exists.
+/// </summary>
 public sealed record CheckHistoryPage(
     Guid EndpointId,
     string EndpointDisplayUrl,
@@ -23,11 +27,7 @@ public sealed record CheckHistoryPage(
     int Page,
     int PageSize,
     int TotalCount,
-    /// <summary>
-    /// BR-P05. Whether the timings on this page may be read against each other, and why not
-    /// when they may not. Assessed over the results actually shown, so the warning appears on
-    /// exactly the pages where the mixture exists.
-    /// </summary>
+    string? CurrentConfigurationFingerprint,
     ComparabilityAssessment Comparability);
 
 public sealed record CheckHistoryItem(

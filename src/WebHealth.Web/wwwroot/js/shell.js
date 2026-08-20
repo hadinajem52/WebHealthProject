@@ -365,9 +365,24 @@
         sync();
     }
 
-    // Flash messages are transient, so dismissal is client-only: nothing is
-    // persisted and the next request renders whatever the server sends.
     function setUpFlashDismissal(container) {
+        var persistentFlashes = container.querySelectorAll('[data-shell-persistent-dismiss-key]');
+        persistentFlashes.forEach(function (flash) {
+            var key = flash.getAttribute('data-shell-persistent-dismiss-key');
+            try {
+                if (window.localStorage.getItem(key) === 'dismissed') {
+                    flash.remove();
+                }
+            } catch (error) {
+                // Dismissal still works for this page when storage is unavailable.
+            }
+        });
+
+        if (!container.querySelector('.flash')) {
+            container.remove();
+            return;
+        }
+
         container.addEventListener('click', function (event) {
             var button = event.target.closest('[data-shell-flash-dismiss]');
             if (!button) {
@@ -377,6 +392,15 @@
             var flash = button.closest('.flash');
             if (!flash) {
                 return;
+            }
+
+            var persistentKey = flash.getAttribute('data-shell-persistent-dismiss-key');
+            if (persistentKey) {
+                try {
+                    window.localStorage.setItem(persistentKey, 'dismissed');
+                } catch (error) {
+                    // Dismissal still works for this page when storage is unavailable.
+                }
             }
 
             flash.remove();
@@ -456,10 +480,7 @@
                 document.querySelector('[data-shell-timezone-name]'));
         }
 
-        var flashMessages = document.querySelector('.flash-messages');
-        if (flashMessages) {
-            setUpFlashDismissal(flashMessages);
-        }
+        document.querySelectorAll('.flash-messages').forEach(setUpFlashDismissal);
 
         var schedulingToggle = document.querySelector('[data-shell-scheduling-toggle]');
         var intervalField = document.querySelector('[data-shell-interval-field]');

@@ -19,7 +19,22 @@ internal sealed class ManualCheckService(
     public async Task<ManualCheckResult> RunNowAsync(
         Guid endpointId,
         RegistryAccessContext access,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await RunMonitorAsync(
+            endpointId, RegistryDefaults.HttpAvailabilityMonitorType, access, cancellationToken);
+
+    public async Task<ManualCheckResult> RunCertificateNowAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        await RunMonitorAsync(
+            endpointId, RegistryDefaults.SslCertificateMonitorType, access, cancellationToken);
+
+    private async Task<ManualCheckResult> RunMonitorAsync(
+        Guid endpointId,
+        string monitorType,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken)
     {
         if (!schedulingOptions.Enabled)
         {
@@ -36,7 +51,7 @@ internal sealed class ManualCheckService(
         // A paused monitor still runs on demand; pausing stops the cadence only.
         var monitor = await dbContext.EndpointMonitors
             .Where(candidate => candidate.EndpointId == endpointId
-                && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType
+                && candidate.MonitorType == monitorType
                 && candidate.DeletedAt == null)
             .SingleOrDefaultAsync(cancellationToken);
         if (monitor is null)
@@ -75,8 +90,8 @@ internal sealed class ManualCheckService(
         {
             Id = durableWorkId,
             LogicalCheckId = logicalCheckId,
-            WorkKind = DurableWorkKinds.HttpCheck,
-            DedupeKey = $"v1|{logicalCheckId:N}|http-check",
+            WorkKind = MonitorWorkKinds.For(monitor.MonitorType),
+            DedupeKey = MonitorWorkKinds.CreateDedupeKey(logicalCheckId, monitor.MonitorType),
             QueueName = MonitoringQueueNames.ShortChecks,
             State = DurableWorkStates.Dispatching,
             AvailableAt = now,

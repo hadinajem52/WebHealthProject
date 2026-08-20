@@ -272,6 +272,10 @@ code,
     margin-top: var(--space-3);
 }
 
+.check-history__comparability {
+    margin-block: var(--space-4);
+}
+
 .flash {
     display: flex;
     align-items: flex-start;

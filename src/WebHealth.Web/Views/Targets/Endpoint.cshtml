@@ -27,9 +27,18 @@
     <form asp-controller="Checks" asp-action="RunCheck" asp-route-id="@Model.Endpoint.Id" method="post">
         <button class="button button--primary" type="submit">
             @await Html.PartialAsync("_Icon", "play")
-            <span>Run now</span>
+            <span>Run availability check</span>
         </button>
     </form>
+    @if (Model.Certificate.IsMonitored)
+    {
+        <form asp-controller="Checks" asp-action="RunCertificateCheck" asp-route-id="@Model.Endpoint.Id" method="post">
+            <button class="button button--secondary" type="submit">
+                @await Html.PartialAsync("_Icon", "check")
+                <span>Run certificate check</span>
+            </button>
+        </form>
+    }
 }@if(Model.CanManage && !Model.Endpoint.IsDeleted)
 {
     <a class="button button--primary" asp-action="EditEndpoint" asp-route-id="@Model.Endpoint.Id">

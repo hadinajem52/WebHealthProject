@@ -35,11 +35,22 @@
             @* BR-P05: say so before the numbers are read, not after. *@
             @if (history.Comparability.Warning is { } comparabilityWarning)
             {
-                <div class="flash" data-level="warning" role="status">
-                    <span class="flash__icon">@await Html.PartialAsync("_Icon", "warning")</span>
-                    <div>
-                        <p class="flash__label">Comparability</p>
-                        <p class="flash__text">@comparabilityWarning</p>
+                <div class="flash-messages check-history__comparability">
+                    <div class="flash"
+                         data-level="warning"
+                         data-shell-persistent-dismiss-key="check-history-comparability-@history.EndpointId-@history.CurrentConfigurationFingerprint"
+                         role="status">
+                        <span class="flash__icon">@await Html.PartialAsync("_Icon", "warning")</span>
+                        <div>
+                            <p class="flash__label">Comparability</p>
+                            <p class="flash__text">@comparabilityWarning</p>
+                        </div>
+                        <button type="button"
+                                class="flash__dismiss"
+                                data-shell-flash-dismiss
+                                aria-label="Dismiss this warning message">
+                            @await Html.PartialAsync("_Icon", "close")
+                        </button>
                     </div>
                 </div>
             }
@@ -74,7 +85,7 @@
                                     }
                                 </td>
                                 <td data-label="Duration">@(item.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</td>
-                                <td data-label="Monitor source">@(item.MonitorSource ?? "—")</td>
+                                <td data-label="Monitor source" title="@item.MonitorSource">@MonitorSourceDisplay.Name(item.MonitorSource)</td>
                                 <td data-label="HTTP status">@(item.HttpStatus?.ToString() ?? "—")</td>
                                 <td data-label="Uptime">@(item.CountsForUptime ? "Counts" : "Excluded")</td>
                                 <td data-label="Details">

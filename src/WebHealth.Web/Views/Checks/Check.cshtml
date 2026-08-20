@@ -48,7 +48,7 @@
                 <div><dt>Page size</dt><dd>@(check.DecodedLength is { } length ? $"{length:N0} bytes" : "—") @if (check.LengthSource is not null) { <span class="data-table__secondary">Measured as @check.LengthSource</span> }</dd></div>
                 <div><dt>Transferred length</dt><dd>@(check.TransferredLength is { } transferred ? $"{transferred:N0} bytes" : "Not advertised")</dd></div>
                 <div><dt>Response truncated</dt><dd>@(check.ResponseTruncated ? "Yes" : "No")</dd></div>
-                <div><dt>Monitor source</dt><dd>@(check.MonitorSource ?? "—")</dd></div>
+                <div><dt>Monitor source</dt><dd title="@check.MonitorSource">@MonitorSourceDisplay.Name(check.MonitorSource)</dd></div>
                 <div><dt>Measured at</dt><dd>@Html.TimestampWithSeconds(check.MeasuredAt)</dd></div>
             </dl>
         </section>

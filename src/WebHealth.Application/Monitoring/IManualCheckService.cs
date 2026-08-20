@@ -8,6 +8,11 @@ public interface IManualCheckService
         Guid endpointId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
+
+    Task<ManualCheckResult> RunCertificateNowAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
 }
 
 public enum ManualCheckStatus

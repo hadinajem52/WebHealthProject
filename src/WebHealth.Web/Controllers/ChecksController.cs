@@ -20,6 +20,18 @@ public sealed class ChecksController(
     public async Task<IActionResult> RunCheck(Guid id, CancellationToken cancellationToken)
     {
         var result = await manualCheckService.RunNowAsync(id, GetAccess(), cancellationToken);
+        return HandleManualCheckResult(id, result, "Availability check queued. It will appear in history shortly.");
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost]
+    public async Task<IActionResult> RunCertificateCheck(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await manualCheckService.RunCertificateNowAsync(id, GetAccess(), cancellationToken);
+        return HandleManualCheckResult(id, result, "Certificate check queued. It will appear in history shortly.");
+    }
+
+    private IActionResult HandleManualCheckResult(Guid endpointId, ManualCheckResult result, string successMessage)
+    {
         switch (result.Status)
         {
             case ManualCheckStatus.Forbidden:
@@ -31,11 +43,11 @@ public sealed class ChecksController(
                 TempData.AddFlashMessage(FlashLevel.Error, "Manual checks are unavailable while monitoring scheduling is disabled.");
                 break;
             default:
-                TempData.AddFlashMessage(FlashLevel.Success, "Check queued. It will appear in history shortly.");
+                TempData.AddFlashMessage(FlashLevel.Success, successMessage);
                 break;
         }
 
-        return RedirectToAction(nameof(TargetsController.Endpoint), "Targets", new { id });
+        return RedirectToAction(nameof(TargetsController.Endpoint), "Targets", new { id = endpointId });
     }
 
     [HttpGet]

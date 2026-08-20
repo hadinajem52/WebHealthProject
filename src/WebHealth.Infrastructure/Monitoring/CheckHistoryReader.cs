@@ -74,6 +74,7 @@ internal sealed class CheckHistoryReader(
             boundedPage,
             PageSize,
             totalCount,
+            items.FirstOrDefault()?.ConfigurationFingerprint,
             comparability);
     }
 
