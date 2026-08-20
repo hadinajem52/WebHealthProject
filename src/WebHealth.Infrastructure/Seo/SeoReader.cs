@@ -104,8 +104,13 @@ internal sealed class SeoReader(
                 observation.CanonicalCount,
                 observation.RobotsMeta,
                 observation.PolicyIndexingExpectation ?? SeoIndexingExpectations.Default,
+                // The rule keys themselves, not a total: §11.2 asks this report for robots and
+                // sitemap findings by name, and every SEO rule shares the "Seo." prefix, so a
+                // count cannot tell a blocked origin from a missing meta description.
                 observation.LogicalCheck.Result!.Findings
-                    .Count(finding => finding.RuleKey.StartsWith(SeoRuleKeyPrefix)),
+                    .Where(finding => finding.RuleKey.StartsWith(SeoRuleKeyPrefix))
+                    .Select(finding => finding.RuleKey)
+                    .ToList(),
                 observation.ObservedAt))
             .ToArrayAsync(cancellationToken);
 

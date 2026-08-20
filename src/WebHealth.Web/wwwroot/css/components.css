@@ -1513,3 +1513,11 @@ code,
         height: 16rem;
     }
 }
+
+/* Finding subjects sit on one line each when the cell is narrow, so a row with
+   both a site-wide and a page-level problem still reads as two distinct things. */
+.finding-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+}

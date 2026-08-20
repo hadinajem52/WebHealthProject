@@ -133,7 +133,22 @@
                                     }
                                     else
                                     {
-                                        <span class="badge" data-status="warning">@item.OpenFindingCount</span>
+                                        @* §11.2 asks for robots and sitemap findings by name. Every
+                                           SEO rule shares one key prefix, so a bare total cannot
+                                           tell a blocked origin from a missing description — the
+                                           subject is named, and the rule spelled out beneath it. *@
+                                        <span class="finding-groups">
+                                            @foreach (var group in item.FindingGroups)
+                                            {
+                                                <span class="badge"
+                                                      data-status="@(SeoFindingGroups.SiteWide.Contains(group.Group) ? "danger" : "warning")">
+                                                    @group.Group @group.Count
+                                                </span>
+                                            }
+                                        </span>
+                                        <span class="data-table__secondary">
+                                            @string.Join("; ", item.FindingRuleKeys.Select(IssueDisplay.DescribeRule))
+                                        </span>
                                     }
                                     @if (item.DocumentTruncated)
                                     {

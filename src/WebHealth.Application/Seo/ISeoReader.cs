@@ -43,9 +43,26 @@ public sealed record SeoListItem(
     int CanonicalCount,
     string? RobotsMeta,
     string PolicyIndexingExpectation,
-    int OpenFindingCount,
+    IReadOnlyList<string> FindingRuleKeys,
     DateTimeOffset ObservedAt)
 {
+    /// <summary>
+    /// How many SEO rules this observation breaks. Kept as a derived value so the count and the
+    /// findings behind it cannot disagree.
+    /// </summary>
+    public int OpenFindingCount => FindingRuleKeys.Count;
+
+    /// <summary>
+    /// The findings grouped by what they are about, in a stable order, so the report can say
+    /// "robots" or "canonical" rather than only "3" (§11.2).
+    /// </summary>
+    public IReadOnlyList<SeoFindingGroupCount> FindingGroups =>
+        [.. FindingRuleKeys
+            .GroupBy(SeoFindingGroups.Of)
+            .Select(group => new SeoFindingGroupCount(group.Key, group.Count()))
+            .OrderByDescending(group => SeoFindingGroups.SiteWide.Contains(group.Group))
+            .ThenBy(group => group.Group, StringComparer.Ordinal)];
+
     /// <summary>
     /// Whether the page is asking search engines to stay away, read from the directives the
     /// extractor already combined. Presented as a fact rather than as a judgement: whether it is
@@ -54,6 +71,9 @@ public sealed record SeoListItem(
     public bool DeclaresNoIndex =>
         RobotsMeta is not null && RobotsMeta.Contains("noindex", StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>How many findings one subject of the SEO configuration has (§11.2).</summary>
+public sealed record SeoFindingGroupCount(string Group, int Count);
 
 public sealed record SeoListPage(IReadOnlyList<SeoListItem> Items, int Page, int PageSize, int TotalCount);
 
