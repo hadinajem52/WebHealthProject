@@ -1,0 +1,35 @@
+{
+  "captchaResult": "CAPTCHA_NOT_NEEDED",
+  "kind": "pagespeedonline#result",
+  "id": "https://example.com/",
+  "analysisUTCTimestamp": "2026-08-19T12:21:30.550Z",
+  "lighthouseResult": {
+    "requestedUrl": "https://example.com/",
+    "finalUrl": "https://example.com/",
+    "lighthouseVersion": "11.4.0",
+    "fetchTime": "2026-08-19T12:21:30.550Z",
+    "runWarnings": [],
+    "configSettings": { "formFactor": "mobile", "locale": "en-US" },
+    "audits": {
+      "document-title": {
+        "id": "document-title",
+        "title": "Document has a `<title>` element",
+        "description": "The title gives an overview of the page.",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      }
+    },
+    "categories": {
+      "seo": {
+        "id": "seo",
+        "title": "SEO",
+        "score": 0.9,
+        "auditRefs": [
+          { "id": "document-title", "weight": 10, "group": "seo-content" },
+          { "id": "meta-description", "weight": 10, "group": "seo-content" }
+        ]
+      }
+    }
+  },
+  "version": { "major": 11, "minor": 4 }
+}

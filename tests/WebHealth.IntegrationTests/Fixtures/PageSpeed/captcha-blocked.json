@@ -1,0 +1,6 @@
+{
+  "captchaResult": "CAPTCHA_BLOCKING",
+  "kind": "pagespeedonline#result",
+  "id": "https://example.com/",
+  "analysisUTCTimestamp": "2026-08-19T11:44:02.100Z"
+}

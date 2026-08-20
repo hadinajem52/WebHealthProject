@@ -1,0 +1,85 @@
+{
+  "captchaResult": "CAPTCHA_NOT_NEEDED",
+  "kind": "pagespeedonline#result",
+  "id": "https://example.com/quiet",
+  "analysisUTCTimestamp": "2026-08-19T10:02:11.004Z",
+  "lighthouseResult": {
+    "requestedUrl": "https://example.com/quiet",
+    "finalUrl": "https://www.example.com/quiet",
+    "lighthouseVersion": "11.4.0",
+    "fetchTime": "2026-08-19T10:02:11.004Z",
+    "runWarnings": [
+      "The page loaded too slowly to finish within the time limit. Results may be incomplete.",
+      "A canonical link was ignored because it points to a different origin."
+    ],
+    "configSettings": {
+      "emulatedFormFactor": "mobile",
+      "formFactor": "mobile",
+      "locale": "en-US",
+      "onlyCategories": ["seo"]
+    },
+    "audits": {
+      "structured-data": {
+        "id": "structured-data",
+        "title": "Structured data is valid",
+        "description": "Run the Structured Data Testing Tool to validate structured data.",
+        "score": null,
+        "scoreDisplayMode": "manual"
+      },
+      "robots-txt": {
+        "id": "robots-txt",
+        "title": "robots.txt is valid",
+        "description": "If your robots.txt file is malformed, crawlers may not be able to understand it.",
+        "score": null,
+        "scoreDisplayMode": "notApplicable"
+      },
+      "hreflang": {
+        "id": "hreflang",
+        "title": "Document has a valid `hreflang`",
+        "description": "hreflang links tell search engines what version of a page to list.",
+        "score": null,
+        "scoreDisplayMode": "notApplicable"
+      },
+      "font-size": {
+        "id": "font-size",
+        "title": "Document uses legible font sizes",
+        "description": "Font sizes less than 12px are too small to be legible.",
+        "score": null,
+        "scoreDisplayMode": "informative",
+        "displayValue": "Text is legible"
+      },
+      "canonical": {
+        "id": "canonical",
+        "title": "Document has a valid `rel=canonical`",
+        "description": "Canonical links suggest which URL to show in search results.",
+        "score": null,
+        "scoreDisplayMode": "error",
+        "errorMessage": "Required Canonical gatherer did not run."
+      },
+      "document-title": {
+        "id": "document-title",
+        "title": "Document has a `<title>` element",
+        "description": "The title gives an overview of the page.",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      }
+    },
+    "categories": {
+      "seo": {
+        "id": "seo",
+        "title": "SEO",
+        "score": 1,
+        "auditRefs": [
+          { "id": "structured-data", "weight": 0, "group": "seo-content" },
+          { "id": "robots-txt", "weight": 10, "group": "seo-crawl" },
+          { "id": "hreflang", "weight": 10, "group": "seo-content" },
+          { "id": "font-size", "weight": 0, "group": "seo-mobile" },
+          { "id": "canonical", "weight": 10, "group": "seo-content" },
+          { "id": "document-title", "weight": 10, "group": "seo-content" }
+        ]
+      }
+    },
+    "timing": { "total": 9871.2 }
+  },
+  "version": { "major": 11, "minor": 4 }
+}

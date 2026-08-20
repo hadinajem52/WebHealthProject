@@ -1,0 +1,177 @@
+{
+  "captchaResult": "CAPTCHA_NOT_NEEDED",
+  "kind": "pagespeedonline#result",
+  "id": "https://example.com/",
+  "loadingExperience": {
+    "id": "https://example.com/",
+    "metrics": {
+      "CUMULATIVE_LAYOUT_SHIFT_SCORE": {
+        "percentile": 5,
+        "category": "FAST"
+      }
+    },
+    "overall_category": "FAST"
+  },
+  "analysisUTCTimestamp": "2026-08-19T09:14:52.331Z",
+  "lighthouseResult": {
+    "requestedUrl": "https://example.com/",
+    "finalUrl": "https://example.com/",
+    "mainDocumentUrl": "https://example.com/",
+    "lighthouseVersion": "11.4.0",
+    "userAgent": "Mozilla/5.0",
+    "fetchTime": "2026-08-19T09:14:52.331Z",
+    "environment": {
+      "networkUserAgent": "Mozilla/5.0",
+      "hostUserAgent": "Mozilla/5.0",
+      "benchmarkIndex": 1682
+    },
+    "runWarnings": [],
+    "configSettings": {
+      "emulatedFormFactor": "mobile",
+      "formFactor": "mobile",
+      "locale": "en-US",
+      "onlyCategories": ["seo"],
+      "channel": "api"
+    },
+    "audits": {
+      "viewport": {
+        "id": "viewport",
+        "title": "Has a `<meta name=\"viewport\">` tag with `width` or `initial-scale`",
+        "description": "A `<meta name=\"viewport\">` not only optimizes your app for mobile screen sizes, but also prevents a 300 millisecond delay to user input. [Learn more about using the viewport meta tag](https://developer.chrome.com/docs/lighthouse/pwa/viewport/).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "document-title": {
+        "id": "document-title",
+        "title": "Document has a `<title>` element",
+        "description": "The title gives screen reader users an overview of the page, and search engine users rely on it heavily to determine if a page is relevant to their search. [Learn more about document titles](https://developer.chrome.com/docs/lighthouse/seo/document-title/).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "meta-description": {
+        "id": "meta-description",
+        "title": "Document does not have a meta description",
+        "description": "Meta descriptions may be included in search results to concisely summarize page content. [Learn more about the meta description](https://developer.chrome.com/docs/lighthouse/seo/meta-description/).",
+        "score": 0,
+        "scoreDisplayMode": "binary"
+      },
+      "http-status-code": {
+        "id": "http-status-code",
+        "title": "Page has successful HTTP status code",
+        "description": "Pages with unsuccessful HTTP status codes may not be indexed properly. [Learn more about HTTP status codes](https://developer.chrome.com/docs/lighthouse/seo/http-status-code/).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "link-text": {
+        "id": "link-text",
+        "title": "Links do not have descriptive text",
+        "description": "Descriptive link text helps search engines understand your content. [Learn how to make links more accessible](https://developer.chrome.com/docs/lighthouse/seo/link-text/).",
+        "score": 0,
+        "scoreDisplayMode": "binary",
+        "displayValue": "3 links found",
+        "explanation": "Anchor text such as \"click here\" gives no indication of the destination.",
+        "details": {
+          "type": "table",
+          "headings": [
+            { "key": "href", "itemType": "url", "text": "Link destination" },
+            { "key": "text", "itemType": "text", "text": "Link Text" }
+          ],
+          "items": [
+            { "href": "https://example.com/a", "text": "click here" },
+            { "href": "https://example.com/b", "text": "here" },
+            { "href": "https://example.com/c", "text": "more" }
+          ]
+        }
+      },
+      "crawlable-anchors": {
+        "id": "crawlable-anchors",
+        "title": "Links are crawlable",
+        "description": "Search engines may use `href` attributes on links to crawl websites. [Learn how to make links crawlable](https://support.google.com/webmasters/answer/9112205).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "is-crawlable": {
+        "id": "is-crawlable",
+        "title": "Page isn’t blocked from indexing",
+        "description": "Search engines are unable to include your pages in search results if they don't have permission to crawl them. [Learn more about crawler directives](https://developer.chrome.com/docs/lighthouse/seo/is-crawlable/).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "robots-txt": {
+        "id": "robots-txt",
+        "title": "robots.txt is valid",
+        "description": "If your robots.txt file is malformed, crawlers may not be able to understand how you want your website to be crawled or indexed. [Learn more about robots.txt](https://developer.chrome.com/docs/lighthouse/seo/invalid-robots-txt/).",
+        "score": null,
+        "scoreDisplayMode": "notApplicable"
+      },
+      "image-alt": {
+        "id": "image-alt",
+        "title": "Image elements have `[alt]` attributes",
+        "description": "Informative elements should aim for short, descriptive alternate text. [Learn more about the `alt` attribute](https://dequeuniversity.com/rules/axe/4.8/image-alt).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "hreflang": {
+        "id": "hreflang",
+        "title": "Document has a valid `hreflang`",
+        "description": "hreflang links tell search engines what version of a page they should list in search results for a given language or region. [Learn more about `hreflang`](https://developer.chrome.com/docs/lighthouse/seo/hreflang/).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "canonical": {
+        "id": "canonical",
+        "title": "Document has a valid `rel=canonical`",
+        "description": "Canonical links suggest which URL to show in search results. [Learn more about canonical links](https://developer.chrome.com/docs/lighthouse/seo/canonical/).",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "structured-data": {
+        "id": "structured-data",
+        "title": "Structured data is valid",
+        "description": "Run the [Structured Data Testing Tool](https://search.google.com/structured-data/testing-tool/) and the [Structured Data Linter](http://linter.structured-data.org/) to validate structured data. [Learn more about Structured Data](https://developer.chrome.com/docs/lighthouse/seo/structured-data/).",
+        "score": null,
+        "scoreDisplayMode": "manual"
+      },
+      "first-contentful-paint": {
+        "id": "first-contentful-paint",
+        "title": "First Contentful Paint",
+        "description": "First Contentful Paint marks the time at which the first text or image is painted.",
+        "score": 0.82,
+        "scoreDisplayMode": "numeric",
+        "displayValue": "1.8 s",
+        "numericValue": 1823.4
+      }
+    },
+    "categories": {
+      "seo": {
+        "id": "seo",
+        "title": "SEO",
+        "score": 0.8,
+        "manualDescription": "Run these additional validators on your site to check additional SEO best practices.",
+        "auditRefs": [
+          { "id": "viewport", "weight": 10, "group": "seo-mobile" },
+          { "id": "document-title", "weight": 10, "group": "seo-content" },
+          { "id": "meta-description", "weight": 10, "group": "seo-content" },
+          { "id": "http-status-code", "weight": 10, "group": "seo-crawl" },
+          { "id": "link-text", "weight": 10, "group": "seo-content" },
+          { "id": "crawlable-anchors", "weight": 10, "group": "seo-crawl" },
+          { "id": "is-crawlable", "weight": 10, "group": "seo-crawl" },
+          { "id": "robots-txt", "weight": 10, "group": "seo-crawl" },
+          { "id": "image-alt", "weight": 10, "group": "seo-content" },
+          { "id": "hreflang", "weight": 10, "group": "seo-content" },
+          { "id": "canonical", "weight": 10, "group": "seo-content" },
+          { "id": "structured-data", "weight": 0, "group": "seo-content" }
+        ]
+      }
+    },
+    "categoryGroups": {
+      "seo-mobile": { "title": "Mobile Friendly" },
+      "seo-content": { "title": "Content Best Practices" },
+      "seo-crawl": { "title": "Crawling and Indexing" }
+    },
+    "timing": { "total": 4213.55 },
+    "i18n": { "rendererFormattedStrings": { "varianceDisclaimer": "Values are estimated." } }
+  },
+  "analysisUTCTimestampFallback": null,
+  "version": { "major": 11, "minor": 4 }
+}
