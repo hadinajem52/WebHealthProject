@@ -51,7 +51,7 @@
                         <th>Website</th>
                         <th>Environment</th>
                         <th>Status</th>
-                        <th>Testable</th>
+                        <th>Monitoring</th>
                         <th><span class="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
@@ -64,7 +64,7 @@
                         <td data-label="Website">@endpoint.WebsiteName</td>
                         <td data-label="Environment">@endpoint.EnvironmentName</td>
                         <td data-label="Status"><span class="badge" data-status="@(endpoint.IsEnabled ? "success" : "warning")">@(endpoint.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                        <td data-label="Testable"><span class="badge" data-status="@(endpoint.CanTest ? "success" : "warning")">@(endpoint.CanTest ? "Yes" : "No")</span></td>
+                        <td data-label="Monitoring"><span class="badge" data-status="@(endpoint.IsMonitored ? "success" : "warning")">@(endpoint.IsMonitored ? "Monitored" : "Paused")</span></td>
                         <td class="data-table__action" data-label="Actions">
                             <div class="data-table__action-group">
                                 <a asp-action="Endpoint" asp-route-id="@endpoint.Id">Open<span class="visually-hidden"> @endpoint.DisplayUrl</span></a>

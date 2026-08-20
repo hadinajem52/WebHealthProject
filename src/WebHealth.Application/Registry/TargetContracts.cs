@@ -74,7 +74,8 @@ public sealed record RegistryEndpointItem(
     string DisplayUrl,
     bool IsEnabled,
     bool CanTest,
-    long Version);
+    long Version,
+    bool IsMonitored);
 
 public sealed record EndpointDetails(
     Guid Id,

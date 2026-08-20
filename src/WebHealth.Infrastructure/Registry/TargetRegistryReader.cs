@@ -171,10 +171,20 @@ internal sealed class TargetRegistryReader(
 
         var testable = await targetAuthorization.FilterTestableEndpointsAsync(
             rows.Select(row => row.Id).ToArray(), access, cancellationToken);
+        var endpointIds = rows.Select(row => row.Id).ToArray();
+        var monitoredEndpointIds = await dbContext.EndpointMonitors.AsNoTracking()
+            .Where(monitor => monitor.DeletedAt == null
+                && monitor.IsEnabled
+                && monitor.SchedulingEnabled
+                && endpointIds.Contains(monitor.EndpointId))
+            .Select(monitor => monitor.EndpointId)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+        var monitored = monitoredEndpointIds.ToHashSet();
         return rows.Select(row => new RegistryEndpointItem(
             row.Id, row.ClientId, row.ClientName, row.WebsiteId, row.WebsiteName,
             row.EnvironmentId, row.EnvironmentName, row.DisplayUrl, row.IsEnabled,
-            testable.Contains(row.Id), row.Version)).ToArray();
+            testable.Contains(row.Id), row.Version, monitored.Contains(row.Id))).ToArray();
     }
 
     public async Task<CertificateStatus?> FindCertificateStatusAsync(
