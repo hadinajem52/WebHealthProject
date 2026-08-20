@@ -80,3 +80,34 @@ public interface IPageAuditProvider
         PageAuditRequest request,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// Where a queued run goes. An interface rather than a direct Hangfire call so the scheduling and
+/// execution services stay testable without a background-job server, and so a deployment with the
+/// feature switched off fails loudly at the queue rather than silently doing nothing.
+/// </summary>
+public interface IPageAuditQueue
+{
+    /// <summary>Queues a run for immediate execution.</summary>
+    void Enqueue(Guid runId);
+
+    /// <summary>Queues a run after a delay, for a bounded retry.</summary>
+    void Schedule(Guid runId, TimeSpan delay);
+}
+
+/// <summary>
+/// What one execution attempt decided, so the job can act on it without repeating the reasoning.
+/// The retry delay is computed here rather than in the job: whether a failure is worth another
+/// attempt is a rule about provider failures, not about Hangfire.
+/// </summary>
+public sealed record PageAuditExecutionOutcome(
+    Guid RunId,
+    string Status,
+    string? FailureCategory,
+    TimeSpan? RetryAfter)
+{
+    public bool ShouldRetry => RetryAfter is not null;
+
+    /// <summary>Nothing to do: the run was already terminal, or another worker holds it.</summary>
+    public static PageAuditExecutionOutcome NotClaimed(Guid runId) => new(runId, "NotClaimed", null, null);
+}
