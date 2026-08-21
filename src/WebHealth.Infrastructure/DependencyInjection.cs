@@ -206,32 +206,39 @@ public static class DependencyInjection
                         PrepareSchemaIfNecessary = false,
                         QueuePollInterval = TimeSpan.FromSeconds(1)
                     }));
-            services.AddHangfireServer(options =>
+            // Built before the server is registered rather than inside the callback: Hangfire
+            // refuses a server with no queues, and with only an isolated-queue feature switched on
+            // this shared server has none to serve. Deciding here means it is simply not
+            // registered, instead of throwing at startup.
+            var sharedQueues = new List<string>();
+            if (schedulingOptions.Enabled)
             {
-                var queues = new List<string>();
-                if (schedulingOptions.Enabled)
-                {
-                    queues.Add(MonitoringQueueNames.ShortChecks);
-                }
+                sharedQueues.Add(MonitoringQueueNames.ShortChecks);
+            }
 
-                if (notificationOptions.Enabled)
-                {
-                    queues.Add(NotificationQueueNames.Notifications);
-                }
+            if (notificationOptions.Enabled)
+            {
+                sharedQueues.Add(NotificationQueueNames.Notifications);
+            }
 
-                if (maintenanceOptions.Enabled)
-                {
-                    queues.Add(MaintenanceQueueNames.Maintenance);
-                }
+            if (maintenanceOptions.Enabled)
+            {
+                sharedQueues.Add(MaintenanceQueueNames.Maintenance);
+            }
 
-                if (seoOptions.Enabled)
-                {
-                    queues.Add(SeoQueueNames.Seo);
-                }
+            if (seoOptions.Enabled)
+            {
+                sharedQueues.Add(SeoQueueNames.Seo);
+            }
 
-                options.Queues = queues.ToArray();
-                options.WorkerCount = Math.Max(1, Math.Min(Environment.ProcessorCount, 4));
-            });
+            if (sharedQueues.Count > 0)
+            {
+                services.AddHangfireServer(options =>
+                {
+                    options.Queues = [.. sharedQueues];
+                    options.WorkerCount = Math.Max(1, Math.Min(Environment.ProcessorCount, 4));
+                });
+            }
 
             // A second server, serving only the crawl queue. Listing the crawl queue on the server
             // above would not isolate anything: Hangfire's queue order decides what a *free* worker

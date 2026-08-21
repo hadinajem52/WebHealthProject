@@ -1,4 +1,8 @@
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using WebHealth.Infrastructure;
 using Hangfire;
 using WebHealth.Infrastructure.Crawling;
 using WebHealth.Infrastructure.Monitoring;
@@ -88,6 +92,45 @@ public sealed class PageAuditIsolationTests
                 || name.Contains("Host", StringComparison.OrdinalIgnoreCase)
                 || name.Contains("Endpoint", StringComparison.OrdinalIgnoreCase)
                 || name.Contains("BaseAddress", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Page audits on their own must be able to start the application.
+    /// </summary>
+    /// <remarks>
+    /// Hangfire refuses a server with no queues. Enabling only an isolated-queue feature leaves
+    /// the shared server with nothing to serve, and building its queue list inside the
+    /// registration callback turned that into an unhandled exception at startup rather than a
+    /// server that is simply not registered. Found by running the application, not by a test,
+    /// which is why there is one now.
+    /// </remarks>
+    [Fact]
+    public void EnablingOnlyPageAudits_StillBuildsAStartableServiceProvider()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = "Host=127.0.0.1;Port=1;Database=none;Username=none",
+            ["Monitoring:Scheduling:Enabled"] = "false",
+            ["Notifications:Scheduling:Enabled"] = "false",
+            ["Maintenance:Scheduling:Enabled"] = "false",
+            ["Seo:Scheduling:Enabled"] = "false",
+            ["Crawling:Scheduling:Enabled"] = "false",
+            ["PageAudits:Scheduling:Enabled"] = "true",
+            ["PageAudits:PageSpeedInsights:ApiKey"] = "configured"
+        }).Build();
+
+        var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration);
+
+        // Deliberately not disposed. AddHangfire writes to Hangfire's static GlobalConfiguration,
+        // which then holds this provider's logger factory; disposing it here tears that factory
+        // out from under every later test that touches Hangfire.
+        var provider = services.BuildServiceProvider();
+
+        // Resolving the hosted services is what Host.StartAsync does, and it is where the empty
+        // queue list threw. No connection is opened, so no database is needed here.
+        var act = () => provider.GetServices<IHostedService>().ToArray();
+
+        act.Should().NotThrow();
     }
 
     private static string QueueOf(Type jobType, string methodName) =>
