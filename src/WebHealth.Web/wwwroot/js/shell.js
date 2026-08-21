@@ -215,8 +215,8 @@
     }
 
     // A non-modal popup: it closes on Escape, on a click outside it, and as soon as
-    // focus leaves it, so it never traps the user. Shared by the account and
-    // notification menus in the header.
+    // focus leaves it, so it never traps the user. Shared by the account, settings and
+    // notification menus in the header, and by the dashboard filter.
     function setUpPopupMenu(container, toggle, menu) {
         var isOpen = false;
 
@@ -513,6 +513,16 @@
 
         if (notifications && notificationsToggle && notificationsMenu) {
             setUpPopupMenu(notifications, notificationsToggle, notificationsMenu);
+        }
+
+        // The dashboard filter uses the same popup contract as the header menus, so its open,
+        // Escape, click-away and focus-out behaviour cannot drift from theirs.
+        var filters = document.querySelector('[data-shell-filters]');
+        var filtersToggle = document.querySelector('[data-shell-filters-toggle]');
+        var filtersMenu = document.querySelector('[data-shell-filters-menu]');
+
+        if (filters && filtersToggle && filtersMenu) {
+            setUpPopupMenu(filters, filtersToggle, filtersMenu);
         }
 
         var settings = document.querySelector('[data-shell-settings]');

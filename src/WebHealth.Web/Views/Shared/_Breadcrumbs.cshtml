@@ -1,7 +1,12 @@
-@{
+﻿@{
     var breadcrumbs = ViewData.GetBreadcrumbs();
 }
-@if (breadcrumbs.Count > 0)
+@*
+    A single-item trail is the current page naming itself directly above an <h1> that says the
+    same word. It is not a path to anywhere, so it is not rendered: a trail appears once there
+    is an ancestor to climb to.
+*@
+@if (breadcrumbs.Count > 1)
 {
     <nav class="breadcrumbs" aria-label="Breadcrumb">
         <ol class="breadcrumbs__list">

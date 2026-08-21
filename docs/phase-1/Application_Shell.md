@@ -59,20 +59,20 @@ Each row is its own flex line, so a value follows its own label rather than alig
 
 ### Exactly reproduced values
 
-At the project owner's direction on 2026-08-13, the sidebar (`2:164`) and the breadcrumb block (`2:263`) reproduce the Figma colors, font weights, type sizes and geometry literally rather than through the shell's own tokens:
+At the project owner's direction on 2026-08-13, the sidebar (`2:164`) and the breadcrumb block (`2:263`) reproduce the Figma font weights, type sizes and geometry literally rather than through the shell's own tokens. Two of the colors were withdrawn on 2026-08-21 and now use the accessible tokens; see **Withdrawn deviation** below.
 
 | Element | Value |
 |---|---|
 | Sidebar and page background | Gray-100 `#F8F9FA` |
 | Nav item card / icon tiles | White, 15px and 12px radius, `0 3.5px 5.5px rgba(0,0,0,.02)` |
 | Icon glyphs | Teal-300 `#4FD1C5`; white on the active Teal-300 tile |
-| Nav labels | 12px bold, Gray-400 `#A0AEC0`; Gray-700 `#2D3748` when current |
+| Nav labels | 12px bold, Gray-600 `#4A5568` (was Gray-400); Gray-700 `#2D3748` when current |
 | Section heading, brand | 12px / 14px bold, Gray-700 |
-| Support card | Teal-300, white 14px bold title, white 12px regular body, white 10px bold button |
+| Support card | Teal-600 (was Teal-300), white 14px bold title, white 12px regular body, white 10px bold button |
 | Item geometry | 219.5x54 card, 30px tile at 16px inset, label at 12px gap, 54px pitch |
 | Separator | 233.25x1 at x=24.5, gradient `#E0E1E2` 0 -> 1 -> 0.15625 alpha |
 | Breadcrumb | 12px regular, Gray-400 ancestors, Gray-700 current page and separator |
-| Page title | 14px bold Gray-700, 5.5px below the breadcrumb |
+| Page title | 26px bold Gray-700 (was 14px), 5.5px below the breadcrumb |
 
 Two details in the Figma file were not copied literally:
 
@@ -92,14 +92,40 @@ Two details in the Figma file were not copied literally:
 
 These overrides apply to page content: card text, status messages, validation and error states.
 
-**Recorded deviation.** They are deliberately *not* applied to the sidebar and breadcrumb, which reproduce the Figma exactly at the project owner's direction on 2026-08-13. Two values there fall below the WCAG 2.1 AA floor required by `UI_Direction.md` section 6:
+**Withdrawn deviation.** These overrides were previously *not* applied to the sidebar, which reproduced Figma node 2:164 exactly at the project owner's direction on 2026-08-13. That deviation was withdrawn on 2026-08-21 after the UI/UX audit measured the result in the browser and the project owner accepted the finding. The two values it exempted, and what replaced them:
 
-| Element | Colors | Contrast | AA requirement |
-|---|---|---|---|
-| Inactive nav labels, breadcrumb ancestors | Gray-400 on Gray-100 | 2.2:1 | 4.5:1 |
-| Support-card title, body and icon | White on Teal-300 | 1.9:1 | 4.5:1 (text), 3:1 (icons) |
+| Element | Was | Measured | Now | Measured |
+|---|---|---|---|---|
+| Inactive nav labels | Gray-400 on Gray-100 | 2.14:1 | Gray-600 on Gray-100 | 7.14:1 |
+| Support-card title and body | White on Teal-300 | 1.87:1 | White on Teal-600 | 5.03:1 |
 
-Every affected element still carries a non-color cue: the current page is marked with `aria-current`, planned entries carry a text badge, and the support card repeats its action as a labelled link. Re-evaluate this deviation at the Phase 7 accessibility review.
+Both now clear the 4.5:1 AA floor. The sidebar keeps the reference geometry and the Teal-300 icon accent, which is decorative and paired with a text label in every case.
+
+Three further contrast failures were found and fixed in the same pass. All measured figures come from `getComputedStyle` in Chromium against each element's own resolved background, not from the stylesheet source:
+
+| Element | Was | Measured | Now | Measured |
+|---|---|---|---|---|
+| Table column headings | Gray-400, 10px | 2.26:1 | Gray-600, 12px bold | 7.53:1 |
+| Secondary cell text | Gray-500 | 4.02:1 | Gray-600 | 7.53:1 |
+| Success badge label | White on Green-400 | 2.43:1 | White on Green-700 | 6.73:1 |
+
+The badge row above was later withdrawn by the project owner. The status pill now follows Figma node 1633:352 as drawn: a solid fill with a centred white 13px label and no silhouette. Only the informational fill clears AA; the rest do not.
+
+| Pill | Fill | White label measured |
+|---|---|---|
+| Healthy | `#48BB78` | 2.43:1 |
+| Critical | `#F73434` | 3.82:1 |
+| Warning | `#EDD600` | 1.48:1 |
+| Acknowledged | `#AB61D0` | 3.92:1 |
+| High | `#FFB100` | 1.82:1 |
+| Disabled, Unknown | `#919191` | 3.15:1 |
+| Not yet checked | `#0030DF` | 8.44:1 |
+
+The pill still satisfies WCAG 2.1 1.4.1 because it always prints its status in words, which is what the removed silhouette was duplicating. It does not satisfy 1.4.3 on six of the seven fills. Restoring compliance without changing the shape means either darkening the fills or switching the label to Gray-700 on the light ones.
+
+The column-heading rule was the root cause of a second defect. `.data-table th` was unscoped, so it also matched the row headers in `tbody`: every endpoint URL rendered as 10px uppercase Gray-400. Scoping the rule to `thead th` and giving `tbody th` the body's own treatment fixed the heading contrast, the row-header contrast, and the shouted URLs together.
+
+Every affected element still carries a non-color cue: the current page is marked with `aria-current`, planned entries carry a text badge, and every status pill names its status in words.
 
 ## Structure
 
@@ -156,7 +182,7 @@ The Figma header's search field, account entry and notification control are rend
 - One consistent focus ring on every interactive element via `:focus-visible`.
 - Below 62em the sidebar becomes an overlay drawer. While open it is announced as a modal dialog (`role="dialog"`, `aria-modal="true"`), the rest of the application is made `inert`, focus is contained, Escape closes it and focus returns to the toggle. Every attribute is removed on close, leaving a plain navigation landmark on wide viewports.
 - Without JavaScript the sidebar stays in the document flow at every viewport and the drawer toggle is hidden, so navigation never depends on scripting.
-- Status and severity are carried by text and an icon, never by color alone: flash messages show their level as text, planned navigation entries show a **Planned** badge, and the error state shows the status code.
+- Status and severity are carried by text, never by color alone: flash messages show their level as text, status pills name their status, planned navigation entries show a **Planned** badge, and the error state shows the status code.
 - A failed submission renders the validation summary above the page content, with `role="alert"`; focus moves to it when scripting is available.
 - Transitions and animations are removed under `prefers-reduced-motion: reduce`.
 

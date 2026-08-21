@@ -1,4 +1,4 @@
-@model string
+﻿@model string
 @*
     Application-owned icon set. Icons are decorative: every icon is paired with a
     visible or screen-reader text label by the calling component, so the SVG is
@@ -42,6 +42,30 @@
             <path d="M6 21V11" />
             <path d="M12 21V4" />
             <path d="M18 21v-6" />
+        </svg>
+        break;
+    case "seo":
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10.5" cy="10.5" r="6.5" />
+            <path d="m15.5 15.5 4.5 4.5" />
+            <path d="M7.75 11.75l2-2.5 1.75 2 2-3" />
+        </svg>
+        break;
+    case "broken-link":
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.5 7.5 8 6a3.9 3.9 0 0 0-5.5 5.5l1.5 1.5" />
+            <path d="m14.5 16.5 1.5 1.5a3.9 3.9 0 0 0 5.5-5.5L20 11" />
+            <path d="M12 4.5V2.5" />
+            <path d="M4.5 12H2.5" />
+            <path d="M21.5 12h-2" />
+            <path d="M12 21.5v-2" />
+        </svg>
+        break;
+    case "speed":
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 18a9 9 0 1 1 16 0" />
+            <path d="m12 14 4-4.5" />
+            <circle cx="12" cy="14" r="1.25" />
         </svg>
         break;
     case "users":

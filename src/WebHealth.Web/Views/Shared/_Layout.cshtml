@@ -1,5 +1,6 @@
-@{
+﻿@{
     var pageTitle = ViewData.GetTitle();
+    var pageSubtitle = ViewData.GetSubtitle();
     var documentTitle = string.IsNullOrWhiteSpace(pageTitle) ? "WebHealth" : $"{pageTitle} - WebHealth";
 }
 <!DOCTYPE html>
@@ -37,30 +38,18 @@
                     <div class="app-header__titles">
                         @await Html.PartialAsync("_Breadcrumbs")
                         <h1 class="app-title">@(pageTitle ?? "WebHealth")</h1>
+                        @if (pageSubtitle is not null)
+                        {
+                            <p class="app-subtitle">@pageSubtitle</p>
+                        }
                     </div>
 
                     @*
-                        Operable placeholders for the identity, registry and
-                        incident work in Phases 2-4. They are focusable controls
-                        with real hit areas, but they carry no behavior yet, so
-                        each one states its status for assistive technology.
+                        The account, display-preference and notification controls. Each is a real
+                        control with a real hit area; anything not yet implemented states that it
+                        is planned rather than pretending to work.
                     *@
                     <div class="app-header__utility">
-                        <div class="app-search">
-                            <label class="app-search__icon" for="app-search">
-                                @await Html.PartialAsync("_Icon", "search")
-                                <span class="visually-hidden">Search</span>
-                            </label>
-                            <input class="app-search__input"
-                                   id="app-search"
-                                   type="search"
-                                   placeholder="Type here..."
-                                   aria-describedby="app-search-hint" />
-                            <span class="visually-hidden" id="app-search-hint">
-                                Search returns results once the registry is available in Phase 2.
-                            </span>
-                        </div>
-
                         @*
                             The menu is rendered open in the document, so signing
                             out is reachable without script; the enhancement in

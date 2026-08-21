@@ -1,4 +1,4 @@
-@{
+﻿@{
     var currentController = ViewContext.RouteData.Values["controller"] as string;
     var currentAction = ViewContext.RouteData.Values["action"] as string;
     var groupIndex = 0;
@@ -60,10 +60,20 @@
         </div>
     }
 
+@*
+    This card used to be headed "Need help?" and offered no help: its only link was the runtime
+    readiness endpoint, which the Diagnostics card and the footer already carry. It now says what
+    it actually shows — whether this application instance is answering — so the destination and
+    the label agree.
+*@
     <div class="app-sidebar__support">
-        <span class="app-sidebar__support-icon">@await Html.PartialAsync("_Icon", "help")</span>
-        <p class="app-sidebar__support-title">Need help?</p>
-        <p class="app-sidebar__support-text">Check our health endpoints.</p>
-        <a class="app-sidebar__support-link" href="/health/ready">Check runtime health</a>
+        <span class="app-sidebar__support-icon">@await Html.PartialAsync("_Icon", "diagnostics")</span>
+        <p class="app-sidebar__support-title">System status</p>
+        <p class="app-sidebar__support-state">
+            <span class="app-sidebar__support-dot" aria-hidden="true"></span>
+            <span>Application responding</span>
+        </p>
+        <p class="app-sidebar__support-text">Signed in and served by this instance.</p>
+        <a class="app-sidebar__support-link" href="/health/ready">Runtime readiness</a>
     </div>
 </nav>

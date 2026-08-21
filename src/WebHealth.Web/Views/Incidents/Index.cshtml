@@ -7,13 +7,6 @@
     var lastVisible = Math.Min(listPage.Page * listPage.PageSize, listPage.TotalCount);
     var hasPrevious = listPage.Page > 1;
     var hasNext = lastVisible < listPage.TotalCount;
-
-    static string StatusBadge(string status) => status switch
-    {
-        "Open" or "Acknowledged" => "danger",
-        "InProgress" or "MonitoringRecovery" => "warning",
-        _ => "success"
-    };
 }
 
 <div class="stack">
@@ -106,7 +99,7 @@
                                 </td>
                                 <td data-label="Severity">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(item.Severity), item.Severity))</td>
                                 <td data-label="Status">
-                                    <span class="badge" data-status="@StatusBadge(item.Status)">@item.Status</span>
+                                    <span class="badge" data-status="@StatusBadges.ForIncidentStatus(item.Status)">@item.Status</span>
                                     @if (item.AcknowledgedAt is null && item.Status != "Resolved" && item.Status != "Closed")
                                     {
                                         <span class="data-table__secondary">Unacknowledged</span>

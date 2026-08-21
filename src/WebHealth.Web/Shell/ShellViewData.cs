@@ -15,6 +15,9 @@ public static class ShellViewData
     /// <summary>The view-data key holding the breadcrumb trail.</summary>
     public const string BreadcrumbsKey = "Breadcrumbs";
 
+    /// <summary>The view-data key holding the one-line description under the heading.</summary>
+    public const string SubtitleKey = "Subtitle";
+
     /// <summary>Sets the page heading, which is also used for the document title.</summary>
     public static void SetTitle(this ViewDataDictionary viewData, string title)
     {
@@ -22,6 +25,18 @@ public static class ShellViewData
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
 
         viewData[TitleKey] = title;
+    }
+
+    /// <summary>
+    /// Sets the one-line description rendered under the page heading. It exists so a top-level
+    /// page can say what it is for in the header instead of spending a card heading on it.
+    /// </summary>
+    public static void SetSubtitle(this ViewDataDictionary viewData, string subtitle)
+    {
+        ArgumentNullException.ThrowIfNull(viewData);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subtitle);
+
+        viewData[SubtitleKey] = subtitle;
     }
 
     /// <summary>Sets the breadcrumb trail, ending with the current page.</summary>
@@ -39,6 +54,14 @@ public static class ShellViewData
         ArgumentNullException.ThrowIfNull(viewData);
 
         return viewData[TitleKey] as string;
+    }
+
+    /// <summary>Gets the heading's description, or <see langword="null" /> when there is none.</summary>
+    public static string? GetSubtitle(this ViewDataDictionary viewData)
+    {
+        ArgumentNullException.ThrowIfNull(viewData);
+
+        return viewData[SubtitleKey] as string;
     }
 
     /// <summary>Gets the breadcrumb trail, or an empty trail when the view did not set one.</summary>

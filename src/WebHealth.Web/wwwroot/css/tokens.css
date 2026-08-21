@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Application-owned design tokens.
  *
  * Source of truth: the Purity UI Dashboard Figma baseline recorded in
@@ -117,6 +117,24 @@
     --status-info-text: var(--color-blue-600);
     --status-info-surface: #ebf8ff;
 
+    /*
+     * Status pill fills, taken from Figma node 1633:352. They are the reference
+     * values as drawn, and they are the one place in this file that does not
+     * carry an accessible override: the white 13px label reaches 8.4:1 on the
+     * info fill and between 1.5:1 and 3.9:1 on the rest. The pill always prints
+     * its status as words, so the fill is never the only cue, but the label on
+     * the lighter fills is below the WCAG 2.1 AA floor in
+     * docs/phase-0/UI_Direction.md section 6.
+     */
+    --badge-success: #48bb78;
+    --badge-danger: #f73434;
+    --badge-warning: #edd600;
+    --badge-high: #ffb100;
+    --badge-acknowledged: #ab61d0;
+    --badge-info: #0030df;
+    --badge-neutral: #919191;
+    --badge-label: var(--color-white);
+
     /* Radii, taken from the Figma card (15px) and tile (12px) geometry. */
     --radius-card: 15px;
     --radius-tile: 12px;
@@ -166,21 +184,23 @@
     --content-max-width: 90rem;
 
     /*
-     * Sidebar palette. Reproduces Figma node 2:164 exactly at the project
-     * owner's direction on 2026-08-13, so the accessible overrides above are
-     * deliberately not applied here. Gray-400 labels reach 2.2:1 and white
-     * support-card text reaches 1.9:1, both below the WCAG 2.1 AA floor
-     * recorded in docs/phase-0/UI_Direction.md section 6. The deviation is
-     * recorded in docs/phase-1/Application_Shell.md.
+     * Sidebar palette. Follows Figma node 2:164 for geometry and for the teal
+     * accent, but the two text colours that node specifies are replaced by the
+     * accessible overrides above: Gray-400 labels measured 2.14:1 and white
+     * support-card text 1.87:1 against their own backgrounds, both below the
+     * WCAG 2.1 AA floor recorded in docs/phase-0/UI_Direction.md section 6.
+     * Gray-600 labels reach 7.5:1 and the Teal-600 support surface carries
+     * white at 4.8:1. The earlier deviation and its withdrawal are recorded in
+     * docs/phase-1/Application_Shell.md.
      */
     --sidebar-surface: var(--color-gray-100);
     --sidebar-item-surface: var(--color-white);
-    --sidebar-label: var(--color-gray-400);
+    --sidebar-label: var(--color-gray-600);
     --sidebar-label-active: var(--color-gray-700);
     --sidebar-icon: var(--color-teal-300);
     --sidebar-icon-active: var(--color-white);
     --sidebar-icon-active-surface: var(--color-teal-300);
-    --sidebar-support-surface: var(--color-teal-300);
+    --sidebar-support-surface: var(--color-teal-600);
     --sidebar-support-text: var(--color-white);
     --sidebar-divider: var(--divider-line);
 
