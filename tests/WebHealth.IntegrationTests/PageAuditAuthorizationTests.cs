@@ -116,6 +116,22 @@ public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory f
         runner.Requested.Should().ContainSingle().Which.Should().Be(Endpoint);
     }
 
+    /// <summary>
+    /// A run id naming nothing this endpoint owns is a wrong address, not an endpoint with no
+    /// history. Rendering "no audit has run yet" would answer a different question and would read
+    /// as though the run had been deleted.
+    /// </summary>
+    [Fact]
+    public async Task ARunIdThatResolvesToNothing_IsNotFound()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var response = await client.GetAsync(
+            $"/PageAudits?endpointId={Endpoint}&runId={Guid.Empty}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     [Fact]
     public async Task RunNow_IsRefusedWithoutAnAntiForgeryToken()
     {

@@ -66,6 +66,12 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
     /// A configured, enabled endpoint, so the page renders its whole surface — including the
     /// Run now control, whose authorization is what several of these tests are about.
     /// </summary>
+    /// <remarks>
+    /// A requested run id resolves to a run, as it does in production: the real reader returns no
+    /// run only when the id names nothing this endpoint owns, and the controller turns that into
+    /// Not Found. A stub that answered null for every id would make the redirect after Run now
+    /// look like a wrong address.
+    /// </remarks>
     public Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
         Guid? runId,
@@ -82,9 +88,30 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
             PageAuditStrategies.Mobile,
             24,
             null,
-            null,
+            runId is { } requested && requested != Guid.Empty
+                ? RunOf(endpointId, requested)
+                : null,
             PageAuditItemCounts.Empty,
             PageAuditComparison.None));
+
+    private static PageAuditRunSummary RunOf(Guid endpointId, Guid runId) => new(
+        runId,
+        endpointId,
+        PageAuditSources.Manual,
+        PageAuditRunStatuses.Queued,
+        "https://example.com/",
+        null,
+        null,
+        PageAuditStrategies.Mobile,
+        "en-US",
+        null,
+        null,
+        null,
+        null,
+        0,
+        DateTimeOffset.UtcNow,
+        null,
+        null);
 
     public Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,
