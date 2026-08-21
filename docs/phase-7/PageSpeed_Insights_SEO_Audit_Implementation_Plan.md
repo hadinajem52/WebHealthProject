@@ -1596,8 +1596,37 @@ The feature ships with `Enabled: false` and no key, and the delivery checks pass
 | PA-21 to PA-24 | `PageAuditReaderAssertions` and the PageSpeed view |
 | PA-25 | Full database foundation suite green, including every pre-existing stage |
 
-Test evidence at the time of the gate: 620 unit tests, 336 integration tests, and the 25-stage
-database foundation suite, all green.
+Test evidence at the time of the gate: 622 unit tests, 326 integration tests (4 skipped, all
+requiring Docker), and the database foundation suite with its four page-audit stages, all green.
+
+### 22.5 Post-review corrections
+
+An external review found eight blocking defects after the increments above were complete. Six
+were real, two were overstated, and one thing the review did not raise turned out to be worse
+than what it did.
+
+| Defect | Fix |
+|---|---|
+| Endpoint query strings were forwarded to Google verbatim, and a query is where a signed link or reset token lives | Eligibility refuses any URL carrying a query. Nothing can tell `?token=` from `?lang=`, so the class is refused rather than guessed at |
+| A run queued against URL A still sent A after the endpoint was edited to B, past a check that had re-derived authorization for B | Execution compares the snapshot against the endpoint's current URL and refuses a stale one |
+| Cancellation wrote its terminal row with the already-cancelled token, so the run stayed `Running` until its lease expired | Cancellation finishes as `Cancelled` on `CancellationToken.None` |
+| An adapter fault the provider did not name escaped every catch, and reclaim ignored `MaximumAttempts`, so reconciliation retried it indefinitely | Every fault is caught and recorded; the attempt ceiling is part of the claim; reconciliation retires runs with no attempts left instead of re-enqueueing them |
+| A valid JSON array or scalar body threw out of the response reader | The document root is checked before any property is read |
+| With scheduling off, Run now committed a run and then threw, leaving it `Queued` forever and holding the target's only active slot | The run is retired when the queue refuses it, and the request says why |
+| `ReachablePercent` in the CSV emitted the healthy-only figure | Renamed to `CleanPercent`. The dashboard's two cards had the same defect and worse - the detail text contradicted the value - and are corrected too |
+
+Two findings were overstated and are recorded as hardening rather than leaks. The API key was
+never exposed through `HttpClientFactory` logging: .NET redacts query strings to `?*` by default,
+which a live run confirmed. The client's loggers are now removed anyway, so the key does not
+depend on a process-wide default this feature does not own. The transport exception was likewise
+never persisted, because the diagnostic is written from the sanitized wrapper message - it is no
+longer attached at all, so nothing that calls `ToString()` later can recover the URI.
+
+Also corrected: the previous-run tie-break could select a later run on an identical finish time;
+a run id naming nothing the endpoint owns now returns Not Found; `page_audit_item` follows the
+schema's RESTRICT contract rather than cascading; `QueueManualAsync` enforces target
+authorization itself rather than trusting its one caller; and the unused `DefaultInterval`
+setting is gone.
 
 No additional Phase 7 documents are required for this feature.
 
