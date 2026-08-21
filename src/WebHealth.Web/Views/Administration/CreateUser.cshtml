@@ -26,7 +26,10 @@
         </div>
         <div class="form-field">
             <label asp-for="Password"></label>
-            <input asp-for="Password" autocomplete="new-password" />
+            <div class="password-field">
+                <input asp-for="Password" autocomplete="new-password" />
+                @await Html.PartialAsync("_PasswordReveal")
+            </div>
             <span class="form-field__hint">At least 12 characters with upper, lower, number, symbol, and four unique characters.</span>
             <span asp-validation-for="Password"></span>
         </div>

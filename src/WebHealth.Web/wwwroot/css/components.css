@@ -864,6 +864,72 @@ code,
 }
 
 /*
+ * Password reveal.
+ *
+ * The button sits inside the field's box rather than beside it, so the control
+ * reads as part of one input instead of as a second thing to tab past on the way
+ * to the submit button. The input gains right padding to match, or long values
+ * would run underneath the icon.
+ *
+ * Hidden without the shell script, which is what performs the toggle. A button
+ * that did nothing would read as the field refusing to reveal.
+ */
+.password-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-field input {
+    /* Room for the 44px target plus the field's own inset. */
+    padding-right: 3rem !important;
+}
+
+.password-field__toggle {
+    display: none;
+}
+
+.js .password-field__toggle {
+    position: absolute;
+    right: var(--space-2);
+    display: grid;
+    place-items: center;
+    /* A 44px target, which is the smallest a pointer should have to hit. */
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-tile);
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.js .password-field__toggle:hover {
+    color: var(--text-primary);
+}
+
+.js .password-field__toggle svg {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+/*
+ * Both icons are rendered and one is shown, so the swap costs no parse and
+ * cannot flash. aria-pressed is the single source of truth for which: the
+ * script sets that attribute and the visual follows, rather than the two being
+ * updated separately and drifting.
+ */
+.password-field__icon--hide,
+.password-field__toggle[aria-pressed="true"] .password-field__icon--show {
+    display: none;
+}
+
+.password-field__toggle[aria-pressed="true"] .password-field__icon--hide {
+    display: block;
+}
+
+/*
  * Select and date controls.
  *
  * The browser default arrow sits hard against the edge of the field, so it is

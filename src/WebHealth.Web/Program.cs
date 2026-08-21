@@ -88,8 +88,6 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
     ExceptionHandlingPath = "/Home/Error",
     SuppressDiagnosticsCallback = _ => true
 });
-app.UseMiddleware<SafeExceptionLoggingMiddleware>();
-app.UseStatusCodePagesWithReExecute("/Home/HttpStatusCode", "?code={0}");
 
 if (!app.Environment.IsDevelopment())
 {
@@ -101,6 +99,8 @@ app.UseSerilogRequestLogging(options =>
     options.MessageTemplate =
         "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
 });
+app.UseMiddleware<SafeExceptionLoggingMiddleware>();
+app.UseStatusCodePagesWithReExecute("/Home/HttpStatusCode", "?code={0}");
 
 app.UseHttpsRedirection();
 app.UseRouting();

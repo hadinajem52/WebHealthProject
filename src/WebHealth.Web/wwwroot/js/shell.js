@@ -29,6 +29,56 @@
         });
     }
 
+    // Reveals a password so it can be checked before submitting. The type swap is
+    // the whole mechanism; aria-pressed carries the state for assistive technology
+    // and drives the icon through CSS, so there is one source of truth rather than
+    // three things to keep in step.
+    function setUpPasswordReveal(toggle) {
+        var field = toggle.parentElement;
+        var input = field && field.querySelector('input');
+        if (!input) {
+            return;
+        }
+
+        function apply(revealed) {
+            input.type = revealed ? 'text' : 'password';
+            toggle.setAttribute('aria-pressed', revealed ? 'true' : 'false');
+            var label = revealed ? 'Hide password' : 'Show password';
+            toggle.setAttribute('aria-label', label);
+            toggle.setAttribute('title', label);
+        }
+
+        toggle.addEventListener('click', function () {
+            var revealed = toggle.getAttribute('aria-pressed') === 'true';
+            apply(!revealed);
+
+            // Focus returns to the value being checked, with the caret at the end.
+            // Without this the caret jumps to the start on some browsers after a
+            // type change, which silently corrupts the next keystroke.
+            var caret = input.value.length;
+            input.focus();
+            if (input.setSelectionRange) {
+                try {
+                    input.setSelectionRange(caret, caret);
+                } catch (error) {
+                    // A browser that refuses selection on this input type is not a
+                    // reason to leave the password revealed.
+                }
+            }
+        });
+
+        // Re-masked on submit. The page normally reloads, but a failed validation
+        // re-render or a back-navigation restore can bring a revealed field back,
+        // and a password left on screen is the one outcome this control must not
+        // cause.
+        var form = input.form;
+        if (form) {
+            form.addEventListener('submit', function () {
+                apply(false);
+            });
+        }
+    }
+
     function onReady(callback) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', callback);
@@ -489,6 +539,9 @@
         if (schedulingToggle && intervalField && intervalInput) {
             setUpIntervalAvailability(schedulingToggle, intervalField, intervalInput);
         }
+
+        document.querySelectorAll('[data-shell-password-toggle]')
+            .forEach(setUpPasswordReveal);
 
         setUpConfirmedSubmission();
 
