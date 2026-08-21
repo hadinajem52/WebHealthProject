@@ -257,6 +257,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyCrawlResultContractAsync(connectionString);
         await VerifyPageAuditContractAsync(connectionString);
         await VerifyPageAuditExecutionAsync(connectionString);
+        await VerifyPageAuditReadModelAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
         await VerifyPhaseThreeToPhaseFourUpgradeAsync(connectionString);
@@ -4365,6 +4366,33 @@ internal static class DatabaseFoundationAssertions
     /// own audit target. The provider and the queue are replaced so nothing here reaches Google or
     /// Hangfire; everything else - the database, the services, the constraints - is real.
     /// </summary>
+    /// <summary>
+    /// The read model, on its own endpoint so the scored runs it seeds cannot disturb the
+    /// execution stage's lease and retry assertions.
+    /// </summary>
+    private static async Task VerifyPageAuditReadModelAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var monitor = await CreateOwnedMonitorAsync(
+            scope, database, "https://page-audit-reader.example.com/status");
+        var administrator = await database.Users.AsNoTracking()
+            .SingleAsync(user => user.Email == "bootstrap@example.test");
+
+        await PageAuditReaderAssertions.VerifyAsync(
+            database,
+            scope.ServiceProvider.GetRequiredService<IPageAuditReader>(),
+            administrator.Id,
+            monitor.EndpointId);
+    }
+
     private static async Task VerifyPageAuditExecutionAsync(string connectionString)
     {
         var provider = new ScriptedPageAuditProvider();
