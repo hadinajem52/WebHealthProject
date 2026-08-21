@@ -1,8 +1,5 @@
-﻿@model FilterSummaryViewModel
-@*
-    BR-R01. Rendered as a definition list rather than as prose so a screen reader can move
-    term-by-term through the applied filters instead of hearing one long sentence.
-*@
+@model FilterSummaryViewModel
+
 <div class="filter-summary" role="note" aria-label="Applied filters and data freshness">
     <dl class="filter-summary__list">
         @if (Model.Window is not null)

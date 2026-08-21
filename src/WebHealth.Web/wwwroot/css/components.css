@@ -1,20 +1,5 @@
-/*
- * Reusable shell components: cards, buttons, flash messages, validation
- * summaries, empty states and error states. Status meaning is always carried by
- * text and an icon, never by color alone.
- */
-
-/* Cards ------------------------------------------------------------------ */
-
-/*
- * Card anatomy follows Figma nodes 4:289 and 68:448: an optional eyebrow, an
- * 18px bold heading, supporting text, an optional divider, and inline
- * label/value rows on a 36px pitch. Text colors keep the AA-safe tokens rather
- * than the reference Gray-400, which does not reach 4.5:1 on white.
- */
-
 .card {
-    padding: 1.3125rem; /* 21px */
+    padding: 1.3125rem;
     border-radius: var(--radius-card);
     background-color: var(--surface-raised);
     box-shadow: var(--shadow-card);
@@ -23,17 +8,17 @@
 
 .card__eyebrow {
     color: var(--text-secondary);
-    font-size: var(--font-size-xs); /* 12px */
+    font-size: var(--font-size-xs);
     font-weight: 700;
     line-height: var(--line-height-base);
 }
 
 .card__eyebrow + .card__title {
-    margin-top: 0.1875rem; /* 3px */
+    margin-top: 0.1875rem;
 }
 
 .card__title {
-    font-size: var(--font-size-lg); /* 18px */
+    font-size: var(--font-size-lg);
     font-weight: 700;
     line-height: var(--line-height-tight);
 }
@@ -41,7 +26,7 @@
 .card__subtitle {
     margin-top: 0.375rem;
     color: var(--text-secondary);
-    font-size: var(--font-size-sm); /* 14px */
+    font-size: var(--font-size-sm);
     font-weight: 400;
     line-height: var(--line-height-tight);
     margin-bottom: 10px;
@@ -67,9 +52,9 @@
     align-items: center;
     margin-top: var(--space-4);
     color: var(--text-primary);
-    font-size: var(--font-size-xs); /* 12px */
+    font-size: var(--font-size-xs);
     font-weight: 700;
-    gap: var(--space-1); /* 4px */
+    gap: var(--space-1);
     text-decoration: none;
 }
 
@@ -78,11 +63,9 @@
 }
 
 .card__action svg {
-    width: 0.75rem; /* 12px */
+    width: 0.75rem;
     height: 0.75rem;
 }
-
-/* Feature card: text column beside a decorative panel (node 4:289). */
 
 .card--feature {
     display: grid;
@@ -119,11 +102,6 @@
     }
 }
 
-/*
- * `align-items: start` rather than the default stretch: a short card beside a
- * tall one used to be pulled to the tall one's height, leaving a large empty
- * panel below its content.
- */
 .card-grid {
     display: grid;
     align-items: start;
@@ -135,15 +113,11 @@
     margin-top: var(--space-5);
 }
 
-/*
- * Each row is its own line, so a value follows its own label instead of being
- * aligned to a shared column (node 68:448).
- */
 .data-list {
     display: flex;
     margin: 0;
     flex-direction: column;
-    gap: 1.125rem; /* 18px, giving the 36px row pitch */
+    gap: 1.125rem;
 }
 
 .data-list__row {
@@ -155,7 +129,7 @@
 
 .data-list dt {
     color: var(--text-secondary);
-    font-size: var(--font-size-xs); /* 12px */
+    font-size: var(--font-size-xs);
     font-weight: 700;
     line-height: var(--line-height-base);
 }
@@ -178,8 +152,6 @@ code,
     overflow-wrap: anywhere;
 }
 
-/* Buttons and links ------------------------------------------------------ */
-
 .button {
     display: inline-flex;
     align-items: center;
@@ -195,7 +167,6 @@ code,
     transition: background-color var(--motion-fast) var(--motion-easing);
 }
 
-/* The reference primary action is the dark button on the billing screen. */
 .button--primary {
     background-color: #2c7a7b;
     color: var(--color-white);
@@ -229,8 +200,6 @@ code,
     width: 1rem;
     height: 1rem;
 }
-
-/* Status --------------------------------------------------------------- */
 
 .status {
     display: inline-flex;
@@ -272,8 +241,6 @@ code,
     color: var(--status-info-text);
 }
 
-/* Flash messages --------------------------------------------------------- */
-
 .flash-messages > * + * {
     margin-top: var(--space-3);
 }
@@ -309,7 +276,6 @@ code,
     font-weight: 700;
 }
 
-/* Hidden without the shell script, which is what performs the dismissal. */
 .flash__dismiss {
     display: none;
 }
@@ -387,8 +353,6 @@ code,
     color: var(--status-danger-text);
 }
 
-/* Validation summary ----------------------------------------------------- */
-
 .validation-summary {
     padding: var(--space-4);
     border: 1px solid var(--status-danger);
@@ -425,8 +389,6 @@ code,
 .validation-summary li:empty {
     display: none;
 }
-
-/* Empty state ------------------------------------------------------------ */
 
 .empty-state {
     display: flex;
@@ -469,8 +431,6 @@ code,
 .empty-state__action {
     margin-top: var(--space-2);
 }
-
-/* Error state ------------------------------------------------------------ */
 
 .error-state {
     max-width: 42rem;
@@ -522,8 +482,6 @@ code,
     gap: var(--space-3);
 }
 
-/* Administration tables and forms --------------------------------------- */
-
 .page-intro {
     display: flex;
     flex-wrap: wrap;
@@ -533,12 +491,6 @@ code,
     margin-bottom: 15px;
 }
 
-/*
- * Table follows the Authors and Projects tables (Figma nodes 29:127 and
- * 29:1020): 10px uppercase column headings, a rule under the heading row and
- * between rows, a 40px rounded avatar tile, and a two-line identity cell.
- */
-
 .table-scroll {
     margin-top: var(--space-5);
     overflow-x: auto;
@@ -547,38 +499,27 @@ code,
 .data-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: var(--font-size-sm); /* 14px */
+    font-size: var(--font-size-sm);
 }
 
 .data-table th,
 .data-table td {
-    padding: 0.6875rem var(--space-3); /* 11px, giving the 62px row pitch */
+    padding: 0.6875rem var(--space-3);
     border-bottom: 1px solid var(--border-subtle);
     text-align: left;
     vertical-align: middle;
 }
 
-/*
- * Scoped to thead deliberately. An unscoped `.data-table th` also matches the
- * row headers in tbody, which rendered endpoint URLs as 10px uppercase
- * Gray-400 — 2.26:1, and shouting. Column headings keep their own treatment;
- * row headers below inherit the body's.
- */
 .data-table thead th {
     padding-bottom: var(--space-2);
     color: var(--color-gray-600);
-    font-size: var(--font-size-xs); /* 12px, up from the 10px reference */
+    font-size: var(--font-size-xs);
     font-weight: 700;
     letter-spacing: 0.02em;
     line-height: var(--line-height-base);
     text-transform: uppercase;
 }
 
-/*
- * A row header is a cell that happens to name its row, so it reads like one:
- * body size, primary colour, and only the weight to mark it as the row's
- * subject.
- */
 .data-table tbody th {
     color: var(--text-primary);
     font-weight: 600;
@@ -592,18 +533,17 @@ code,
 .data-table__identity {
     display: flex;
     align-items: center;
-    gap: 0.9375rem; /* 15px */
+    gap: 0.9375rem;
 }
 
 .data-table__avatar {
     display: grid;
-    width: 2.5rem; /* 40px */
+    width: 2.5rem;
     height: 2.5rem;
     flex: 0 0 auto;
     border-radius: var(--radius-tile);
     background-color: var(--color-teal-300);
 
-    /* Gray-700 on Teal-300 reaches 6.4:1; the reference uses a photograph. */
     color: var(--color-gray-700);
     font-size: var(--font-size-xs);
     font-weight: 700;
@@ -676,42 +616,30 @@ code,
 
 .data-table__action a {
     color: var(--color-gray-500);
-    font-size: var(--font-size-xs); /* 12px */
+    font-size: var(--font-size-xs);
     font-weight: 700;
 }
 
-/*
- * Status pill, Figma node 1633:352: a solid 65x25 fill, 8px corners, and a
- * centred white 13px label with nothing beside it. Every status in the
- * application resolves to one of the fills below, so a pill written before or
- * after this rule looks the same.
- *
- * The label is the non-colour cue. The pill previously drew a per-status
- * silhouette as well; the reference has none, and the label already names the
- * status in words, which is what WCAG 2.1 1.4.1 asks for.
- */
 .badge {
     display: inline-flex;
-    min-width: 4.0625rem; /* 65px */
-    min-height: 1.5625rem; /* 25px */
+    min-width: 4.0625rem;
+    min-height: 1.5625rem;
     align-items: center;
     justify-content: center;
     padding: 0 var(--space-2);
     border-radius: 8px;
     background-color: var(--badge-neutral);
     color: var(--badge-label);
-    font-size: 0.8125rem; /* 13px */
+    font-size: 0.8125rem;
     font-weight: 400;
-    line-height: var(--line-height-tight); /* 1.4 */
+    line-height: var(--line-height-tight);
     text-align: center;
 }
 
-/* Healthy. */
 .badge[data-status="success"] {
     background-color: var(--badge-success);
 }
 
-/* Critical. */
 .badge[data-status="danger"] {
     background-color: var(--badge-danger);
 }
@@ -720,11 +648,6 @@ code,
     background-color: var(--badge-warning);
 }
 
-/*
- * Warning and high share the amber family, with high the more saturated of the
- * two, so the three severity bands read as one escalating scale rather than
- * three unrelated colours.
- */
 .badge[data-status="high"] {
     background-color: var(--badge-high);
 }
@@ -733,12 +656,10 @@ code,
     background-color: var(--badge-acknowledged);
 }
 
-/* Not yet checked. */
 .badge[data-status="info"] {
     background-color: var(--badge-info);
 }
 
-/* Disabled and unknown share one fill in the reference: neither is a verdict. */
 .badge[data-status="neutral"] {
     background-color: var(--badge-neutral);
 }
@@ -760,11 +681,6 @@ code,
     font-size: var(--font-size-xs);
     font-weight: 700;
 }
-
-/*
- * Sunken panel from the Billing Information card: a grouped block inside a
- * card, used to separate the sections of a long form.
- */
 
 .panel-list {
     display: flex;
@@ -788,13 +704,13 @@ code,
 }
 
 .panel__title {
-    font-size: var(--font-size-sm); /* 14px */
+    font-size: var(--font-size-sm);
     font-weight: 700;
 }
 
 .panel__hint {
     color: var(--color-gray-500);
-    font-size: var(--font-size-xs); /* 12px */
+    font-size: var(--font-size-xs);
 }
 
 .panel__body {
@@ -827,8 +743,6 @@ code,
     font-weight: 700;
 }
 
-/* A field whose value has no effect under the current settings. Still readable
-   and still submitted, so the stored value survives. */
 .form-field[data-inactive="true"] {
     opacity: 0.55;
 }
@@ -853,17 +767,6 @@ code,
     resize: vertical;
 }
 
-/*
- * Password reveal.
- *
- * The button sits inside the field's box rather than beside it, so the control
- * reads as part of one input instead of as a second thing to tab past on the way
- * to the submit button. The input gains right padding to match, or long values
- * would run underneath the icon.
- *
- * Hidden without the shell script, which is what performs the toggle. A button
- * that did nothing would read as the field refusing to reveal.
- */
 .password-field {
     position: relative;
     display: flex;
@@ -871,7 +774,7 @@ code,
 }
 
 .password-field input {
-    /* Room for the 44px target plus the field's own inset. */
+
     padding-right: 3rem !important;
 }
 
@@ -884,7 +787,7 @@ code,
     right: var(--space-2);
     display: grid;
     place-items: center;
-    /* A 44px target, which is the smallest a pointer should have to hit. */
+
     width: 2.75rem;
     height: 2.75rem;
     padding: 0;
@@ -905,12 +808,6 @@ code,
     height: 1.125rem;
 }
 
-/*
- * Both icons are rendered and one is shown, so the swap costs no parse and
- * cannot flash. aria-pressed is the single source of truth for which: the
- * script sets that attribute and the visual follows, rather than the two being
- * updated separately and drifting.
- */
 .password-field__icon--hide,
 .password-field__toggle[aria-pressed="true"] .password-field__icon--show {
     display: none;
@@ -920,14 +817,6 @@ code,
     display: block;
 }
 
-/*
- * Select and date controls.
- *
- * The browser default arrow sits hard against the edge of the field, so it is
- * replaced with the chevron used elsewhere in the interface, inset by the same
- * 16px the card content uses. The up chevron is a second image rather than a
- * rotation because a background image cannot be transformed.
- */
 .form-field select {
     appearance: none;
     padding-right: 2.75rem;
@@ -942,28 +831,12 @@ code,
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232d3748' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m18 15-6-6-6 6'/%3E%3C/svg%3E");
 }
 
-/*
- * Where the browser supports the customizable select, the option list is drawn
- * by the application instead of the operating system, so it carries the card
- * radius, border and shadow. Browsers without it keep the native list and the
- * chevron above.
- */
 @supports (appearance: base-select) {
     .form-field select,
     .form-field select::picker(select) {
         appearance: base-select;
     }
 
-    /*
-     * The label is laid out as plain inline text on one line, clipped by the
-     * field.
-     *
-     * It is tempting to lay this out as flex with the chevron as the trailing
-     * item, but the browser wraps the selected label in generated content it
-     * builds in its own shadow tree, and that box has min-width:auto and cannot
-     * be selected to shrink it. A long label then either wraps out of the field
-     * or pushes the chevron out of view.
-     */
     .form-field select,
     .form-field select:open {
         position: relative;
@@ -974,13 +847,6 @@ code,
         white-space: nowrap;
     }
 
-    /*
-     * The chevron is taken out of flow so it holds the right edge whatever the
-     * label's length, and it carries the field's own background: a background
-     * image would paint behind the text, leaving a long label running through
-     * the glyph. As its own box it occludes the overflow instead, so the label
-     * ends cleanly at the chevron.
-     */
     .form-field select::picker-icon {
         position: absolute;
         top: 0;
@@ -1038,10 +904,6 @@ code,
     }
 }
 
-/*
- * The calendar panel itself is browser chrome and cannot be styled; only the
- * control that opens it is application owned.
- */
 .form-field input[type="date"]::-webkit-calendar-picker-indicator {
     width: 1.125rem;
     height: 1.125rem;
@@ -1155,12 +1017,6 @@ code,
     font-size: 0.875rem;
 }
 
-/*
- * Filter bar. One grid of equal, capped columns instead of a single flexed row:
- * the row used to shrink every control until labels wrapped onto two lines and
- * a field carrying a hint dragged its neighbours out of line. Columns wrap on
- * their own, each field owns its cell, and the actions sit on a closing row.
- */
 .filter-grid {
     display: grid;
     align-items: start;
@@ -1170,11 +1026,6 @@ code,
     grid-template-columns: 1fr;
 }
 
-/*
- * A fixed column count rather than auto-fill: auto-fill packs as many controls
- * onto the first line as fit and leaves the last one stranded alone on the
- * second. Four columns keep the eight dashboard filters as two even rows.
- */
 @media (min-width: 40em) {
     .filter-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -1191,34 +1042,21 @@ code,
     min-width: 0;
 }
 
-/*
- * A filter bar holding one control gives it the whole row. The column count is
- * sized for the eight dashboard filters, so a lone field inherits a quarter of
- * the width and clips a value that had room to be read in full.
- */
 .filter-grid .form-field--full {
     grid-column: 1 / -1;
 }
 
-/* A label is a column heading here, so it stays on one line and truncates
-   rather than growing the row it sits in. */
 .filter-grid .form-field label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-/* One control height across inputs, dates and selects keeps the labels on a
-   single baseline. */
 .filter-grid .form-field input,
 .filter-grid .form-field select {
     height: 3.125rem;
 }
 
-/*
- * A hint belongs to the whole row rather than to the one field that happens to
- * carry it, so it spans the grid and never lengthens a single column.
- */
 .filter-grid__hint {
     margin: calc(var(--space-2) * -1) 0 0;
     color: var(--text-secondary);
@@ -1226,10 +1064,6 @@ code,
     grid-column: 1 / -1;
 }
 
-/*
- * The actions close the filter bar on their own row, right aligned under the
- * fields, so they keep their natural width whatever the field count is.
- */
 .filter-grid__actions {
     display: flex;
     align-items: center;
@@ -1370,25 +1204,20 @@ code,
     margin-top: var(--space-2);
 }
 
-/*
- * Switch, shared with the sign-in screen (Figma node 88:499). The 13.5px knob
- * is centred in the 36x18 track and travels the remaining 18px when on.
- */
-
 .switch-field {
     display: flex;
     align-items: center;
     color: var(--text-primary);
-    font-size: var(--font-size-xs); /* 12px */
+    font-size: var(--font-size-xs);
     font-weight: 700;
-    gap: 0.625rem; /* 10px */
+    gap: 0.625rem;
     line-height: var(--line-height-base);
 }
 
 .switch-field input {
     position: relative;
-    width: 2.25rem; /* 36px */
-    height: 1.125rem; /* 18px */
+    width: 2.25rem;
+    height: 1.125rem;
     flex: 0 0 auto;
     appearance: none;
     border-radius: var(--radius-pill);
@@ -1472,13 +1301,6 @@ code,
     }
 }
 
-/* Filter summary --------------------------------------------------------- */
-
-/*
- * BR-R01's disclosure strip. It sits above the numbers it describes and stays
- * legible at every width: the items wrap rather than scroll, because a reader
- * must never have to pan sideways to find out what a figure was filtered to.
- */
 .filter-summary {
     padding: var(--space-3) var(--space-4);
     border: 1px solid var(--border-subtle);
@@ -1519,13 +1341,6 @@ code,
     font-size: var(--font-size-sm);
 }
 
-/* Dashboard -------------------------------------------------------------- */
-
-/*
- * Scope bar. The line that used to be an eight-field panel: what you are looking
- * at, how fresh it is, and the two actions worth having at hand. The full filter
- * form still exists, at the foot of the page and folded away.
- */
 .scope-bar {
     display: flex;
     flex-wrap: wrap;
@@ -1560,12 +1375,6 @@ code,
     gap: var(--space-2);
 }
 
-/*
- * Current-status tiles. They differ from .stat deliberately: a stat is a number
- * over a period, and these are states right now. The tone stripe gives the tile
- * a weight that matches what it is reporting, so a critical tile is not the same
- * visual object as a healthy one.
- */
 .status-grid {
     display: grid;
     gap: var(--space-4);
@@ -1614,7 +1423,6 @@ code,
     line-height: var(--line-height-base);
 }
 
-/* Two charts side by side on a wide screen, stacked when there is no room. */
 .chart-pair {
     display: grid;
     margin-top: var(--space-4);
@@ -1641,23 +1449,11 @@ code,
     text-transform: uppercase;
 }
 
-/*
- * A row the reader should look at first gets a marker in the table rather than
- * only a coloured badge, so it is findable while scanning the left edge.
- */
 .data-table tbody tr[data-attention="true"] th[scope="row"] {
     box-shadow: inset 3px 0 0 var(--status-danger-text);
     padding-left: var(--space-3);
 }
 
-/* The filter menu --------------------------------------------------------- */
-
-/*
- * A popup anchored to the Filters button, built the same way as the header's
- * account and settings menus: present in the document, hidden by the `.js`
- * enhancement, and reopened by the toggle. Without script the form is simply
- * part of the page, so filtering never depends on JavaScript.
- */
 .filter-menu {
     position: relative;
 }
@@ -1676,7 +1472,6 @@ code,
     top: calc(100% + var(--space-2));
     right: 0;
 
-    /* Wide enough for two columns of controls, but never wider than the screen. */
     width: min(34rem, calc(100vw - var(--space-8)));
     max-height: min(38rem, calc(100vh - 8rem));
     padding: var(--space-5);
@@ -1707,7 +1502,6 @@ code,
     font-size: var(--font-size-sm);
 }
 
-/* The applied-filter count on the button itself. */
 .filter-menu__count {
     display: inline-grid;
     min-width: 1.25rem;
@@ -1736,11 +1530,6 @@ code,
     text-transform: uppercase;
 }
 
-/*
- * Two columns inside a group. A select carrying a long client name needs the
- * width, and four controls stacked in one column would push the actions below
- * the fold of the panel.
- */
 .filter-menu__fields {
     display: grid;
     margin-top: var(--space-2);
@@ -1764,10 +1553,6 @@ code,
     line-height: var(--line-height-base);
 }
 
-/*
- * The actions stay visible at the foot of the panel while its groups scroll, so
- * Apply is never something the reader has to go looking for.
- */
 .filter-menu__actions {
     position: sticky;
     bottom: calc(var(--space-5) * -1);
@@ -1785,13 +1570,6 @@ code,
     margin-top: var(--space-4);
 }
 
-
-
-/*
- * Stat tiles. The grid collapses to one column on a narrow viewport rather than
- * shrinking the numerals, because a headline figure that has to be squinted at
- * has stopped being a headline figure.
- */
 .stat-grid {
     display: grid;
     gap: var(--space-4);
@@ -1827,10 +1605,6 @@ code,
     font-size: var(--font-size-sm);
 }
 
-/*
- * A legend is a list, not a row of loose spans: assistive technology announces
- * how many states there are before reading them.
- */
 .badge-legend {
     display: flex;
     flex-wrap: wrap;
@@ -1840,11 +1614,6 @@ code,
     list-style: none;
 }
 
-/*
- * The canvas needs a sized box because Chart.js draws to the element's own
- * dimensions. The height is fixed and the width fluid, so the chart reflows
- * with the card instead of forcing the page to scroll sideways.
- */
 .chart-frame {
     position: relative;
     height: 20rem;
@@ -1878,8 +1647,6 @@ code,
     }
 }
 
-/* Finding subjects sit on one line each when the cell is narrow, so a row with
-   both a site-wide and a page-level problem still reads as two distinct things. */
 .finding-groups {
     display: flex;
     flex-wrap: wrap;

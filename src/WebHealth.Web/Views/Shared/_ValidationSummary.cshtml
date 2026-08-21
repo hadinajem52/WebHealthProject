@@ -6,10 +6,7 @@
         .Where(message => !string.IsNullOrWhiteSpace(message))
         .ToList();
 }
-@*
-    Only messages the application supplied are rendered. Model-binding
-    exceptions carry no safe message and are replaced with a generic statement.
-*@
+
 @if (modelState.ErrorCount > 0)
 {
     <div class="validation-summary" role="alert" tabindex="-1" data-shell-validation-summary>

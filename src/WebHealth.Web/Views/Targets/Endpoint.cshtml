@@ -1,4 +1,4 @@
-﻿@model EndpointDetailsViewModel
+@model EndpointDetailsViewModel
 @{
     ViewData.SetTitle("Endpoint");
     ViewData.SetBreadcrumbs(
@@ -88,9 +88,7 @@
             <div>
                 <dt>Expiry</dt>
                 <dd>
-                    @* An invalid certificate has no expiry band to report: its validation state
-                       is the thing to act on, and a green expiry badge beside a red validation
-                       badge would read as a contradiction. *@
+
                     @if (valid)
                     {
                         @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForExpirySeverity(certificate.ExpirySeverity), StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)))

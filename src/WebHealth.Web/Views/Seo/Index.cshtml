@@ -1,4 +1,4 @@
-﻿@model SeoListViewModel
+@model SeoListViewModel
 @using WebHealth.Application.Seo
 @using WebHealth.Domain.Seo
 @{
@@ -49,9 +49,7 @@
                 </select>
             </div>
             <label class="switch-field">
-                @* No name override: asp-for emits a hidden false companion under the model
-                   property's own name, so renaming only the visible input submits the value
-                   twice under two spellings of one case-insensitive parameter. *@
+
                 <input asp-for="ProblemsOnly" type="checkbox" />
                 <span>With SEO findings only</span>
             </label>
@@ -105,9 +103,7 @@
                                 </td>
                                 @if (item.Applicability == SeoApplicabilities.NotApplicable)
                                 {
-                                    @* One cell across the value columns: a non-HTML response has no
-                                       SEO values, and rendering four dashes would look like four
-                                       separate problems rather than one reason. *@
+
                                     <td data-label="Values" colspan="4">
                                         <span class="badge" data-status="@StatusBadges.Info">Not applicable</span>
                                         <span class="data-table__secondary">@(item.NotApplicableReason ?? "No reason recorded")</span>
@@ -144,10 +140,7 @@
                                     }
                                     else
                                     {
-                                        @* §11.2 asks for robots and sitemap findings by name. Every
-                                           SEO rule shares one key prefix, so a bare total cannot
-                                           tell a blocked origin from a missing description — the
-                                           subject is named, and the rule spelled out beneath it. *@
+
                                         <span class="finding-groups">
                                             @foreach (var group in item.FindingGroups)
                                             {
@@ -163,17 +156,12 @@
                                     }
                                     @if (item.DocumentTruncated)
                                     {
-                                        @* BR-E10: absence rules cannot be trusted on a document that
-                                           was cut short, so the reader is told rather than left to
-                                           read a missing value as a missing tag. *@
+
                                         <span class="data-table__secondary">Response was truncated</span>
                                     }
                                 </td>
                                 <td data-label="Observed">@Html.Timestamp(item.ObservedAt)</td>
-                                @* A link rather than a score column. The score belongs to a
-                                   different provider on a different cadence, and reading it here
-                                   would put a Lighthouse number beside WebHealth's own findings as
-                                   though the two were one judgement. *@
+
                                 <td data-label="PageSpeed">
                                     <a class="button button--secondary" asp-controller="PageAudits" asp-action="Index" asp-route-endpointId="@item.EndpointId">
                                         <span>PageSpeed</span>

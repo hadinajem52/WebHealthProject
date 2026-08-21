@@ -1,4 +1,4 @@
-﻿@model CrawlIndexViewModel
+@model CrawlIndexViewModel
 @{
     ViewData.SetTitle("Broken links");
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Broken links"));
@@ -71,8 +71,7 @@
                                 <td data-label="Status">
                                     <span class="badge" data-status="@CrawlRunDisplay.StatusTone(run)">@CrawlRunDisplay.DescribeStatus(run)</span>
                                 </td>
-                                @* BR-L05: a run that stopped on a budget must never read as a clean
-                                   result, so the reason it stopped is stated, not implied. *@
+
                                 <td data-label="Coverage">@CrawlRunDisplay.DescribeStopReason(run)</td>
                                 <td data-label="Pages">@run.PagesFetched</td>
                                 <td data-label="Broken links">
@@ -118,8 +117,6 @@
                     <div><dt>Indeterminate</dt><dd>@comparison.Indeterminate.TotalCount</dd></div>
                 </div>
 
-                @* The counts above are exact; each table below shows a bounded sample, because a
-                   large crawl would otherwise turn this page into an unbounded response. *@
                 @foreach (var bucket in new[]
                 {
                     ("New broken links", comparison.New, "These were not broken in the previous crawl."),

@@ -1,10 +1,10 @@
-﻿@model WebHealth.Application.Notifications.NotificationFeed
+@model WebHealth.Application.Notifications.NotificationFeed
 @{
     var returnUrl = ViewContext.HttpContext.Request.Path + ViewContext.HttpContext.Request.QueryString;
     var unread = Model.UnreadCount;
     var badge = unread > 9 ? "9+" : unread.ToString();
 }
-@* Server-rendered open; shell.js collapses it to a button-triggered popup. *@
+
 <div class="app-account app-notifications" data-shell-notifications data-open="false">
     <button type="button"
             class="app-header__icon app-notifications__toggle"
