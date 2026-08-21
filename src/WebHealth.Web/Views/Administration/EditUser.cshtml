@@ -41,7 +41,10 @@
                 <div class="panel__body">
                     <div class="form-field">
                         <label asp-for="NewPassword"></label>
-                        <input asp-for="NewPassword" autocomplete="new-password" />
+                        <div class="password-field">
+                            <input asp-for="NewPassword" autocomplete="new-password" />
+                            @await Html.PartialAsync("_PasswordReveal")
+                        </div>
                         <span class="form-field__hint">A reset invalidates existing sessions.</span>
                         <span asp-validation-for="NewPassword"></span>
                     </div>

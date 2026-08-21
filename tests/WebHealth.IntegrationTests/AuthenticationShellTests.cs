@@ -31,6 +31,8 @@ public sealed class AuthenticationShellTests(WebHealthWebApplicationFactory fact
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("class=\"auth-form-panel\"", content, StringComparison.Ordinal);
         Assert.Contains("autocomplete=\"username\"", content, StringComparison.Ordinal);
+        Assert.Contains("data-shell-password-toggle", content, StringComparison.Ordinal);
+        Assert.Contains("/js/shell.js", content, StringComparison.Ordinal);
         Assert.DoesNotContain("aria-label=\"Primary\"", content, StringComparison.Ordinal);
     }
 
