@@ -63,6 +63,14 @@ public sealed class PageAuditsController(
             return NotFound();
         }
 
+        // A run id that names nothing this endpoint owns is a wrong address, not an endpoint with
+        // no history. Rendering "no audit has run yet" would answer a different question than the
+        // one asked, and would read as though the run had been deleted.
+        if (runId is not null && summary.LatestRun is null)
+        {
+            return NotFound();
+        }
+
         var runs = await pageAuditReader.ListRunsAsync(selected, RunsListed, access, cancellationToken);
         var items = summary.LatestRun is null
             ? []
@@ -89,7 +97,7 @@ public sealed class PageAuditsController(
         }
 
         var result = await pageAuditRunner.QueueManualAsync(
-            endpointId, access.UserId, cancellationToken);
+            endpointId, access, cancellationToken);
 
         if (!result.Succeeded)
         {

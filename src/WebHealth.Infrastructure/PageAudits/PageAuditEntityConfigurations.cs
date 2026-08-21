@@ -271,8 +271,11 @@ internal sealed class PageAuditItemConfiguration : IEntityTypeConfiguration<Page
         builder.HasIndex(item => new { item.RunId, item.Status, item.AuditId })
             .HasDatabaseName("ix_page_audit_item_run_status");
 
+        // RESTRICT like every other foreign key here. A cascade would be the one place in this
+        // schema where deleting a parent silently took evidence with it, and nothing needs it:
+        // the endpoint purge deletes items explicitly, in order, before the runs they belong to.
         builder.HasOne(item => item.Run).WithMany(run => run.Items)
             .HasForeignKey(item => item.RunId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

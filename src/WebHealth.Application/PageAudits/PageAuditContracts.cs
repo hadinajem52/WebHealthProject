@@ -1,3 +1,5 @@
+using WebHealth.Application.Registry;
+
 namespace WebHealth.Application.PageAudits;
 
 /// <summary>
@@ -134,8 +136,16 @@ public sealed record PageAuditManualResult(Guid? RunId, bool WasAlreadyRunning, 
 /// </summary>
 public interface IPageAuditRunner
 {
+    /// <summary>
+    /// Opens a run on request, refusing an endpoint the requester may not test.
+    /// </summary>
+    /// <remarks>
+    /// The access context is a parameter because the check belongs here, not only in the
+    /// controller that happens to call it today. An endpoint id is a parameter, not a permission,
+    /// and a second caller must not be able to reach Google by forgetting a guard.
+    /// </remarks>
     Task<PageAuditManualResult> QueueManualAsync(
         Guid endpointId,
-        Guid requestedByUserId,
+        RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 }

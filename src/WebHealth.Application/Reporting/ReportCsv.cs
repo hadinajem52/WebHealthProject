@@ -29,7 +29,7 @@ public static class ReportCsv
         "DownSamples",
         "ExcludedSamples",
         "UptimePercent",
-        "ReachablePercent",
+        "CleanPercent",
         "P50Ms",
         "P95Ms",
         "MeasuredSamples",

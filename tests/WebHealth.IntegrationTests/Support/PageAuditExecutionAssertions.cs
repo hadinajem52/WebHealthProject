@@ -47,6 +47,11 @@ internal static class PageAuditExecutionAssertions
             database, execution, provider, targetId, endpointId, endpointUrl);
         await VerifyReconciliationReEnqueuesRatherThanOpeningASecondRunAsync(
             connectionString, database, scheduling, queue, targetId, endpointId, endpointUrl);
+        await VerifyAStaleUrlIsNeverSentAsync(
+            connectionString, database, execution, provider, targetId, endpointId);
+        await VerifyASpentAttemptBudgetStopsReclaimAsync(
+            connectionString, database, execution, provider, scheduling, queue, targetId,
+            endpointId, endpointUrl);
     }
 
     private static async Task<Guid> SeedDueTargetAsync(ApplicationDbContext database, Guid endpointId)
@@ -329,6 +334,83 @@ internal static class PageAuditExecutionAssertions
             .Should().Be(1);
 
         await CloseRunAsync(connectionString, runId);
+    }
+
+    /// <summary>
+    /// The snapshot makes the job un-steerable, and also makes it stale. An endpoint edited
+    /// between queueing and execution re-derives its authorization for the new URL, so the
+    /// eligibility check passes while the request still carries the old one - a host nobody
+    /// authorized. The run must refuse rather than send it.
+    /// </summary>
+    private static async Task VerifyAStaleUrlIsNeverSentAsync(
+        string connectionString,
+        ApplicationDbContext database,
+        PageAuditExecutionService execution,
+        ScriptedPageAuditProvider provider,
+        Guid targetId,
+        Guid endpointId)
+    {
+        var runId = await OpenQueuedRunAsync(
+            database, targetId, endpointId, "https://someone-elses-host.example.com/");
+        provider.Respond(ScriptedPageAuditProvider.MixedResult());
+        var callsBefore = provider.CallCount;
+
+        var outcome = await execution.ExecuteAsync(runId);
+
+        outcome.Status.Should().Be(PageAuditRunStatuses.Failed);
+        outcome.FailureCategory.Should().Be(PageAuditFailureCategories.TargetRejected);
+        provider.CallCount.Should().Be(callsBefore,
+            "a URL the endpoint no longer has must never reach the provider");
+
+        var run = await database.PageAuditRuns.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == runId);
+        run.SafeDiagnostic.Should().Contain("changed after this run was queued");
+    }
+
+    /// <summary>
+    /// A run with no attempts left can never be claimed again. Reconciliation therefore retires it
+    /// instead of re-enqueueing work no worker will do - otherwise its target's single active-run
+    /// slot is held against every later audit, forever.
+    /// </summary>
+    private static async Task VerifyASpentAttemptBudgetStopsReclaimAsync(
+        string connectionString,
+        ApplicationDbContext database,
+        PageAuditExecutionService execution,
+        ScriptedPageAuditProvider provider,
+        PageAuditSchedulingService scheduling,
+        RecordingPageAuditQueue queue,
+        Guid targetId,
+        Guid endpointId,
+        string endpointUrl)
+    {
+        var runId = await OpenQueuedRunAsync(database, targetId, endpointId, endpointUrl);
+
+        // A worker that died after spending the whole budget: Running, lease expired, no attempts
+        // left. Before the ceiling was part of the claim this was reclaimed indefinitely.
+        await ExecuteSqlAsync(connectionString,
+            $"""
+            UPDATE web_health.page_audit_run
+            SET status = 'Running', lease_token = '{Guid.NewGuid()}',
+                lease_expires_at = now() - interval '10 minutes', attempt_count = 3,
+                updated_at = now() - interval '30 minutes'
+            WHERE id = '{runId}';
+            """);
+
+        var callsBefore = provider.CallCount;
+        provider.Respond(ScriptedPageAuditProvider.MixedResult());
+        (await execution.ExecuteAsync(runId)).Status.Should().Be("NotClaimed");
+        provider.CallCount.Should().Be(callsBefore,
+            "a run past its attempt budget must not spend another request");
+
+        queue.Enqueued.Clear();
+        await scheduling.ReconcileAsync();
+
+        queue.Enqueued.Should().NotContain(runId,
+            "re-enqueueing a run nothing can claim would queue work no worker will do");
+        var retired = await database.PageAuditRuns.AsNoTracking()
+            .SingleAsync(candidate => candidate.Id == runId);
+        retired.Status.Should().Be(PageAuditRunStatuses.Failed);
+        retired.FinishedAt.Should().NotBeNull("the target's active slot has to be released");
     }
 
     private static async Task<Guid> OpenQueuedRunAsync(

@@ -66,6 +66,24 @@ public sealed class PageAuditExecutionService(
         {
             return await HandleProviderFailureAsync(claim, exception, cancellationToken);
         }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // An adapter fault the provider did not name - a response shape its guards did not
+            // anticipate, say. Left to escape it would reach the job, leave the run Running with a
+            // lease, and be reclaimed by reconciliation for as long as the fault reproduces: an
+            // unbounded retry loop against somebody else's quota. Only the exception type is
+            // recorded, never its message, which is unbounded text from an unknown source.
+            logger.LogError(
+                exception,
+                "PageAudit run faulted unexpectedly. PageAuditRunId={PageAuditRunId} "
+                + "EndpointId={EndpointId}",
+                claim.Id, claim.EndpointId);
+            return await FailAsync(
+                claim,
+                PageAuditFailureCategories.UnknownProviderFailure,
+                $"The audit failed unexpectedly ({exception.GetType().Name}).",
+                CancellationToken.None);
+        }
     }
 
     /// <summary>
@@ -79,8 +97,13 @@ public sealed class PageAuditExecutionService(
         var leaseToken = Guid.NewGuid();
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // The attempt ceiling is part of the claim, not only of the retry decision. Without it a
+        // run whose worker dies - or whose fault escapes before any decision is recorded - is
+        // reclaimed by reconciliation forever, and every reclaim is another request against
+        // somebody else's site.
         var claimed = await dbContext.PageAuditRuns
             .Where(run => run.Id == runId
+                && run.AttemptCount < options.MaximumAttempts
                 && (run.Status == PageAuditRunStatuses.Queued
                     || (run.Status == PageAuditRunStatuses.Running
                         && run.LeaseExpiresAt != null
@@ -122,12 +145,24 @@ public sealed class PageAuditExecutionService(
             return "PageSpeed auditing was switched off for this endpoint before the run started.";
         }
 
-        var testable = await MonitoringEligibility
+        var current = await MonitoringEligibility
             .ApplyTestable(dbContext.Endpoints.AsNoTracking(), now)
-            .AnyAsync(endpoint => endpoint.Id == run.EndpointId, cancellationToken);
-        if (!testable)
+            .Where(endpoint => endpoint.Id == run.EndpointId)
+            .Select(endpoint => endpoint.NormalizedUrl)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (current is null)
         {
             return "The endpoint is no longer active, or its target authorization has lapsed.";
+        }
+
+        // The snapshot is what makes the job un-steerable, but it also makes it stale. An endpoint
+        // edited from A to B between queueing and execution re-derives its authorization for B,
+        // so the check above passes while the request still carries A - a host nobody authorized.
+        // The snapshot is only trustworthy while it still is the endpoint's URL.
+        if (!string.Equals(current, run.RequestedUrl, StringComparison.Ordinal))
+        {
+            return "The endpoint URL changed after this run was queued, so the audit it was "
+                + "opened for no longer describes this endpoint.";
         }
 
         var eligibility = PageAuditEligibility.Evaluate(run.RequestedUrl);
@@ -234,6 +269,19 @@ public sealed class PageAuditExecutionService(
         PageAuditProviderException exception,
         CancellationToken cancellationToken)
     {
+        // Cancellation is not a failure of the audit, and it is the one case where the token this
+        // method was handed is already cancelled. Writing the terminal row with it would cancel
+        // the write too, leaving the run Running until its lease expired.
+        if (exception.FailureCategory == PageAuditFailureCategories.Cancelled)
+        {
+            return await FinishAsync(
+                claim,
+                PageAuditRunStatuses.Cancelled,
+                PageAuditFailureCategories.Cancelled,
+                exception.Message,
+                CancellationToken.None);
+        }
+
         var retryable = PageAuditFailureCategories.IsTransient(exception.FailureCategory)
             && claim.AttemptCount < options.MaximumAttempts;
         if (!retryable)
@@ -279,8 +327,16 @@ public sealed class PageAuditExecutionService(
         _ => TimeSpan.FromMinutes(5)
     };
 
-    private async Task<PageAuditExecutionOutcome> FailAsync(
+    private Task<PageAuditExecutionOutcome> FailAsync(
         PageAuditRun claim,
+        string failureCategory,
+        string diagnostic,
+        CancellationToken cancellationToken) =>
+        FinishAsync(claim, PageAuditRunStatuses.Failed, failureCategory, diagnostic, cancellationToken);
+
+    private async Task<PageAuditExecutionOutcome> FinishAsync(
+        PageAuditRun claim,
+        string status,
         string failureCategory,
         string diagnostic,
         CancellationToken cancellationToken)
@@ -289,7 +345,7 @@ public sealed class PageAuditExecutionService(
         var stillOurs = await dbContext.PageAuditRuns
             .Where(run => run.Id == claim.Id && run.LeaseToken == claim.LeaseToken)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(run => run.Status, PageAuditRunStatuses.Failed)
+                .SetProperty(run => run.Status, status)
                 .SetProperty(run => run.FailureCategory, failureCategory)
                 .SetProperty(run => run.SafeDiagnostic,
                     PageAuditNormalization.BoundText(diagnostic, PageAuditTextBounds.SafeDiagnostic))

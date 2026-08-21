@@ -24,8 +24,6 @@ public sealed record PageAuditSchedulingOptions
     /// </summary>
     public TimeSpan ReconciliationDelay { get; init; } = TimeSpan.FromMinutes(5);
 
-    /// <summary>The cadence a newly enabled target gets unless an administrator overrides it.</summary>
-    public TimeSpan DefaultInterval { get; init; } = TimeSpan.FromDays(1);
 
     /// <summary>
     /// How long a worker's claim on a run stays valid. Comfortably longer than the provider

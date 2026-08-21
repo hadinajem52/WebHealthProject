@@ -71,19 +71,20 @@ internal sealed class PageSpeedInsightsProvider(
         }
         catch (HttpRequestException exception)
         {
-            // The message is ours, not the exception's: an HttpRequestException raised while
-            // building or sending can carry the request URI, and the request URI carries the key.
+            // Neither the message nor the exception itself is carried. An HttpRequestException
+            // raised while sending can name the request URI, and the request URI carries the key;
+            // attaching it as an inner exception would put that text inside anything that later
+            // called ToString() - a Hangfire job record, for one. Only the type name survives.
             throw new PageAuditProviderException(
                 PageAuditFailureCategories.ProviderUnavailable,
-                "The provider could not be reached.",
-                innerException: exception);
+                $"The provider could not be reached ({exception.GetType().Name}).");
         }
-        catch (JsonException exception)
+        catch (JsonException)
         {
+            // Same reasoning: a JSON exception quotes the payload it choked on.
             throw new PageAuditProviderException(
                 PageAuditFailureCategories.ProviderResponseInvalid,
-                "The provider response was not valid JSON.",
-                innerException: exception);
+                "The provider response was not valid JSON.");
         }
     }
 

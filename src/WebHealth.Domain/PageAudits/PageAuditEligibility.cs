@@ -12,6 +12,13 @@ public static class PageAuditIneligibilityReasons
     /// <summary>Credentials in the URL would be handed to the provider along with it.</summary>
     public const string UrlCarriesCredentials = "UrlCarriesCredentials";
 
+    /// <summary>
+    /// The URL carries a query string. Normalization keeps queries, and a query is where a signed
+    /// link, a reset token or a session identifier lives. Nothing here can tell one of those from
+    /// <c>?lang=en</c>, so the whole class is refused rather than guessed at.
+    /// </summary>
+    public const string UrlCarriesQuery = "UrlCarriesQuery";
+
     /// <summary>A literal address the public internet cannot reach, or must not be asked to.</summary>
     public const string AddressNotPublic = "AddressNotPublic";
 
@@ -23,7 +30,7 @@ public static class PageAuditIneligibilityReasons
 
     public static bool IsSupported(string value) =>
         value is UrlNotAbsolute or SchemeNotSupported or UrlCarriesCredentials
-            or AddressNotPublic or HostNotPublic;
+            or UrlCarriesQuery or AddressNotPublic or HostNotPublic;
 }
 
 /// <summary>
@@ -95,6 +102,17 @@ public static class PageAuditEligibility
         if (!string.IsNullOrEmpty(parsed.UserInfo))
         {
             return PageAuditEligibilityResult.Rejected(PageAuditIneligibilityReasons.UrlCarriesCredentials);
+        }
+
+        // Endpoint normalization preserves query strings, and this URL is handed to Google
+        // verbatim. A query is exactly where a signed link, a password-reset token or a session
+        // identifier lives, and no rule here can tell one of those from a locale switch. The
+        // conservative reading is the only safe one: the cost of refusing "?lang=en" is an
+        // endpoint that cannot be audited, and the cost of allowing a token is disclosing it to a
+        // third party who then loads it.
+        if (parsed.Query.Length > 0)
+        {
+            return PageAuditEligibilityResult.Rejected(PageAuditIneligibilityReasons.UrlCarriesQuery);
         }
 
         return EvaluateHost(parsed);

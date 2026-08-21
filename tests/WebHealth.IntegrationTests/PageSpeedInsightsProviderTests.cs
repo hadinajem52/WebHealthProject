@@ -340,8 +340,9 @@ public sealed class PageSpeedInsightsProviderTests
     }
 
     /// <summary>
-    /// Encoded exactly once. Concatenating would let a query string in the target truncate ours,
-    /// and the parameter it would most easily displace is the category.
+    /// Encoded exactly once. Eligibility now refuses a target carrying a query at all, so this is
+    /// defence in depth on the layer below: even handed one, the builder cannot let the target's
+    /// parameters displace ours, and the one they would most easily displace is the category.
     /// </summary>
     [Fact]
     public async Task RunAsync_EscapesATargetUrlCarryingItsOwnQueryExactlyOnce()
@@ -407,6 +408,45 @@ public sealed class PageSpeedInsightsProviderTests
             "the provider's own error body is never read back into a diagnostic");
     }
 
+    /// <summary>
+    /// A valid JSON array is not an object, and TryGetProperty throws rather than returning false
+    /// on one. Left unguarded it escaped this adapter as an exception no caller expected, and the
+    /// run was then reclaimed by reconciliation for as long as the fault reproduced.
+    /// </summary>
+    [Theory]
+    [InlineData("[1,2,3]")]
+    [InlineData("\"a string\"")]
+    [InlineData("42")]
+    [InlineData("null")]
+    public async Task RunAsync_RefusesAResponseThatIsValidJsonOfTheWrongKind(string body)
+    {
+        var (provider, _) = Create(new FakeHandler(HttpStatusCode.OK, body));
+
+        var failure = await Assert.ThrowsAsync<PageAuditProviderException>(
+            () => provider.RunAsync(Request));
+
+        failure.FailureCategory.Should().Be(PageAuditFailureCategories.ProviderContractInvalid);
+    }
+
+    /// <summary>
+    /// A transport exception can name the request URI, and the request URI carries the key. It is
+    /// not attached as an inner exception, so nothing that later calls ToString - a background job
+    /// record, for one - can recover that text.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_CarriesNoInnerExceptionFromTheTransport()
+    {
+        var (provider, _) = Create(new ThrowingHandler());
+
+        var failure = await Assert.ThrowsAsync<PageAuditProviderException>(
+            () => provider.RunAsync(Request));
+
+        failure.FailureCategory.Should().Be(PageAuditFailureCategories.ProviderUnavailable);
+        failure.InnerException.Should().BeNull();
+        failure.ToString().Should().NotContain(ApiKey);
+        failure.ToString().Should().NotContain("pagespeedonline");
+    }
+
     private static string Mode(PageAuditProviderResult result, string auditId) =>
         result.Items.Single(item => item.AuditId == auditId).ScoreDisplayMode!;
 
@@ -415,7 +455,7 @@ public sealed class PageSpeedInsightsProviderTests
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "PageSpeed", name)));
 
     private static (PageSpeedInsightsProvider Provider, FakeHandler Handler) Create(
-        BlockingHandler handler,
+        HttpMessageHandler handler,
         PageSpeedInsightsOptions? options = null) =>
         (Build(handler, options, null), new FakeHandler(HttpStatusCode.OK, "{}"));
 
@@ -470,6 +510,16 @@ public sealed class PageSpeedInsightsProviderTests
 
             return Task.FromResult(response);
         }
+    }
+
+    /// <summary>Fails the way a DNS or connection fault does, with the URI in its message.</summary>
+    private sealed class ThrowingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            throw new HttpRequestException(
+                $"No such host is known ({request.RequestUri}).");
     }
 
     private sealed class BlockingHandler : HttpMessageHandler
