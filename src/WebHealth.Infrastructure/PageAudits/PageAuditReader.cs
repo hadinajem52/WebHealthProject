@@ -69,9 +69,10 @@ internal sealed class PageAuditReader(
         // whatever its status, so a queued or failed run is visible rather than hidden behind the
         // last one that happened to succeed.
         var selected = runId is { } requested
-            ? await RunsOf(access, endpointId).SingleOrDefaultAsync(
-                run => run.RunId == requested, cancellationToken)
-            : await OrderedRuns(RunsOf(access, endpointId)).FirstOrDefaultAsync(cancellationToken);
+            ? await Project(RunsOf(access, endpointId).Where(run => run.Id == requested))
+                .SingleOrDefaultAsync(cancellationToken)
+            : await Project(Ordered(RunsOf(access, endpointId)))
+                .FirstOrDefaultAsync(cancellationToken);
 
         var counts = selected is null
             ? PageAuditItemCounts.Empty
@@ -101,8 +102,8 @@ internal sealed class PageAuditReader(
         int limit,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        await OrderedRuns(RunsOf(access, endpointId))
-            .Take(Math.Clamp(limit, 1, MaxRunsListed))
+        await Project(Ordered(RunsOf(access, endpointId))
+                .Take(Math.Clamp(limit, 1, MaxRunsListed)))
             .ToArrayAsync(cancellationToken);
 
     public async Task<IReadOnlyList<PageAuditItemView>> ListAuditItemsAsync(
@@ -215,18 +216,23 @@ internal sealed class PageAuditReader(
             CountOf(PageAuditItemStatuses.Error));
     }
 
-    private IQueryable<PageAuditRunSummary> RunsOf(RegistryAccessContext access, Guid endpointId) =>
-        Project(VisibleRuns(access).Where(run => run.EndpointId == endpointId));
+    private IQueryable<PageAuditRun> RunsOf(RegistryAccessContext access, Guid endpointId) =>
+        VisibleRuns(access).Where(run => run.EndpointId == endpointId);
 
     /// <summary>
     /// Newest first, with unfinished runs at the top: a queued or running audit is the most
     /// interesting row on the page, and ordering by finish time alone would bury it under history.
     /// </summary>
-    private static IQueryable<PageAuditRunSummary> OrderedRuns(IQueryable<PageAuditRunSummary> runs) =>
+    /// <remarks>
+    /// Ordering belongs on the row, not on the projection. Ordering by a member of a constructed
+    /// <see cref="PageAuditRunSummary" /> is not translatable, so the sort would have to happen in
+    /// memory over every run the requester can see - and the paging built on it would be a lie.
+    /// </remarks>
+    private static IOrderedQueryable<PageAuditRun> Ordered(IQueryable<PageAuditRun> runs) =>
         runs.OrderByDescending(run => run.FinishedAt == null)
             .ThenByDescending(run => run.FinishedAt)
             .ThenByDescending(run => run.QueuedAt)
-            .ThenByDescending(run => run.RunId);
+            .ThenByDescending(run => run.Id);
 
     private static IQueryable<PageAuditRunSummary> Project(IQueryable<PageAuditRun> runs) =>
         runs.Select(run => new PageAuditRunSummary(

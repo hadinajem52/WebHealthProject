@@ -92,6 +92,7 @@
                             <th scope="col">Indexing</th>
                             <th scope="col">Findings</th>
                             <th scope="col">Observed</th>
+                            <th scope="col"><span class="visually-hidden">PageSpeed</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -169,6 +170,15 @@
                                     }
                                 </td>
                                 <td data-label="Observed">@Html.Timestamp(item.ObservedAt)</td>
+                                @* A link rather than a score column. The score belongs to a
+                                   different provider on a different cadence, and reading it here
+                                   would put a Lighthouse number beside WebHealth's own findings as
+                                   though the two were one judgement. *@
+                                <td data-label="PageSpeed">
+                                    <a class="button button--secondary" asp-controller="PageAudits" asp-action="Index" asp-route-endpointId="@item.EndpointId">
+                                        <span>PageSpeed</span>
+                                    </a>
+                                </td>
                             </tr>
                         }
                     </tbody>

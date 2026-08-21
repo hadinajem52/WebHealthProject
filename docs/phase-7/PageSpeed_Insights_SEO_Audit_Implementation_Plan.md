@@ -4,7 +4,7 @@
 **Reviewed baseline:** `main` at commit `c6f2dd0fb22705d499e03bd2165afc75aa193638`  
 **Suggested repository path:** `docs/phase-7/PageSpeed_Insights_SEO_Audit_Implementation_Plan.md`  
 **Prepared:** 2026-08-20  
-**Status:** Proposed  
+**Status:** Implemented on `feature/pagespeed-seo-audit`  
 **Estimated implementation:** 8-11 working days for the V1 described here.
 
 > **Scope note.** This is a solo portfolio/internship feature. The plan deliberately stops at working, tested software demonstrable on a local or demo instance. Metrics backends, staged rollouts, quota alerting, and incident integration are explicitly out of scope and are recorded as deferred in section 14, not designed here.
@@ -1541,14 +1541,63 @@ Enable additional endpoints from the endpoint form as needed. Keep the default d
 
 ---
 
-## 22. Documentation
+## 22. Implementation record
 
-This document is the feature's documentation. Update it in place with:
+This document is the feature's documentation. What was built differs from what was planned in a
+few places; each deviation and why it was made is recorded here rather than left for a reader to
+discover by diffing.
 
-- the exact request parameters and fields consumed, once the fixtures are recorded;
-- the API and Lighthouse versions observed in those fixtures;
-- API key setup notes;
-- the gate evidence from increment 16.6 (migration, test runs, authorization matrix, worker-isolation test, key redaction test, endpoint purge test).
+### 22.1 Deviations from the plan
+
+| Planned | Built | Why |
+|---|---|---|
+| Nested `PageAuditSettings` record on the endpoint contracts | Flat optional parameters | The SEO policy fields already set that precedent on the same three records; one shape beats two. |
+| Six dedicated audit actions (§12.4) | Two fields on the existing endpoint audit snapshot | SEO policy changes are recorded the same way. `AuditContractTests` pins the property list, so the addition is enforced rather than conventional. |
+| Two interfaces (§5.3) | Three: plus `IPageAuditRunner` | The controller needs to open a run. Depending on the scheduling service would drag a database context into every page that renders a button. |
+| Interval bounds in the infrastructure service | `PageAuditCadence` in the domain | The view model, the validator and the check constraint all need them; three copies would drift. |
+| `PageAuditComparison` as a stored idea | Computed in the reader | Nothing persists a comparison, so there is nothing to keep in step with the runs it describes. |
+
+### 22.2 Contract observed in the fixtures
+
+Fixtures were recorded against PageSpeed Insights v5 with `lighthouseVersion` **11.4.0**. The
+fields consumed are those in section 4.2; everything in section 4.3 is ignored on the way in and
+has no column able to hold it. `tests/WebHealth.IntegrationTests/Fixtures/PageSpeed/` also carries
+the failure shapes: a Lighthouse runtime error, a blocking CAPTCHA, a response with no SEO
+category, and a category referencing an audit the response does not contain.
+
+### 22.3 Enabling it locally
+
+1. Enable the PageSpeed Insights API in a Google Cloud project and create a key restricted to
+   that API alone.
+2. Apply migrations: `dotnet ef database update --project src/WebHealth.Infrastructure`.
+3. `dotnet user-secrets set "PageAudits:PageSpeedInsights:ApiKey" "<key>" --project src/WebHealth.Web`
+4. Set `PageAudits:Scheduling:Enabled` to `true`. Startup refuses to come up with scheduling on
+   and no key, rather than failing one run at a time.
+5. Enable PageSpeed auditing on one public endpoint and use **Run now**.
+
+The feature ships with `Enabled: false` and no key, and the delivery checks pass in that state.
+
+### 22.4 Gate evidence
+
+| Acceptance | Where it is proved |
+|---|---|
+| PA-01, PA-02 | `PageSpeedInsightsProviderTests` — official endpoint, and category/strategy/locale sent explicitly |
+| PA-03 | `RunAsync_NeverWritesTheApiKeyOrTheRequestUriToTheLog`, `RunAsync_KeepsTheApiKeyOutOfEveryFailureItRaises`, and `VerifyNoRawPayloadOrSecretColumnAsync` |
+| PA-04 | Byte cap, audit-count cap, JSON depth cap and timeout tests in the same class |
+| PA-05 | Every provider test uses a recorded fixture and a fake handler |
+| PA-06, PA-10 | `PageAuditIsolationTests` — queue attributes, and the dedicated Hangfire server in `DependencyInjection` |
+| PA-07 | `ux_page_audit_run_active`, asserted in `PageAuditSchemaAssertions` |
+| PA-08, PA-09 | `PageAuditExecutionAssertions` — dispatch, reclaim, bounded retry, reconciliation |
+| PA-11 to PA-14 | `PageAuditSchemaAssertions` and `PageAuditReaderAssertions` |
+| PA-15 | `EndpointPurgeCascade` plus the purge counts in `DatabaseFoundationAssertions` |
+| PA-16, PA-17, PA-20 | `PageAuditEligibilityTests`, `PageAuditConfiguration.Validate`, and the disclosure text on the endpoint form |
+| PA-18 | `PageAuditAuthorizationTests` |
+| PA-19 | `VerifyAnotherClientsEndpointIsNotReadableAsync` |
+| PA-21 to PA-24 | `PageAuditReaderAssertions` and the PageSpeed view |
+| PA-25 | Full database foundation suite green, including every pre-existing stage |
+
+Test evidence at the time of the gate: 620 unit tests, 336 integration tests, and the 25-stage
+database foundation suite, all green.
 
 No additional Phase 7 documents are required for this feature.
 
