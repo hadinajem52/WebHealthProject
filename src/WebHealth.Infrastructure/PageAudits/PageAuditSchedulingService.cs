@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using NpgsqlTypes;
 using WebHealth.Application.PageAudits;
+using WebHealth.Application.Registry;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.PageAudits;
 using WebHealth.Infrastructure.Persistence;
@@ -23,6 +24,7 @@ namespace WebHealth.Infrastructure.PageAudits;
 public sealed class PageAuditSchedulingService(
     ApplicationDbContext dbContext,
     IPageAuditQueue queue,
+    ITargetAuthorizationService targetAuthorization,
     PageAuditSchedulingOptions options,
     PageSpeedInsightsOptions providerOptions,
     TimeProvider timeProvider,
@@ -44,7 +46,7 @@ public sealed class PageAuditSchedulingService(
         var now = timeProvider.GetUtcNow();
         var staleBefore = now.Subtract(options.ReconciliationDelay);
 
-        var runIds = await dbContext.PageAuditRuns.AsNoTracking()
+        var recoverable = await dbContext.PageAuditRuns.AsNoTracking()
             .Where(run =>
                 (run.Status == PageAuditRunStatuses.Queued && run.UpdatedAt < staleBefore)
                 || (run.Status == PageAuditRunStatuses.Running
@@ -53,8 +55,39 @@ public sealed class PageAuditSchedulingService(
             .OrderBy(run => run.UpdatedAt)
             .ThenBy(run => run.Id)
             .Take(options.ReconciliationBatchSize)
-            .Select(run => run.Id)
+            .Select(run => new { run.Id, run.AttemptCount })
             .ToArrayAsync(cancellationToken);
+
+        // A run that has spent its attempts can never be claimed again, so re-enqueueing it would
+        // queue work no worker will do while its target's active-run index refuses every new run.
+        // Retiring it is what lets the next scheduled audit open at all.
+        var exhausted = recoverable
+            .Where(run => run.AttemptCount >= options.MaximumAttempts)
+            .Select(run => run.Id)
+            .ToArray();
+        if (exhausted.Length > 0)
+        {
+            await dbContext.PageAuditRuns
+                .Where(run => exhausted.Contains(run.Id))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(run => run.Status, PageAuditRunStatuses.Failed)
+                    .SetProperty(run => run.FailureCategory,
+                        PageAuditFailureCategories.UnknownProviderFailure)
+                    .SetProperty(run => run.SafeDiagnostic,
+                        "The audit stopped without recording an outcome and has no attempts left.")
+                    .SetProperty(run => run.FinishedAt, now)
+                    .SetProperty(run => run.LeaseToken, (Guid?)null)
+                    .SetProperty(run => run.LeaseExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(run => run.UpdatedAt, now),
+                    cancellationToken);
+            logger.LogWarning(
+                "Retired {Count} page audit runs that had no attempts left.", exhausted.Length);
+        }
+
+        var runIds = recoverable
+            .Where(run => run.AttemptCount < options.MaximumAttempts)
+            .Select(run => run.Id)
+            .ToArray();
 
         if (runIds.Length > 0)
         {
@@ -73,10 +106,19 @@ public sealed class PageAuditSchedulingService(
     /// </summary>
     public async Task<PageAuditManualResult> QueueManualAsync(
         Guid endpointId,
-        Guid requestedByUserId,
+        RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(access);
         var now = timeProvider.GetUtcNow();
+
+        // Enforced here rather than trusted from the caller. Asking Google to load a page is
+        // active testing of that target, and this method is the only door to it.
+        if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
+        {
+            return PageAuditManualResult.Rejected(
+                "You are not authorized to run an audit against this endpoint.");
+        }
 
         var target = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
@@ -125,7 +167,7 @@ public sealed class PageAuditSchedulingService(
             return PageAuditManualResult.AlreadyRunning(existing);
         }
 
-        var runId = OpenRun(target, endpoint.NormalizedUrl, PageAuditSources.Manual, requestedByUserId, now);
+        var runId = OpenRun(target, endpoint.NormalizedUrl, PageAuditSources.Manual, access.UserId, now);
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -146,7 +188,27 @@ public sealed class PageAuditSchedulingService(
         }
 
         dbContext.ChangeTracker.Clear();
-        queue.Enqueue(runId);
+        try
+        {
+            queue.Enqueue(runId);
+        }
+        catch (Exception exception)
+        {
+            // The run is committed before it is enqueued so a lost job leaves evidence rather than
+            // nothing. That bargain assumes a worker exists to lose the job. With scheduling off
+            // there is no queue and no reconciliation sweep, so a committed run would sit Queued
+            // forever and its target's active-run index would refuse every later request. Retiring
+            // it here keeps the failure to the one request that caused it.
+            await RetireUnreachableRunAsync(runId, cancellationToken);
+            logger.LogError(
+                exception,
+                "PageAudit run could not be queued and was retired. PageAuditRunId={PageAuditRunId}",
+                runId);
+            return PageAuditManualResult.Rejected(
+                "PageSpeed audits are not running on this instance, so the audit could not be "
+                + "started. Enable PageAudits:Scheduling to run them.");
+        }
+
         logger.LogInformation(
             "PageAudit run queued by request. PageAuditRunId={PageAuditRunId} EndpointId={EndpointId}",
             runId, endpointId);
@@ -250,6 +312,25 @@ public sealed class PageAuditSchedulingService(
             UpdatedAt = now
         });
         return runId;
+    }
+
+    /// <summary>
+    /// Closes a run that was committed but could never be handed to a worker, so it does not hold
+    /// its target's single active-run slot against every later request.
+    /// </summary>
+    private async Task RetireUnreachableRunAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        await dbContext.PageAuditRuns
+            .Where(run => run.Id == runId && run.Status == PageAuditRunStatuses.Queued)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(run => run.Status, PageAuditRunStatuses.Cancelled)
+                .SetProperty(run => run.SafeDiagnostic,
+                    "No page audit worker is running on this instance, so the audit was never started.")
+                .SetProperty(run => run.FinishedAt, now)
+                .SetProperty(run => run.UpdatedAt, now),
+                cancellationToken);
+        dbContext.ChangeTracker.Clear();
     }
 
     private async Task<Guid?> FindActiveRunAsync(Guid targetId, CancellationToken cancellationToken)

@@ -28,6 +28,16 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
         ArgumentNullException.ThrowIfNull(document);
         var root = document.RootElement;
 
+        // Guarded before anything reads a property off it. TryGetProperty throws rather than
+        // returning false when the element is not an object, so a valid JSON array or scalar
+        // would leave this reader by an exception nobody downstream is expecting.
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new PageAuditProviderException(
+                PageAuditFailureCategories.ProviderContractInvalid,
+                "The provider response was not a JSON object.");
+        }
+
         // Checked before anything else. A blocked audit produced no result at all, and reading on
         // would report the absence of a score as a contract failure rather than as what it is.
         if (TryGetString(root, "captchaResult") is { } captcha

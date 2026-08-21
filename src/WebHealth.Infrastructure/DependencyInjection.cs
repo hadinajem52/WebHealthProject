@@ -337,7 +337,14 @@ public static class DependencyInjection
             {
                 AllowAutoRedirect = false,
                 AutomaticDecompression = System.Net.DecompressionMethods.All
-            });
+            })
+
+            // The factory's own handlers log every request URI, and this client's URI carries the
+            // API key in its query. .NET redacts query strings by default, but that default is a
+            // process-wide switch somebody else can turn off - and a key must not depend on a
+            // setting this feature does not own. Removing the logging handlers means there is no
+            // request-URI log line to redact in the first place.
+            .RemoveAllLoggers();
 
         services.AddHealthChecks()
             .AddCheck<PostgreSqlReadinessCheck>("postgresql", tags: ["ready"]);
@@ -421,8 +428,7 @@ public static class DependencyInjection
             || options.ReconciliationBatchSize is < 1 or > 500
             || options.ReconciliationDelay < TimeSpan.FromMinutes(1)
             || options.ReconciliationDelay > TimeSpan.FromHours(1)
-            || options.DefaultInterval < TimeSpan.FromHours(6)
-            || options.DefaultInterval > TimeSpan.FromDays(30)
+
             || options.MaximumAttempts is < 1 or > 5
             || options.LeaseDuration < providerOptions.RequestTimeout
             || options.LeaseDuration > TimeSpan.FromHours(1))

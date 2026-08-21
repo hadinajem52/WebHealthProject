@@ -16,7 +16,6 @@ public sealed class PageAuditEligibilityTests
 
     [Theory]
     [InlineData("https://example.com/")]
-    [InlineData("https://www.example.com/pricing?plan=pro")]
     [InlineData("http://example.co.uk/")]
     [InlineData("https://sub.domain.example.org/path")]
     public void Evaluate_AcceptsAPublicHttpOrHttpsPage(string url) =>
@@ -64,6 +63,18 @@ public sealed class PageAuditEligibilityTests
     [InlineData("file:///c:/site/index.html")]
     public void Evaluate_RejectsASchemeTheProviderCannotAudit(string url) =>
         Evaluate(url).Reason.Should().Be(PageAuditIneligibilityReasons.SchemeNotSupported);
+
+    /// <summary>
+    /// A query is where a signed link, a reset token or a session identifier lives, and nothing
+    /// here can tell one of those from a locale switch. Refusing the whole class costs an endpoint
+    /// that cannot be audited; allowing it costs a secret handed to a third party who then loads it.
+    /// </summary>
+    [Theory]
+    [InlineData("https://example.com/reset?token=SECRET")]
+    [InlineData("https://example.com/?lang=en")]
+    [InlineData("https://example.com/doc?a=1&sig=abc")]
+    public void Evaluate_RejectsAUrlCarryingAQueryString(string url) =>
+        Evaluate(url).Reason.Should().Be(PageAuditIneligibilityReasons.UrlCarriesQuery);
 
     [Fact]
     public void Evaluate_RejectsAUrlCarryingCredentials() =>

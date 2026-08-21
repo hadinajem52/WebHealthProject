@@ -149,12 +149,17 @@
             <div class="stat">
                 <p class="stat__label">Uptime</p>
                 <p class="stat__value">@Percent(uptime.Percentage)</p>
-                <p class="stat__detail">@uptime.HealthySamples.ToString("N0") healthy of @uptime.EligibleSamples.ToString("N0") eligible samples</p>
+                @* BR-U01: every eligible sample where the endpoint answered, so a warning counts
+                   as up. The detail names both halves rather than only the healthy one, which is
+                   what the value used to mean before the uptime figures were reworked. *@
+                <p class="stat__detail">@((uptime.HealthySamples + uptime.WarningSamples).ToString("N0")) up of @uptime.EligibleSamples.ToString("N0") eligible samples</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Reachable</p>
+                <p class="stat__label">Clean</p>
                 <p class="stat__value">@Percent(uptime.CleanPercentage)</p>
-                <p class="stat__detail">Includes @uptime.WarningSamples.ToString("N0") sample@(uptime.WarningSamples == 1 ? null : "s") that answered with a warning</p>
+                @* The stricter figure beside uptime: answered with nothing to report at all. The
+                   gap between the two is the point - an endpoint can be fully up and misconfigured. *@
+                <p class="stat__detail">Excludes @uptime.WarningSamples.ToString("N0") sample@(uptime.WarningSamples == 1 ? null : "s") that answered with a warning</p>
             </div>
             <div class="stat">
                 <p class="stat__label">Response time P50</p>

@@ -154,9 +154,9 @@ internal sealed class PageAuditReader(
             return PageAuditComparison.None;
         }
 
-        // The candidate must be strictly earlier, with the id breaking a tie, so a run never
-        // compares against itself and two runs finishing in the same microsecond still order
-        // stably.
+        // The candidate must be strictly earlier, with a strictly lower id breaking a tie, so a run
+        // never compares against itself and never against a run that sorts after it: two runs
+        // finishing in the same microsecond still order stably, in one direction only.
         var previous = await VisibleRuns(access)
             .Where(run => run.PageAuditTargetId == targetId
                 && run.RawScore != null
@@ -164,7 +164,8 @@ internal sealed class PageAuditReader(
                 && (run.Status == PageAuditRunStatuses.Completed
                     || run.Status == PageAuditRunStatuses.CompletedWithWarnings)
                 && (run.FinishedAt < finishedAt
-                    || (run.FinishedAt == finishedAt && run.Id != current.RunId))
+                    || (run.FinishedAt == finishedAt
+                        && run.Id.CompareTo(current.RunId) < 0))
                 && run.Strategy == current.Strategy
                 && run.Locale == current.Locale)
             .OrderByDescending(run => run.FinishedAt)

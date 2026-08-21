@@ -107,7 +107,7 @@ internal sealed class RecordingPageAuditRunner : IPageAuditRunner
 
     public Task<PageAuditManualResult> QueueManualAsync(
         Guid endpointId,
-        Guid requestedByUserId,
+        RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
         Requested.Add(endpointId);
