@@ -26,26 +26,32 @@ public static class ShellNavigation
                 "Incidents",
                 "Index",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"]),
+            new NavigationItem("Reports", "reports")
+        ]),
+        // The three audit surfaces answer the same question — what a crawl of the site found —
+        // so they group under one heading rather than competing with Dashboard and Incidents for
+        // top-level attention. Each carries its own glyph: they previously shared the bar-chart
+        // icon, which left the sidebar with three entries that looked identical.
+        new("Audits",
+        [
             new NavigationItem(
                 "SEO",
-                "reports",
+                "seo",
                 "Seo",
                 "Index",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"]),
             new NavigationItem(
                 "Broken links",
-                "reports",
+                "broken-link",
                 "Crawl",
                 "Index",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"]),
-
             new NavigationItem(
                 "PageSpeed",
-                "reports",
+                "speed",
                 "PageAudits",
                 "Index",
-                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
-            new NavigationItem("Reports", "reports")
+                ["Administrator", "Operations", "Developer/Support", "Viewer"])
         ]),
         new("Administration",
         [

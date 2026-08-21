@@ -8,13 +8,6 @@
     var isAdministrator = User.IsInRole("Administrator");
     var isActive = incident.Status is "Open" or "Acknowledged" or "InProgress" or "MonitoringRecovery";
 
-    static string StatusBadge(string status) => status switch
-    {
-        "Open" or "Acknowledged" => "danger",
-        "InProgress" or "MonitoringRecovery" => "warning",
-        _ => "success"
-    };
-
     static string DeliveryBadge(string state) => state switch
     {
         "Sent" => "success",
@@ -36,7 +29,7 @@
             </div>
             <div class="form-actions">
                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(incident.Severity), incident.Severity))
-                <span class="badge" data-status="@StatusBadge(incident.Status)">@incident.Status</span>
+                <span class="badge" data-status="@StatusBadges.ForIncidentStatus(incident.Status)">@incident.Status</span>
             </div>
         </div>
 

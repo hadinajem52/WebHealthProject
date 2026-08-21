@@ -202,12 +202,26 @@ public sealed record ReportTrendPoint(
     double? P50Ms,
     double? P95Ms);
 
+/// <summary>
+/// An active incident as the dashboard lists it.
+/// </summary>
+/// <param name="IssueKey">
+/// The deduplication identity, carried so the list can say <em>what failed</em> rather than only
+/// where and how badly. Triage starts from the failure, and an incident row without one asks the
+/// reader to open the detail page before they can tell a DNS outage from a slow response.
+/// </param>
+/// <param name="MonitorType">
+/// Which monitor confirmed the failure. It separates an availability incident from a certificate
+/// one, which the severity and the endpoint alone cannot.
+/// </param>
 public sealed record ReportIncidentItem(
     Guid Id,
     Guid EndpointId,
     string EndpointDisplayUrl,
     string ClientName,
     string EnvironmentName,
+    string IssueKey,
+    string MonitorType,
     string Severity,
     string Status,
     DateTimeOffset OpenedAt,

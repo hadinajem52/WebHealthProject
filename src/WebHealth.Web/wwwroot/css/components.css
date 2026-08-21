@@ -119,8 +119,14 @@
     }
 }
 
+/*
+ * `align-items: start` rather than the default stretch: a short card beside a
+ * tall one used to be pulled to the tall one's height, leaving a large empty
+ * panel below its content.
+ */
 .card-grid {
     display: grid;
+    align-items: start;
     gap: var(--space-5);
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 }
@@ -524,6 +530,7 @@ code,
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-4);
+    margin-bottom: 15px;
 }
 
 /*
@@ -551,17 +558,34 @@ code,
     vertical-align: middle;
 }
 
-.data-table th {
+/*
+ * Scoped to thead deliberately. An unscoped `.data-table th` also matches the
+ * row headers in tbody, which rendered endpoint URLs as 10px uppercase
+ * Gray-400 — 2.26:1, and shouting. Column headings keep their own treatment;
+ * row headers below inherit the body's.
+ */
+.data-table thead th {
     padding-bottom: var(--space-2);
-    color: var(--color-gray-400);
-    font-size: 0.625rem; /* 10px */
-    font-weight: 400;
+    color: var(--color-gray-600);
+    font-size: var(--font-size-xs); /* 12px, up from the 10px reference */
+    font-weight: 700;
     letter-spacing: 0.02em;
     line-height: var(--line-height-base);
     text-transform: uppercase;
 }
 
-.data-table tbody tr:last-child td {
+/*
+ * A row header is a cell that happens to name its row, so it reads like one:
+ * body size, primary colour, and only the weight to mark it as the row's
+ * subject.
+ */
+.data-table tbody th {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.data-table tbody tr:last-child td,
+.data-table tbody tr:last-child th {
     border-bottom: 0;
 }
 
@@ -593,7 +617,10 @@ code,
 
 .data-table__secondary {
     display: block;
-    color: var(--color-gray-500);
+    color: var(--color-gray-600);
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    text-transform: none;
 }
 
 .known-issue {
@@ -654,9 +681,14 @@ code,
 }
 
 /*
- * Solid status pill from the table rows. The reference fills are Green-400 and
- * Gray-300 with white text (2.4:1 and 1.6:1); the fills below keep the same
- * shape and white label while reaching AA.
+ * Status pill, Figma node 1633:352: a solid 65x25 fill, 8px corners, and a
+ * centred white 13px label with nothing beside it. Every status in the
+ * application resolves to one of the fills below, so a pill written before or
+ * after this rule looks the same.
+ *
+ * The label is the non-colour cue. The pill previously drew a per-status
+ * silhouette as well; the reference has none, and the label already names the
+ * status in words, which is what WCAG 2.1 1.4.1 asks for.
  */
 .badge {
     display: inline-flex;
@@ -664,97 +696,55 @@ code,
     min-height: 1.5625rem; /* 25px */
     align-items: center;
     justify-content: center;
-    gap: var(--space-1);
     padding: 0 var(--space-2);
     border-radius: 8px;
-    background-color: var(--color-gray-600);
-    color: var(--color-white);
-    font-size: var(--font-size-sm); /* 14px */
-    line-height: var(--line-height-base);
+    background-color: var(--badge-neutral);
+    color: var(--badge-label);
+    font-size: 0.8125rem; /* 13px */
+    font-weight: 400;
+    line-height: var(--line-height-tight); /* 1.4 */
+    text-align: center;
 }
 
+/* Healthy. */
 .badge[data-status="success"] {
-    background-color: var(--status-success);
+    background-color: var(--badge-success);
 }
 
+/* Critical. */
 .badge[data-status="danger"] {
-    background-color: var(--status-danger-text);
+    background-color: var(--badge-danger);
 }
 
-/*
- * Warning and high share the orange family, with high the darker of the two, so
- * the three severity bands read as one escalating scale rather than three
- * unrelated colours. Both keep the white label at AA against their fill.
- */
 .badge[data-status="warning"] {
-    background-color: var(--status-warning-text);
-}
-
-.badge[data-status="high"] {
-    background-color: var(--color-orange-700);
-}
-
-.badge[data-status="info"] {
-    background-color: var(--status-info-text);
+    background-color: var(--badge-warning);
 }
 
 /*
- * The non-colour cue. Each status gets its own silhouette, so a pill still reads
- * correctly in greyscale, with a colour-vision deficiency, or in a forced-colours
- * theme where every fill collapses to the same value. It is drawn with clip-path
- * rather than with generated text, so a screen reader never announces it: the
- * label beside it already says the same thing and is the primary cue.
- *
- * The rule targets .badge itself, so every badge in the application carries the
- * shape whether or not it was written through the _StatusBadge partial.
+ * Warning and high share the amber family, with high the more saturated of the
+ * two, so the three severity bands read as one escalating scale rather than
+ * three unrelated colours.
  */
-.badge::before {
-    display: inline-block;
-    width: 0.625rem;
-    height: 0.625rem;
-    flex: 0 0 auto;
-    background-color: currentcolor;
-    content: "";
+.badge[data-status="high"] {
+    background-color: var(--badge-high);
 }
 
-/* Circle: settled, nothing to act on. */
-.badge[data-status="success"]::before {
-    border-radius: 50%;
+.badge[data-status="acknowledged"] {
+    background-color: var(--badge-acknowledged);
 }
 
-/* Triangle: the conventional caution silhouette. */
-.badge[data-status="warning"]::before {
-    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+/* Not yet checked. */
+.badge[data-status="info"] {
+    background-color: var(--badge-info);
 }
 
-/* Diamond: a triangle turned up a notch, distinct at a glance from both neighbours. */
-.badge[data-status="high"]::before {
-    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-}
-
-/* Octagon: the stop silhouette. */
-.badge[data-status="danger"]::before {
-    clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
-}
-
-/* A bar, deliberately unlike the four states above: this is information, not a verdict. */
-.badge[data-status="info"]::before {
-    width: 0.1875rem;
-    height: 0.75rem;
+/* Disabled and unknown share one fill in the reference: neither is a verdict. */
+.badge[data-status="neutral"] {
+    background-color: var(--badge-neutral);
 }
 
 .badge__label {
     white-space: nowrap;
-}
-
-/*
- * In a forced-colours theme the fills are replaced by the system palette, so the
- * shape becomes the only remaining distinction and has to keep its contrast.
- */
-@media (forced-colors: active) {
-    .badge::before {
-        background-color: CanvasText;
-    }
 }
 
 .tag-list {
@@ -903,6 +893,7 @@ code,
     background: none;
     color: var(--text-secondary);
     cursor: pointer;
+    margin-top: 9px;
 }
 
 .js .password-field__toggle:hover {
@@ -1529,6 +1520,272 @@ code,
 }
 
 /* Dashboard -------------------------------------------------------------- */
+
+/*
+ * Scope bar. The line that used to be an eight-field panel: what you are looking
+ * at, how fresh it is, and the two actions worth having at hand. The full filter
+ * form still exists, at the foot of the page and folded away.
+ */
+.scope-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-4);
+}
+
+.scope-bar__summary {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: baseline;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    gap: var(--space-2);
+}
+
+.scope-bar__scope {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.scope-bar__separator {
+    color: var(--color-gray-400);
+}
+
+.scope-bar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+/*
+ * Current-status tiles. They differ from .stat deliberately: a stat is a number
+ * over a period, and these are states right now. The tone stripe gives the tile
+ * a weight that matches what it is reporting, so a critical tile is not the same
+ * visual object as a healthy one.
+ */
+.status-grid {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.status-tile {
+    padding: var(--space-4);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-tile);
+    background-color: var(--surface-raised);
+}
+
+.status-tile__label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.status-tile__value {
+    margin: var(--space-1) 0 0;
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.status-tile__value a {
+    color: inherit;
+}
+
+.status-tile[data-tone="danger"] .status-tile__value {
+    color: var(--status-danger-text);
+}
+
+.status-tile[data-tone="warning"] .status-tile__value {
+    color: var(--status-warning-text);
+}
+
+.status-tile__detail {
+    margin: var(--space-1) 0 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-base);
+}
+
+/* Two charts side by side on a wide screen, stacked when there is no room. */
+.chart-pair {
+    display: grid;
+    margin-top: var(--space-4);
+    gap: var(--space-5);
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 62em) {
+    .chart-pair {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.chart-panel {
+    min-width: 0;
+    margin: 0;
+}
+
+.chart-panel__title {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+/*
+ * A row the reader should look at first gets a marker in the table rather than
+ * only a coloured badge, so it is findable while scanning the left edge.
+ */
+.data-table tbody tr[data-attention="true"] th[scope="row"] {
+    box-shadow: inset 3px 0 0 var(--status-danger-text);
+    padding-left: var(--space-3);
+}
+
+/* The filter menu --------------------------------------------------------- */
+
+/*
+ * A popup anchored to the Filters button, built the same way as the header's
+ * account and settings menus: present in the document, hidden by the `.js`
+ * enhancement, and reopened by the toggle. Without script the form is simply
+ * part of the page, so filtering never depends on JavaScript.
+ */
+.filter-menu {
+    position: relative;
+}
+
+.js .filter-menu__panel {
+    display: none;
+}
+
+.js .filter-menu[data-open="true"] .filter-menu__panel {
+    display: block;
+}
+
+.filter-menu__panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + var(--space-2));
+    right: 0;
+
+    /* Wide enough for two columns of controls, but never wider than the screen. */
+    width: min(34rem, calc(100vw - var(--space-8)));
+    max-height: min(38rem, calc(100vh - 8rem));
+    padding: var(--space-5);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+    overflow-y: auto;
+    text-align: left;
+}
+
+.filter-menu__header {
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-4);
+}
+
+.filter-menu__title {
+    color: var(--text-primary);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    line-height: var(--line-height-tight);
+}
+
+.filter-menu__hint {
+    margin-top: 0.125rem;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+/* The applied-filter count on the button itself. */
+.filter-menu__count {
+    display: inline-grid;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: var(--radius-pill);
+    background-color: var(--surface-accent);
+    color: var(--color-white);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    place-items: center;
+}
+
+.filter-menu__group {
+    padding: 0;
+    border: 0;
+    margin: 0 0 var(--space-4);
+}
+
+.filter-menu__legend {
+    padding: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/*
+ * Two columns inside a group. A select carrying a long client name needs the
+ * width, and four controls stacked in one column would push the actions below
+ * the fold of the panel.
+ */
+.filter-menu__fields {
+    display: grid;
+    margin-top: var(--space-2);
+    gap: var(--space-3);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.filter-menu__fields .form-field {
+    min-width: 0;
+}
+
+.filter-menu__fields .form-field input,
+.filter-menu__fields .form-field select {
+    height: 2.75rem;
+}
+
+.filter-menu__note {
+    margin-top: var(--space-2);
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-base);
+}
+
+/*
+ * The actions stay visible at the foot of the panel while its groups scroll, so
+ * Apply is never something the reader has to go looking for.
+ */
+.filter-menu__actions {
+    position: sticky;
+    bottom: calc(var(--space-5) * -1);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--space-4);
+    background-color: var(--surface-raised);
+    gap: var(--space-2);
+}
+
+.filter-menu__panel .filter-summary {
+    margin-top: var(--space-4);
+}
+
+
 
 /*
  * Stat tiles. The grid collapses to one column on a narrow viewport rather than
