@@ -1,4 +1,4 @@
-﻿@model IncidentListViewModel
+@model IncidentListViewModel
 @{
     ViewData.SetTitle("Incidents");
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Incidents"));
@@ -57,7 +57,6 @@
             </div>
         </form>
 
-        @* BR-R01: the applied filters and the read instant, stated above the results. *@
         @await Html.PartialAsync("_FilterSummary", Model.Summary)
 
         @if (listPage.Items.Count == 0)
@@ -91,8 +90,7 @@
                                     <span class="data-table__primary target-url">@item.EndpointDisplayUrl</span>
                                     <span class="data-table__secondary">@item.ClientName / @item.WebsiteName / @item.EnvironmentName</span>
                                 </td>
-                                @* The key stays in the title so it can still be read and copied
-                                   for a lookup; the cell leads with what is actually wrong. *@
+
                                 <td data-label="Issue" title="@item.IssueKey">
                                     <span class="data-table__primary">@IssueDisplay.Describe(item.IssueKey)</span>
                                     @if (item.RecurrenceCount > 0) { <span class="tag">Recurrence @item.RecurrenceCount</span> }

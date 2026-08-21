@@ -240,9 +240,7 @@
                                 @foreach (var item in auditGroup.Items)
                                 {
                                     <tr>
-                                        @* Provider text, rendered as plain text. Lighthouse
-                                           descriptions carry Markdown-style links, which stay
-                                           visible as text rather than becoming markup. *@
+
                                         <td data-label="Audit">@(item.Title ?? item.AuditId)</td>
                                         <td data-label="What it checks">@item.Description</td>
                                         <td data-label="Value">

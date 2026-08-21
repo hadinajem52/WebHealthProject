@@ -1,4 +1,4 @@
-﻿@model CheckHistoryViewModel
+@model CheckHistoryViewModel
 @{
     ViewData.SetTitle("Check history");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Endpoints(Url), Breadcrumbs.Endpoint(Url, Model.Page.EndpointId, Model.Page.EndpointDisplayUrl), new BreadcrumbItem("Check history"));
@@ -20,7 +20,6 @@
             <span class="tag">@history.TotalCount check@(history.TotalCount == 1 ? null : "s")</span>
         </div>
 
-        @* BR-R01: the applied scope and the read instant, stated above the results. *@
         @await Html.PartialAsync("_FilterSummary", Model.Summary)
 
         @if (history.Items.Count == 0)
@@ -32,7 +31,7 @@
         }
         else
         {
-            @* BR-P05: say so before the numbers are read, not after. *@
+
             @if (history.Comparability.Warning is { } comparabilityWarning)
             {
                 <div class="flash-messages check-history__comparability">

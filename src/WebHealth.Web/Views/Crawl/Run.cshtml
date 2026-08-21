@@ -1,4 +1,4 @@
-﻿@model CrawlRunViewModel
+@model CrawlRunViewModel
 @{
     ViewData.SetTitle("Crawl run");
     ViewData.SetBreadcrumbs(
@@ -38,9 +38,7 @@
 
         @if (Model.BrokenLinks.Count == 0)
         {
-            @* "No broken links" is not "everything works": a run can hold timeouts, blocked and
-               skipped links, and a partial run never reached part of the site at all. The empty
-               state says only what the data supports. *@
+
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 Model.Offset == 0 ? "No broken links were recorded" : "No more broken links",
                 Model.Offset == 0
@@ -67,7 +65,7 @@
                         @foreach (var link in Model.BrokenLinks)
                         {
                             <tr>
-                                @* AC-08: the source page is what makes the report actionable. *@
+
                                 <td data-label="Source page"><span class="target-url">@(link.SourceUrl ?? "Seed URL")</span></td>
                                 <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
                                 <td data-label="Scope">@(link.IsInternal ? "Internal" : "External")</td>

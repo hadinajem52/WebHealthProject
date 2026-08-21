@@ -1,4 +1,4 @@
-﻿@{
+@{
     var currentController = ViewContext.RouteData.Values["controller"] as string;
     var currentAction = ViewContext.RouteData.Values["action"] as string;
     var groupIndex = 0;
@@ -9,7 +9,6 @@
         <span>WebHealth</span>
     </a>
 
-    @* Visible only while the narrow-viewport drawer is available. *@
     <button type="button" class="app-sidebar__close" data-shell-close>
         @await Html.PartialAsync("_Icon", "close")
         <span>Close menu</span>
@@ -60,12 +59,6 @@
         </div>
     }
 
-@*
-    This card used to be headed "Need help?" and offered no help: its only link was the runtime
-    readiness endpoint, which the Diagnostics card and the footer already carry. It now says what
-    it actually shows — whether this application instance is answering — so the destination and
-    the label agree.
-*@
     <div class="app-sidebar__support">
         <span class="app-sidebar__support-icon">@await Html.PartialAsync("_Icon", "diagnostics")</span>
         <p class="app-sidebar__support-title">System status</p>

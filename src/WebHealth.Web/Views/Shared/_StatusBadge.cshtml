@@ -1,10 +1,5 @@
 @model StatusBadgeViewModel
-@*
-    The non-colour cue is a CSS shape on .badge[data-status], so every badge in the
-    application carries it — including ones written before this partial existed and ones
-    written after. This partial adds only what a shape and a label cannot: extra wording for
-    a screen reader when the visible label is too terse to stand alone.
-*@
+
 <span class="badge" data-status="@Model.Status">
     <span class="badge__label">@Model.Label</span>
     @if (Model.Detail is not null)

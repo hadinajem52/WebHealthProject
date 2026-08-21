@@ -1,4 +1,4 @@
-﻿@{
+@{
     var pageTitle = ViewData.GetTitle();
     var pageSubtitle = ViewData.GetSubtitle();
     var documentTitle = string.IsNullOrWhiteSpace(pageTitle) ? "WebHealth" : $"{pageTitle} - WebHealth";
@@ -20,7 +20,7 @@
     <a class="skip-link" href="#main-content">Skip to main content</a>
 
     <div class="app-shell">
-    
+
         @await Html.PartialAsync("_Sidebar")
 
         <div class="app-column" data-shell-content>
@@ -44,17 +44,8 @@
                         }
                     </div>
 
-                    @*
-                        The account, display-preference and notification controls. Each is a real
-                        control with a real hit area; anything not yet implemented states that it
-                        is planned rather than pretending to work.
-                    *@
                     <div class="app-header__utility">
-                        @*
-                            The menu is rendered open in the document, so signing
-                            out is reachable without script; the enhancement in
-                            shell.js collapses it to a button-triggered popup.
-                        *@
+
                         <div class="app-account" data-shell-account data-open="false">
                             <button type="button"
                                     class="app-header__account"
@@ -87,11 +78,6 @@
                             </div>
                         </div>
 
-                        @*
-                            Display preferences only. Nothing here is sent to the server or stored
-                            against the account: the instants themselves stay UTC everywhere, and
-                            the choice is which zone this browser renders them in.
-                        *@
                         <div class="app-settings" data-shell-settings data-open="false">
                             <button type="button"
                                     class="app-header__icon"
