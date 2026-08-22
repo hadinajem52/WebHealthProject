@@ -31,9 +31,11 @@ namespace WebHealth.Infrastructure.Reporting;
 /// make a year-long window a multi-million-row transfer.
 /// </para>
 /// <para>
-/// One instant is read per call and used for visibility scoping and for every "is this overdue"
-/// comparison, so the freshness a screen displays is the instant its data was actually selected
-/// at rather than an approximation of it.
+/// One instant is read per selection and used for visibility scoping and for every "is this
+/// overdue" comparison, so the freshness a screen displays is the instant its data was actually
+/// selected at rather than an approximation of it. A screen that reads several surfaces for one
+/// filter shares that instant along with the selection, so its cards cannot disagree about when
+/// "now" was.
 /// </para>
 /// </remarks>
 internal sealed class ReportingReader(
@@ -51,21 +53,27 @@ internal sealed class ReportingReader(
     /// </summary>
     private static readonly TimeSpan OverdueGrace = TimeSpan.FromMinutes(10);
 
+    /// <summary>
+    /// The selections this instance has already resolved, keyed by the filter and the caller
+    /// they were resolved for. The reader is registered per scope, so this lives exactly as long
+    /// as the request that is reading.
+    /// </summary>
+    private readonly Dictionary<SelectionKey, Task<Selection>> selections = [];
+
     public async Task<ReportDataset> QueryAsync(
         ReportQuery query,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        var now = timeProvider.GetUtcNow();
-        var selection = SelectMonitors(query, access, now);
-        var totalCount = await CountAsync(selection, cancellationToken);
+        var selection = await ResolveSelectionAsync(query, access, cancellationToken);
+        var totalCount = selection.TotalCount;
 
         // The page the reader actually served is the page it reports back, so a request for
         // page 999,999 renders "page 2 of 2" rather than an unreachable page number with
         // pagination links that go nowhere.
         var effectiveQuery = query.WithPaging(EffectivePage(query, totalCount));
-        var page = await PageAsync(selection, effectiveQuery, cancellationToken);
-        var monitorIds = await MonitorIdsAsync(selection, cancellationToken);
+        var page = await PageAsync(selection.Monitors, effectiveQuery, cancellationToken);
+        var monitorIds = selection.MonitorIds;
 
         return new(
             effectiveQuery,
@@ -83,11 +91,12 @@ internal sealed class ReportingReader(
         // ForExport re-slices the caller's filter rather than trusting it to have been sliced:
         // an export is the whole filtered set, never the page the screen happened to be on.
         var exportQuery = query.ForExport();
-        var now = timeProvider.GetUtcNow();
-        var selection = SelectMonitors(exportQuery, access, now);
-        var totalCount = await CountAsync(selection, cancellationToken);
-        var page = await PageAsync(selection, exportQuery, cancellationToken);
-        return new(exportQuery, await BuildRowsAsync(exportQuery, page, cancellationToken), totalCount);
+        var selection = await ResolveSelectionAsync(exportQuery, access, cancellationToken);
+        var page = await PageAsync(selection.Monitors, exportQuery, cancellationToken);
+        return new(
+            exportQuery,
+            await BuildRowsAsync(exportQuery, page, cancellationToken),
+            selection.TotalCount);
     }
 
     /// <summary>
@@ -100,15 +109,17 @@ internal sealed class ReportingReader(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        var now = timeProvider.GetUtcNow();
-        var totalCount = await CountAsync(SelectMonitors(query, access, now), cancellationToken);
+        var selection = await ResolveSelectionAsync(query, access, cancellationToken);
+        var totalCount = selection.TotalCount;
 
         // The certificate subset is selected by the same method the whole selection is, with the
         // monitor type as one more filter applied where every other filter is applied. Narrowing
         // the projected rows afterwards instead would put a predicate on a constructed record,
-        // which the provider cannot translate once a visibility scope is in play.
+        // which the provider cannot translate once a visibility scope is in play. It is selected
+        // at the instant the whole selection was, so the subset cannot be drawn from a different
+        // moment than the total it is reported against.
         var certificateMonitors = await SelectMonitors(
-                query, access, now, SslMonitorIdentity.MonitorType)
+                query, access, selection.Now, SslMonitorIdentity.MonitorType)
             .ToArrayAsync(cancellationToken);
         var notApplicable = totalCount - certificateMonitors.Length;
         if (certificateMonitors.Length == 0)
@@ -195,16 +206,14 @@ internal sealed class ReportingReader(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        var now = timeProvider.GetUtcNow();
-        var selection = SelectMonitors(query, access, now);
-        await GuardSelectionSizeAsync(selection, cancellationToken);
-        var monitorIds = await MonitorIdsAsync(selection, cancellationToken);
+        var selection = await ResolveSelectionAsync(query, access, cancellationToken);
+        var monitorIds = selection.MonitorIds;
         if (monitorIds.Count == 0)
         {
             return ReportDiagnostics.Empty;
         }
 
-        var overdueBefore = now - OverdueGrace;
+        var overdueBefore = selection.Now - OverdueGrace;
         var scheduling = await dbContext.EndpointMonitors.AsNoTracking()
             .Where(monitor => monitorIds.Contains(monitor.Id))
             .Select(monitor => new
@@ -267,10 +276,8 @@ internal sealed class ReportingReader(
         int limit,
         CancellationToken cancellationToken = default)
     {
-        var now = timeProvider.GetUtcNow();
-        var selection = SelectMonitors(query, access, now);
-        await GuardSelectionSizeAsync(selection, cancellationToken);
-        var monitorIds = await MonitorIdsAsync(selection, cancellationToken);
+        var selection = await ResolveSelectionAsync(query, access, cancellationToken);
+        var monitorIds = selection.MonitorIds;
         if (monitorIds.Count == 0)
         {
             return [];
@@ -444,20 +451,81 @@ internal sealed class ReportingReader(
         return projected;
     }
 
-    private static async Task<int> CountAsync(
-        IQueryable<MonitorRow> selection,
+    /// <summary>
+    /// The selection for one filter, resolved once per reader.
+    /// </summary>
+    /// <remarks>
+    /// Every surface needs the same two facts before it can report anything: how many monitors
+    /// the filter selects, and which ones. Each method used to establish both for itself, so a
+    /// dashboard reading four surfaces for one filter counted the selection four times and
+    /// listed it four times — eight round trips for two answers that could not have differed,
+    /// since one filter and one visibility scope cannot select different monitors within a
+    /// request. Resolving it once is what makes the four surfaces demonstrably one selection
+    /// rather than four that are merely expected to agree.
+    /// <para>
+    /// The task is cached rather than the value, so a filter resolved once is resolved once even
+    /// if two surfaces ask concurrently, and a selection that was refused for being too large is
+    /// refused the same way for every surface that asks.
+    /// </para>
+    /// </remarks>
+    private Task<Selection> ResolveSelectionAsync(
+        ReportQuery query,
+        RegistryAccessContext access,
         CancellationToken cancellationToken)
     {
-        var count = await selection.CountAsync(cancellationToken);
-        return count > ReportQueryNormalizer.MaximumMonitors
-            ? throw new ReportTooLargeException(ReportQueryNormalizer.MaximumMonitors)
-            : count;
+        var key = SelectionKey.For(query, access);
+        if (selections.TryGetValue(key, out var existing))
+        {
+            return existing;
+        }
+
+        var resolving = ResolveAsync();
+        selections[key] = resolving;
+        return resolving;
+
+        async Task<Selection> ResolveAsync()
+        {
+            var now = timeProvider.GetUtcNow();
+            var monitors = SelectMonitors(query, access, now);
+            var totalCount = await monitors.CountAsync(cancellationToken);
+            if (totalCount > ReportQueryNormalizer.MaximumMonitors)
+            {
+                throw new ReportTooLargeException(ReportQueryNormalizer.MaximumMonitors);
+            }
+
+            // The identifiers the aggregates run over: the whole selection, not one page,
+            // because the cards and the trend describe the filter rather than the page being
+            // viewed. The count above bounds this array.
+            var monitorIds = await monitors
+                .Select(row => row.EndpointMonitorId)
+                .Take(ReportQueryNormalizer.MaximumMonitors)
+                .ToArrayAsync(cancellationToken);
+
+            return new Selection(now, monitors, totalCount, monitorIds);
+        }
     }
 
-    private static Task GuardSelectionSizeAsync(
-        IQueryable<MonitorRow> selection,
-        CancellationToken cancellationToken) =>
-        CountAsync(selection, cancellationToken);
+    /// <summary>
+    /// One filter, as one caller sees it. Roles are ordered so that the same permissions
+    /// presented in a different sequence are recognised as the same selection.
+    /// </summary>
+    private sealed record SelectionKey(ReportQuery Query, Guid UserId, string Roles)
+    {
+        public static SelectionKey For(ReportQuery query, RegistryAccessContext access) => new(
+            query,
+            access.UserId,
+            string.Join("|", access.Roles.OrderBy(role => role, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// A resolved selection: the instant it was selected at, the composed query every surface
+    /// pages or aggregates from, and the size and membership already established for it.
+    /// </summary>
+    private sealed record Selection(
+        DateTimeOffset Now,
+        IQueryable<MonitorRow> Monitors,
+        int TotalCount,
+        IReadOnlyList<Guid> MonitorIds);
 
     /// <summary>
     /// The requested page, clamped to what the selection actually has. A page beyond the end
@@ -474,19 +542,6 @@ internal sealed class ReportingReader(
         selection
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
-            .ToArrayAsync(cancellationToken);
-
-    /// <summary>
-    /// The identifiers the aggregates run over: the whole selection, not one page, because the
-    /// cards and the trend describe the filter rather than the page being viewed. The count
-    /// guard above bounds this array.
-    /// </summary>
-    private static async Task<IReadOnlyList<Guid>> MonitorIdsAsync(
-        IQueryable<MonitorRow> selection,
-        CancellationToken cancellationToken) =>
-        await selection
-            .Select(row => row.EndpointMonitorId)
-            .Take(ReportQueryNormalizer.MaximumMonitors)
             .ToArrayAsync(cancellationToken);
 
     private async Task<IReadOnlyList<ReportRow>> BuildRowsAsync(

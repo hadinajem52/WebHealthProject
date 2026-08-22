@@ -12,7 +12,8 @@ internal sealed class TargetRegistryReader(
     ApplicationDbContext dbContext,
     RegistryVisibility visibility,
     ITargetAuthorizationService targetAuthorization,
-    IMonitoringEligibilityService monitoringEligibility) : ITargetRegistryReader
+    IMonitoringEligibilityService monitoringEligibility,
+    OwnerSubjectNames ownerSubjectNames) : ITargetRegistryReader
 {
     public Task<IReadOnlyList<EnvironmentListItem>> ListEnvironmentsAsync(
         Guid websiteId,
@@ -438,23 +439,11 @@ internal sealed class TargetRegistryReader(
                 endpoint.SeoDescriptionRequired))
             .ToListAsync(cancellationToken);
 
-    private async Task<Dictionary<Guid, string>> LoadOwnerNamesAsync(
+    private Task<Dictionary<Guid, string>> LoadOwnerNamesAsync(
         IEnumerable<Guid> ownerSubjectIds,
-        CancellationToken cancellationToken)
-    {
-        var ids = ownerSubjectIds.Distinct().ToArray();
-        var users = await dbContext.OwnerSubjects.AsNoTracking()
-            .Where(owner => ids.Contains(owner.Id) && owner.UserId != null)
-            .Join(dbContext.Users.AsNoTracking(), owner => owner.UserId, user => user.Id,
-                (owner, user) => new { owner.Id, Name = user.DisplayName })
-            .ToListAsync(cancellationToken);
-        var teams = await dbContext.OwnerSubjects.AsNoTracking()
-            .Where(owner => ids.Contains(owner.Id) && owner.TeamId != null)
-            .Join(dbContext.Teams.AsNoTracking(), owner => owner.TeamId, team => team.Id,
-                (owner, team) => new { owner.Id, team.Name })
-            .ToListAsync(cancellationToken);
-        return users.Concat(teams).ToDictionary(owner => owner.Id, owner => owner.Name);
-    }
+        CancellationToken cancellationToken) =>
+        ownerSubjectNames.LoadAsync(ownerSubjectIds, cancellationToken);
+
 
     private static EnvironmentListItem ToEnvironmentItem(EnvironmentRow environment) => new(
         environment.Id,

@@ -32,6 +32,24 @@ try {
         --configuration Release `
         --no-build
     if ($LASTEXITCODE -ne 0) { throw 'Migration drift check failed.' }
+
+    # The application binds a pre-built model, so a model change that is not regenerated here is
+    # a change the running application never sees: it would keep querying the previous shape and
+    # fail at runtime against a schema the migration had already moved. Regenerating and asking
+    # git whether anything moved is what keeps the generated copy honest.
+    dotnet ef dbcontext optimize `
+        --project $infrastructure `
+        --startup-project $infrastructure `
+        --configuration Release `
+        --no-build `
+        --output-dir Persistence/CompiledModels `
+        --namespace WebHealth.Infrastructure.Persistence.CompiledModels
+    if ($LASTEXITCODE -ne 0) { throw 'Compiled model regeneration failed.' }
+
+    git -C $root diff --quiet -- 'src/WebHealth.Infrastructure/Persistence/CompiledModels'
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Compiled model is stale. Regenerate it with dotnet ef dbcontext optimize and commit the result.'
+    }
 }
 finally {
     Remove-Item Env:WEBHEALTH_MIGRATIONS_CONNECTION -ErrorAction SilentlyContinue

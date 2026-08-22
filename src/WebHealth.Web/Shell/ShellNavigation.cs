@@ -25,8 +25,7 @@ public static class ShellNavigation
                 "incidents",
                 "Incidents",
                 "Index",
-                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
-            new NavigationItem("Reports", "reports")
+                ["Administrator", "Operations", "Developer/Support", "Viewer"])
         ]),
         // The three audit surfaces answer the same question — what a crawl of the site found —
         // so they group under one heading rather than competing with Dashboard and Incidents for
@@ -57,8 +56,7 @@ public static class ShellNavigation
         [
             new NavigationItem("Users", "users", "Administration", "Users", ["Administrator"]),
             new NavigationItem("Teams", "users", "Administration", "Teams", ["Administrator"]),
-            new NavigationItem("Audit", "audit", "Audit", "Index", ["Administrator", "Operations"]),
-            new NavigationItem("Diagnostics", "diagnostics")
+            new NavigationItem("Audit", "audit", "Audit", "Index", ["Administrator", "Operations"])
         ])
     ];
 

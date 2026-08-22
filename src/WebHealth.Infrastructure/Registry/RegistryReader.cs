@@ -6,7 +6,8 @@ namespace WebHealth.Infrastructure.Registry;
 
 internal sealed class RegistryReader(
     ApplicationDbContext dbContext,
-    RegistryVisibility visibility) : IRegistryReader
+    RegistryVisibility visibility,
+    OwnerSubjectNames ownerSubjectNames) : IRegistryReader
 {
     public async Task<IReadOnlyList<ClientListItem>> ListClientsAsync(
         RegistryAccessContext access,
@@ -252,29 +253,11 @@ internal sealed class RegistryReader(
             .ToArray();
     }
 
-    private async Task<Dictionary<Guid, string>> LoadOwnerNamesAsync(
+    private Task<Dictionary<Guid, string>> LoadOwnerNamesAsync(
         IEnumerable<Guid> ownerSubjectIds,
-        CancellationToken cancellationToken)
-    {
-        var ids = ownerSubjectIds.Distinct().ToArray();
-        var userOwners = await dbContext.OwnerSubjects.AsNoTracking()
-            .Where(subject => ids.Contains(subject.Id) && subject.UserId != null)
-            .Join(
-                dbContext.Users.AsNoTracking(),
-                subject => subject.UserId,
-                user => user.Id,
-                (subject, user) => new { subject.Id, Name = user.DisplayName })
-            .ToListAsync(cancellationToken);
-        var teamOwners = await dbContext.OwnerSubjects.AsNoTracking()
-            .Where(subject => ids.Contains(subject.Id) && subject.TeamId != null)
-            .Join(
-                dbContext.Teams.AsNoTracking(),
-                subject => subject.TeamId,
-                team => team.Id,
-                (subject, team) => new { subject.Id, team.Name })
-            .ToListAsync(cancellationToken);
-        return userOwners.Concat(teamOwners).ToDictionary(owner => owner.Id, owner => owner.Name);
-    }
+        CancellationToken cancellationToken) =>
+        ownerSubjectNames.LoadAsync(ownerSubjectIds, cancellationToken);
+
 
     private static IReadOnlyList<WebsiteListItem> ToWebsiteItems(
         IEnumerable<WebsiteRow> websites,
