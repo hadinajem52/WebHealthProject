@@ -50,6 +50,20 @@ public static class CrawlSkipReasons
 
     /// <summary>Discovered, but the run stopped before reaching it. Never mistaken for healthy.</summary>
     public const string RunStopped = "RunStopped";
+
+    /// <summary>
+    /// Skips that leave part of the site unexamined, so a run carrying one has not covered its
+    /// scope however cleanly its frontier drained.
+    /// <para>
+    /// These are the reasons a URL that may itself be a page is never fetched, which is what makes
+    /// the links it would have contributed absent rather than merely unchecked. A skip that still
+    /// records a row -- an external target nobody opted to check, a check-only budget -- is not
+    /// here: that link is present and classified indeterminate, which the comparison already
+    /// respects.
+    /// </para>
+    /// </summary>
+    public static IReadOnlyList<string> LimitsCoverage =>
+        [PageLimit, QueryVariantCap, RobotsDisallowed, TargetNotAuthorized];
 }
 
 /// <summary>BR-L05: a crawl stops gracefully and reports why it stopped.</summary>

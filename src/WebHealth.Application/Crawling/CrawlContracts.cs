@@ -53,6 +53,13 @@ public sealed record CrawlRunOutcome(
     /// </summary>
     public string? FailureDetail { get; init; }
 
+    /// <summary>
+    /// Whether anything left part of the site unexamined: a page nobody could read, a robots rule,
+    /// a budget. A run carrying this has not covered its scope, whatever its stop reason says, and
+    /// must not stand as the baseline a later comparison calls links resolved against.
+    /// </summary>
+    public bool CoverageLimited { get; init; }
+
     public static CrawlRunOutcome Invalid(Guid runId, IReadOnlyList<string> errors) => new(
         runId, CrawlRunStatuses.Failed, CrawlStopReasons.Failed, 0, 0, false, null, errors);
 }
@@ -143,12 +150,30 @@ public interface ICrawlRobotsReader
 }
 
 /// <summary>
-/// Extracts <c>href</c> values from a document and returns nothing else. The narrow return type is
-/// the point: BR-E10 stays structural rather than a convention if the document has no way out.
+/// What one document yielded, and whether that is all of it.
+/// <para>
+/// "This page links to nothing" and "this page could not be read" produce the same empty list and
+/// mean opposite things. A comparison that cannot tell them apart reports every link the
+/// unreadable page used to carry as resolved, on the strength of nobody having looked.
+/// </para>
+/// </summary>
+public sealed record CrawlDocumentLinks(IReadOnlyList<string> Hrefs, bool FullyInspected)
+{
+    /// <summary>A document whose links were never enumerated.</summary>
+    public static CrawlDocumentLinks NotInspected { get; } = new([], false);
+
+    /// <summary>A document with nothing to enumerate: no markup this crawler reads links out of.</summary>
+    public static CrawlDocumentLinks Nothing { get; } = new([], true);
+}
+
+/// <summary>
+/// Extracts <c>href</c> values from a document and returns nothing else beyond whether it read the
+/// whole document. The narrow return type is the point: BR-E10 stays structural rather than a
+/// convention if the document has no way out.
 /// </summary>
 public interface IHtmlLinkExtractor
 {
-    IReadOnlyList<string> ExtractHrefs(ReadOnlyMemory<byte> body, string? contentType);
+    CrawlDocumentLinks ExtractHrefs(ReadOnlyMemory<byte> body, string? contentType);
 }
 
 /// <summary>One run, as a report row. No link detail: the views page that separately.</summary>
@@ -161,9 +186,11 @@ public sealed record CrawlRunSummary(
     int LinksRecorded,
     int BrokenLinkCount,
     bool RobotsOverrideGranted,
+    string? RobotsOverrideRefusedBecause,
     DateTimeOffset StartedAt,
     DateTimeOffset? FinishedAt,
-    string? FailureReason = null)
+    string? FailureReason = null,
+    bool CoverageLimited = false)
 {
     /// <summary>
     /// Covered means the crawler actually examined the site: the frontier drained <em>and</em> at
@@ -180,8 +207,16 @@ public sealed record CrawlRunSummary(
     public bool CoveredWholeScope =>
         Status == Domain.Crawling.CrawlRunStatuses.Completed
         && StopReason == Domain.Crawling.CrawlStopReasons.FrontierExhausted
-        && PagesFetched > 0;
+        && PagesFetched > 0
+        && !CoverageLimited;
 }
+
+/// <summary>
+/// How many of a run's URLs went unrequested for one reason. A crawl that fetched nothing has to be
+/// able to say what stopped it: "nothing was examined" with no reason behind it leaves the one
+/// person who has to act on it with nowhere to go.
+/// </summary>
+public sealed record CrawlSkipSummary(string SkipReason, int Count);
 
 /// <summary>One broken source-target pair, which is what a report is actually for (AC-08).</summary>
 public sealed record CrawlBrokenLink(
@@ -251,6 +286,15 @@ public interface ICrawlReportReader
         int limit,
         RegistryAccessContext access,
         int offset = 0,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Why this run's URLs were not requested, most common reason first. Bounded by the number of
+    /// distinct reasons, which is a fixed, small vocabulary rather than a function of crawl size.
+    /// </summary>
+    Task<IReadOnlyList<CrawlSkipSummary>> ListSkipReasonsAsync(
+        Guid runId,
+        RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
     /// <summary>

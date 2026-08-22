@@ -49,6 +49,12 @@ internal sealed class EmptyCrawlReportReader : ICrawlReportReader
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<CrawlBrokenLink>>([]);
 
+    public Task<IReadOnlyList<CrawlSkipSummary>> ListSkipReasonsAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<CrawlSkipSummary>>([]);
+
     public Task<CrawlComparison> CompareLatestAsync(
         Guid endpointId,
         RegistryAccessContext access,

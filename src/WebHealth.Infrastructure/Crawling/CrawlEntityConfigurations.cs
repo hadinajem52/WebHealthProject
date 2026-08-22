@@ -83,6 +83,7 @@ internal sealed class CrawlRunConfiguration : IEntityTypeConfiguration<CrawlRun>
         builder.Property(run => run.AllowedHosts).HasMaxLength(MaxScopeLength);
         builder.Property(run => run.AllowedPathPrefixes).HasMaxLength(MaxScopeLength);
         builder.Property(run => run.FailureReason).HasMaxLength(MaxFailureReasonLength);
+        builder.Property(run => run.CoverageLimited).HasDefaultValue(false);
 
         // The reports and the comparison both ask for an endpoint's runs newest first, so that is
         // the index. Descending on started_at so the ordering is served rather than sorted.

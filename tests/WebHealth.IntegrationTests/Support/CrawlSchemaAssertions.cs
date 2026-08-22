@@ -45,7 +45,8 @@ internal static class CrawlSchemaAssertions
             "id", "endpoint_id", "status", "stop_reason", "seed_urls", "pages_fetched",
             "links_recorded", "robots_override_granted", "robots_override_refused_because",
             "allowed_hosts", "allowed_path_prefixes", "query_policy", "max_pages", "max_depth",
-            "check_external_links", "failure_reason", "started_at", "finished_at");
+            "check_external_links", "failure_reason", "coverage_limited", "started_at",
+            "finished_at");
 
         (await ColumnsOfAsync(connectionString, "crawl_link_result")).Should().BeEquivalentTo(
             "id", "run_id", "source_url", "source_url_hash", "target_url", "target_url_hash",
@@ -442,6 +443,7 @@ internal static class CrawlSchemaAssertions
         await VerifyComparisonIsBoundedAsync(services, endpointId);
         await VerifyPartialRunIsNeverABaselineAsync(services, endpointId);
         await VerifyRunThatFetchedNothingIsNeverABaselineAsync(services, endpointId);
+        await VerifyCoverageLimitedRunIsNeverABaselineAsync(services, endpointId);
         await VerifyUncheckedLinkIsNotReportedResolvedAsync(services, endpointId);
         await VerifyRunStartIsReplayableAsync(services, endpointId);
     }
@@ -586,6 +588,61 @@ internal static class CrawlSchemaAssertions
         comparison.Resolved.Sample.Should().NotContain(
             link => link.TargetUrl == "https://blocked.test/broken",
             "a link is only resolved when a crawl re-checked it, not when a crawl was refused");
+    }
+
+    /// <summary>
+    /// A run that fetched pages, drained its frontier, and still could not read part of the site.
+    /// Every other test of a baseline passes it: the status is Completed, the stop reason is
+    /// FrontierExhausted, and the page count is not zero. Only the coverage flag separates it from
+    /// a crawl that actually swept the site, and the links the unreadable pages carry are simply
+    /// absent from it -- which is what the comparison reads as resolved.
+    /// </summary>
+    private static async Task VerifyCoverageLimitedRunIsNeverABaselineAsync(
+        IServiceProvider services,
+        Guid endpointId)
+    {
+        var fullScopeRun = Guid.CreateVersion7();
+        await WriteRunAsync(services, endpointId, fullScopeRun, CrawlStopReasons.FrontierExhausted,
+            ("https://partial.test/a", "https://partial.test/broken", CrawlLinkClassifications.Broken));
+
+        var limitedRun = Guid.CreateVersion7();
+        await using (var writing = services.CreateAsyncScope())
+        {
+            var sink = writing.ServiceProvider.GetRequiredService<ICrawlResultSink>();
+            await sink.BeginRunAsync(new(
+                limitedRun, endpointId, ["https://partial.test/"],
+                new([], [], "Canonicalize", 1000, 5, false), DateTimeOffset.UtcNow));
+
+            // A page it did read, linking to something healthy. The broken pair above is missing
+            // from this run because the page carrying it was one of the ones it could not read.
+            await sink.RecordLinkAsync(new(
+                limitedRun, "https://partial.test/a", "https://partial.test/ok", true, 1,
+                CrawlLinkClassifications.Healthy, 200, 0, null, null, 8));
+
+            await sink.RecordRunOutcomeAsync(new(
+                limitedRun, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+                4, 1, false, CrawlOverrideRefusals.NotRequested, [])
+            {
+                CoverageLimited = true
+            });
+        }
+
+        await using var scope = services.CreateAsyncScope();
+        var reader = scope.ServiceProvider.GetRequiredService<ICrawlReportReader>();
+        var access = await AdministratorAccessAsync(scope);
+
+        var limited = await reader.FindRunAsync(limitedRun, access);
+        limited!.CoverageLimited.Should().BeTrue("the flag has to survive the round trip");
+        limited.CoveredWholeScope.Should().BeFalse(
+            "part of the site went unexamined, whatever the stop reason and page count say");
+
+        var comparison = await reader.CompareLatestAsync(endpointId, access);
+        comparison.CurrentRunId.Should().Be(fullScopeRun,
+            "a run that could not read part of the site must not displace the last full-scope run");
+        comparison.Resolved.Sample.Should().NotContain(
+            link => link.TargetUrl == "https://partial.test/broken",
+            "the pair is absent because nobody read the page that carries it, which is not evidence "
+            + "that it was fixed");
     }
 
     /// <summary>

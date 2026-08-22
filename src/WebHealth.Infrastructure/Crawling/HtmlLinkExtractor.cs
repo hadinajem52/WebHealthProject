@@ -27,23 +27,36 @@ internal sealed class HtmlLinkExtractor : IHtmlLinkExtractor
 
     static HtmlLinkExtractor() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-    public IReadOnlyList<string> ExtractHrefs(ReadOnlyMemory<byte> body, string? contentType)
+    public CrawlDocumentLinks ExtractHrefs(ReadOnlyMemory<byte> body, string? contentType)
     {
-        if (!SeoExtractionRules.IsHtml(contentType) || body.Length == 0) return [];
+        // A response with no declared type is the one case that cannot be judged: it may be markup
+        // full of links or a binary with none, and either way its links were not enumerated.
+        if (contentType is null) return CrawlDocumentLinks.NotInspected;
+        if (!SeoExtractionRules.IsHtml(contentType) || body.Length == 0)
+        {
+            return CrawlDocumentLinks.Nothing;
+        }
 
         try
         {
             using var document = Parse(body, contentType);
-            return [.. document.QuerySelectorAll("a[href], area[href]")
+            var hrefs = document.QuerySelectorAll("a[href], area[href]")
                 .Select(element => element.GetAttribute("href"))
                 .Where(href => !string.IsNullOrWhiteSpace(href))
-                .Take(MaxHrefsPerPage)!];
+                .Take(MaxHrefsPerPage + 1)
+                .ToArray();
+
+            // One over the cap: the extra element is how a document that has more links than this
+            // reads is told apart from one that has exactly as many.
+            return hrefs.Length > MaxHrefsPerPage
+                ? new(hrefs[..MaxHrefsPerPage]!, FullyInspected: false)
+                : new(hrefs!, FullyInspected: true);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
             // A document is untrusted input. A parse that fails costs this page's links, never the
             // run. The exception carries document text, so it is deliberately not logged.
-            return [];
+            return CrawlDocumentLinks.NotInspected;
         }
     }
 

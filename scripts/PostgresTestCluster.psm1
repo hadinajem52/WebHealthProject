@@ -4,7 +4,8 @@ function Start-PostgresTestCluster {
         [Parameter(Mandatory)] [string] $RepositoryRoot,
         [Parameter(Mandatory)] [string] $Name,
         [Parameter(Mandatory)] [int] $Port,
-        [Parameter(Mandatory)] [ref] $Cluster
+        [Parameter(Mandatory)] [ref] $Cluster,
+        [string[]] $ServerSetting = @()
     )
 
     $postgresBin = 'C:\Program Files\PostgreSQL\18\bin'
@@ -40,8 +41,25 @@ function Start-PostgresTestCluster {
     }
     New-Item -ItemType Directory -Path $work | Out-Null
 
-    & (Join-Path $postgresBin 'initdb.exe') -D $data -U postgres -A trust --no-locale --encoding=UTF8
-    if ($LASTEXITCODE -ne 0) { throw 'initdb failed.' }
+    if (-not (Test-Path -LiteralPath $spikesRoot)) {
+        New-Item -ItemType Directory -Path $spikesRoot | Out-Null
+    }
+
+    $initdb = Join-Path $postgresBin 'initdb.exe'
+    $template = Join-Path $spikesRoot ("_initdb-" + ((& $initdb --version) -replace '[^\d.]', ''))
+    if (-not (Test-Path -LiteralPath (Join-Path $template 'PG_VERSION'))) {
+        Remove-Item -LiteralPath $template -Recurse -Force -ErrorAction SilentlyContinue
+        $staging = "$template-$PID"
+        & $initdb -D $staging -U postgres -A trust --no-locale --encoding=UTF8 --no-sync
+        if ($LASTEXITCODE -ne 0) { throw 'initdb failed.' }
+        Move-Item -LiteralPath $staging -Destination $template
+    }
+
+    robocopy $template $data /E /MT:8 /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw 'Copying the initdb template failed.' }
+
+    $serverOptions = (@("-p $Port", '-h 127.0.0.1') +
+        ($ServerSetting | ForEach-Object { "-c $_" })) -join ' '
 
     # The postmaster inherits pg_ctl's standard handles and outlives it. When this script's own
     # stdout is a pipe rather than a console, the daemon holds that pipe open forever and the
@@ -52,7 +70,7 @@ function Start-PostgresTestCluster {
     # Wait on pg_ctl itself, not on Start-Process -Wait: that form also waits for descendants, and
     # the postmaster it leaves behind is one.
     $start = Start-Process -FilePath $pgCtl `
-        -ArgumentList @('-D', "`"$data`"", '-l', "`"$log`"", '-o', "`"-p $Port -h 127.0.0.1`"", '-w', 'start') `
+        -ArgumentList @('-D', "`"$data`"", '-l', "`"$log`"", '-o', "`"$serverOptions`"", '-w', 'start') `
         -NoNewWindow -PassThru -RedirectStandardOutput $startOut -RedirectStandardError $startErr
     $start.WaitForExit()
     Get-Content -LiteralPath $startOut, $startErr -ErrorAction SilentlyContinue | Write-Host

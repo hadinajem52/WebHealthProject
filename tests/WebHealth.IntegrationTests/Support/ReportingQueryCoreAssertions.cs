@@ -49,10 +49,10 @@ internal static class ReportingQueryCoreAssertions
         await VerifyWindowIsHalfOpenAsync(reader, access, fixture);
         await VerifyPercentilesUseSuccessfulSamplesOnlyAsync(reader, access, fixture);
         await VerifyTrendBucketsByUtcDayAsync(reader, access, fixture);
-        await VerifyScreenAndCsvSelectTheSameRecordsAsync(reader, access, fixture);
+        await VerifyScreenAndCsvSelectTheSameRecordsAsync(services, access, fixture);
         await VerifyIncidentListAndCountDescribeOneSelectionAsync(reader, access, fixture);
         await VerifyAPageBeyondTheEndReportsThePageItServedAsync(reader, access, fixture);
-        await VerifyVisibilityIsAppliedToBothSurfacesAsync(database, reader, fixture);
+        await VerifyVisibilityIsAppliedToBothSurfacesAsync(services, database, reader, fixture);
     }
 
     /// <summary>
@@ -217,12 +217,12 @@ internal static class ReportingQueryCoreAssertions
     /// to match, because both came from one query.
     /// </summary>
     private static async Task VerifyScreenAndCsvSelectTheSameRecordsAsync(
-        IReportingReader reader,
+        ServiceProvider services,
         RegistryAccessContext access,
         ReportingFixture fixture)
     {
         var covered = 0;
-        foreach (var query in EveryFilterCombination(fixture))
+        await ForEachReaderAsync(services, EveryFilterCombination(fixture), async (reader, query) =>
         {
             var screenRows = await ReadEveryScreenPageAsync(reader, query, access);
 
@@ -249,8 +249,8 @@ internal static class ReportingQueryCoreAssertions
             csvRows.Select(row => row[Array.IndexOf(ReportCsv.Headers.ToArray(), "UptimePercent")])
                 .Should().Equal(screenRows.Select(row => Rendered(row.Uptime.Percentage)));
 
-            covered++;
-        }
+            Interlocked.Increment(ref covered);
+        });
 
         // A guard on the guard: an empty combination set would make every assertion above
         // vacuous while still passing.
@@ -266,6 +266,7 @@ internal static class ReportingQueryCoreAssertions
     /// be a data-disclosure route that no screen assertion would ever catch.
     /// </summary>
     private static async Task VerifyVisibilityIsAppliedToBothSurfacesAsync(
+        ServiceProvider services,
         ApplicationDbContext database,
         IReportingReader reader,
         ReportingFixture fixture)
@@ -293,17 +294,30 @@ internal static class ReportingQueryCoreAssertions
         // produces, and each filter changes the shape again. Every surface is exercised under
         // every status and monitor-type combination so that a selection which only composes for
         // an administrator cannot pass as working.
-        foreach (var scoped in EveryScopedFilter(fixture))
+        await ForEachReaderAsync(services, EveryScopedFilter(fixture), async (scopedReader, scopedQuery) =>
         {
-            (await reader.QueryAsync(scoped, unprivileged)).Rows.Should().BeEmpty();
-            (await reader.ExportAsync(scoped, unprivileged)).Rows.Should().BeEmpty();
-            (await reader.QueryCertificateExpiryAsync(scoped, unprivileged))
+            (await scopedReader.QueryAsync(scopedQuery, unprivileged)).Rows.Should().BeEmpty();
+            (await scopedReader.ExportAsync(scopedQuery, unprivileged)).Rows.Should().BeEmpty();
+            (await scopedReader.QueryCertificateExpiryAsync(scopedQuery, unprivileged))
                 .NeedingAttention.Should().BeEmpty();
-            (await reader.QueryDiagnosticsAsync(scoped, unprivileged))
+            (await scopedReader.QueryDiagnosticsAsync(scopedQuery, unprivileged))
                 .ScheduledMonitorCount.Should().Be(0);
-            (await reader.QueryActiveIncidentsAsync(scoped, unprivileged, 10)).Should().BeEmpty();
-        }
+            (await scopedReader.QueryActiveIncidentsAsync(scopedQuery, unprivileged, 10)).Should().BeEmpty();
+        });
     }
+
+    private static Task ForEachReaderAsync<T>(
+        ServiceProvider services,
+        IEnumerable<T> source,
+        Func<IReportingReader, T, Task> body) =>
+        Parallel.ForEachAsync(
+            source,
+            new ParallelOptions { MaxDegreeOfParallelism = 6 },
+            async (item, _) =>
+            {
+                await using var scope = services.CreateAsyncScope();
+                await body(scope.ServiceProvider.GetRequiredService<IReportingReader>(), item);
+            });
 
     private static IEnumerable<ReportQuery> EveryScopedFilter(ReportingFixture fixture)
     {

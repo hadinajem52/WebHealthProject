@@ -26,9 +26,16 @@ public sealed record EndpointOption(Guid Id, string Label);
 public sealed record CrawlRunViewModel(
     CrawlRunSummary Run,
     IReadOnlyList<CrawlBrokenLink> BrokenLinks,
+    IReadOnlyList<CrawlSkipSummary> Skips,
     int Offset,
     int PageSize)
 {
+    /// <summary>
+    /// A crawl that requested no page at all was stopped by something, and the reader is owed the
+    /// reason in the place they are already looking rather than in a log.
+    /// </summary>
+    public bool ExaminedNothing => Run.PagesFetched == 0 && Skips.Count > 0;
+
     public bool HasMore => BrokenLinks.Count == PageSize;
 
     public int NextOffset => Offset + PageSize;
@@ -74,9 +81,13 @@ public static class CrawlRunDisplay
             // An exhausted frontier with nothing fetched is a refusal, not a sweep. Saying
             // "covered the whole scope" beside a zero page count is the reading that turns a
             // blocked crawl into a clean bill of health.
-            CrawlStopReasons.FrontierExhausted => run.PagesFetched > 0
-                ? "Covered the whole scope"
-                : "Fetched no pages — nothing on the site was examined",
+            CrawlStopReasons.FrontierExhausted when run.CoveredWholeScope => "Covered the whole scope",
+            CrawlStopReasons.FrontierExhausted => run.PagesFetched == 0
+                ? "Fetched no pages — nothing on the site was examined"
+                // The frontier drained, and parts of the site were still never examined: a page
+                // whose markup would not parse or that robots kept the crawler out of offered no
+                // links to follow, so the crawl ran out of work rather than out of site.
+                : "Parts of the site could not be examined, so this crawl is partial",
             CrawlStopReasons.PageLimit => "Stopped at the page limit — the site was not fully covered",
             CrawlStopReasons.DurationLimit => "Stopped at the time limit — the site was not fully covered",
             CrawlStopReasons.Cancelled => "Cancelled — partial results only",
@@ -98,6 +109,45 @@ public static class CrawlRunDisplay
             ? "No reason was recorded. Check the application log for this run id."
             : run.FailureReason;
     }
+
+    /// <summary>
+    /// Why a URL was never requested, in the reader's terms. The stored values are a small fixed
+    /// vocabulary, so an unrecognised one is shown as itself rather than hidden: a reason nobody
+    /// has written a sentence for is still more use than silence.
+    /// </summary>
+    public static string DescribeSkipReason(string skipReason) => skipReason switch
+    {
+        CrawlSkipReasons.RobotsDisallowed =>
+            "Blocked by robots.txt — the site's rules do not permit this crawler",
+        CrawlSkipReasons.TargetNotAuthorized =>
+            "No target authorization covers this host, so it was never contacted",
+        CrawlSkipReasons.ExternalCheckDisabled =>
+            "External link — this run did not opt in to checking links off the site",
+        CrawlSkipReasons.ExternalCheckLimit =>
+            "Past the limit on link checks this run may make",
+        CrawlSkipReasons.PageLimit => "Past the page limit for one crawl",
+        CrawlSkipReasons.QueryVariantCap =>
+            "Too many query-string variants of one path had already been queued",
+        CrawlSkipReasons.AlreadySeen => "Already recorded by this crawl",
+        CrawlSkipReasons.RunStopped => "The run stopped before reaching it",
+        _ => skipReason
+    };
+
+    /// <summary>
+    /// Why a run's robots override was not granted. BR-L02 permits one only for a non-production
+    /// target carrying an approved exception, so most of these are settled policy rather than
+    /// something a reader can act on -- which is exactly what the wording has to convey.
+    /// </summary>
+    public static string DescribeOverrideRefusal(string? refusedBecause) => refusedBecause switch
+    {
+        CrawlOverrideRefusals.NotRequested => "Not requested",
+        CrawlOverrideRefusals.ProductionTarget =>
+            "Refused — an override is never granted for a production target",
+        CrawlOverrideRefusals.NoApprovedException =>
+            "Refused — this origin carries no approved exception",
+        null => "Not requested",
+        _ => refusedBecause
+    };
 
     /// <summary>How much of a failure reason fits in a badge tooltip before it stops being read.</summary>
     private const int TooltipDetailLimit = 180;
