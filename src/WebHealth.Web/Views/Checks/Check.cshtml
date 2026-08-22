@@ -98,7 +98,7 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
                             <span>Outcome</span>
                         </span>
-                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? "Pending"))</span>
+                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? "Pending", check.FailureCategory))</span>
                     </div>
                 </li>
                 <li>

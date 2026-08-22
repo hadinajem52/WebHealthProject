@@ -5,11 +5,21 @@ using WebHealth.Domain.Crawling;
 namespace WebHealth.Web.Models;
 
 /// <summary>The endpoint picker plus that endpoint's crawl history.</summary>
+/// <param name="CanRunNow">
+/// Whether to offer the Run crawl button. It mirrors the authorization the action itself
+/// enforces -- the button is a convenience, not the control.
+/// </param>
+/// <param name="ActiveRunId">
+/// The crawl already in flight for this endpoint, if any. One crawl per endpoint at a time is a
+/// database constraint, so offering the button while one runs would only produce a refusal.
+/// </param>
 public sealed record CrawlIndexViewModel(
     IReadOnlyList<EndpointOption> Endpoints,
     Guid? SelectedEndpointId,
     IReadOnlyList<CrawlRunSummary> Runs,
-    CrawlComparison Comparison);
+    CrawlComparison Comparison,
+    bool CanRunNow = false,
+    Guid? ActiveRunId = null);
 
 public sealed record EndpointOption(Guid Id, string Label);
 
@@ -47,6 +57,18 @@ public static class CrawlRunDisplay
     public static string DescribeStopReason(CrawlRunSummary run)
     {
         ArgumentNullException.ThrowIfNull(run);
+
+        // A run in flight has not stopped, so it has no stop reason yet. The column defaults to
+        // FrontierExhausted while running, which with nothing fetched so far would otherwise read
+        // as "Fetched no pages - nothing on the site was examined": a verdict on a crawl that has
+        // barely started. Nothing became visible here until crawls could actually be started.
+        if (run.Status == CrawlRunStatuses.Running)
+        {
+            return run.PagesFetched == 0
+                ? "In progress - no pages fetched yet"
+                : $"In progress - {run.PagesFetched} page(s) fetched so far";
+        }
+
         return run.StopReason switch
         {
             // An exhausted frontier with nothing fetched is a refusal, not a sweep. Saying
@@ -66,6 +88,12 @@ public static class CrawlRunDisplay
     {
         ArgumentNullException.ThrowIfNull(run);
         if (run.Status is CrawlRunStatuses.Failed) return "danger";
+
+        // A run still going has not covered the whole scope *yet*, which is not the same as having
+        // failed to. Without this it inherits the partial-crawl warning and reads as a problem
+        // from the moment it starts.
+        if (run.Status is CrawlRunStatuses.Running) return "info";
+
         if (run.Status is CrawlRunStatuses.Cancelled || !run.CoveredWholeScope) return "warning";
         return run.BrokenLinkCount > 0 ? "warning" : "success";
     }

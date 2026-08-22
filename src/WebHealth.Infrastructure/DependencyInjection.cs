@@ -164,6 +164,18 @@ public static class DependencyInjection
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlExecutionService, CrawlExecutionService>();
         services.AddScoped<CrawlRunJob>();
+        // Only when a crawl worker exists. HangfireCrawlRunQueue needs IBackgroundJobClient, which
+        // is registered only when some feature enables Hangfire at all; registering it
+        // unconditionally makes resolving ICrawlRunner throw on an instance with everything off,
+        // and that failure would take the whole Broken links page with it rather than just the
+        // button. CrawlRunner takes the queue as an optional dependency and refuses to open a run
+        // without one.
+        if (crawlOptions.Enabled)
+        {
+            services.AddScoped<ICrawlRunQueue, HangfireCrawlRunQueue>();
+        }
+
+        services.AddScoped<ICrawlRunner, CrawlRunner>();
         services.AddScoped<IPageAuditProvider, PageSpeedInsightsProvider>();
         services.AddScoped<PageAuditExecutionService>();
         services.AddScoped<PageAuditSchedulingService>();

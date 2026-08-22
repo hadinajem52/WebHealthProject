@@ -86,11 +86,10 @@
                                 <td data-label="Source"><span class="tag">@item.Source</span></td>
                                 <td data-label="Initiator">@(item.InitiatedByDisplayName ?? "—")</td>
                                 <td data-label="Outcome">
-                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForOutcome(item.Outcome), item.Outcome ?? "Pending"))
-                                    @if (item.FailureCategory is not null)
-                                    {
-                                        <span class="data-table__secondary">@item.FailureCategory</span>
-                                    }
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        StatusBadges.ForOutcome(item.Outcome),
+                                        item.Outcome ?? "Pending",
+                                        item.FailureCategory))
                                     @foreach (var incident in item.KnownIncidents)
                                     {
                                         <a class="known-issue" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.IncidentId"

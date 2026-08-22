@@ -314,8 +314,15 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     /// <summary>
     /// A pill's visible text, whether it is written directly into the element or wrapped by the
     /// <c>_StatusBadge</c> partial's label span.
+    /// <para>
+    /// The class list and the attributes are matched loosely on purpose. A pill carrying added
+    /// context renders as <c>badge badge--detailed</c> and brings <c>data-badge-detail</c>,
+    /// <c>title</c> and <c>tabindex</c> with it. Pinning the exact attribute string made this
+    /// assertion match nothing once that variant existed, which fails as "there are no pills on
+    /// this page" rather than as a breach of the rule it is actually guarding.
+    /// </para>
     /// </summary>
-    [GeneratedRegex("<span class=\"badge\" data-status=\"[a-z]+\">\\s*(?:<span class=\"badge__label\">)?([^<]*)")]
+    [GeneratedRegex("<span class=\"badge[^\"]*\"[^>]*?data-status=\"[a-z]+\"[^>]*>\\s*(?:<span class=\"badge__label\">)?([^<]*)")]
     private static partial Regex BadgeLabel();
 
     /// <summary>

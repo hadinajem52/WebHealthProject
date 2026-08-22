@@ -262,3 +262,62 @@ public interface ICrawlReportReader
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// What happened to a crawl somebody asked for by hand. An existing run is a distinct answer from
+/// a new one, so the page can say "already running" rather than implying it started something.
+/// </summary>
+public sealed record CrawlManualResult(Guid? RunId, bool WasAlreadyRunning, string? Error)
+{
+    public bool Succeeded => RunId is not null;
+
+    public static CrawlManualResult Queued(Guid runId) => new(runId, false, null);
+
+    public static CrawlManualResult AlreadyRunning(Guid runId) => new(runId, true, null);
+
+    public static CrawlManualResult Rejected(string error) => new(null, false, error);
+}
+
+/// <summary>
+/// Opening a crawl on request. This is the only door to starting one: nothing else in the
+/// application enqueues <c>CrawlRunJob</c>, so every crawl this system performs against a site it
+/// does not own passes through the authorization and eligibility checks behind this method.
+/// </summary>
+public interface ICrawlRunner
+{
+    /// <summary>
+    /// Whether this instance can run a crawl at all. False when crawl scheduling is switched off:
+    /// there is then no worker serving the crawl queue, so a run opened here would sit unstarted
+    /// and hold its endpoint's only active-crawl slot. Pages use it to hide a control that could
+    /// only be refused.
+    /// </summary>
+    bool CanQueue { get; }
+
+    /// <summary>
+    /// Opens a crawl on request, refusing an endpoint the requester may not test.
+    /// </summary>
+    /// <remarks>
+    /// The access context is a parameter because the check belongs here rather than only in the
+    /// controller that happens to call it today. An endpoint id is a parameter, not a permission.
+    /// </remarks>
+    Task<CrawlManualResult> QueueManualAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// The seam between opening a crawl and the background worker that performs it. Keeping it an
+/// interface is what lets the runner live in one place while Hangfire stays an infrastructure
+/// detail, and lets a test observe that a run was enqueued without a job server.
+/// </summary>
+public interface ICrawlRunQueue
+{
+    void Enqueue(
+        Guid runId,
+        Guid endpointId,
+        bool isProduction,
+        IReadOnlyList<string> seedUrls,
+        bool checkExternalLinks,
+        bool requestRobotsOverride);
+}
