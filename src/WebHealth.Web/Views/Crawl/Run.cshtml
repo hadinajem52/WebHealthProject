@@ -131,6 +131,19 @@
                         <span class="detail-list__value">@(run.RobotsOverrideGranted ? "Granted" : "Not granted")</span>
                     </div>
                 </li>
+                @* Only a failed run has one, and it is the first thing its reader came for. *@
+                @if (run.Status == CrawlRunStatuses.Failed)
+                {
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "error")</span>
+                                <span>Why it failed</span>
+                            </span>
+                            <span class="detail-list__value">@CrawlRunDisplay.DescribeFailure(run)</span>
+                        </div>
+                    </li>
+                }
             </ul>
         </div>
     </section>

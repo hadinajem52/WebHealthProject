@@ -19,6 +19,41 @@ public sealed class CrawlExecutionTests
 
     private const string Blocking = "User-agent: *\nDisallow: /private";
 
+    /// <summary>
+    /// A crawl swallows the exception that stopped it, by design: whatever it had already found
+    /// must survive. Swallowing it without recording it is the part that left a reader with a red
+    /// Failed badge and nowhere to go.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_RecordsWhyAFailedRunFailed()
+    {
+        var site = Site().Page(Seed, CrawlTestHarness.LinkTo("/a"));
+        site.BeforeRespondAsync = _ =>
+            throw new InvalidOperationException("the connection pool is exhausted");
+
+        var (outcome, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        outcome.Status.Should().Be(CrawlRunStatuses.Failed);
+        outcome.StopReason.Should().Be(CrawlStopReasons.Failed);
+        outcome.FailureDetail.Should()
+            .Contain("InvalidOperationException", "the type is half of what identifies the fault")
+            .And.Contain("the connection pool is exhausted");
+        sink.Outcome!.FailureDetail.Should().Be(outcome.FailureDetail,
+            "the reason has to reach the store, not only the caller");
+    }
+
+    /// <summary>A run that ended normally must carry no failure text at all.</summary>
+    [Fact]
+    public async Task ExecuteAsync_LeavesNoFailureDetailOnARunThatCompleted()
+    {
+        var site = Site().Page(Seed, CrawlTestHarness.LinkTo());
+
+        var (outcome, _) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        outcome.Status.Should().Be(CrawlRunStatuses.Completed);
+        outcome.FailureDetail.Should().BeNull();
+    }
+
     [Fact]
     public async Task ExecuteAsync_ReportsABrokenInternalLinkWithItsSourcePage()
     {
