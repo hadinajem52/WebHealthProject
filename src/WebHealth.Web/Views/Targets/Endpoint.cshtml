@@ -8,56 +8,318 @@
         Breadcrumbs.Environments(Url, Model.Endpoint.WebsiteId),
         Breadcrumbs.Environment(Url, Model.Endpoint.EnvironmentId, Model.Endpoint.EnvironmentName),
         new BreadcrumbItem(Model.Endpoint.DisplayUrl));
+
     string? notTestableReason = Model.Endpoint.CanTest ? null
         : Model.Endpoint.IsDeleted ? "endpoint is archived"
         : !Model.Endpoint.IsEnabled ? "endpoint is disabled"
         : "you are not authorized to test this target";
-    static string OutcomeStatus(string? outcome) => outcome switch
+
+    var endpointStatus = Model.Endpoint.IsDeleted ? "danger"
+        : Model.Endpoint.IsEnabled ? "success"
+        : "warning";
+    var endpointStatusLabel = Model.Endpoint.IsDeleted ? "Archived"
+        : Model.Endpoint.IsEnabled ? "Enabled"
+        : "Disabled";
+
+    var certificate = Model.Certificate.Latest;
+    var certificateValid = certificate is not null && certificate.ValidationCategory == "Valid";
+    var certificateStatus = !Model.Certificate.IsMonitored ? "warning"
+        : certificate is null ? "warning"
+        : certificateValid ? "success"
+        : "danger";
+    var certificateStatusLabel = !Model.Certificate.IsMonitored ? "Not applicable"
+        : certificate is null ? "Not checked yet"
+        : certificate.ValidationCategory;
+
+    var latest = Model.LatestCheck;
+
+    static string StatusIcon(string status) => status switch
     {
-        "Healthy" => "success",
-        "Critical" => "danger",
+        "success" => "success",
+        "danger" => "error",
         _ => "warning"
     };
 }
-<section class="card"><div class="page-intro"><div><h2 class="card__title target-url">@Model.Endpoint.DisplayUrl</h2><p class="card__subtitle">@Model.Endpoint.WebsiteName / @Model.Endpoint.EnvironmentName · Version @Model.Endpoint.Version</p></div><div class="form-actions"><a class="button button--secondary" asp-controller="Checks" asp-action="History" asp-route-id="@Model.Endpoint.Id">
-        @await Html.PartialAsync("_Icon", "clock")
-        <span>Check history</span>
-    </a>@if(Model.Endpoint.CanTest)
-{
-    <form asp-controller="Checks" asp-action="RunCheck" asp-route-id="@Model.Endpoint.Id" method="post">
-        <button class="button button--primary" type="submit">
-            @await Html.PartialAsync("_Icon", "play")
-            <span>Run availability check</span>
-        </button>
-    </form>
-    @if (Model.Certificate.IsMonitored)
-    {
-        <form asp-controller="Checks" asp-action="RunCertificateCheck" asp-route-id="@Model.Endpoint.Id" method="post">
-            <button class="button button--secondary" type="submit">
-                @await Html.PartialAsync("_Icon", "check")
-                <span>Run certificate check</span>
-            </button>
-        </form>
-    }
-}@if(Model.CanManage && !Model.Endpoint.IsDeleted)
-{
-    <a class="button button--primary" asp-action="EditEndpoint" asp-route-id="@Model.Endpoint.Id">
-        @await Html.PartialAsync("_Icon", "pencil")
-        <span>Edit endpoint</span>
-    </a>
-}</div></div>
-<dl class="registry-facts"><div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Endpoint.IsDeleted ? "danger" : Model.Endpoint.IsEnabled ? "success" : "warning")">@(Model.Endpoint.IsDeleted ? "Deleted" : Model.Endpoint.IsEnabled ? "Enabled" : "Disabled")</span></dd></div><div><dt>Owner</dt><dd>@Model.Endpoint.OwnerName @(Model.Endpoint.InheritsWebsiteOwner ? "(website inherited)" : "")</dd></div><div><dt>Monitor configuration</dt><dd>@Model.Endpoint.MonitorType · every @(Model.Endpoint.IntervalSeconds / 60) min @(Model.Endpoint.IntervalMinutesOverride is null ? "(environment default)" : "(endpoint override)") · @(Model.Endpoint.TimeoutSeconds)s timeout · @(!Model.Endpoint.SchedulingEnabled ? "manual only" : Model.Endpoint.MonitorEnabled ? "scheduled" : "paused")</dd></div><div><dt>Response-time thresholds</dt><dd>@(Model.Endpoint.WarningThresholdMs) ms warning · @(Model.Endpoint.CriticalThresholdMs) ms critical @(Model.Endpoint.HasThresholdOverride ? "(endpoint override)" : "(default)")</dd></div><div><dt>Effective monitoring</dt><dd>@(!Model.Endpoint.SchedulingEnabled ? "Manual runs only" : !Model.Endpoint.MonitorEnabled ? "Paused - manual runs only" : Model.Endpoint.IsMonitoringEligible ? "Eligible" : "Not eligible")</dd></div><div><dt>Testing authorization</dt><dd><span class="badge" data-status="@(Model.Endpoint.CanTest ? "success" : "warning")">@(Model.Endpoint.CanTest ? "Authorized" : "Not authorized")</span>@if(notTestableReason is not null)
-{
-    <span class="data-table__secondary">Reason: @notTestableReason</span>
-}</dd></div><div><dt>Target evidence</dt><dd>@(Model.CanManage ? Model.Endpoint.TargetAuthorizationEvidence ?? "Not recorded" : Model.Endpoint.HasTargetAuthorization ? "Recorded" : "Not recorded")</dd></div><div><dt>Canonical URL v@(Model.Endpoint.NormalizationVersion)</dt><dd class="target-url">@Model.Endpoint.NormalizedUrl</dd></div><div><dt>Production HTTP exception</dt><dd>@(Model.CanManage ? Model.Endpoint.HttpExceptionReason ?? "Not required" : Model.Endpoint.HasHttpException ? "Recorded" : "Not required")</dd></div></dl>
-@if(Model.CanManage){<div class="registry-lifecycle">@if(Model.Endpoint.IsDeleted){<form asp-action="RestoreEndpoint" method="post"><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--primary">Restore endpoint</button></form>@if(Model.CanPurge){<form asp-action="PurgeEndpoint" method="post" data-shell-confirm="Permanently delete this endpoint and all of its checks, results, SEO observations, crawls, incidents and notifications? This cannot be undone."><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--danger">Delete permanently</button></form>}}else{@if(Model.Endpoint.IsEnabled){<form asp-action="DisableEndpoint" method="post"><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--secondary">Disable</button></form>}@if(Model.Endpoint.IsEnabled && Model.Endpoint.SchedulingEnabled){<form asp-action="@(Model.Endpoint.MonitorEnabled ? "PauseEndpointSchedule" : "ResumeEndpointSchedule")" method="post"><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--secondary">@(Model.Endpoint.MonitorEnabled ? "Pause scheduled checks" : "Resume scheduled checks")</button></form>}<form asp-action="DeleteEndpoint" method="post"><input type="hidden" name="id" value="@Model.Endpoint.Id"/><input type="hidden" name="version" value="@Model.Endpoint.Version"/><button class="button button--danger">Archive endpoint</button></form>}</div>}</section>
-<section class="card">
+
+<section class="card" aria-labelledby="endpoint-heading">
     <div class="page-intro">
         <div>
-            <h2 class="card__title">Certificate</h2>
-            <p class="card__subtitle">The most recent certificate observed for this endpoint.</p>
+            <h2 class="card__title target-url" id="endpoint-heading">@Model.Endpoint.DisplayUrl</h2>
+            <p class="card__status" data-status="@endpointStatus">
+                @await Html.PartialAsync("_Icon", StatusIcon(endpointStatus))
+                <span>Endpoint status &middot; @endpointStatusLabel</span>
+            </p>
+        </div>
+
+        <div class="form-actions">
+            <a class="button button--secondary button--icon"
+               asp-controller="Checks"
+               asp-action="History"
+               asp-route-id="@Model.Endpoint.Id"
+               title="Check history"
+               aria-label="Check history">
+                @await Html.PartialAsync("_Icon", "clock")
+            </a>
+
+            @if (Model.Endpoint.CanTest)
+            {
+                <div class="action-menu" data-shell-menu data-open="false">
+                    <button type="button"
+                            class="button button--primary"
+                            data-shell-menu-toggle
+                            aria-controls="endpoint-run-menu"
+                            aria-expanded="false"
+                            aria-haspopup="true">
+                        @await Html.PartialAsync("_Icon", "play")
+                        <span>Run</span>
+                        <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                    </button>
+
+                    <div class="action-menu__panel" id="endpoint-run-menu" data-shell-menu-panel>
+                        <form asp-controller="Checks" asp-action="RunCheck" asp-route-id="@Model.Endpoint.Id" method="post">
+                            <button class="action-menu__item" type="submit">
+                                @await Html.PartialAsync("_Icon", "activity")
+                                <span>Run availability check</span>
+                            </button>
+                        </form>
+                        @if (Model.Certificate.IsMonitored)
+                        {
+                            <form asp-controller="Checks" asp-action="RunCertificateCheck" asp-route-id="@Model.Endpoint.Id" method="post">
+                                <button class="action-menu__item" type="submit">
+                                    @await Html.PartialAsync("_Icon", "shield-check")
+                                    <span>Run certificate check</span>
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (Model.CanManage && !Model.Endpoint.IsDeleted)
+            {
+                <a class="button button--primary" asp-action="EditEndpoint" asp-route-id="@Model.Endpoint.Id">
+                    @await Html.PartialAsync("_Icon", "pencil")
+                    <span>Edit</span>
+                </a>
+            }
+
+            @if (Model.CanManage)
+            {
+                <div class="action-menu" data-shell-menu data-open="false">
+                    <button type="button"
+                            class="button button--secondary"
+                            data-shell-menu-toggle
+                            aria-controls="endpoint-actions-menu"
+                            aria-expanded="false"
+                            aria-haspopup="true">
+                        @await Html.PartialAsync("_Icon", "settings")
+                        <span>Actions</span>
+                        <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                    </button>
+
+                    <div class="action-menu__panel" id="endpoint-actions-menu" data-shell-menu-panel>
+                        @if (Model.Endpoint.IsDeleted)
+                        {
+                            <form asp-action="RestoreEndpoint" method="post">
+                                <input type="hidden" name="id" value="@Model.Endpoint.Id" />
+                                <input type="hidden" name="version" value="@Model.Endpoint.Version" />
+                                <button class="action-menu__item" type="submit">
+                                    @await Html.PartialAsync("_Icon", "restore")
+                                    <span>Restore endpoint</span>
+                                </button>
+                            </form>
+                            @if (Model.CanPurge)
+                            {
+                                <hr class="action-menu__separator" />
+                                <form asp-action="PurgeEndpoint"
+                                      method="post"
+                                      data-shell-confirm="Permanently delete this endpoint and all of its checks, results, SEO observations, crawls, incidents and notifications? This cannot be undone.">
+                                    <input type="hidden" name="id" value="@Model.Endpoint.Id" />
+                                    <input type="hidden" name="version" value="@Model.Endpoint.Version" />
+                                    <button class="action-menu__item action-menu__item--danger" type="submit">
+                                        @await Html.PartialAsync("_Icon", "trash")
+                                        <span>Delete permanently</span>
+                                    </button>
+                                </form>
+                            }
+                        }
+                        else
+                        {
+                            @if (Model.Endpoint.IsEnabled)
+                            {
+                                <form asp-action="DisableEndpoint" method="post">
+                                    <input type="hidden" name="id" value="@Model.Endpoint.Id" />
+                                    <input type="hidden" name="version" value="@Model.Endpoint.Version" />
+                                    <button class="action-menu__item" type="submit">
+                                        @await Html.PartialAsync("_Icon", "power")
+                                        <span>Disable</span>
+                                    </button>
+                                </form>
+                            }
+
+                            @if (Model.Endpoint.IsEnabled && Model.Endpoint.SchedulingEnabled)
+                            {
+                                <form asp-action="@(Model.Endpoint.MonitorEnabled ? "PauseEndpointSchedule" : "ResumeEndpointSchedule")" method="post">
+                                    <input type="hidden" name="id" value="@Model.Endpoint.Id" />
+                                    <input type="hidden" name="version" value="@Model.Endpoint.Version" />
+                                    <button class="action-menu__item" type="submit">
+                                        @await Html.PartialAsync("_Icon", Model.Endpoint.MonitorEnabled ? "pause" : "play")
+                                        <span>@(Model.Endpoint.MonitorEnabled ? "Pause checks" : "Resume checks")</span>
+                                    </button>
+                                </form>
+                            }
+
+                            <hr class="action-menu__separator" />
+                            <form asp-action="DeleteEndpoint" method="post">
+                                <input type="hidden" name="id" value="@Model.Endpoint.Id" />
+                                <input type="hidden" name="version" value="@Model.Endpoint.Version" />
+                                <button class="action-menu__item action-menu__item--danger" type="submit">
+                                    @await Html.PartialAsync("_Icon", "archive")
+                                    <span>Archive endpoint</span>
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            }
         </div>
     </div>
+
+    <div class="detail-list">
+        <div class="detail-list__head" aria-hidden="true">
+            <span>Subject</span>
+            <span>Status</span>
+        </div>
+        <ul class="detail-list__items">
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                        <span>Status</span>
+                    </span>
+                    <span class="detail-list__value">
+                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(endpointStatus, endpointStatusLabel))
+                    </span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "person")</span>
+                        <span>Owner</span>
+                    </span>
+                    <span class="detail-list__value">
+                        <span>@Model.Endpoint.OwnerName</span>
+                        @if (Model.Endpoint.InheritsWebsiteOwner)
+                        {
+                            <span class="detail-list__note">Website inherited</span>
+                        }
+                    </span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "settings")</span>
+                        <span>Monitor configuration</span>
+                    </span>
+                    <span class="detail-list__value">
+                        @Model.Endpoint.MonitorType &middot; every @(Model.Endpoint.IntervalSeconds / 60) min @(Model.Endpoint.IntervalMinutesOverride is null ? "(environment default)" : "(endpoint override)") &middot; @(Model.Endpoint.TimeoutSeconds)s timeout
+                    </span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
+                        <span>Response-time thresholds</span>
+                    </span>
+                    <span class="detail-list__value">
+                        @(Model.Endpoint.WarningThresholdMs) ms warning &middot; @(Model.Endpoint.CriticalThresholdMs) ms critical
+                        <span class="detail-list__note">@(Model.Endpoint.HasThresholdOverride ? "Endpoint override" : "Default")</span>
+                    </span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                        <span>Effective monitoring</span>
+                    </span>
+                    <span class="detail-list__value">
+                        @(!Model.Endpoint.SchedulingEnabled ? "Manual runs only"
+                            : !Model.Endpoint.MonitorEnabled ? "Paused — manual runs only"
+                            : Model.Endpoint.IsMonitoringEligible ? "Eligible" : "Not eligible")
+                    </span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield")</span>
+                        <span>Testing authorization</span>
+                    </span>
+                    <span class="detail-list__value">
+                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                            Model.Endpoint.CanTest ? StatusBadges.Success : StatusBadges.Warning,
+                            Model.Endpoint.CanTest ? "Authorized" : "Not authorized"))
+                        @if (notTestableReason is not null)
+                        {
+                            <span class="detail-list__note">@notTestableReason</span>
+                        }
+                    </span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "audit")</span>
+                        <span>Target evidence</span>
+                    </span>
+                    <span class="detail-list__value">
+                        @(Model.CanManage
+                            ? Model.Endpoint.TargetAuthorizationEvidence ?? "Not recorded"
+                            : Model.Endpoint.HasTargetAuthorization ? "Recorded" : "Not recorded")
+                    </span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "link")</span>
+                        <span>Canonical URL v@(Model.Endpoint.NormalizationVersion)</span>
+                    </span>
+                    <span class="detail-list__value target-url">@Model.Endpoint.NormalizedUrl</span>
+                </div>
+            </li>
+            <li>
+                <div class="detail-list__row">
+                    <span class="detail-list__subject">
+                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "warning")</span>
+                        <span>Production HTTP exception</span>
+                    </span>
+                    <span class="detail-list__value">
+                        @(Model.CanManage
+                            ? Model.Endpoint.HttpExceptionReason ?? "Not required"
+                            : Model.Endpoint.HasHttpException ? "Recorded" : "Not required")
+                    </span>
+                </div>
+            </li>
+        </ul>
+    </div>
+</section>
+
+<section class="card" aria-labelledby="endpoint-certificate-heading">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title" id="endpoint-certificate-heading">Certificate</h2>
+            <p class="card__status" data-status="@certificateStatus">
+                @await Html.PartialAsync("_Icon", StatusIcon(certificateStatus))
+                <span>Certificate status &middot; @certificateStatusLabel</span>
+            </p>
+        </div>
+    </div>
+
     @if (!Model.Certificate.IsMonitored)
     {
         @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
@@ -65,7 +327,7 @@
             "This endpoint uses HTTP, so it presents no certificate to check.",
             "information"))
     }
-    else if (Model.Certificate.Latest is null)
+    else if (certificate is null)
     {
         @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
             "No certificate checked yet",
@@ -74,81 +336,230 @@
     }
     else
     {
-        var certificate = Model.Certificate.Latest;
-        var valid = certificate.ValidationCategory == "Valid";
-        <dl class="registry-facts">
-            <div>
-                <dt>Validation</dt>
-                <dd>
-                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(valid ? StatusBadges.Success : StatusBadges.Danger, certificate.ValidationCategory))
-                </dd>
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
             </div>
-            <div><dt>Subject</dt><dd>@certificate.Subject</dd></div>
-            <div><dt>Issuer</dt><dd>@certificate.Issuer</dd></div>
-            <div>
-                <dt>Expiry</dt>
-                <dd>
-
-                    @if (valid)
-                    {
-                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForExpirySeverity(certificate.ExpirySeverity), StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)))
-                    }
-                    else
-                    {
-                        <span class="data-table__secondary">Not applicable while the certificate is @certificate.ValidationCategory.</span>
-                    }
-                </dd>
-            </div>
-            <div><dt>Valid until</dt><dd>@Html.Timestamp(certificate.NotAfter) (@certificate.DaysRemaining days remaining)</dd></div>
-            <div><dt>Hostname</dt><dd>@(certificate.HostnameMatched ? "Matches" : "Does not match")</dd></div>
-            <div><dt>Chain</dt><dd>@(certificate.ChainTrusted ? "Trusted" : "Not trusted")</dd></div>
-            <div><dt>Fingerprint (SHA-256)</dt><dd class="target-url">@certificate.Sha256Fingerprint</dd></div>
-            <div><dt>Observed</dt><dd>@Html.TimestampWithSeconds(certificate.ObservedAt)</dd></div>
-        </dl>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield-check")</span>
+                            <span>Validation</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                certificateValid ? StatusBadges.Success : StatusBadges.Danger,
+                                certificate.ValidationCategory))
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "person")</span>
+                            <span>Subject</span>
+                        </span>
+                        <span class="detail-list__value">@certificate.Subject</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "building")</span>
+                            <span>Issuer</span>
+                        </span>
+                        <span class="detail-list__value">@certificate.Issuer</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                            <span>Expiry</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @if (certificateValid)
+                            {
+                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                    StatusBadges.ForExpirySeverity(certificate.ExpirySeverity),
+                                    StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)))
+                            }
+                            else
+                            {
+                                <span class="detail-list__note">Not applicable while the certificate is @certificate.ValidationCategory.</span>
+                            }
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "calendar")</span>
+                            <span>Valid until</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @Html.Timestamp(certificate.NotAfter)
+                            <span class="detail-list__note">@certificate.DaysRemaining days remaining</span>
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "link")</span>
+                            <span>Hostname</span>
+                        </span>
+                        <span class="detail-list__value">@(certificate.HostnameMatched ? "Matches" : "Does not match")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield")</span>
+                            <span>Chain</span>
+                        </span>
+                        <span class="detail-list__value">@(certificate.ChainTrusted ? "Trusted" : "Not trusted")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "key")</span>
+                            <span>Fingerprint (SHA-256)</span>
+                        </span>
+                        <span class="detail-list__value target-url">@certificate.Sha256Fingerprint</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "eye")</span>
+                            <span>Observed</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(certificate.ObservedAt)</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
     }
 </section>
 
-<section class="card">
+<section class="card" aria-labelledby="endpoint-latest-heading">
     <div class="page-intro">
         <div>
-            <h2 class="card__title">Latest check</h2>
-            <p class="card__subtitle">The most recent scheduled or manual result for this endpoint.</p>
+            <h2 class="card__title" id="endpoint-latest-heading">Latest check</h2>
+            @{ var latestStatus = latest is null ? "warning" : StatusBadges.ForOutcome(latest.Outcome); }
+            <p class="card__status" data-status="@latestStatus">
+                @await Html.PartialAsync("_Icon", StatusIcon(latestStatus))
+                <span>Outcome &middot; @(latest is null ? "No checks yet" : latest.Outcome ?? latest.State)</span>
+            </p>
         </div>
+
+        @if (latest is not null)
+        {
+            <div class="form-actions">
+                <a class="button button--secondary"
+                   asp-controller="Checks"
+                   asp-action="Check"
+                   asp-route-id="@latest.LogicalCheckId">
+                    @await Html.PartialAsync("_Icon", "clock")
+                    <span>View details</span>
+                </a>
+            </div>
+        }
     </div>
-    @{ var latest = Model.LatestCheck; }
+
     @if (latest is null)
     {
         @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
             "No checks yet",
-            "Click Run now above, or wait for the next scheduled run.",
+            "Use Run above, or wait for the next scheduled run.",
             "clock"))
     }
     else
     {
-        <dl class="registry-facts">
-            <div>
-                <dt>Outcome</dt>
-                <dd>
-                    <span class="badge" data-status="@OutcomeStatus(latest.Outcome)">@(latest.Outcome ?? latest.State)</span>
-                    @if (latest.FailureCategory is not null)
-                    {
-                        <span class="data-table__secondary">@latest.FailureCategory</span>
-                    }
-                </dd>
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
             </div>
-            <div><dt>Time</dt><dd>@Html.TimestampWithSeconds((latest.CompletedAt ?? latest.ScheduledFor ?? latest.RequestedAt), "—")</dd></div>
-            <div><dt>Source</dt><dd>@latest.Source @(latest.InitiatedByDisplayName is not null ? $"({latest.InitiatedByDisplayName})" : "")</dd></div>
-            <div><dt>HTTP status</dt><dd>@(latest.HttpStatus?.ToString() ?? "—")</dd></div>
-            <div><dt>Duration</dt><dd>@(latest.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</dd></div>
-            <div><dt>Uptime</dt><dd>@(latest.CountsForUptime ? "Counts" : "Excluded")</dd></div>
-        </dl>
-        <div class="form-actions">
-            <a class="button button--secondary" asp-controller="Checks" asp-action="Check" asp-route-id="@latest.LogicalCheckId">
-                <span>View details</span>
-            </a>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                            <span>Outcome</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                StatusBadges.ForOutcome(latest.Outcome), latest.Outcome ?? latest.State))
+                            @if (latest.FailureCategory is not null)
+                            {
+                                <span class="detail-list__note">@latest.FailureCategory</span>
+                            }
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                            <span>Time</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @Html.TimestampWithSeconds((latest.CompletedAt ?? latest.ScheduledFor ?? latest.RequestedAt), "—")
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "play")</span>
+                            <span>Source</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <span>@latest.Source</span>
+                            @if (latest.InitiatedByDisplayName is not null)
+                            {
+                                <span class="detail-list__note">@latest.InitiatedByDisplayName</span>
+                            }
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "diagnostics")</span>
+                            <span>HTTP status</span>
+                        </span>
+                        <span class="detail-list__value">@(latest.HttpStatus?.ToString() ?? "—")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
+                            <span>Duration</span>
+                        </span>
+                        <span class="detail-list__value">@(latest.TotalDurationMs is { } duration ? $"{duration} ms" : "—")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "reports")</span>
+                            <span>Uptime</span>
+                        </span>
+                        <span class="detail-list__value">@(latest.CountsForUptime ? "Counts" : "Excluded")</span>
+                    </div>
+                </li>
+            </ul>
         </div>
     }
 </section>
+
 @section Scripts {
     @if (Model.LatestCheck is not null && Model.LatestCheck.State != WebHealth.Domain.Monitoring.LogicalCheckStates.Completed)
     {
