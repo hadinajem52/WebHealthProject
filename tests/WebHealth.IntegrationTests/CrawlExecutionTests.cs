@@ -20,6 +20,158 @@ public sealed class CrawlExecutionTests
     private const string Blocking = "User-agent: *\nDisallow: /private";
 
     /// <summary>
+    /// A drained frontier is not evidence that the site was covered. These are the runs whose
+    /// missing links would otherwise read as fixed the next time a comparison is drawn.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_ReportsCoverageAsLimitedWhenAPageCouldNotBeRead()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/cut"))
+            .With("https://site.test/cut", new(
+                200, CrawlTestHarness.LinkTo("/deeper"), Truncated: true));
+
+        var (outcome, _) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        outcome.StopReason.Should().Be(CrawlStopReasons.FrontierExhausted);
+        outcome.CoverageLimited.Should().BeTrue(
+            "a page whose body was cut short contributed none of the links it holds");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReportsCoverageAsLimitedWhenRobotsKeptItOutOfAPage()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/private/page"))
+            .Page("https://site.test/private/page", CrawlTestHarness.LinkTo("/deeper"));
+
+        var (outcome, _) = await CrawlTestHarness.RunAsync(
+            site,
+            CrawlTestHarness.Request(),
+            robotsReader: new FakeRobotsReader(new(true, Blocking, false)));
+
+        outcome.CoverageLimited.Should().BeTrue(
+            "the disallowed URL may be a page, and its links are missing rather than merely unchecked");
+    }
+
+    /// <summary>
+    /// The flag has to stay off for an ordinary run, or every comparison is refused and the
+    /// feature reports nothing at all.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_LeavesCoverageUnlimitedForARunThatReadEveryPage()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/good", "/gone", "https://external.test/x"))
+            .Page("https://site.test/good", CrawlTestHarness.LinkTo())
+            .Status("https://site.test/gone", 404);
+
+        var (outcome, _) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        outcome.StopReason.Should().Be(CrawlStopReasons.FrontierExhausted);
+        outcome.CoverageLimited.Should().BeFalse(
+            "an unchecked external link is recorded and classified, not missing");
+    }
+
+    /// <summary>
+    /// The transport resolves a redirect chain internally, so the document a crawl parses can come
+    /// from a different URL than the one it asked for. Resolving that document's relative hrefs
+    /// against the requested URL invents targets the page never contained.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_ResolvesLinksAgainstTheUrlTheDocumentCameFrom()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/old"))
+            .With("https://site.test/old", new(
+                200,
+                CrawlTestHarness.LinkTo("sibling"),
+                RedirectCount: 1,
+                FinalUrl: "https://site.test/docs/page"))
+            .Page("https://site.test/docs/sibling", CrawlTestHarness.LinkTo());
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        sink.Links.Select(link => link.TargetUrl).Should()
+            .Contain("https://site.test/docs/sibling",
+                "the relative href belongs to the document at /docs/page")
+            .And.NotContain("https://site.test/sibling",
+                "that target exists only if the redirect is ignored");
+    }
+
+    /// <summary>
+    /// The links recorded for a redirected page are recorded under the document that contains
+    /// them, so the report names a page a reader can open and find the link on.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AttributesLinksToTheRedirectedDocument()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/old"))
+            .With("https://site.test/old", new(
+                200,
+                CrawlTestHarness.LinkTo("/gone"),
+                RedirectCount: 1,
+                FinalUrl: "https://site.test/docs/page"))
+            .Status("https://site.test/gone", 404);
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        sink.Links.Should()
+            .ContainSingle(link => link.TargetUrl == "https://site.test/gone")
+            .Which.SourceUrl.Should().Be("https://site.test/docs/page");
+    }
+
+    /// <summary>
+    /// An internal URL redirecting off-site hands back a document outside this crawl's scope. Its
+    /// links are not ours to inspect, and following them expands the crawl onto a site nobody put
+    /// in its scope.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_DoesNotFollowLinksOfADocumentThatRedirectedOutOfScope()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/out"))
+            .With("https://site.test/out", new(
+                200,
+                CrawlTestHarness.LinkTo("/secret", "https://elsewhere.test/x"),
+                RedirectCount: 1,
+                FinalUrl: "https://elsewhere.test/landing"));
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        sink.Links.Select(link => link.TargetUrl).Should()
+            .NotContain("https://elsewhere.test/secret")
+            .And.NotContain("https://elsewhere.test/x")
+            .And.NotContain("https://site.test/secret");
+        site.Requested.Should().NotContain("https://elsewhere.test/secret");
+    }
+
+    /// <summary>
+    /// Robots was consulted for the URL that was requested. A redirect lands on a path that policy
+    /// may cover differently, and the document arrives without that having been checked.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_DoesNotFollowADocumentRobotsDisallowsAtItsFinalUrl()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/open"))
+            .With("https://site.test/open", new(
+                200,
+                CrawlTestHarness.LinkTo("/private/deeper"),
+                RedirectCount: 1,
+                FinalUrl: "https://site.test/private/landing"));
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(
+            site,
+            CrawlTestHarness.Request(),
+            robotsReader: new FakeRobotsReader(new(true, Blocking, false)));
+
+        sink.Links.Select(link => link.TargetUrl).Should()
+            .NotContain("https://site.test/private/deeper");
+    }
+
+    /// <summary>
     /// A crawl swallows the exception that stopped it, by design: whatever it had already found
     /// must survive. Swallowing it without recording it is the part that left a reader with a red
     /// Failed badge and nowhere to go.

@@ -152,6 +152,7 @@ internal sealed class CrawlResultSink(
         run.Status = outcome.Status;
         run.StopReason = outcome.StopReason;
         run.PagesFetched = outcome.PagesFetched;
+        run.CoverageLimited = outcome.CoverageLimited;
         run.LinksRecorded = outcome.LinksRecorded;
         run.RobotsOverrideGranted = outcome.RobotsOverrideGranted;
         run.RobotsOverrideRefusedBecause = outcome.RobotsOverrideGranted

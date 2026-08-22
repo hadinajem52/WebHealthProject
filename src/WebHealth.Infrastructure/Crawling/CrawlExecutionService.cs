@@ -151,6 +151,13 @@ internal sealed class CrawlRunExecution
     private string? _firstOverrideRefusal;
     private volatile string? _budgetStopReason;
 
+    /// <summary>
+    /// Set the moment anything leaves part of the site unexamined. It is what separates a frontier
+    /// that drained because the site was covered from one that drained because the pages nobody
+    /// could read had no links to offer.
+    /// </summary>
+    private volatile bool _coverageLimited;
+
     public CrawlRunExecution(
         CrawlRunRequest request,
         CrawlScope scope,
@@ -285,7 +292,8 @@ internal sealed class CrawlRunExecution
             granted ? null : _firstOverrideRefusal ?? CrawlOverrideRefusals.NotRequested,
             [])
         {
-            FailureDetail = failure is null ? null : Describe(failure)
+            FailureDetail = failure is null ? null : Describe(failure),
+            CoverageLimited = _coverageLimited
         };
     }
 
@@ -365,6 +373,7 @@ internal sealed class CrawlRunExecution
     {
         if (await SkipReasonForAsync(item, cancellationToken) is { } skipReason)
         {
+            if (CrawlSkipReasons.LimitsCoverage.Contains(skipReason)) _coverageLimited = true;
             lock (_lock) Buffer(_ledger.RecordSkip(item.Url.Value, skipReason));
             return;
         }
@@ -393,13 +402,79 @@ internal sealed class CrawlRunExecution
                 (int)Math.Clamp(result.Duration.TotalMilliseconds, 0, int.MaxValue)));
         }
 
-        if (item.Mode != CrawlVisitMode.Follow || !ShouldFollow(result)) return;
+        if (item.Mode != CrawlVisitMode.Follow) return;
+
+        if (!ShouldFollow(result))
+        {
+            // A page whose body was cut short is fetched and never read. ShouldFollow refuses it
+            // because a truncated document's last href may be cut mid-URL, which is right, and it
+            // still means this page's links are missing rather than absent.
+            if (result.BodyTruncated) _coverageLimited = true;
+            return;
+        }
 
         Interlocked.Increment(ref _pagesFetched);
 
+        // The transport follows redirects itself, so the document in hand is not necessarily the
+        // one this work item names. Where it came from decides everything below: whether its links
+        // are ours to inspect, and what every relative href resolves against.
+        var document = await DocumentToFollowAsync(item, result, cancellationToken);
+        if (document is null)
+        {
+            _coverageLimited = true;
+            return;
+        }
+
         // The body is turned into a list of hrefs and then dropped. Nothing downstream of this line
         // can see the document (BR-E10).
-        FollowLinks(item, _dependencies.LinkExtractor.ExtractHrefs(result.Body, result.ContentType));
+        var links = _dependencies.LinkExtractor.ExtractHrefs(result.Body, result.ContentType);
+        if (!links.FullyInspected) _coverageLimited = true;
+        FollowLinks(document, item.Depth, links.Hrefs);
+    }
+
+    /// <summary>
+    /// The document a response actually is, or null when its links must not be followed.
+    /// <para>
+    /// A redirect chain is resolved inside the transport, which re-checks target authorization at
+    /// every hop but knows nothing of this crawl's scope, robots policy or per-host pacing. Those
+    /// were decided for the URL that was asked for, and a response from somewhere else has not
+    /// been through them.
+    /// </para>
+    /// </summary>
+    private async Task<CrawlUrl?> DocumentToFollowAsync(
+        CrawlWorkItem item,
+        SafeHttpTransportResult result,
+        CancellationToken cancellationToken)
+    {
+        var finalUrl = result.FinalDestination?.Url;
+        if (finalUrl is null || string.Equals(finalUrl, item.Url.Value, StringComparison.Ordinal))
+        {
+            return item.Url;
+        }
+
+        if (CrawlUrlNormalizer.Normalize(finalUrl, _request.UrlOptions).Url is not { } destination)
+        {
+            return null;
+        }
+
+        // An internal URL that redirects off-site hands back a document this crawl has no business
+        // reading. Parsing it would attribute another site's links to a page of ours, and expand
+        // the crawl into a site nobody put in its scope.
+        if (_frontier.Scope.Decide(destination) != CrawlScopeDecision.Internal) return null;
+
+        // The chain spent a request on this host that the crawler's own limiter never counted, so
+        // it is charged here. Spacing the next request is the only correction still available once
+        // the response is in hand.
+        if (!string.Equals(destination.Host, item.Url.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            await _dependencies.RateLimiter.WaitAsync(destination.Host, cancellationToken);
+        }
+
+        var facts = await RobotsFactsAsync(destination.Origin, cancellationToken);
+        return CrawlRobotsGate.IsAllowed(
+            facts, _userAgent, destination.Path, OverrideFor(destination.Origin, facts))
+            ? destination
+            : null;
     }
 
     /// <summary>
@@ -498,14 +573,19 @@ internal sealed class CrawlRunExecution
         }
     }
 
-    private void FollowLinks(CrawlWorkItem item, IReadOnlyList<string> hrefs)
+    /// <summary>
+    /// <paramref name="document" /> is where the response came from, which after a redirect is not
+    /// the URL that was requested. It is both the base every relative href resolves against and the
+    /// page the discovered links are recorded under, because it is the document that contains them.
+    /// </summary>
+    private void FollowLinks(CrawlUrl document, int depth, IReadOnlyList<string> hrefs)
     {
         foreach (var href in hrefs)
         {
-            var resolved = CrawlUrlNormalizer.Resolve(href, item.Url, _request.UrlOptions);
+            var resolved = CrawlUrlNormalizer.Resolve(href, document, _request.UrlOptions);
             if (resolved.Url is null)
             {
-                RecordRejectedHref(item, href, resolved.Rejection);
+                RecordRejectedHref(document, href, resolved.Rejection);
                 continue;
             }
 
@@ -514,11 +594,11 @@ internal sealed class CrawlRunExecution
                 // Scope and depth are tracked whether or not the frontier admits the URL. Recording
                 // them only on admission made a page-limited internal link report as external at
                 // depth -1, which is a lie about a link the report exists to explain.
-                Track(resolved.Url, item.Depth + 1,
+                Track(resolved.Url, depth + 1,
                     _frontier.Scope.Decide(resolved.Url) == CrawlScopeDecision.Internal);
 
-                var admission = _frontier.Offer(resolved.Url, item.Depth + 1);
-                Buffer(_ledger.RecordDiscovery(item.Url.Value, resolved.Url.Value));
+                var admission = _frontier.Offer(resolved.Url, depth + 1);
+                Buffer(_ledger.RecordDiscovery(document.Value, resolved.Url.Value));
 
                 // A skip that is not "we already know about this" resolves the target here: the
                 // report has to distinguish a link nobody checked from a link that is fine.
@@ -527,6 +607,11 @@ internal sealed class CrawlRunExecution
                     if (admission.SkipReason == CrawlSkipReasons.PageLimit)
                     {
                         _budgetStopReason = CrawlStopReasons.PageLimit;
+                    }
+
+                    if (CrawlSkipReasons.LimitsCoverage.Contains(admission.SkipReason!))
+                    {
+                        _coverageLimited = true;
                     }
 
                     Buffer(_ledger.RecordSkip(resolved.Url.Value, admission.SkipReason));
@@ -545,7 +630,7 @@ internal sealed class CrawlRunExecution
     /// would bury the broken links this report exists for under every contact link on the site.
     /// </para>
     /// </summary>
-    private void RecordRejectedHref(CrawlWorkItem item, string href, string? rejection)
+    private void RecordRejectedHref(CrawlUrl document, string href, string? rejection)
     {
         if (rejection is null or CrawlUrlRejections.UnsupportedScheme) return;
 
@@ -558,7 +643,7 @@ internal sealed class CrawlRunExecution
 
         lock (_lock)
         {
-            Buffer(_ledger.RecordDiscovery(item.Url.Value, authored));
+            Buffer(_ledger.RecordDiscovery(document.Value, authored));
             Buffer(_ledger.RecordSkip(authored, rejection));
         }
     }

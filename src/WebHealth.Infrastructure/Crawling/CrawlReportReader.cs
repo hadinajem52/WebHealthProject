@@ -63,6 +63,20 @@ internal sealed class CrawlReportReader(
                 .Take(Math.Clamp(limit, 1, MaxBrokenLinksListed)))
             .ToArrayAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<CrawlSkipSummary>> ListSkipReasonsAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        await VisibleLinks(access)
+            .Where(link => link.RunId == runId && link.SkipReason != null)
+            .GroupBy(link => link.SkipReason!)
+            .Select(group => new CrawlSkipSummary(group.Key, group.Count()))
+            // Count first so the reason that governed the run leads, then the reason itself: two
+            // reasons with the same count must not swap places between two reads of one run.
+            .OrderByDescending(summary => summary.Count)
+            .ThenBy(summary => summary.SkipReason)
+            .ToArrayAsync(cancellationToken);
+
     public async Task<CrawlComparison> CompareLatestAsync(
         Guid endpointId,
         RegistryAccessContext access,
@@ -78,11 +92,18 @@ internal sealed class CrawlReportReader(
         // having examined nothing; as a baseline it reports every previously broken link as
         // resolved. This mirrors CrawlRunSummary.CoveredWholeScope, which cannot be used directly
         // because the predicate has to translate to SQL.
+        //
+        // A drained frontier is not evidence on its own either. A page whose body was cut short,
+        // whose markup would not parse, or that robots kept the crawler out of contributes no
+        // links, so the pairs it used to carry are simply absent from the run -- and absence is
+        // exactly what this comparison reads as resolved. Such a run records that its coverage was
+        // limited and is refused as a baseline here.
         var runs = await VisibleRuns(access)
             .Where(run => run.EndpointId == endpointId
                 && run.Status == CrawlRunStatuses.Completed
                 && run.StopReason == CrawlStopReasons.FrontierExhausted
-                && run.PagesFetched > 0)
+                && run.PagesFetched > 0
+                && !run.CoverageLimited)
             .OrderByDescending(run => run.StartedAt)
             .ThenByDescending(run => run.Id)
             .Select(run => run.Id)
@@ -215,7 +236,9 @@ internal sealed class CrawlReportReader(
                 run.LinksRecorded,
                 run.Links.Count(link => link.Classification == CrawlLinkClassifications.Broken),
                 run.RobotsOverrideGranted,
+                run.RobotsOverrideRefusedBecause,
                 run.StartedAt,
                 run.FinishedAt,
-                run.FailureReason));
+                run.FailureReason,
+                run.CoverageLimited));
 }

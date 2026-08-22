@@ -81,7 +81,8 @@ internal static class DatabaseFoundationAssertions
         "20260820083941_EndpointPurgeEvidenceRemoval",
         "20260820184410_PageAuditFoundation",
         "20260821071613_PageAuditItemRestrictDelete",
-        "20260822122047_CrawlRunActiveUniqueIndex"
+        "20260822122047_CrawlRunActiveUniqueIndex",
+        "20260822215850_CrawlRunCoverageLimited"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -217,8 +218,13 @@ internal static class DatabaseFoundationAssertions
         "CrawlLinkResult"
     ];
 
-    public static async Task VerifyAsync(string connectionString)
+    public static async Task VerifyAsync(string harnessConnectionString)
     {
+        var connectionString = new NpgsqlConnectionStringBuilder(harnessConnectionString)
+        {
+            Pooling = true
+        }.ToString();
+
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var context = new ApplicationDbContext(options.Options);
@@ -262,9 +268,8 @@ internal static class DatabaseFoundationAssertions
         await VerifyPageAuditReadModelAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
-        await VerifyPhaseThreeToPhaseFourUpgradeAsync(connectionString);
-        await VerifyPhaseTwoUpgradeAsync(connectionString);
-        await VerifyPhaseOneUpgradeAndRepeatabilityAsync(connectionString);
+
+        await VerifyUpgradePathsAsync(connectionString);
     }
 
     /// <summary>
@@ -2871,11 +2876,22 @@ internal static class DatabaseFoundationAssertions
             .BuildServiceProvider();
     }
 
+    private static async Task VerifyUpgradePathsAsync(string connectionString)
+    {
+        var phaseThree = await CreateUpgradeDatabaseAsync(connectionString, "phase3");
+        var phaseTwo = await CreateUpgradeDatabaseAsync(connectionString, "phase2");
+        var phaseOne = await CreateUpgradeDatabaseAsync(connectionString, "phase1");
+
+        await Task.WhenAll(
+            VerifyPhaseThreeToPhaseFourUpgradeAsync(phaseThree),
+            VerifyPhaseTwoUpgradeAsync(phaseTwo),
+            VerifyPhaseOneUpgradeAndRepeatabilityAsync(phaseOne));
+    }
+
     /// <summary>Item 22: migrating from the exact Phase 3 boundary applies the three Phase 4
     /// migrations cleanly on top of a database that already has real Phase 3 data in it.</summary>
-    private static async Task VerifyPhaseThreeToPhaseFourUpgradeAsync(string connectionString)
+    private static async Task VerifyPhaseThreeToPhaseFourUpgradeAsync(string upgradeConnectionString)
     {
-        var upgradeConnectionString = await CreateUpgradeDatabaseAsync(connectionString, "phase3");
         await using var services = BuildUpgradeServices(upgradeConnectionString);
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -2934,9 +2950,8 @@ internal static class DatabaseFoundationAssertions
     /// walked back to the Phase 1 boundary — which is safe here because this database holds no
     /// incident, certificate or SEO rows for the intervening down migrations to reverse.
     /// </summary>
-    private static async Task VerifyPhaseTwoUpgradeAsync(string connectionString)
+    private static async Task VerifyPhaseTwoUpgradeAsync(string upgradeConnectionString)
     {
-        var upgradeConnectionString = await CreateUpgradeDatabaseAsync(connectionString, "phase2");
         await using var services = BuildUpgradeServices(upgradeConnectionString);
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -2993,9 +3008,8 @@ internal static class DatabaseFoundationAssertions
         endpoint.Succeeded.Should().BeTrue(string.Join(" ", endpoint.Errors));
     }
 
-    private static async Task VerifyPhaseOneUpgradeAndRepeatabilityAsync(string connectionString)
+    private static async Task VerifyPhaseOneUpgradeAndRepeatabilityAsync(string upgradeConnectionString)
     {
-        var upgradeConnectionString = await CreateUpgradeDatabaseAsync(connectionString, "phase1");
         await using var services = BuildUpgradeServices(upgradeConnectionString);
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

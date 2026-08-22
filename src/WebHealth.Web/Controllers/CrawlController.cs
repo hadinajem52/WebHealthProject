@@ -110,7 +110,9 @@ public sealed class CrawlController(
 
         var brokenLinks = await crawlReader.ListBrokenLinksAsync(
             id, BrokenLinksPerPage, access, Math.Max(0, offset), cancellationToken);
-        return View(new CrawlRunViewModel(run, brokenLinks, Math.Max(0, offset), BrokenLinksPerPage));
+        var skips = await crawlReader.ListSkipReasonsAsync(id, access, cancellationToken);
+        return View(new CrawlRunViewModel(
+            run, brokenLinks, skips, Math.Max(0, offset), BrokenLinksPerPage));
     }
 
     private RegistryAccessContext GetAccess()

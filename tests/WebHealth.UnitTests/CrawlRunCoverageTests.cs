@@ -15,10 +15,16 @@ namespace WebHealth.UnitTests;
 /// </summary>
 public sealed class CrawlRunCoverageTests
 {
-    private static CrawlRunSummary Run(string status, string stopReason, int pagesFetched) =>
+    private static CrawlRunSummary Run(
+        string status,
+        string stopReason,
+        int pagesFetched,
+        bool coverageLimited = false) =>
         new(Guid.NewGuid(), Guid.NewGuid(), status, stopReason, pagesFetched,
             LinksRecorded: 1, BrokenLinkCount: 0, RobotsOverrideGranted: false,
-            StartedAt: DateTimeOffset.UnixEpoch, FinishedAt: DateTimeOffset.UnixEpoch);
+            RobotsOverrideRefusedBecause: CrawlOverrideRefusals.NotRequested,
+            StartedAt: DateTimeOffset.UnixEpoch, FinishedAt: DateTimeOffset.UnixEpoch,
+            CoverageLimited: coverageLimited);
 
     [Fact]
     public void CompletedRunThatFetchedPages_CoveredTheWholeScope()
@@ -41,6 +47,27 @@ public sealed class CrawlRunCoverageTests
         run.CoveredWholeScope.Should().BeFalse(
             "an exhausted frontier with nothing fetched examined nothing, so it must not stand as "
             + "a clean result or as a comparison baseline");
+    }
+
+    /// <summary>
+    /// The same regression one step further in. This run fetched pages and drained its frontier,
+    /// so every earlier test passes it — and some of what it fetched could not be read, so the
+    /// links those pages carry are missing from it. Absence is what the comparison reads as
+    /// resolved, which is why coverage is its own fact rather than something inferred from the
+    /// stop reason and the page count.
+    /// </summary>
+    [Fact]
+    public void RunThatCouldNotReadEveryPage_DidNotCoverTheWholeScope()
+    {
+        var run = Run(
+            CrawlRunStatuses.Completed,
+            CrawlStopReasons.FrontierExhausted,
+            pagesFetched: 42,
+            coverageLimited: true);
+
+        run.CoveredWholeScope.Should().BeFalse(
+            "a page nobody could read contributes no links, so this run must not stand as the "
+            + "baseline a later comparison calls links resolved against");
     }
 
     [Theory]

@@ -42,6 +42,14 @@ public sealed class CrawlRun
     /// </summary>
     public string? FailureReason { get; set; }
 
+    /// <summary>
+    /// Whether anything left part of the site unexamined -- a page that could not be read, a
+    /// robots rule, a budget. Separate from the stop reason because a run can drain its frontier
+    /// and still have looked at less than the site: the pages nobody could read contributed no
+    /// links to follow. Only a run with this false can be a comparison's baseline.
+    /// </summary>
+    public bool CoverageLimited { get; set; }
+
     public int PagesFetched { get; set; }
     public int LinksRecorded { get; set; }
 

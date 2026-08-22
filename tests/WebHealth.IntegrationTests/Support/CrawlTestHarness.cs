@@ -32,7 +32,8 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
         string? Html = null,
         SafeHttpFailureKind? Failure = null,
         int RedirectCount = 0,
-        string? FinalUrl = null);
+        string? FinalUrl = null,
+        bool Truncated = false);
 
     public FakeSiteTransport Page(string url, string html) =>
         With(url, new(200, html));
@@ -78,7 +79,7 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
                 new SafeHttpDestination(response.FinalUrl ?? request.Url),
                 TimeSpan.FromMilliseconds(5),
                 body.Length,
-                false,
+                response.Truncated,
                 body,
                 [.. Enumerable.Range(0, response.RedirectCount)
                     .Select(index => new SafeHttpRedirectHop(301, request.Url, request.Url, false))],

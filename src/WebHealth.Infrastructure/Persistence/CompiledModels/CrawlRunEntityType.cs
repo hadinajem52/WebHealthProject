@@ -22,10 +22,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Crawling.CrawlRun",
                 typeof(CrawlRun),
                 baseEntityType,
-                propertyCount: 18,
+                propertyCount: 19,
                 navigationCount: 2,
                 foreignKeyCount: 1,
-                unnamedIndexCount: 1,
+                unnamedIndexCount: 2,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -67,6 +67,17 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: false);
             checkExternalLinks.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             checkExternalLinks.AddAnnotation("Relational:ColumnName", "check_external_links");
+
+            var coverageLimited = runtimeEntityType.AddProperty(
+                "CoverageLimited",
+                typeof(bool),
+                propertyInfo: typeof(CrawlRun).GetProperty("CoverageLimited", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CrawlRun).GetField("<CoverageLimited>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                valueGenerated: ValueGenerated.OnAdd,
+                sentinel: false);
+            coverageLimited.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            coverageLimited.AddAnnotation("Relational:ColumnName", "coverage_limited");
+            coverageLimited.AddAnnotation("Relational:DefaultValue", false);
 
             var endpointId = runtimeEntityType.AddProperty(
                 "EndpointId",
@@ -204,8 +215,14 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             key.AddAnnotation("Relational:Name", "pk_crawl_run");
 
             var index = runtimeEntityType.AddIndex(
+                new[] { endpointId },
+                unique: true);
+            index.AddAnnotation("Relational:Filter", "status = 'Running'");
+            index.AddAnnotation("Relational:Name", "ux_crawl_run_active");
+
+            var index0 = runtimeEntityType.AddIndex(
                 new[] { endpointId, startedAt });
-            index.AddAnnotation("Relational:Name", "ix_crawl_run_endpoint_id_started_at");
+            index0.AddAnnotation("Relational:Name", "ix_crawl_run_endpoint_id_started_at");
 
             return runtimeEntityType;
         }
