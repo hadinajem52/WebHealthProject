@@ -46,6 +46,13 @@ public sealed record CrawlRunOutcome(
     string? RobotsOverrideRefusedBecause,
     IReadOnlyList<string> ValidationErrors)
 {
+    /// <summary>
+    /// What went wrong, when the run failed on an exception rather than on invalid configuration.
+    /// A failed run whose only account of itself is "it failed" leaves the reader with nowhere to
+    /// go, and the exception is otherwise lost the moment the run is summarised.
+    /// </summary>
+    public string? FailureDetail { get; init; }
+
     public static CrawlRunOutcome Invalid(Guid runId, IReadOnlyList<string> errors) => new(
         runId, CrawlRunStatuses.Failed, CrawlStopReasons.Failed, 0, 0, false, null, errors);
 }
@@ -155,7 +162,8 @@ public sealed record CrawlRunSummary(
     int BrokenLinkCount,
     bool RobotsOverrideGranted,
     DateTimeOffset StartedAt,
-    DateTimeOffset? FinishedAt)
+    DateTimeOffset? FinishedAt,
+    string? FailureReason = null)
 {
     /// <summary>
     /// Covered means the crawler actually examined the site: the frontier drained <em>and</em> at

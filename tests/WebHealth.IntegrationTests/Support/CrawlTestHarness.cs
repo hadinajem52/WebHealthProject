@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using Microsoft.Extensions.Logging.Abstractions;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Crawling;
@@ -157,7 +158,8 @@ internal static class CrawlTestHarness
             new HostRequestRateLimiter(TimeProvider.System, effective.RequestsPerSecondPerHost),
             effective,
             transportOptions,
-            TimeProvider.System);
+            TimeProvider.System,
+            NullLogger<CrawlExecutionService>.Instance);
 
         var outcome = await service.ExecuteAsync(request, cancellationToken);
         return (outcome, sink);

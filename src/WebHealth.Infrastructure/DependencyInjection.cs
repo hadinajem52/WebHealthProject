@@ -84,7 +84,16 @@ public static class DependencyInjection
             services.AddSingleton<IEmailTransport, SmtpEmailTransport>();
         }
 
-        services.AddDbContext<ApplicationDbContext>(options =>
+        // A factory as well as the scoped context. A DbContext is not thread-safe, and the crawler
+        // is the one place in this application that runs several requests at once: its workers and
+        // the transport's own authorization check would otherwise share the request's single
+        // context and fail with "a second operation was started on this context instance", taking
+        // the run down with them. Everything on that concurrent path takes its context from the
+        // factory and owns it for exactly one operation.
+        //
+        // The scoped context is built from the factory rather than registered separately, so there
+        // is one options object and one place the connection string is read.
+        services.AddDbContextFactory<ApplicationDbContext>(options =>
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
             if (string.IsNullOrWhiteSpace(connectionString))
@@ -95,6 +104,8 @@ public static class DependencyInjection
 
             PostgreSqlDbContextOptions.Configure(options, connectionString);
         });
+        services.AddScoped(provider =>
+            provider.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContext());
 
         services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
             {

@@ -1092,9 +1092,25 @@ code,
 
 /* A select that carries a long label -- "Client - Environment - https://..." -- needs more
    room than the 26rem cap the shared rule sets, or every option truncates. Capped short of the
-   row so a second action still fits beside it rather than being pushed onto its own line. */
-.filter-inline--wide .form-field {
-    max-width: 32rem;
+   row so a second action still fits beside it rather than being pushed onto its own line.
+
+   The basis is a fixed length rather than auto because a select sizes itself from the option
+   currently showing. With an auto basis the field is one width holding a full endpoint label
+   and a much narrower one holding "Select an endpoint", so the row relaid itself out -- and the
+   buttons moved -- every time the reader changed the selection.
+
+   Both selectors are doubled up because the generic .filter-inline .form-field rule below
+   carries the same specificity and comes later, so it won every declaration this rule set. */
+.filter-inline.filter-inline--wide .form-field {
+    flex: 0 1 32rem;
+    width: 32rem;
+    max-width: 100%;
+}
+
+/* Long labels are clipped rather than widening the control. */
+.filter-inline.filter-inline--wide .form-field select {
+    width: 100%;
+    text-overflow: ellipsis;
 }
 
 /* The picker and the action that uses it share one row, but a GET form and a POST form cannot
@@ -1102,12 +1118,14 @@ code,
    and submit out the same way the row does.
 
    flex: 0 1 auto keeps the group at its content width. Letting it grow would stretch it across
-   the row and strand the button that follows it against the far edge. */
+   the row and strand the button that follows it against the far edge. nowrap keeps the submit
+   beside its own field: wrapping dropped it under the select and left the action after the group
+   stranded at the far right of the row. */
 .filter-inline__group {
     display: flex;
     min-width: 0;
     flex: 0 1 auto;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: flex-end;
     gap: var(--space-3) var(--space-4);
 }
@@ -1122,6 +1140,14 @@ code,
 .filter-inline .form-field select,
 .filter-inline .button {
     height: 3.125rem;
+}
+
+/* The row shrinks the field, never the action. Without this the button was a flex item free to
+   shrink under its own label, and "Show crawls" broke onto two lines inside a fixed-height
+   button as soon as the field beside it wanted the room. */
+.filter-inline .button {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .table-scroll--flush {

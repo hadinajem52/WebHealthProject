@@ -12,9 +12,16 @@ namespace WebHealth.Infrastructure.Crawling;
 /// Writes a run and its results as they resolve. Per result rather than batched at the end, which
 /// is the whole of BR-L10's preservation guarantee: a cancelled run needs no special save path
 /// because everything it found is already committed.
+/// <para>
+/// Each write owns its context for exactly one operation. A crawl's workers run concurrently, and
+/// on one shared context a failed save also left its entity tracked, so the next save re-sent a
+/// row that had already landed and turned one fault into a run-ending cascade of duplicate-key
+/// violations. A context that is gone by the next call cannot carry a failure forward.
+/// </para>
 /// </summary>
-internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvider timeProvider)
-    : ICrawlResultSink
+internal sealed class CrawlResultSink(
+    IDbContextFactory<ApplicationDbContext> contextFactory,
+    TimeProvider timeProvider) : ICrawlResultSink
 {
     /// <summary>
     /// Opens the run. Replaying the same run id is a controlled no-op rather than a primary-key
@@ -29,6 +36,7 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
     public async Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(start);
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await dbContext.CrawlRuns.AsNoTracking()
             .SingleOrDefaultAsync(run => run.Id == start.RunId, cancellationToken);
         if (existing is not null)
@@ -77,7 +85,6 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
             // flight -- a different fact entirely, and one the caller must see. Swallowing it
             // here would report a run as opened that was never inserted, and the caller would
             // enqueue a job against a row that does not exist.
-            dbContext.ChangeTracker.Clear();
         }
     }
 
@@ -92,6 +99,7 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Bound first, then hash what was bound. Hashing the original while storing a shortened
         // copy would make the identity describe a value the row does not contain — and that identity
@@ -128,7 +136,6 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
             // BR-L07 is enforced by the index, and the ledger already deduplicates, so reaching
             // here means a retry re-sent a pair rather than that a pair was counted twice. The row
             // that is already stored is the same row, so the write is dropped rather than failed.
-            dbContext.ChangeTracker.Clear();
         }
     }
 
@@ -137,7 +144,7 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(outcome);
-        dbContext.ChangeTracker.Clear();
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
         var run = await dbContext.CrawlRuns
             .SingleOrDefaultAsync(item => item.Id == outcome.RunId, cancellationToken);
         if (run is null) return;
@@ -150,11 +157,14 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
         run.RobotsOverrideRefusedBecause = outcome.RobotsOverrideGranted
             ? null
             : outcome.RobotsOverrideRefusedBecause ?? CrawlOverrideRefusals.NotRequested;
+        // Configuration errors first: they are the reason the run never really started, and they
+        // are written for a reader. The exception detail is the fallback, and the bare sentence is
+        // the last resort -- a failure with no account of itself at all.
         run.FailureReason = outcome.Status == CrawlRunStatuses.Failed
             ? Bounded(
                 outcome.ValidationErrors.Count > 0
                     ? string.Join(" ", outcome.ValidationErrors)
-                    : "The crawl stopped on an unexpected error.",
+                    : outcome.FailureDetail ?? "The crawl stopped on an unexpected error.",
                 CrawlRunConfiguration.MaxFailureReasonLength)
             : null;
         run.FinishedAt = timeProvider.GetUtcNow();

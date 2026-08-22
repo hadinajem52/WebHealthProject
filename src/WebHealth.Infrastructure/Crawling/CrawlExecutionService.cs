@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Crawling;
@@ -13,7 +14,8 @@ internal sealed record CrawlDependencies(
     ICrawlResultSink Sink,
     IMonitoringTargetAuthorizer TargetAuthorizer,
     CrawlRequestBudget RequestBudget,
-    HostRequestRateLimiter RateLimiter);
+    HostRequestRateLimiter RateLimiter,
+    ILogger Logger);
 
 /// <summary>
 /// BR-L01 to BR-L10. Drives the frontier from 6.5 through the same <see cref="ISafeHttpTransport" />
@@ -35,7 +37,8 @@ internal sealed class CrawlExecutionService(
     HostRequestRateLimiter rateLimiter,
     CrawlSchedulingOptions options,
     SafeHttpTransportOptions transportOptions,
-    TimeProvider timeProvider) : ICrawlExecutionService
+    TimeProvider timeProvider,
+    ILogger<CrawlExecutionService> logger) : ICrawlExecutionService
 {
     public async Task<CrawlRunOutcome> ExecuteAsync(
         CrawlRunRequest request,
@@ -62,7 +65,8 @@ internal sealed class CrawlExecutionService(
 
         var run = new CrawlRunExecution(
             request, scope!, options, transportOptions.UserAgent, timeProvider,
-            new(transport, linkExtractor, robotsReader, sink, targetAuthorizer, requestBudget, rateLimiter));
+            new(transport, linkExtractor, robotsReader, sink, targetAuthorizer, requestBudget,
+                rateLimiter, logger));
         return await run.ExecuteAsync(cancellationToken);
     }
 
@@ -174,8 +178,8 @@ internal sealed class CrawlRunExecution
     public async Task<CrawlRunOutcome> ExecuteAsync(CancellationToken cancellationToken)
     {
         var cancelled = false;
-        var failed = false;
         var durationExceeded = false;
+        Exception? failure = null;
 
         // The deadline is a cancellation token, not only a between-items check. A worker parked in
         // the rate limiter or waiting on a slow host would otherwise run past the run's duration
@@ -202,7 +206,7 @@ internal sealed class CrawlRunExecution
             // BR-L05 asks a crawl to stop gracefully. A run that threw its way out would lose the
             // outcome record along with every result it had already found, and would look to the
             // reader exactly like a run that was never started.
-            failed = true;
+            failure = exception;
         }
 
         // Flushing and recording the outcome happen on every path, and never under the run's own
@@ -214,11 +218,23 @@ internal sealed class CrawlRunExecution
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            failed = true;
+            // Only if nothing had failed already: the first exception is the one that explains the
+            // run, and a flush that then failed is usually its consequence.
+            failure ??= exception;
+        }
+
+        if (failure is not null)
+        {
+            // Logged as well as stored. The stored reason is bounded and written for a reader of
+            // the report; the log keeps the stack trace, which is what a defect is diagnosed from.
+            _dependencies.Logger.LogError(
+                failure,
+                "Crawl run {RunId} for endpoint {EndpointId} failed after {PagesFetched} page(s).",
+                _request.RunId, _request.EndpointId, _pagesFetched);
         }
 
         var outcome = Summarize(
-            cancelled || cancellationToken.IsCancellationRequested, failed, durationExceeded);
+            cancelled || cancellationToken.IsCancellationRequested, failure, durationExceeded);
         await _dependencies.Sink.RecordRunOutcomeAsync(outcome, CancellationToken.None);
         return outcome;
     }
@@ -242,17 +258,17 @@ internal sealed class CrawlRunExecution
     /// reasons the run stopped early, and a budget that also happened to bind says less about what
     /// the reader is looking at.
     /// </summary>
-    private CrawlRunOutcome Summarize(bool cancelled, bool failed, bool durationExceeded)
+    private CrawlRunOutcome Summarize(bool cancelled, Exception? failure, bool durationExceeded)
     {
         var stopReason = cancelled ? CrawlStopReasons.Cancelled
-            : failed ? CrawlStopReasons.Failed
+            : failure is not null ? CrawlStopReasons.Failed
             : durationExceeded ? CrawlStopReasons.DurationLimit
             : _budgetStopReason
                 ?? (_timeProvider.GetUtcNow() >= _deadline ? CrawlStopReasons.DurationLimit : null)
                 ?? CrawlStopReasons.FrontierExhausted;
 
         var status = cancelled ? CrawlRunStatuses.Cancelled
-            : failed ? CrawlRunStatuses.Failed
+            : failure is not null ? CrawlRunStatuses.Failed
             : CrawlRunStatuses.Completed;
 
         // BR-L02 reporting: the flag answers "did this run bypass a published restriction anywhere?",
@@ -267,7 +283,27 @@ internal sealed class CrawlRunExecution
             _linksRecorded,
             granted,
             granted ? null : _firstOverrideRefusal ?? CrawlOverrideRefusals.NotRequested,
-            []);
+            [])
+        {
+            FailureDetail = failure is null ? null : Describe(failure)
+        };
+    }
+
+    /// <summary>
+    /// The exception chain as one sentence a reader of the report can act on. The inner exceptions
+    /// are what carry the actual cause -- an <c>HttpRequestException</c> alone says "a request
+    /// failed" where its inner socket error says which host refused and why -- so the chain is
+    /// kept rather than only its outermost frame.
+    /// </summary>
+    private static string Describe(Exception exception)
+    {
+        var parts = new List<string>();
+        for (var current = exception; current is not null && parts.Count < 3; current = current.InnerException)
+        {
+            parts.Add($"{current.GetType().Name}: {current.Message}");
+        }
+
+        return string.Join(" -> ", parts);
     }
 
     /// <summary>

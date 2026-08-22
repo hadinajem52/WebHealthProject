@@ -80,9 +80,32 @@ public static class CrawlRunDisplay
             CrawlStopReasons.PageLimit => "Stopped at the page limit — the site was not fully covered",
             CrawlStopReasons.DurationLimit => "Stopped at the time limit — the site was not fully covered",
             CrawlStopReasons.Cancelled => "Cancelled — partial results only",
-            _ => "Failed before it finished"
+            _ => string.IsNullOrWhiteSpace(run.FailureReason)
+                ? "Failed before it finished"
+                : $"Failed before it finished — {Shortened(run.FailureReason)}"
         };
     }
+
+    /// <summary>
+    /// The whole recorded reason, for the run's own page. "It failed" with nothing behind it is a
+    /// dead end for the one person who has to work out why, so the stored reason is shown rather
+    /// than only logged.
+    /// </summary>
+    public static string DescribeFailure(CrawlRunSummary run)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        return string.IsNullOrWhiteSpace(run.FailureReason)
+            ? "No reason was recorded. Check the application log for this run id."
+            : run.FailureReason;
+    }
+
+    /// <summary>How much of a failure reason fits in a badge tooltip before it stops being read.</summary>
+    private const int TooltipDetailLimit = 180;
+
+    private static string Shortened(string detail) =>
+        detail.Length <= TooltipDetailLimit
+            ? detail
+            : $"{detail[..TooltipDetailLimit].TrimEnd()}… Open the run for the full message.";
 
     public static string StatusTone(CrawlRunSummary run)
     {

@@ -216,5 +216,6 @@ internal sealed class CrawlReportReader(
                 run.Links.Count(link => link.Classification == CrawlLinkClassifications.Broken),
                 run.RobotsOverrideGranted,
                 run.StartedAt,
-                run.FinishedAt));
+                run.FinishedAt,
+                run.FailureReason));
 }
