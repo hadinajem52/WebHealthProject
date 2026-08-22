@@ -525,6 +525,17 @@
             setUpPopupMenu(filters, filtersToggle, filtersMenu);
         }
 
+        // Page-level dropdowns declare themselves, so a page can carry several of
+        // them without the script naming each one.
+        document.querySelectorAll('[data-shell-menu]').forEach(function (container) {
+            var menuToggle = container.querySelector('[data-shell-menu-toggle]');
+            var menuPanel = container.querySelector('[data-shell-menu-panel]');
+
+            if (menuToggle && menuPanel) {
+                setUpPopupMenu(container, menuToggle, menuPanel);
+            }
+        });
+
         var settings = document.querySelector('[data-shell-settings]');
         var settingsToggle = document.querySelector('[data-shell-settings-toggle]');
         var settingsMenu = document.querySelector('[data-shell-settings-menu]');

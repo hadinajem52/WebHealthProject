@@ -19,7 +19,7 @@
 
 .card__title {
     font-size: var(--font-size-lg);
-    font-weight: 700;
+    font-weight: 400;
     line-height: var(--line-height-tight);
 }
 
@@ -1671,4 +1671,225 @@ code,
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-1);
+}
+
+/* Detail list — the two-column "Subject / STATUS" card body from the Purity
+   endpoint design: an icon-led label on the left, a badge or plain value on the
+   right, with the shared gradient hairline between rows. */
+.detail-list {
+    margin-top: var(--space-6);
+}
+
+.detail-list__head,
+.detail-list__row {
+    display: grid;
+    align-items: center;
+    gap: var(--space-4);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 19rem);
+}
+
+.detail-list__head {
+    padding-bottom: var(--space-2);
+    color: var(--color-gray-400);
+    font-size: 0.625rem;
+    font-weight: 400;
+    line-height: var(--line-height-base);
+}
+
+.detail-list__head span:last-child {
+    text-transform: uppercase;
+}
+
+.detail-list__items {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.detail-list__items > li {
+    position: relative;
+}
+
+.detail-list__items > li::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 1px;
+    background: var(--divider-line);
+    content: "";
+}
+
+.detail-list__row {
+    padding: var(--space-4) 0;
+}
+
+.detail-list__subject {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    line-height: var(--line-height-tight);
+}
+
+.detail-list__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--color-teal-300);
+}
+
+.detail-list__icon svg {
+    width: 0.875rem;
+    height: 0.875rem;
+}
+
+.detail-list__value {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    line-height: var(--line-height-tight);
+    overflow-wrap: anywhere;
+}
+
+.detail-list__note {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+}
+
+/* The card eyebrow that sits under the title: a green check-circle followed by
+   the name of what the list below reports on. */
+.card__status {
+    display: flex;
+    align-items: center;
+    margin-top: var(--space-2);
+    color: var(--color-gray-400);
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    gap: var(--space-2);
+    line-height: var(--line-height-tight);
+}
+
+.card__status svg {
+    width: 0.9375rem;
+    height: 0.9375rem;
+    flex-shrink: 0;
+    color: var(--color-green-300);
+}
+
+.card__status[data-status="warning"] svg {
+    color: var(--status-warning);
+}
+
+.card__status[data-status="danger"] svg {
+    color: var(--status-danger);
+}
+
+/* Square icon-only button, matching the 45x39 tile in the design. */
+.button--icon {
+    justify-content: center;
+    padding-right: var(--space-3);
+    padding-left: var(--space-3);
+}
+
+.button__caret {
+    display: inline-flex;
+    align-items: center;
+    margin-left: -0.125rem;
+}
+
+/* Dropdown that shares the popup contract with the header and filter menus, so
+   its open, Escape, click-away and focus-out behaviour cannot drift from theirs. */
+.action-menu {
+    position: relative;
+}
+
+.js .action-menu__panel {
+    display: none;
+}
+
+.js .action-menu[data-open="true"] .action-menu__panel {
+    display: block;
+}
+
+.action-menu__panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    width: max-content;
+    min-width: 13rem;
+    max-width: min(20rem, calc(100vw - var(--space-8)));
+    padding: var(--space-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    background-color: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+    text-align: left;
+}
+
+.action-menu__panel form {
+    display: block;
+}
+
+.action-menu__item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-tile);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    gap: var(--space-3);
+    text-align: left;
+    text-decoration: none;
+}
+
+.action-menu__item:hover {
+    background-color: var(--surface-sunken);
+}
+
+.action-menu__item svg {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    color: var(--color-teal-300);
+}
+
+.action-menu__item--danger {
+    color: var(--status-danger-text);
+}
+
+.action-menu__item--danger svg {
+    color: var(--status-danger-text);
+}
+
+.action-menu__separator {
+    height: 1px;
+    border: 0;
+    margin: var(--space-2) var(--space-3);
+    background-color: var(--border-subtle);
+}
+
+@media (max-width: 48em) {
+    .detail-list__head {
+        display: none;
+    }
+
+    .detail-list__row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-2);
+    }
 }
