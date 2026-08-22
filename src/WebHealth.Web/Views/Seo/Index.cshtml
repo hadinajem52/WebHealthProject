@@ -1,4 +1,4 @@
-@model SeoListViewModel
+﻿@model SeoListViewModel
 @using WebHealth.Application.Seo
 @using WebHealth.Domain.Seo
 @{
@@ -64,8 +64,6 @@
                 </a>
             </div>
         </form>
-
-        <p class="card__subtitle">@Model.FilterSummary</p>
 
         @if (listPage.Items.Count == 0)
         {

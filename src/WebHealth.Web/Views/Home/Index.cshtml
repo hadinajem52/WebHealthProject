@@ -1,4 +1,4 @@
-@model DashboardViewModel
+﻿@model DashboardViewModel
 @using WebHealth.Domain.Incidents
 @{
     ViewData.SetTitle("Dashboard");
@@ -233,8 +233,6 @@
                             </button>
                         </div>
                     </form>
-
-                    @await Html.PartialAsync("_FilterSummary", Model.Summary)
                 </div>
             </div>
 

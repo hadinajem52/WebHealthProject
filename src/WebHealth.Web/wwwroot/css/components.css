@@ -510,13 +510,17 @@ code,
     vertical-align: middle;
 }
 
+/* Column headers read the same as .detail-list__head, so a table and a fact list on the
+   same page share one visual language: small, light, uppercase, closed by the single
+   heavier rule in the table. Row separators below stay --border-subtle. */
 .data-table thead th {
     padding-bottom: var(--space-2);
-    color: var(--color-gray-600);
-    font-size: var(--font-size-xs);
-    font-weight: 700;
+    border-bottom: 1px solid var(--border-strong);
+    color: var(--color-gray-400);
+    font-size: 0.625rem;
+    font-weight: 400;
     letter-spacing: 0.02em;
-    line-height: var(--line-height-base);
+    line-height: 15px;
     text-transform: uppercase;
 }
 
@@ -1295,7 +1299,9 @@ code,
 
     .data-table tr {
         padding: var(--space-3) 0;
-        border-bottom: 1px solid var(--divider-line);
+        /* A gradient is not a valid <color>, so the shorthand dropped this declaration
+           entirely and stacked-card rows rendered with no separator at all. */
+        border-bottom: 1px solid var(--border-subtle);
     }
 
     .data-table td,
@@ -1319,46 +1325,6 @@ code,
     .data-table__action {
         text-align: left !important;
     }
-}
-
-.filter-summary {
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-tile);
-    background-color: var(--surface-sunken);
-}
-
-.filter-summary__list {
-    display: flex;
-    flex-wrap: wrap;
-    margin: 0;
-    gap: var(--space-2) var(--space-5);
-}
-
-.filter-summary__item {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-}
-
-.filter-summary__item dt {
-    color: var(--text-secondary);
-    font-size: var(--font-size-xs);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-}
-
-.filter-summary__item dd {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    font-weight: 700;
-}
-
-.filter-summary__note {
-    margin: var(--space-2) 0 0;
-    color: var(--text-secondary);
-    font-size: var(--font-size-sm);
 }
 
 .scope-bar {
@@ -1586,10 +1552,6 @@ code,
     gap: var(--space-2);
 }
 
-.filter-menu__panel .filter-summary {
-    margin-top: var(--space-4);
-}
-
 .stat-grid {
     display: grid;
     gap: var(--space-4);
@@ -1688,12 +1650,15 @@ code,
     grid-template-columns: minmax(0, 1fr) minmax(0, 19rem);
 }
 
+/* The one deliberately heavier rule on the list: it closes the column header and
+   opens the rows. Every separator below it is lighter, so the hierarchy reads. */
 .detail-list__head {
     padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-strong);
     color: var(--color-gray-400);
     font-size: 0.625rem;
     font-weight: 400;
-    line-height: var(--line-height-base);
+    line-height: 15px;
 }
 
 .detail-list__head span:last-child {
@@ -1710,13 +1675,17 @@ code,
     position: relative;
 }
 
-.detail-list__items > li::before {
+/* Row separators are a flat #E2E8F0 stroke, matching the Figma, and deliberately not
+   --divider-line: that gradient is the card divider and peaks mid-span, which reads as
+   a heavier line on some rows. Only between rows -- the first row is closed off by the
+   header rule above, which is the single heavier line in the list. */
+.detail-list__items > li + li::before {
     position: absolute;
     top: 0;
     right: 0;
     left: 0;
     height: 1px;
-    background: var(--divider-line);
+    background-color: var(--border-subtle);
     content: "";
 }
 
@@ -1732,7 +1701,7 @@ code,
     color: var(--text-primary);
     font-size: var(--font-size-sm);
     font-weight: 400;
-    line-height: var(--line-height-tight);
+    line-height: 20px;
 }
 
 .detail-list__icon {
@@ -1755,7 +1724,10 @@ code,
     color: var(--text-primary);
     font-size: var(--font-size-sm);
     font-weight: 400;
-    line-height: var(--line-height-tight);
+    /* A length, not a ratio: it inherits as 20px into the smaller __note text too, so
+       every line box in the row is a whole number of pixels and each separator lands on
+       the same subpixel phase. A unitless 1.4 would give 19.6px here and 16.8px there. */
+    line-height: 20px;
     overflow-wrap: anywhere;
 }
 
@@ -1782,6 +1754,12 @@ code,
     height: 0.9375rem;
     flex-shrink: 0;
     color: var(--color-green-300);
+}
+
+/* Not every card eyebrow reports a pass/fail state -- a history or index card just
+   names what the list below is. Neutral keeps the app's icon teal. */
+.card__status[data-status="neutral"] svg {
+    color: var(--color-teal-300);
 }
 
 .card__status[data-status="warning"] svg {
