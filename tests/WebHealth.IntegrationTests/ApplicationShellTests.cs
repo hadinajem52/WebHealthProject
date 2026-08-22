@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.IntegrationTests.Support;
@@ -250,21 +250,24 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     }
 
     /// <summary>
-    /// BR-R01. A dashboard that does not say what it was filtered to, and when it was read,
-    /// cannot be compared against another view of the same page.
+    /// BR-R01 previously required a `_FilterSummary` strip naming every applied filter, the
+    /// window and the read instant. The project owner removed that component from the whole
+    /// application on 2026-08-22; see docs/phase-5/Dashboard_Trends_And_Reports_Ui.md.
+    ///
+    /// What survives of the rule is the scope bar, which still names the selected filters and
+    /// how fresh the reading is. It states neither the filter labels nor the exact instant, so
+    /// this is a deliberately weaker assertion than the one it replaces.
     /// </summary>
     [Fact]
-    public async Task Dashboard_DisclosesTheAppliedFiltersAndTheAsOfInstant()
+    public async Task Dashboard_StillNamesItsScopeAndHowFreshTheReadingIs()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/?HealthStatus=Critical");
 
-        Assert.Contains("aria-label=\"Applied filters and data freshness\"", content, StringComparison.Ordinal);
-        Assert.Contains("<dt>Health status</dt>", content, StringComparison.Ordinal);
-        Assert.Contains("<dt>As of</dt>", content, StringComparison.Ordinal);
-        Assert.Contains("<dt>Window</dt>", content, StringComparison.Ordinal);
-        Assert.Contains("(exclusive)", content, StringComparison.Ordinal);
+        Assert.Contains("class=\"scope-bar__scope\"", content, StringComparison.Ordinal);
+        Assert.Contains("Critical", content, StringComparison.Ordinal);
+        Assert.Contains("Updated", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -274,7 +277,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
 
         var content = await client.GetStringAsync("/");
 
-        Assert.Contains("everything you have access to", content, StringComparison.Ordinal);
+        Assert.Contains("All clients", content, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-@model CheckHistoryViewModel
+﻿@model CheckHistoryViewModel
 @{
     ViewData.SetTitle("Check history");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Endpoints(Url), Breadcrumbs.Endpoint(Url, Model.Page.EndpointId, Model.Page.EndpointDisplayUrl), new BreadcrumbItem("Check history"));
@@ -14,13 +14,22 @@
     <section class="card">
         <div class="page-intro">
             <div>
-                <h2 class="card__title">Check history</h2>
-                <p class="card__subtitle target-url">@history.EndpointDisplayUrl</p>
+                <h2 class="card__title target-url">@history.EndpointDisplayUrl</h2>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "clock")
+                    <span>Check history &middot; @history.TotalCount check@(history.TotalCount == 1 ? null : "s")</span>
+                </p>
             </div>
-            <span class="tag">@history.TotalCount check@(history.TotalCount == 1 ? null : "s")</span>
+            <div class="form-actions">
+                <a class="button button--secondary"
+                   asp-controller="Targets"
+                   asp-action="Endpoint"
+                   asp-route-id="@history.EndpointId">
+                    @await Html.PartialAsync("_Icon", "arrow-left")
+                    <span>Back to endpoint</span>
+                </a>
+            </div>
         </div>
-
-        @await Html.PartialAsync("_FilterSummary", Model.Summary)
 
         @if (history.Items.Count == 0)
         {

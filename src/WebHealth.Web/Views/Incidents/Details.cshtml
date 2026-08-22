@@ -8,6 +8,29 @@
     var isAdministrator = User.IsInRole("Administrator");
     var isActive = incident.Status is "Open" or "Acknowledged" or "InProgress" or "MonitoringRecovery";
 
+    var incidentStatus = StatusBadges.ForIncidentStatus(incident.Status);
+
+    // Each flag reproduces exactly the condition the form was rendered under before, so
+    // moving the controls into a menu and a separate card cannot widen what anyone can do.
+    var canAcknowledge = incident.CanManage && incident.Status == "Open";
+    var canStartProgress = incident.CanManage && incident.Status == "Acknowledged";
+    var canCloseIncident = incident.CanManage && incident.Status == "Resolved";
+    var hasQuickActions = canAcknowledge || canStartProgress || canCloseIncident;
+
+    var canResolve = incident.CanManage && isActive;
+    var canAddNote = incident.CanManage && incident.Status != "Closed";
+    var canReassign = incident.CanManage && isGlobal && incident.Status != "Closed" && Model.OwnerOptions.Count > 0;
+    var canForceClose = isAdministrator && incident.Status != "Closed";
+    var canReopen = isAdministrator && incident.Status == "Closed";
+    var hasManageForms = canResolve || canAddNote || canReassign || canForceClose || canReopen;
+
+    static string StatusIcon(string status) => status switch
+    {
+        "success" => "success",
+        "danger" => "error",
+        _ => "warning"
+    };
+
     static string DeliveryBadge(string state) => state switch
     {
         "Sent" => "success",
@@ -22,76 +45,207 @@
         <div class="page-intro">
             <div>
                 <h2 class="card__title target-url">@incident.EndpointDisplayUrl</h2>
-                <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName · @IssueDisplay.Describe(incident.IssueKey)</p>
-
+                <p class="card__status" data-status="@incidentStatus">
+                    @await Html.PartialAsync("_Icon", StatusIcon(incidentStatus))
+                    <span>@IssueDisplay.Describe(incident.IssueKey) &middot; @IncidentStatusDisplay.Name(incident.Status)</span>
+                </p>
+                <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName</p>
                 <p class="card__subtitle code">@incident.IssueKey</p>
             </div>
             <div class="form-actions">
                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(incident.Severity), incident.Severity))
-                <span class="badge" data-status="@StatusBadges.ForIncidentStatus(incident.Status)">@incident.Status</span>
+                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(incidentStatus, incident.Status))
+
+                @if (hasQuickActions)
+                {
+                    <div class="action-menu" data-shell-menu data-open="false">
+                        <button type="button"
+                                class="button button--primary"
+                                data-shell-menu-toggle
+                                aria-controls="incident-actions-menu"
+                                aria-expanded="false"
+                                aria-haspopup="true">
+                            @await Html.PartialAsync("_Icon", "settings")
+                            <span>Actions</span>
+                            <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        </button>
+
+                        <div class="action-menu__panel" id="incident-actions-menu" data-shell-menu-panel>
+                            @if (canAcknowledge)
+                            {
+                                <form asp-action="Acknowledge" method="post">
+                                    <input type="hidden" name="id" value="@incident.Id" />
+                                    <input type="hidden" name="version" value="@incident.Version" />
+                                    <button class="action-menu__item" type="submit">
+                                        @await Html.PartialAsync("_Icon", "check")
+                                        <span>Acknowledge</span>
+                                    </button>
+                                </form>
+                            }
+                            @if (canStartProgress)
+                            {
+                                <form asp-action="StartProgress" method="post">
+                                    <input type="hidden" name="id" value="@incident.Id" />
+                                    <input type="hidden" name="version" value="@incident.Version" />
+                                    <button class="action-menu__item" type="submit">
+                                        @await Html.PartialAsync("_Icon", "play")
+                                        <span>Start progress</span>
+                                    </button>
+                                </form>
+                            }
+                            @if (canCloseIncident)
+                            {
+                                <form asp-action="Close" method="post">
+                                    <input type="hidden" name="id" value="@incident.Id" />
+                                    <input type="hidden" name="version" value="@incident.Version" />
+                                    <button class="action-menu__item" type="submit">
+                                        @await Html.PartialAsync("_Icon", "archive")
+                                        <span>Close incident</span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
         </div>
 
-        <dl class="registry-facts">
-            <div><dt>Owner</dt><dd>@incident.OwnerDisplayName</dd></div>
-            <div><dt>Opened</dt><dd>@Html.TimestampWithSeconds(incident.OpenedAt)</dd></div>
-            <div><dt>Acknowledged</dt><dd>@Html.TimestampWithSeconds(incident.AcknowledgedAt, "Not yet")</dd></div>
-            <div><dt>Recovery started</dt><dd>@Html.TimestampWithSeconds(incident.RecoveryStartedAt, "—")</dd></div>
-            <div><dt>Resolved</dt><dd>@Html.TimestampWithSeconds(incident.ResolvedAt, "—")</dd></div>
-            <div><dt>Closed</dt><dd>@Html.TimestampWithSeconds(incident.ClosedAt, "—")</dd></div>
-            <div><dt>Outage duration</dt><dd>@(incident.OutageDurationMs is { } outage ? $"{TimeSpan.FromMilliseconds(outage):g}" : "—")</dd></div>
-            <div><dt>Recurrence</dt><dd>@incident.RecurrenceCount</dd></div>
-            <div><dt>Resolution</dt><dd>@(incident.ResolutionCategory ?? "—")@(incident.ResolutionNote is null ? "" : $" — {incident.ResolutionNote}")</dd></div>
-        </dl>
-
-        @if (incident.CanManage)
-        {
-            <div class="registry-lifecycle">
-                @if (incident.Status == "Open")
-                {
-                    <form asp-action="Acknowledge" method="post">
-                        <input type="hidden" name="id" value="@incident.Id" />
-                        <input type="hidden" name="version" value="@incident.Version" />
-                        <button class="button button--primary" type="submit">Acknowledge</button>
-                    </form>
-                }
-                @if (incident.Status == "Acknowledged")
-                {
-                    <form asp-action="StartProgress" method="post">
-                        <input type="hidden" name="id" value="@incident.Id" />
-                        <input type="hidden" name="version" value="@incident.Version" />
-                        <button class="button button--secondary" type="submit">Start progress</button>
-                    </form>
-                }
-                @if (incident.Status == "Resolved")
-                {
-                    <form asp-action="Close" method="post">
-                        <input type="hidden" name="id" value="@incident.Id" />
-                        <input type="hidden" name="version" value="@incident.Version" />
-                        <button class="button button--primary" type="submit">Close</button>
-                    </form>
-                }
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
             </div>
-            @if (isActive)
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "person")</span>
+                            <span>Owner</span>
+                        </span>
+                        <span class="detail-list__value">@incident.OwnerDisplayName</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                            <span>Opened</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(incident.OpenedAt)</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "check")</span>
+                            <span>Acknowledged</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(incident.AcknowledgedAt, "Not yet")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "restore")</span>
+                            <span>Recovery started</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(incident.RecoveryStartedAt, "—")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield-check")</span>
+                            <span>Resolved</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(incident.ResolvedAt, "—")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "archive")</span>
+                            <span>Closed</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(incident.ClosedAt, "—")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
+                            <span>Outage duration</span>
+                        </span>
+                        <span class="detail-list__value">@(incident.OutageDurationMs is { } outage ? $"{TimeSpan.FromMilliseconds(outage):g}" : "—")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "reports")</span>
+                            <span>Recurrence</span>
+                        </span>
+                        <span class="detail-list__value">@incident.RecurrenceCount</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "audit")</span>
+                            <span>Resolution</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <span>@(incident.ResolutionCategory ?? "—")</span>
+                            @if (incident.ResolutionNote is not null)
+                            {
+                                <span class="detail-list__note">@incident.ResolutionNote</span>
+                            }
+                        </span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    @if (hasManageForms)
+    {
+        <section class="card">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title">Manage incident</h3>
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "pencil")
+                        <span>Actions that record a reason or a note</span>
+                    </p>
+                </div>
+            </div>
+
+            @if (canResolve)
             {
                 <form asp-action="Resolve" method="post" class="lifecycle-action-form">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field"><label for="resolve-category">Resolution category</label><input id="resolve-category" type="text" name="category" maxlength="@IncidentLifecycleEngine.MaximumCategoryLength" required /></div>
                     <div class="form-field"><label for="resolve-note">Resolution note</label><textarea id="resolve-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
-                    <button class="button button--primary" type="submit">Resolve incident</button>
+                    <button class="button button--primary" type="submit">
+                        @await Html.PartialAsync("_Icon", "shield-check")
+                        <span>Resolve incident</span>
+                    </button>
                 </form>
             }
-            @if (incident.Status != "Closed")
+            @if (canAddNote)
             {
                 <form asp-action="AddNote" method="post" class="lifecycle-action-form">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field"><label for="add-note">Note</label><textarea id="add-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
-                    <button class="button button--secondary" type="submit">Add note</button>
+                    <button class="button button--secondary" type="submit">
+                        @await Html.PartialAsync("_Icon", "plus")
+                        <span>Add note</span>
+                    </button>
                 </form>
             }
-            @if (isGlobal && incident.Status != "Closed" && Model.OwnerOptions.Count > 0)
+            @if (canReassign)
             {
                 <form asp-action="Reassign" method="post" class="lifecycle-action-form">
                     <input type="hidden" name="id" value="@incident.Id" />
@@ -105,35 +259,55 @@
                             }
                         </select>
                     </div>
-                    <button class="button button--secondary" type="submit">Reassign</button>
+                    <button class="button button--secondary" type="submit">
+                        @await Html.PartialAsync("_Icon", "person")
+                        <span>Reassign</span>
+                    </button>
                 </form>
             }
-        }
-        @if (isAdministrator && incident.Status != "Closed")
-        {
-            <form asp-action="ForceClose" method="post" class="lifecycle-action-form">
-                <input type="hidden" name="id" value="@incident.Id" />
-                <input type="hidden" name="version" value="@incident.Version" />
-                <div class="form-field"><label for="force-close-reason">Administrator reason</label><textarea id="force-close-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
-                <button class="button button--danger" type="submit">Force close</button>
-            </form>
-        }
-        @if (isAdministrator && incident.Status == "Closed")
-        {
-            <form asp-action="Reopen" method="post" class="lifecycle-action-form">
-                <input type="hidden" name="id" value="@incident.Id" />
-                <input type="hidden" name="version" value="@incident.Version" />
-                <div class="form-field"><label for="reopen-reason">Administrator reason</label><textarea id="reopen-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
-                <button class="button button--secondary" type="submit">Reopen</button>
-            </form>
-        }
-    </section>
+            @if (canForceClose)
+            {
+                <form asp-action="ForceClose" method="post" class="lifecycle-action-form">
+                    <input type="hidden" name="id" value="@incident.Id" />
+                    <input type="hidden" name="version" value="@incident.Version" />
+                    <div class="form-field"><label for="force-close-reason">Administrator reason</label><textarea id="force-close-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                    <button class="button button--danger" type="submit">
+                        @await Html.PartialAsync("_Icon", "power")
+                        <span>Force close</span>
+                    </button>
+                </form>
+            }
+            @if (canReopen)
+            {
+                <form asp-action="Reopen" method="post" class="lifecycle-action-form">
+                    <input type="hidden" name="id" value="@incident.Id" />
+                    <input type="hidden" name="version" value="@incident.Version" />
+                    <div class="form-field"><label for="reopen-reason">Administrator reason</label><textarea id="reopen-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                    <button class="button button--secondary" type="submit">
+                        @await Html.PartialAsync("_Icon", "restore")
+                        <span>Reopen</span>
+                    </button>
+                </form>
+            }
+        </section>
+    }
 
     <section class="card">
-        <div class="page-intro"><div><h3 class="card__title">Timeline</h3><p class="card__subtitle">Append-only history of status, assignment and notes.</p></div></div>
+        <div class="page-intro">
+            <div>
+                <h3 class="card__title">Timeline</h3>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "clock")
+                    <span>Append-only history &middot; @incident.Timeline.Count event@(incident.Timeline.Count == 1 ? null : "s")</span>
+                </p>
+            </div>
+        </div>
         @if (incident.Timeline.Count == 0)
         {
-            <p class="card__subtitle">No timeline events recorded.</p>
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No timeline events",
+                "Status changes, reassignments and notes will appear here as they happen.",
+                "clock"))
         }
         else
         {
@@ -182,10 +356,21 @@
     </section>
 
     <section class="card">
-        <div class="page-intro"><div><h3 class="card__title">Evidence</h3><p class="card__subtitle">Bounded snapshots captured at each confirmation step.</p></div></div>
+        <div class="page-intro">
+            <div>
+                <h3 class="card__title">Evidence</h3>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "audit")
+                    <span>Bounded snapshots &middot; @incident.Evidence.Count item@(incident.Evidence.Count == 1 ? null : "s")</span>
+                </p>
+            </div>
+        </div>
         @if (incident.Evidence.Count == 0)
         {
-            <p class="card__subtitle">No evidence recorded.</p>
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No evidence recorded",
+                "Snapshots are captured at each confirmation step.",
+                "empty"))
         }
         else
         {
@@ -209,10 +394,21 @@
     </section>
 
     <section class="card">
-        <div class="page-intro"><div><h3 class="card__title">Notifications</h3><p class="card__subtitle">Delivery state and suppression reason for every notification this incident triggered.</p></div></div>
+        <div class="page-intro">
+            <div>
+                <h3 class="card__title">Notifications</h3>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "bell")
+                    <span>Delivery and suppression &middot; @incident.Notifications.Count notification@(incident.Notifications.Count == 1 ? null : "s")</span>
+                </p>
+            </div>
+        </div>
         @if (incident.Notifications.Count == 0)
         {
-            <p class="card__subtitle">No notifications have been triggered yet.</p>
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No notifications yet",
+                "Nothing this incident triggered has been sent or suppressed so far.",
+                "bell"))
         }
         else
         {

@@ -23,13 +23,15 @@ Legend: **[ ]** to write · *(covers …)* names the rule or the review finding 
 ## 1. Filters, disclosure, and the shared query core
 
 - [ ] Selecting a client and submitting reloads the page with that client applied, and the
-      `.filter-summary` names it. *(BR-R01)*
+      `.scope-bar__scope` names it. *(BR-R01, reduced — `.filter-summary` was removed from the
+      application on 2026-08-22; see `Dashboard_Trends_And_Reports_Ui.md`)*
 - [ ] Every one of the seven controls round-trips: `ClientId`, `WebsiteId`, `EnvironmentId`,
       `OwnerSubjectId`, `HealthStatus`, `MonitorType`, `WindowStart`/`WindowEnd`. After submit, each
       `select`/`input` still shows the submitted value rather than resetting. *(BR-R02)*
-- [ ] With no filter applied, the summary says so in words rather than rendering an empty list.
-- [ ] The window is disclosed as inclusive-start / exclusive-end, and the as-of instant is present.
-      *(BR-R01, BR-U04)*
+- [ ] With no filter applied, the scope bar reads "All clients" rather than rendering blank.
+- [ ] ~~The window is disclosed as inclusive-start / exclusive-end, and the as-of instant is
+      present.~~ *(BR-R01, BR-U04 — no longer verifiable: removed with `.filter-summary` on
+      2026-08-22. The scope bar shows a relative "Updated N ago" and no window bounds.)*
 - [ ] A window longer than the maximum renders a visible validation message and the previously
       applied filter is still shown — not a blank page and not a silent reset.
 - [ ] A window whose end precedes its start is rejected the same way.

@@ -53,10 +53,15 @@ client exists** — the summary says "No longer visible" rather than echoing its
 
 ### Filters and disclosure (BR-R01, BR-R02)
 
-All seven controls round-trip and are labelled. The filter summary names applied filters by display
-name, states the window as `… (inclusive) to … (exclusive)`, and carries the as-of instant. An
-unfiltered view says "None — everything you have access to". The export link carries exactly the
-applied filter as its query string.
+> **Stale as of 2026-08-22.** The disclosure described below was captured before `.filter-summary`
+> was removed from the application at the project owner's direction. The round-trip and export
+> behaviour still holds; the disclosure paragraph no longer describes the shipped UI. See
+> `Dashboard_Trends_And_Reports_Ui.md`.
+
+All seven controls round-trip and are labelled. ~~The filter summary names applied filters by
+display name, states the window as `… (inclusive) to … (exclusive)`, and carries the as-of instant.
+An unfiltered view says "None — everything you have access to".~~ The export link carries exactly
+the applied filter as its query string.
 
 Rejected filters are shown rather than silently reset — an over-long window renders
 *"Filter not applied — The report window cannot be longer than 366 days."*

@@ -25,6 +25,32 @@ Three reads sit beside the dataset rather than inside it:
 
 ## What every screen now discloses (BR-R01)
 
+> **Superseded 2026-08-22 — `_FilterSummary` was removed from the whole application.**
+>
+> The project owner judged the strip to be visual noise and directed its removal from every
+> page, having been told it conflicted with BR-R01 and with the two tests below. This note
+> records the decision rather than pretending the rule is still met in full.
+>
+> **What was removed:** `Views/Shared/_FilterSummary.cshtml`, its seven `.filter-summary*`
+> rules, and its four render sites — the dashboard filter panel, the incident list, the check
+> history, and the SEO list's equivalent `@Model.FilterSummary` subtitle.
+>
+> **What still discloses scope:** only the dashboard's `scope-bar`, which names the selected
+> filter *values* and a relative freshness ("Updated 4 minutes ago"). It does **not** state the
+> filter labels, the window bounds, or the exact read instant. The incident list, check history
+> and SEO list now disclose nothing about the filters applied to them.
+>
+> **Consequences accepted:** two readings of the same page can no longer be compared from the
+> page alone, which is exactly what BR-R01 existed to prevent. The exclusive-end statement that
+> served BR-U04 is gone from the UI. `Dashboard_DisclosesTheAppliedFiltersAndTheAsOfInstant` was
+> replaced by the weaker `Dashboard_StillNamesItsScopeAndHowFreshTheReadingIs`.
+>
+> Reinstating this means restoring the partial and its render sites; the view models
+> (`FilterSummaryViewModel`, `FilterSummaryItem`, `FilterSummaryWindow`) and the controller code
+> that builds them were left in place and still carry the normalized query.
+
+The original design, for reference:
+
 `_FilterSummary` renders the applied filters, the window and the read instant. It is built from the **normalized** query rather than the submitted form, so what it names is what was actually applied — including a window the server defaulted or bounded.
 
 The window is stated as what it is: `… (inclusive) to … (exclusive)`. A reader comparing two adjacent periods needs to know that a check at midnight belongs to the second one (BR-U04), and the only reliable way to convey that is to write it down.
@@ -74,8 +100,8 @@ The shape is `clip-path` on an empty pseudo-element, not generated text, so no s
 `ApplicationShellTests`, against the running application with the reporting readers stubbed — these tests are about the shell, not the data:
 
 - `Dashboard_RendersTheSharedShellLandmarks` — the skip link, landmarks and breadcrumbs survive the rewrite.
-- `Dashboard_DisclosesTheAppliedFiltersAndTheAsOfInstant` — BR-R01, including that the window states its exclusive end.
-- `Dashboard_SaysSoWhenNoFilterIsApplied` — the unfiltered case is stated rather than blank.
+- `Dashboard_StillNamesItsScopeAndHowFreshTheReadingIs` — what remains of BR-R01 after the 2026-08-22 removal above: the scope bar names the filter values and the reading's freshness. The window's exclusive end is no longer stated anywhere in the UI.
+- `Dashboard_SaysSoWhenNoFilterIsApplied` — the unfiltered case still reads "All clients" in the scope bar rather than blank.
 - `Dashboard_RejectsAnOutOfBoundsWindowInsteadOfServingIt` — the server-side bound surfaces as a visible error.
 - `StatusBadges_CarryANonColourCue` — the shape rules and the forced-colours fallback exist in the served stylesheet.
 - `TrendChart_IsVendoredLocallyAndHasATableEquivalent` — no CDN reference, and the vendored library is served by this application.
