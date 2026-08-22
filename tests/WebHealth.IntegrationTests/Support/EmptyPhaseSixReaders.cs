@@ -142,6 +142,24 @@ internal sealed class RecordingPageAuditRunner : IPageAuditRunner
     }
 }
 
+/// <summary>Records what the controller asked for instead of opening a crawl.</summary>
+internal sealed class RecordingCrawlRunner : ICrawlRunner
+{
+    public List<Guid> Requested { get; } = [];
+
+    /// <summary>Settable so a test can render the page as an instance with crawling switched off.</summary>
+    public bool CanQueue { get; set; } = true;
+
+    public Task<CrawlManualResult> QueueManualAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        Requested.Add(endpointId);
+        return Task.FromResult(CrawlManualResult.Queued(Guid.NewGuid()));
+    }
+}
+
 /// <summary>
 /// Authorizes every endpoint. The tests that matter here are the ones asserting a refusal, and a
 /// stub that refused everything would make those pass for the wrong reason.

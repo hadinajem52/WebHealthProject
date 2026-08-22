@@ -79,6 +79,96 @@
         }
     }
 
+    // A badge's added context, shown on hover and on focus. The element is positioned against
+    // the viewport rather than the badge, because the badges live inside table containers that
+    // scroll horizontally, and anything absolutely positioned inside one of those is clipped by
+    // it. One shared element is reused for every badge; there is only ever one visible.
+    function setUpBadgeTooltips() {
+        var badges = document.querySelectorAll('[data-badge-detail]');
+        if (badges.length === 0) {
+            return;
+        }
+
+        var tooltip = document.createElement('div');
+        tooltip.className = 'badge-tooltip';
+        tooltip.setAttribute('role', 'tooltip');
+        tooltip.hidden = true;
+        document.body.appendChild(tooltip);
+
+        var openBadge = null;
+        var GAP = 8;
+
+        function show(badge) {
+            var detail = badge.getAttribute('data-badge-detail');
+            if (!detail) {
+                return;
+            }
+
+            openBadge = badge;
+            tooltip.textContent = detail;
+            tooltip.hidden = false;
+
+            // Measured after the text is in place, or the first badge hovered is positioned
+            // against the previous badge's dimensions.
+            var anchor = badge.getBoundingClientRect();
+            var size = tooltip.getBoundingClientRect();
+
+            var left = anchor.left + (anchor.width / 2) - (size.width / 2);
+            left = Math.max(GAP, Math.min(left, window.innerWidth - size.width - GAP));
+
+            // Above by preference, below when the badge is too near the top of the viewport.
+            var top = anchor.top - size.height - GAP;
+            if (top < GAP) {
+                top = anchor.bottom + GAP;
+            }
+
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        }
+
+        function hide() {
+            openBadge = null;
+            tooltip.hidden = true;
+        }
+
+        Array.prototype.forEach.call(badges, function (badge) {
+            // The styled popup replaces the native one; leaving the attribute in place would
+            // show both, one of them after a delay and in the wrong position.
+            badge.removeAttribute('title');
+
+            badge.addEventListener('mouseenter', function () {
+                show(badge);
+            });
+            badge.addEventListener('mouseleave', hide);
+            badge.addEventListener('focus', function () {
+                show(badge);
+            });
+            badge.addEventListener('blur', hide);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (openBadge && event.key === 'Escape') {
+                openBadge.blur();
+                hide();
+            }
+        });
+
+        // A fixed element does not travel with the page, so it has to be dismissed rather than
+        // left floating over unrelated content. Capture, because the scroll usually happens in
+        // the table container rather than on the window.
+        window.addEventListener('scroll', function () {
+            if (openBadge) {
+                hide();
+            }
+        }, true);
+
+        window.addEventListener('resize', function () {
+            if (openBadge) {
+                hide();
+            }
+        });
+    }
+
     function onReady(callback) {
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', callback);
@@ -563,6 +653,8 @@
 
         document.querySelectorAll('[data-shell-password-toggle]')
             .forEach(setUpPasswordReveal);
+
+        setUpBadgeTooltips();
 
         setUpConfirmedSubmission();
 

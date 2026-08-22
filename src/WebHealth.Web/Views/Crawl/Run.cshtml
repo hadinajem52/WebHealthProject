@@ -1,44 +1,158 @@
 @model CrawlRunViewModel
+@using WebHealth.Domain.Crawling
 @{
     ViewData.SetTitle("Crawl run");
     ViewData.SetBreadcrumbs(
         new BreadcrumbItem("Broken links", "/Crawl"),
         new BreadcrumbItem("Crawl run"));
     var run = Model.Run;
+    var runTone = CrawlRunDisplay.StatusTone(run);
+
+    static string StatusIcon(string tone) => tone switch
+    {
+        "success" => "success",
+        "danger" => "error",
+        "warning" => "warning",
+        "info" => "information",
+        _ => "clock"
+    };
 }
 
 <div class="stack">
-    <section class="card">
+    @* No card title: the page heading already reads "Crawl run", and this run has no other
+       identity to show -- the summary carries an endpoint id, not its URL. The status and what
+       it means lead instead. *@
+    <section class="card" aria-labelledby="crawl-run-label">
         <div class="page-intro">
             <div>
-                <h2 class="card__title">Crawl run</h2>
-                <p class="card__subtitle">@CrawlRunDisplay.DescribeStopReason(run)</p>
+                <p class="card__status" data-status="@runTone" id="crawl-run-label">
+                    @await Html.PartialAsync("_Icon", StatusIcon(runTone))
+                    <span>@CrawlRunDisplay.DescribeStatus(run) &middot; @CrawlRunDisplay.DescribeStopReason(run)</span>
+                </p>
             </div>
-            <span class="badge" data-status="@CrawlRunDisplay.StatusTone(run)">@CrawlRunDisplay.DescribeStatus(run)</span>
+            <div class="form-actions">
+                <a class="button button--secondary" asp-action="Index" asp-route-endpointId="@run.EndpointId">
+                    @await Html.PartialAsync("_Icon", "arrow-left")
+                    <span>Back to crawl history</span>
+                </a>
+            </div>
         </div>
 
-        <dl class="registry-facts">
-            <div><dt>Started</dt><dd>@Html.TimestampWithSeconds(run.StartedAt)</dd></div>
-            <div><dt>Finished</dt><dd>@Html.TimestampWithSeconds(run.FinishedAt, "Still running")</dd></div>
-            <div><dt>Pages fetched</dt><dd>@run.PagesFetched</dd></div>
-            <div><dt>Links recorded</dt><dd>@run.LinksRecorded</dd></div>
-            <div><dt>Broken links</dt><dd>@run.BrokenLinkCount</dd></div>
-            <div><dt>Covered whole scope</dt><dd>@(run.CoveredWholeScope ? "Yes" : "No")</dd></div>
-            <div><dt>Robots override</dt><dd>@(run.RobotsOverrideGranted ? "Granted" : "Not granted")</dd></div>
-        </dl>
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
+            </div>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                            <span>Started</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(run.StartedAt)</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "check")</span>
+                            <span>Finished</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(run.FinishedAt, "Still running")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "audit")</span>
+                            <span>Pages fetched</span>
+                        </span>
+                        <span class="detail-list__value">@run.PagesFetched</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "link")</span>
+                            <span>Links recorded</span>
+                        </span>
+                        <span class="detail-list__value">@run.LinksRecorded</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "broken-link")</span>
+                            <span>Broken links</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                run.BrokenLinkCount == 0 ? StatusBadges.Success : StatusBadges.Warning,
+                                run.BrokenLinkCount.ToString(),
+                                run.CoveredWholeScope
+                                    ? null
+                                    : "This crawl did not cover the whole scope, so links it never reached are not counted."))
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "seo")</span>
+                            <span>Covered whole scope</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @* "No" is a verdict, and a crawl still walking the site has not
+                               earned one yet. *@
+                            @if (run.Status == CrawlRunStatuses.Running)
+                            {
+                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                    StatusBadges.Info,
+                                    "Not yet",
+                                    "The crawl is still running, so how much of the site it covers is not settled."))
+                            }
+                            else
+                            {
+                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                    run.CoveredWholeScope ? StatusBadges.Success : StatusBadges.Warning,
+                                    run.CoveredWholeScope ? "Yes" : "No",
+                                    CrawlRunDisplay.DescribeStopReason(run)))
+                            }
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield")</span>
+                            <span>Robots override</span>
+                        </span>
+                        <span class="detail-list__value">@(run.RobotsOverrideGranted ? "Granted" : "Not granted")</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
     </section>
 
-    <section class="card">
+    <section class="card" aria-labelledby="crawl-broken-heading">
         <div class="page-intro">
             <div>
-                <h2 class="card__title">Broken links</h2>
-                <p class="card__subtitle">Each row is one link on one page, so a page linking to the same broken URL twice appears once.</p>
+                <h3 class="card__title" id="crawl-broken-heading">Broken links</h3>
+                <p class="card__status" data-status="@(run.BrokenLinkCount == 0 ? "success" : "warning")">
+                    @await Html.PartialAsync("_Icon", run.BrokenLinkCount == 0 ? "success" : "warning")
+                    <span>@run.BrokenLinkCount recorded by this crawl</span>
+                </p>
             </div>
         </div>
+
+        <p class="card__subtitle">
+            Each row is one link on one page, so a page linking to the same broken URL twice
+            appears once.
+        </p>
 
         @if (Model.BrokenLinks.Count == 0)
         {
-
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 Model.Offset == 0 ? "No broken links were recorded" : "No more broken links",
                 Model.Offset == 0
@@ -46,7 +160,7 @@
                         ? "This crawl covered the whole scope. Links it could not classify are not counted as broken."
                         : "This crawl did not cover the whole scope, so links it never reached are not counted here.")
                     : "You have reached the end of the list.",
-                "reports"))
+                "broken-link"))
         }
         else
         {
@@ -65,12 +179,16 @@
                         @foreach (var link in Model.BrokenLinks)
                         {
                             <tr>
-
                                 <td data-label="Source page"><span class="target-url">@(link.SourceUrl ?? "Seed URL")</span></td>
                                 <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
                                 <td data-label="Scope">@(link.IsInternal ? "Internal" : "External")</td>
                                 <td data-label="Status">
-                                    <span class="badge" data-status="danger">@(link.StatusCode?.ToString() ?? link.Classification)</span>
+                                    @* A bare status code says nothing to a reader who does not
+                                       know them; the classification behind it does. *@
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        StatusBadges.Danger,
+                                        link.StatusCode?.ToString() ?? link.Classification,
+                                        link.StatusCode is null ? null : link.Classification))
                                 </td>
                             </tr>
                         }

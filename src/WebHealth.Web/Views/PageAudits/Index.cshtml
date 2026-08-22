@@ -1,4 +1,4 @@
-@model PageAuditIndexViewModel
+﻿@model PageAuditIndexViewModel
 @using WebHealth.Domain.PageAudits
 @{
     ViewData.SetTitle("PageSpeed");
@@ -6,23 +6,32 @@
     var summary = Model.Summary;
     var run = summary?.LatestRun;
     var comparison = summary?.Comparison;
+    var selectedLabel = Model.Endpoints
+        .FirstOrDefault(candidate => candidate.Id == Model.SelectedEndpointId)?.Label;
+
+    static string StatusIcon(string tone) => tone switch
+    {
+        "success" => "success",
+        "danger" => "error",
+        "warning" => "warning",
+        "info" => "information",
+        _ => "clock"
+    };
 }
 
 <div class="stack">
-    <section class="card">
-        <div class="page-intro">
-            <div>
-                <h2 class="card__title">PageSpeed</h2>
-                <p class="card__subtitle">
-                    Google PageSpeed Insights runs Lighthouse against a public page and returns a
-                    technical SEO score. It is an automated audit of the page's markup, not a
-                    prediction of search ranking or traffic.
-                </p>
-            </div>
-        </div>
+    @* No card title here: the page heading already reads "PageSpeed", and repeating it
+       immediately below is a second first-level label for the same thing. The card is the
+       control that scopes the page, so the control leads and the explanation follows it. *@
+    <section class="card" aria-labelledby="pagespeed-scope-label">
+        <p class="card__subtitle" id="pagespeed-scope-label">
+            Google PageSpeed Insights runs Lighthouse against a public page and returns a
+            technical SEO score. It is an automated audit of the page's markup, not a
+            prediction of search ranking or traffic.
+        </p>
 
-        <form method="get" class="filter-grid">
-            <div class="form-field form-field--full">
+        <form method="get" class="filter-inline filter-inline--wide">
+            <div class="form-field">
                 <label for="endpointId">Endpoint</label>
                 <select id="endpointId" name="endpointId">
                     <option value="">Select an endpoint</option>
@@ -32,120 +41,193 @@
                     }
                 </select>
             </div>
-            <div class="filter-grid__actions">
-                <button class="button button--primary" type="submit">
-                    @await Html.PartialAsync("_Icon", "filter")
-                    <span>Show audits</span>
-                </button>
-            </div>
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "search")
+                <span>Show audits</span>
+            </button>
         </form>
+    </section>
 
-        @if (summary is null)
-        {
+    @if (summary is null)
+    {
+        <section class="card">
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "Select an endpoint",
                 "PageSpeed audits are configured and recorded per endpoint. Choose one to see its score.",
                 "reports"))
-        }
-        else if (!summary.IsConfigured || !summary.IsEnabled)
-        {
+        </section>
+    }
+    else if (!summary.IsConfigured || !summary.IsEnabled)
+    {
+        <section class="card">
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "PageSpeed auditing is off for this endpoint",
                 "Enable it on the endpoint to have Google audit this page. Enabling sends the URL to Google and asks Google infrastructure to load it, so it is only suitable for public pages.",
                 "reports"))
-        }
-        else
-        {
-            <dl class="registry-facts">
-                <div>
-                    <dt>Lighthouse technical SEO score</dt>
-                    <dd>
-                        @if (run is not null && run.HasScore)
-                        {
-                            <span class="badge" data-status="@PageAuditDisplay.ScoreTone(run.Score)">@run.Score / 100</span>
-                        }
-                        else
-                        {
-                            <span class="badge" data-status="neutral">Not measured</span>
-                        }
-                    </dd>
-                </div>
-                <div>
-                    <dt>Latest run</dt>
-                    <dd>
-                        @if (run is null)
-                        {
-                            <span>No audit has run yet</span>
-                        }
-                        else
-                        {
-                            <span class="badge" data-status="@PageAuditDisplay.StatusTone(run)">@PageAuditDisplay.DescribeStatus(run)</span>
-                        }
-                    </dd>
-                </div>
-                <div><dt>Strategy</dt><dd>@summary.Strategy</dd></div>
-                <div>
-                    <dt>Scheduled</dt>
-                    <dd>
-                        @if (summary.SchedulingEnabled)
-                        {
-                            <span>Every @summary.IntervalHours hours</span>
-                            @if (summary.NextDueAt is { } due)
-                            {
-                                <span class="form-field__hint">Next @Html.Timestamp(due)</span>
-                            }
-                        }
-                        else
-                        {
-                            <span>On demand only</span>
-                        }
-                    </dd>
-                </div>
-                @if (run?.AnalysisAt is { } analysedAt)
-                {
-                    <div><dt>Audited</dt><dd>@Html.Timestamp(analysedAt)</dd></div>
-                }
-                @if (run?.LighthouseVersion is { } version)
-                {
-                    <div><dt>Lighthouse version</dt><dd>@version</dd></div>
-                }
-            </dl>
+        </section>
+    }
 
-            @if (Model.CanRunNow)
-            {
-                <form method="post" asp-action="RunNow">
-                    <input type="hidden" name="endpointId" value="@Model.SelectedEndpointId" />
-                    <button class="button button--primary" type="submit">
-                        @await Html.PartialAsync("_Icon", "play")
-                        <span>Run now</span>
-                    </button>
-                    <span class="form-field__hint">Asks Google to audit this page now. The score appears once Google answers.</span>
-                </form>
-            }
-        }
-    </section>
+    @if (summary is not null && summary.IsConfigured && summary.IsEnabled)
+    {
+        var summaryTone = run is null ? "neutral" : PageAuditDisplay.StatusTone(run);
+
+        <section class="card">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title target-url">@(selectedLabel ?? "Selected endpoint")</h3>
+                    <p class="card__status" data-status="@summaryTone">
+                        @await Html.PartialAsync("_Icon", StatusIcon(summaryTone))
+                        <span>PageSpeed &middot; @(run is null ? "No audit has run yet" : PageAuditDisplay.DescribeStatus(run))</span>
+                    </p>
+                </div>
+
+                @if (Model.CanRunNow)
+                {
+                    <div class="form-actions">
+                        <form method="post" asp-action="RunNow">
+                            <input type="hidden" name="endpointId" value="@Model.SelectedEndpointId" />
+                            <button class="button button--primary" type="submit"
+                                    title="Asks Google to audit this page now. The score appears once Google answers.">
+                                @await Html.PartialAsync("_Icon", "play")
+                                <span>Run now</span>
+                            </button>
+                        </form>
+                    </div>
+                }
+            </div>
+
+            <div class="detail-list">
+                <div class="detail-list__head" aria-hidden="true">
+                    <span>Subject</span>
+                    <span>Status</span>
+                </div>
+                <ul class="detail-list__items">
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
+                                <span>Lighthouse technical SEO score</span>
+                            </span>
+                            <span class="detail-list__value">
+                                @if (run is not null && run.HasScore)
+                                {
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.ScoreTone(run.Score), $"{run.Score} / 100"))
+                                }
+                                else
+                                {
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("neutral", "Not measured"))
+                                }
+                            </span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                                <span>Latest run</span>
+                            </span>
+                            <span class="detail-list__value">
+                                @if (run is null)
+                                {
+                                    <span>No audit has run yet</span>
+                                }
+                                else
+                                {
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.StatusTone(run), PageAuditDisplay.DescribeStatus(run)))
+                                }
+                            </span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "settings")</span>
+                                <span>Strategy</span>
+                            </span>
+                            <span class="detail-list__value">@summary.Strategy</span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                                <span>Scheduled</span>
+                            </span>
+                            <span class="detail-list__value">
+                                @if (summary.SchedulingEnabled)
+                                {
+                                    <span>Every @summary.IntervalHours hours</span>
+                                    @if (summary.NextDueAt is { } due)
+                                    {
+                                        <span class="detail-list__note">Next @Html.Timestamp(due)</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span>On demand only</span>
+                                }
+                            </span>
+                        </div>
+                    </li>
+                    @if (run?.AnalysisAt is { } analysedAt)
+                    {
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "calendar")</span>
+                                    <span>Audited</span>
+                                </span>
+                                <span class="detail-list__value">@Html.Timestamp(analysedAt)</span>
+                            </div>
+                        </li>
+                    }
+                    @if (run?.LighthouseVersion is { } version)
+                    {
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "information")</span>
+                                    <span>Lighthouse version</span>
+                                </span>
+                                <span class="detail-list__value">@version</span>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </section>
+    }
 
     @if (summary is not null && run is not null)
     {
         @if (run.IsActive)
         {
             <section class="card">
-                <h3 class="card__title">Audit in progress</h3>
-                <p class="card__subtitle">
-                    Google is running this audit. Reload the page in a moment to see the score.
-                    @if (run.AttemptCount > 1)
-                    {
-                        <span>This is attempt @run.AttemptCount.</span>
-                    }
-                </p>
+                <div class="page-intro">
+                    <div>
+                        <h3 class="card__title">Audit in progress</h3>
+                        <p class="card__status" data-status="info">
+                            @await Html.PartialAsync("_Icon", "clock")
+                            <span>Google is running this audit@(run.AttemptCount > 1 ? $" · attempt {run.AttemptCount}" : null)</span>
+                        </p>
+                    </div>
+                </div>
+                <p class="card__subtitle">Reload the page in a moment to see the score.</p>
             </section>
         }
 
         @if (run.Status == PageAuditRunStatuses.Failed)
         {
             <section class="card">
-                <h3 class="card__title">This audit produced no score</h3>
-                <p class="card__subtitle">@PageAuditDisplay.DescribeFailure(run.FailureCategory)</p>
+                <div class="page-intro">
+                    <div>
+                        <h3 class="card__title">This audit produced no score</h3>
+                        <p class="card__status" data-status="danger">
+                            @await Html.PartialAsync("_Icon", "error")
+                            <span>@PageAuditDisplay.DescribeFailure(run.FailureCategory)</span>
+                        </p>
+                    </div>
+                </div>
                 @if (run.SafeDiagnostic is { } diagnostic)
                 {
                     <p class="card__subtitle">@diagnostic</p>
@@ -163,16 +245,49 @@
                 <div class="page-intro">
                     <div>
                         <h3 class="card__title">Change since the previous audit</h3>
-                        <p class="card__subtitle">@PageAuditDisplay.DescribeComparison(comparison)</p>
+                        <p class="card__status" data-status="neutral">
+                            @await Html.PartialAsync("_Icon", "reports")
+                            <span>@PageAuditDisplay.DescribeComparison(comparison)</span>
+                        </p>
                     </div>
                 </div>
                 @if (comparison.PreviousRunId is not null)
                 {
-                    <dl class="registry-facts">
-                        <div><dt>Current</dt><dd>@comparison.CurrentScore</dd></div>
-                        <div><dt>Previous</dt><dd>@comparison.PreviousScore</dd></div>
-                        <div><dt>Change</dt><dd>@(comparison.Delta > 0 ? "+" : null)@comparison.Delta</dd></div>
-                    </dl>
+                    <div class="detail-list">
+                        <div class="detail-list__head" aria-hidden="true">
+                            <span>Subject</span>
+                            <span>Status</span>
+                        </div>
+                        <ul class="detail-list__items">
+                            <li>
+                                <div class="detail-list__row">
+                                    <span class="detail-list__subject">
+                                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                                        <span>Current</span>
+                                    </span>
+                                    <span class="detail-list__value">@comparison.CurrentScore</span>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="detail-list__row">
+                                    <span class="detail-list__subject">
+                                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "restore")</span>
+                                        <span>Previous</span>
+                                    </span>
+                                    <span class="detail-list__value">@comparison.PreviousScore</span>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="detail-list__row">
+                                    <span class="detail-list__subject">
+                                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
+                                        <span>Change</span>
+                                    </span>
+                                    <span class="detail-list__value">@(comparison.Delta > 0 ? "+" : null)@comparison.Delta</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
                 }
             </section>
         }
@@ -180,8 +295,15 @@
         @if (run.WarningSummary is { } warnings)
         {
             <section class="card">
-                <h3 class="card__title">Provider warnings</h3>
-                <p class="card__subtitle">Google reported these while running the audit. The score is still usable.</p>
+                <div class="page-intro">
+                    <div>
+                        <h3 class="card__title">Provider warnings</h3>
+                        <p class="card__status" data-status="warning">
+                            @await Html.PartialAsync("_Icon", "warning")
+                            <span>Reported by Google while running the audit &middot; the score is still usable</span>
+                        </p>
+                    </div>
+                </div>
                 <p>@warnings</p>
             </section>
         }
@@ -189,12 +311,41 @@
         @if (run.RedirectedTo is { } finalUrl)
         {
             <section class="card">
-                <h3 class="card__title">Google audited a different URL</h3>
-                <p class="card__subtitle">
-                    The request asked for <span class="target-url">@run.RequestedUrl</span> and Google
-                    followed a redirect to <span class="target-url">@finalUrl</span>. The score describes
-                    the page it landed on.
-                </p>
+                <div class="page-intro">
+                    <div>
+                        <h3 class="card__title">Google audited a different URL</h3>
+                        <p class="card__status" data-status="warning">
+                            @await Html.PartialAsync("_Icon", "link")
+                            <span>The score describes the page the redirect landed on</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="detail-list">
+                    <div class="detail-list__head" aria-hidden="true">
+                        <span>Subject</span>
+                        <span>Status</span>
+                    </div>
+                    <ul class="detail-list__items">
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "arrow-right")</span>
+                                    <span>Requested</span>
+                                </span>
+                                <span class="detail-list__value target-url">@run.RequestedUrl</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "link")</span>
+                                    <span>Audited</span>
+                                </span>
+                                <span class="detail-list__value target-url">@finalUrl</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
             </section>
         }
 
@@ -202,54 +353,111 @@
             <div class="page-intro">
                 <div>
                     <h3 class="card__title">Audits</h3>
-                    <p class="card__subtitle">
-                        Manual and not-applicable audits are listed apart from passed ones: neither is
-                        a check this page passed, and neither counts against the score.
+                    <p class="card__status" data-status="@(summary.Counts.Failed > 0 ? "danger" : "success")">
+                        @await Html.PartialAsync("_Icon", summary.Counts.Failed > 0 ? "error" : "success")
+                        <span>@summary.Counts.Failed failed &middot; @summary.Counts.Passed passed</span>
                     </p>
                 </div>
             </div>
 
-            <dl class="registry-facts">
-                <div><dt>Failed</dt><dd>@summary.Counts.Failed</dd></div>
-                <div><dt>Passed</dt><dd>@summary.Counts.Passed</dd></div>
-                <div><dt>Manual</dt><dd>@summary.Counts.Manual</dd></div>
-                <div><dt>Not applicable</dt><dd>@summary.Counts.NotApplicable</dd></div>
-                <div><dt>Informative</dt><dd>@summary.Counts.Informative</dd></div>
-                <div><dt>Errors</dt><dd>@summary.Counts.Error</dd></div>
-            </dl>
+            <p class="card__subtitle">
+                Manual and not-applicable audits are listed apart from passed ones: neither is
+                a check this page passed, and neither counts against the score.
+            </p>
+
+            <div class="detail-list">
+                <div class="detail-list__head" aria-hidden="true">
+                    <span>Subject</span>
+                    <span>Status</span>
+                </div>
+                <ul class="detail-list__items">
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "error")</span>
+                                <span>Failed</span>
+                            </span>
+                            <span class="detail-list__value">@summary.Counts.Failed</span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "success")</span>
+                                <span>Passed</span>
+                            </span>
+                            <span class="detail-list__value">@summary.Counts.Passed</span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "person")</span>
+                                <span>Manual</span>
+                            </span>
+                            <span class="detail-list__value">@summary.Counts.Manual</span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "close")</span>
+                                <span>Not applicable</span>
+                            </span>
+                            <span class="detail-list__value">@summary.Counts.NotApplicable</span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "information")</span>
+                                <span>Informative</span>
+                            </span>
+                            <span class="detail-list__value">@summary.Counts.Informative</span>
+                        </div>
+                    </li>
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "warning")</span>
+                                <span>Errors</span>
+                            </span>
+                            <span class="detail-list__value">@summary.Counts.Error</span>
+                        </div>
+                    </li>
+                </ul>
+            </div>
 
             @foreach (var auditGroup in Model.Sections.Where(candidate => candidate.Items.Count > 0))
             {
                 <details class="disclosure" open="@(auditGroup.Status == PageAuditItemStatuses.Failed)">
-                    <summary>
-                        <span class="badge" data-status="@PageAuditDisplay.ItemTone(auditGroup.Status)">@auditGroup.Items.Count</span>
-                        <span>@auditGroup.Title</span>
+                    <summary class="disclosure__summary">
+                        <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        <span class="disclosure__title">@auditGroup.Title</span>
+                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                            PageAuditDisplay.ItemTone(auditGroup.Status),
+                            auditGroup.Items.Count.ToString(),
+                            $"{auditGroup.Items.Count} {auditGroup.Title.ToLowerInvariant()}"))
                     </summary>
-                    <p class="card__subtitle">@auditGroup.Description</p>
-                    <div class="table-scroll table-scroll--flush">
-                        <table class="data-table">
-                            <caption class="visually-hidden">@auditGroup.Title</caption>
-                            <thead>
-                                <tr>
-                                    <th scope="col">Audit</th>
-                                    <th scope="col">What it checks</th>
-                                    <th scope="col">Value</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var item in auditGroup.Items)
-                                {
-                                    <tr>
-
-                                        <td data-label="Audit">@(item.Title ?? item.AuditId)</td>
-                                        <td data-label="What it checks">@item.Description</td>
-                                        <td data-label="Value">
-                                            @(item.DisplayValue ?? item.Explanation ?? item.ErrorMessage)
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
+                    <div class="disclosure__body">
+                        <p class="disclosure__description">@auditGroup.Description</p>
+                        <ul class="audit-list">
+                            @foreach (var item in auditGroup.Items)
+                            {
+                                <li>
+                                    <div class="audit-list__row">
+                                        <div>
+                                            <p class="audit-list__title">@Html.LighthouseText(item.Title ?? item.AuditId)</p>
+                                            @if (!string.IsNullOrWhiteSpace(item.Description))
+                                            {
+                                                <p class="audit-list__description">@Html.LighthouseText(item.Description)</p>
+                                            }
+                                        </div>
+                                        <div class="audit-list__value">@Html.LighthouseText(item.DisplayValue ?? item.Explanation ?? item.ErrorMessage)</div>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
                     </div>
                 </details>
             }
@@ -262,7 +470,10 @@
             <div class="page-intro">
                 <div>
                     <h3 class="card__title">Run history</h3>
-                    <p class="card__subtitle">Select a run to see the audits it recorded.</p>
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "clock")
+                        <span>@Model.Runs.Count run@(Model.Runs.Count == 1 ? null : "s") &middot; select one to see the audits it recorded</span>
+                    </p>
                 </div>
             </div>
             <div class="table-scroll table-scroll--flush">

@@ -1090,6 +1090,28 @@ code,
     gap: var(--space-3);
 }
 
+/* A select that carries a long label -- "Client - Environment - https://..." -- needs more
+   room than the 26rem cap the shared rule sets, or every option truncates. Capped short of the
+   row so a second action still fits beside it rather than being pushed onto its own line. */
+.filter-inline--wide .form-field {
+    max-width: 32rem;
+}
+
+/* The picker and the action that uses it share one row, but a GET form and a POST form cannot
+   be the same element. Each form is a flex item in the row, and the inner one lays its field
+   and submit out the same way the row does.
+
+   flex: 0 1 auto keeps the group at its content width. Letting it grow would stretch it across
+   the row and strand the button that follows it against the far edge. */
+.filter-inline__group {
+    display: flex;
+    min-width: 0;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3) var(--space-4);
+}
+
 .filter-inline .form-field {
     min-width: 0;
     flex: 1 1 18rem;
@@ -1766,6 +1788,10 @@ code,
     color: var(--status-warning);
 }
 
+.card__status[data-status="info"] svg {
+    color: var(--status-info);
+}
+
 .card__status[data-status="danger"] svg {
     color: var(--status-danger);
 }
@@ -1870,4 +1896,239 @@ code,
         grid-template-columns: minmax(0, 1fr);
         gap: var(--space-2);
     }
+}
+
+/* Audit disclosure -- a collapsible group of Lighthouse audits.
+   The title leads and the count follows it: the count is how many, which only means
+   something once you know what of. A red "2" before the words reads as an error badge
+   rather than as a tally. */
+.disclosure {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-tile);
+    margin-top: var(--space-4);
+}
+
+.disclosure__summary {
+    display: flex;
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-tile);
+    cursor: pointer;
+    gap: var(--space-3);
+    list-style: none;
+}
+
+/* Both spellings are needed: WebKit still uses the pseudo-element, everyone else ::marker. */
+.disclosure__summary::-webkit-details-marker {
+    display: none;
+}
+
+.disclosure__summary::marker {
+    content: "";
+}
+
+.disclosure__summary:hover {
+    background-color: var(--surface-sunken);
+}
+
+.disclosure__chevron {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--color-gray-400);
+    transition: transform var(--motion-fast) var(--motion-easing);
+}
+
+.disclosure__chevron svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.disclosure[open] > .disclosure__summary .disclosure__chevron {
+    transform: rotate(180deg);
+}
+
+.disclosure__title {
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    line-height: 20px;
+}
+
+.disclosure__count {
+    min-width: 1.75rem;
+}
+
+.disclosure__body {
+    padding: 0 var(--space-4) var(--space-4);
+}
+
+.disclosure__description {
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: 18px;
+}
+
+/* Audit rows. The audit name and its explanation belong together in one column: the
+   explanation is a sentence about the name, and splitting them across two table cells
+   forced a narrow name column that wrapped every title. The measured value is the only
+   thing that scans vertically, so it is the only thing given its own column. */
+.audit-list {
+    padding: 0;
+    margin: var(--space-3) 0 0;
+    list-style: none;
+}
+
+.audit-list > li {
+    position: relative;
+}
+
+.audit-list > li + li::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 1px;
+    background-color: var(--border-subtle);
+    content: "";
+}
+
+.audit-list__row {
+    display: grid;
+    align-items: baseline;
+    padding: var(--space-3) 0;
+    gap: var(--space-3) var(--space-4);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 10rem);
+}
+
+.audit-list__title {
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    line-height: 20px;
+}
+
+.audit-list__description {
+    margin-top: 0.25rem;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: 18px;
+}
+
+.audit-list__description a {
+    color: var(--text-link);
+    text-decoration: underline;
+}
+
+.audit-list__description code,
+.audit-list__title code {
+    padding: 0.05rem 0.25rem;
+    border-radius: 0.25rem;
+    background-color: var(--surface-sunken);
+    font-size: 0.9em;
+}
+
+.audit-list__value {
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    line-height: 20px;
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.audit-list__value:empty::before {
+    color: var(--color-gray-400);
+    content: "—";
+}
+
+@media (max-width: 48em) {
+    .audit-list__row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-1);
+    }
+
+    .audit-list__value {
+        text-align: left;
+    }
+}
+
+/* A badge carrying added context. The "i" sits after the label so the label still reads
+   first, and the whole badge is the hover/focus target rather than the icon alone. */
+.badge--detailed {
+    cursor: help;
+    gap: 0.25rem;
+}
+
+.badge__info {
+    display: inline-flex;
+    flex-shrink: 0;
+    opacity: 0.75;
+}
+
+.badge__info svg {
+    width: 0.8125rem;
+    height: 0.8125rem;
+}
+
+.badge--detailed:hover .badge__info,
+.badge--detailed:focus-visible .badge__info {
+    opacity: 1;
+}
+
+/* Positioned by shell.js against the viewport, not the badge, so a table with its own
+   scroll container cannot clip it. */
+.badge-tooltip {
+    position: fixed;
+    z-index: 100;
+    max-width: 20rem;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-tile);
+    background-color: var(--color-gray-700);
+    color: var(--color-white);
+    font-size: var(--font-size-xs);
+    font-weight: 400;
+    line-height: 18px;
+    box-shadow: var(--shadow-raised);
+    pointer-events: none;
+    text-align: left;
+}
+
+.badge-tooltip[hidden] {
+    display: none;
+}
+
+/* Filter bar -- fields, switches and actions on one wrapping line.
+   The grid it replaces gave the actions a full-width row of their own
+   (grid-column: 1 / -1), which left a band of empty card between the last field and the
+   submit button and pushed the button as far from the fields as the card allowed. */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-top: var(--space-5);
+    gap: var(--space-3) var(--space-4);
+}
+
+.filter-bar .form-field {
+    min-width: 0;
+    flex: 1 1 11rem;
+    max-width: 17rem;
+}
+
+.filter-bar .form-field input,
+.filter-bar .form-field select,
+.filter-bar .button {
+    height: 2.75rem;
+}
+
+/* A switch has no label above it, so bottom alignment would sit it on the baseline of the
+   select rather than level with the middle of the control. */
+.filter-bar__switch {
+    padding-bottom: 0.8125rem;
+}
+
+.filter-bar__actions {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    gap: var(--space-2);
 }

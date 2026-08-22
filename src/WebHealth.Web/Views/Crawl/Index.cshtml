@@ -6,49 +6,98 @@
 }
 
 <div class="stack">
-    <section class="card">
-        <div class="page-intro">
-            <div>
-                <h2 class="card__title">Broken links</h2>
-                <p class="card__subtitle">Crawl history for one endpoint, and how its latest full-scope crawl compares to the one before it.</p>
-            </div>
-        </div>
+    @* No card title here: the page heading already reads "Broken links". This card is the
+       control that scopes everything below it, so it carries the explanation and the picker. *@
+    <section class="card" aria-labelledby="crawl-scope-label">
+        <p class="card__subtitle" id="crawl-scope-label">
+            Crawl history for one endpoint, and how its latest full-scope crawl compares to the
+            one before it.
+        </p>
 
-        <form method="get" class="filter-grid">
-            <div class="form-field form-field--full">
-                <label for="endpointId">Endpoint</label>
-                <select id="endpointId" name="endpointId">
-                    <option value="">Select an endpoint</option>
-                    @foreach (var option in Model.Endpoints)
-                    {
-                        <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
-                    }
-                </select>
-            </div>
-            <div class="filter-grid__actions">
+        @* Two forms, one row: picking an endpoint is a GET and starting a crawl is a POST, so
+           they cannot share a form element. The row is the flex container and each form is an
+           item in it. *@
+        <div class="filter-inline filter-inline--wide">
+            <form method="get" class="filter-inline__group">
+                <div class="form-field">
+                    <label for="endpointId">Endpoint</label>
+                    <select id="endpointId" name="endpointId">
+                        <option value="">Select an endpoint</option>
+                        @foreach (var option in Model.Endpoints)
+                        {
+                            <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
+                        }
+                    </select>
+                </div>
                 <button class="button button--primary" type="submit">
-                    @await Html.PartialAsync("_Icon", "filter")
+                    @await Html.PartialAsync("_Icon", "search")
                     <span>Show crawls</span>
                 </button>
-            </div>
-        </form>
+            </form>
 
-        @if (Model.SelectedEndpointId is null)
-        {
+            @* The selection has to be one the picker actually lists. An endpointId in the query
+               string that resolves to nothing leaves the select showing its placeholder, and a
+               Run crawl button beside a picker reading "Select an endpoint" offers to crawl
+               something the page cannot name. *@
+            @if (Model.SelectedEndpointId is { } runTarget
+                && Model.CanRunNow
+                && Model.Endpoints.Any(option => option.Id == runTarget))
+            {
+                @if (Model.ActiveRunId is { } activeRunId)
+                {
+                    @* One crawl per endpoint is a database constraint, so a second press could
+                       only be refused. Offer the run that is already going instead. *@
+                    <a class="button button--secondary" asp-action="Run" asp-route-id="@activeRunId">
+                        @await Html.PartialAsync("_Icon", "clock")
+                        <span>Crawl in progress</span>
+                    </a>
+                }
+                else
+                {
+                    <form method="post" asp-action="RunNow">
+                        <input type="hidden" name="endpointId" value="@runTarget" />
+                        <button class="button button--secondary" type="submit"
+                                title="Fetches this site page by page and checks every link it finds. External links are not fetched.">
+                            @await Html.PartialAsync("_Icon", "play")
+                            <span>Run crawl</span>
+                        </button>
+                    </form>
+                }
+            }
+        </div>
+    </section>
+
+    @if (Model.SelectedEndpointId is null)
+    {
+        <section class="card">
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "Select an endpoint",
                 "Crawl results are recorded per endpoint. Choose one to see its history.",
                 "reports"))
-        }
-        else if (Model.Runs.Count == 0)
-        {
+        </section>
+    }
+    else if (Model.Runs.Count == 0)
+    {
+        <section class="card">
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "No crawls have run for this endpoint",
                 "A crawl records every page it fetched and every link it checked.",
-                "reports"))
-        }
-        else
-        {
+                "broken-link"))
+        </section>
+    }
+    else
+    {
+        <section class="card" aria-labelledby="crawl-history-heading">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title" id="crawl-history-heading">Crawl history</h3>
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "clock")
+                        <span>@Model.Runs.Count crawl@(Model.Runs.Count == 1 ? null : "s") recorded</span>
+                    </p>
+                </div>
+            </div>
+
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table">
                     <caption class="visually-hidden">Crawl runs for the selected endpoint</caption>
@@ -56,7 +105,6 @@
                         <tr>
                             <th scope="col">Started</th>
                             <th scope="col">Status</th>
-                            <th scope="col">Coverage</th>
                             <th scope="col">Pages</th>
                             <th scope="col">Broken links</th>
                             <th scope="col">Robots override</th>
@@ -68,14 +116,22 @@
                         {
                             <tr>
                                 <td data-label="Started">@Html.Timestamp(run.StartedAt)</td>
+                                @* The stop reason was its own column of long sentences. It is what
+                                   the status means, so it belongs behind the status badge. *@
                                 <td data-label="Status">
-                                    <span class="badge" data-status="@CrawlRunDisplay.StatusTone(run)">@CrawlRunDisplay.DescribeStatus(run)</span>
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        CrawlRunDisplay.StatusTone(run),
+                                        CrawlRunDisplay.DescribeStatus(run),
+                                        CrawlRunDisplay.DescribeStopReason(run)))
                                 </td>
-
-                                <td data-label="Coverage">@CrawlRunDisplay.DescribeStopReason(run)</td>
                                 <td data-label="Pages">@run.PagesFetched</td>
                                 <td data-label="Broken links">
-                                    <span class="badge" data-status="@(run.BrokenLinkCount == 0 ? "success" : "warning")">@run.BrokenLinkCount</span>
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        run.BrokenLinkCount == 0 ? StatusBadges.Success : StatusBadges.Warning,
+                                        run.BrokenLinkCount.ToString(),
+                                        run.CoveredWholeScope
+                                            ? null
+                                            : "This crawl did not cover the whole scope, so links it never reached are not counted."))
                                 </td>
                                 <td data-label="Robots override">@(run.RobotsOverrideGranted ? "Granted" : "No")</td>
                                 <td data-label="Details">
@@ -88,16 +144,16 @@
                     </tbody>
                 </table>
             </div>
-        }
-    </section>
+        </section>
 
-    @if (Model.SelectedEndpointId is not null)
-    {
-        <section class="card">
+        <section class="card" aria-labelledby="crawl-comparison-heading">
             <div class="page-intro">
                 <div>
-                    <h2 class="card__title">Change since the previous crawl</h2>
-                    <p class="card__subtitle">@CrawlRunDisplay.DescribeComparison(comparison)</p>
+                    <h3 class="card__title" id="crawl-comparison-heading">Change since the previous crawl</h3>
+                    <p class="card__status" data-status="@(comparison.CurrentRunId is null ? "warning" : "neutral")">
+                        @await Html.PartialAsync("_Icon", comparison.CurrentRunId is null ? "warning" : "reports")
+                        <span>@CrawlRunDisplay.DescribeComparison(comparison)</span>
+                    </p>
                 </div>
             </div>
 
@@ -110,54 +166,109 @@
             }
             else
             {
-                <div class="registry-facts">
-                    <div><dt>New</dt><dd>@comparison.New.TotalCount</dd></div>
-                    <div><dt>Continuing</dt><dd>@comparison.Continuing.TotalCount</dd></div>
-                    <div><dt>Resolved</dt><dd>@comparison.Resolved.TotalCount</dd></div>
-                    <div><dt>Indeterminate</dt><dd>@comparison.Indeterminate.TotalCount</dd></div>
+                @* Was a <div class="registry-facts"> holding bare <dt>/<dd> pairs, which are only
+                   valid inside a <dl>. The detail list is a real list, so the markup now matches
+                   what it claims to be. *@
+                <div class="detail-list">
+                    <div class="detail-list__head" aria-hidden="true">
+                        <span>Subject</span>
+                        <span>Status</span>
+                    </div>
+                    <ul class="detail-list__items">
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "plus")</span>
+                                    <span>New</span>
+                                </span>
+                                <span class="detail-list__value">@comparison.New.TotalCount</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "restore")</span>
+                                    <span>Continuing</span>
+                                </span>
+                                <span class="detail-list__value">@comparison.Continuing.TotalCount</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "success")</span>
+                                    <span>Resolved</span>
+                                </span>
+                                <span class="detail-list__value">@comparison.Resolved.TotalCount</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "help")</span>
+                                    <span>Indeterminate</span>
+                                </span>
+                                <span class="detail-list__value">@comparison.Indeterminate.TotalCount</span>
+                            </div>
+                        </li>
+                    </ul>
                 </div>
 
+                @* Four stacked headings each followed by a table made one card scroll for pages.
+                   Each bucket is now a disclosure, open only when it holds something that needs
+                   acting on, so the card opens at the size of what changed. *@
                 @foreach (var bucket in new[]
                 {
-                    ("New broken links", comparison.New, "These were not broken in the previous crawl."),
-                    ("Continuing", comparison.Continuing, "Broken in this crawl and the previous one."),
-                    ("Resolved", comparison.Resolved, "Broken before, and not broken now — either re-checked successfully, or the page no longer links to it."),
-                    ("Indeterminate", comparison.Indeterminate, "Broken before, and this crawl could not establish whether they still are.")
+                    ("New broken links", comparison.New, "These were not broken in the previous crawl.", StatusBadges.Danger, true),
+                    ("Continuing", comparison.Continuing, "Broken in this crawl and the previous one.", StatusBadges.Warning, true),
+                    ("Resolved", comparison.Resolved, "Broken before, and not broken now — either re-checked successfully, or the page no longer links to it.", StatusBadges.Success, false),
+                    ("Indeterminate", comparison.Indeterminate, "Broken before, and this crawl could not establish whether they still are.", StatusBadges.Neutral, false)
                 })
                 {
                     @if (bucket.Item2.TotalCount > 0)
                     {
-                        <h3 class="card__title">@bucket.Item1</h3>
-                        <p class="card__subtitle">@bucket.Item3</p>
-                        <div class="table-scroll table-scroll--flush">
-                            <table class="data-table">
-                                <caption class="visually-hidden">@bucket.Item1</caption>
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Source page</th>
-                                        <th scope="col">Link target</th>
-                                        <th scope="col">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var link in bucket.Item2.Sample)
-                                    {
-                                        <tr>
-                                            <td data-label="Source page"><span class="target-url">@(link.SourceUrl ?? "Seed URL")</span></td>
-                                            <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
-                                            <td data-label="Status">@(link.StatusCode?.ToString() ?? link.Classification)</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                        @if (bucket.Item2.HasMore)
-                        {
-                            <p class="card__subtitle">
-                                Showing @bucket.Item2.Sample.Count of @bucket.Item2.TotalCount.
-                                Open the run to page through every broken link it recorded.
-                            </p>
-                        }
+                        <details class="disclosure" open="@bucket.Item5">
+                            <summary class="disclosure__summary">
+                                <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                                <span class="disclosure__title">@bucket.Item1</span>
+                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                    bucket.Item4,
+                                    bucket.Item2.TotalCount.ToString(),
+                                    bucket.Item3))
+                            </summary>
+                            <div class="disclosure__body">
+                                <p class="disclosure__description">@bucket.Item3</p>
+                                <div class="table-scroll table-scroll--flush">
+                                    <table class="data-table">
+                                        <caption class="visually-hidden">@bucket.Item1</caption>
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Source page</th>
+                                                <th scope="col">Link target</th>
+                                                <th scope="col">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var link in bucket.Item2.Sample)
+                                            {
+                                                <tr>
+                                                    <td data-label="Source page"><span class="target-url">@(link.SourceUrl ?? "Seed URL")</span></td>
+                                                    <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
+                                                    <td data-label="Status">@(link.StatusCode?.ToString() ?? link.Classification)</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                @if (bucket.Item2.HasMore)
+                                {
+                                    <p class="disclosure__description">
+                                        Showing @bucket.Item2.Sample.Count of @bucket.Item2.TotalCount.
+                                        Open the run to page through every broken link it recorded.
+                                    </p>
+                                }
+                            </div>
+                        </details>
                     }
                 }
             }

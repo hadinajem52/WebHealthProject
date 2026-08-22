@@ -1,4 +1,4 @@
-using WebHealth.Application.Seo;
+﻿using WebHealth.Application.Seo;
 using WebHealth.Domain.Seo;
 
 namespace WebHealth.Web.Models;
@@ -58,11 +58,4 @@ public sealed record SeoListViewModel(
             ? "Indexable"
             : "Not indexed";
     }
-
-    /// <summary>
-    /// A value that was never extracted and a value that is genuinely empty look the same on a
-    /// page unless one of them says so.
-    /// </summary>
-    public static string Present(string? value, int length) =>
-        string.IsNullOrEmpty(value) ? "—" : $"{value} ({length} chars)";
 }

@@ -262,11 +262,8 @@
                     <span class="detail-list__value">
                         @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                             Model.Endpoint.CanTest ? StatusBadges.Success : StatusBadges.Warning,
-                            Model.Endpoint.CanTest ? "Authorized" : "Not authorized"))
-                        @if (notTestableReason is not null)
-                        {
-                            <span class="detail-list__note">@notTestableReason</span>
-                        }
+                            Model.Endpoint.CanTest ? "Authorized" : "Not authorized",
+                            notTestableReason is null ? null : $"Reason: {notTestableReason}"))
                     </span>
                 </div>
             </li>
@@ -494,11 +491,9 @@
                         </span>
                         <span class="detail-list__value">
                             @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                StatusBadges.ForOutcome(latest.Outcome), latest.Outcome ?? latest.State))
-                            @if (latest.FailureCategory is not null)
-                            {
-                                <span class="detail-list__note">@latest.FailureCategory</span>
-                            }
+                                StatusBadges.ForOutcome(latest.Outcome),
+                                latest.Outcome ?? latest.State,
+                                latest.FailureCategory))
                         </span>
                     </div>
                 </li>

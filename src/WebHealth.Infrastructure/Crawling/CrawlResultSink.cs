@@ -68,9 +68,15 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception) when (IsDuplicatePair(exception))
+        catch (DbUpdateException exception) when (IsViolationOf(exception, "pk_crawl_run"))
         {
             // Two callers opening the same run id at once: the row that won is the same row.
+            //
+            // Matched by constraint name rather than by "any unique violation". crawl_run also
+            // carries ux_crawl_run_active, which says this endpoint already has a crawl in
+            // flight -- a different fact entirely, and one the caller must see. Swallowing it
+            // here would report a run as opened that was never inserted, and the caller would
+            // enqueue a job against a row that does not exist.
             dbContext.ChangeTracker.Clear();
         }
     }
@@ -116,7 +122,8 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
         {
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException exception) when (IsDuplicatePair(exception))
+        catch (DbUpdateException exception)
+            when (IsViolationOf(exception, "ux_crawl_link_result_pair"))
         {
             // BR-L07 is enforced by the index, and the ledger already deduplicates, so reaching
             // here means a retry re-sent a pair rather than that a pair was counted twice. The row
@@ -160,6 +167,16 @@ internal sealed class CrawlResultSink(ApplicationDbContext dbContext, TimeProvid
     private static string? Bounded(string? value, int maxLength) =>
         value is null || value.Length <= maxLength ? value : value[..maxLength];
 
-    private static bool IsDuplicatePair(DbUpdateException exception) =>
-        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+    /// <summary>
+    /// A unique violation of one named constraint. The name is the whole point: this class writes
+    /// to two tables carrying three unique indexes between them, and each says something
+    /// different. Matching on the SQL state alone made every one of them look like a harmless
+    /// replay.
+    /// </summary>
+    private static bool IsViolationOf(DbUpdateException exception, string constraintName) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation
+        } postgres
+        && string.Equals(postgres.ConstraintName, constraintName, StringComparison.Ordinal);
 }

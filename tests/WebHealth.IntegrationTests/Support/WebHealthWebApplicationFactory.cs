@@ -60,6 +60,12 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddSingleton<RecordingPageAuditRunner>();
             services.AddScoped<IPageAuditRunner>(provider =>
                 provider.GetRequiredService<RecordingPageAuditRunner>());
+            // The Broken links page decides whether to offer Run crawl, and the action itself
+            // checks the same thing. Both reach the database in production, so both are stubbed.
+            services.RemoveAll<ICrawlRunner>();
+            services.AddSingleton<RecordingCrawlRunner>();
+            services.AddScoped<ICrawlRunner>(provider =>
+                provider.GetRequiredService<RecordingCrawlRunner>());
             services.RemoveAll<ITargetAuthorizationService>();
             services.AddScoped<ITargetAuthorizationService, PermissiveTargetAuthorizationService>();
 

@@ -12,16 +12,15 @@
 }
 
 <div class="stack">
-    <section class="card">
-        <div class="page-intro">
-            <div>
-                <h2 class="card__title">SEO</h2>
-                <p class="card__subtitle">Title, description, canonical and indexing values read from the last successful check of each endpoint.</p>
-            </div>
-            <span class="tag">@listPage.TotalCount endpoint@(listPage.TotalCount == 1 ? null : "s")</span>
-        </div>
+    @* No card title here: the page heading already reads "SEO". This card is the control that
+       scopes the list below it, so it carries only the explanation and the filters. *@
+    <section class="card" aria-labelledby="seo-scope-label">
+        <p class="card__subtitle" id="seo-scope-label">
+            Title, description, canonical and indexing values read from the last successful
+            check of each endpoint.
+        </p>
 
-        <form method="get" class="filter-grid">
+        <form method="get" class="filter-bar">
             <div class="form-field">
                 <label asp-for="Applicability">Applicability</label>
                 <select asp-for="Applicability" name="applicability">
@@ -48,34 +47,53 @@
                     }
                 </select>
             </div>
-            <label class="switch-field">
-
+            <label class="switch-field filter-bar__switch">
                 <input asp-for="ProblemsOnly" type="checkbox" />
                 <span>With SEO findings only</span>
             </label>
-            <div class="filter-grid__actions">
+            <div class="filter-bar__actions">
                 <button class="button button--primary" type="submit">
                     @await Html.PartialAsync("_Icon", "filter")
                     <span>Apply filters</span>
                 </button>
-                <a class="button button--secondary" asp-action="Index">
-                    @await Html.PartialAsync("_Icon", "close")
-                    <span>Clear</span>
-                </a>
+                @if (Model.HasFilters)
+                {
+                    <a class="button button--secondary" asp-action="Index">
+                        @await Html.PartialAsync("_Icon", "close")
+                        <span>Clear</span>
+                    </a>
+                }
             </div>
         </form>
+    </section>
 
-        @if (listPage.Items.Count == 0)
-        {
+    @if (listPage.Items.Count == 0)
+    {
+        <section class="card">
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 Model.HasFilters
                     ? "No SEO observations match these filters"
                     : "No SEO observations recorded yet",
                 "SEO values are extracted from successful HTML responses during ordinary checks.",
                 "reports"))
-        }
-        else
-        {
+        </section>
+    }
+    else
+    {
+        <section class="card" aria-labelledby="seo-results-heading">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title" id="seo-results-heading">Observations</h3>
+                    @* The count is the total across every page, which is what the reader is
+                       selecting from. Anything derived from listPage.Items would describe this
+                       page only, and reading as a total would be wrong. *@
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "seo")
+                        <span>@listPage.TotalCount endpoint@(listPage.TotalCount == 1 ? null : "s") observed</span>
+                    </p>
+                </div>
+            </div>
+
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table">
                     <caption class="visually-hidden">SEO observations visible to your account</caption>
@@ -88,7 +106,6 @@
                             <th scope="col">Indexing</th>
                             <th scope="col">Findings</th>
                             <th scope="col">Observed</th>
-                            <th scope="col"><span class="visually-hidden">PageSpeed</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -101,70 +118,83 @@
                                 </td>
                                 @if (item.Applicability == SeoApplicabilities.NotApplicable)
                                 {
-
                                     <td data-label="Values" colspan="4">
-                                        <span class="badge" data-status="@StatusBadges.Info">Not applicable</span>
-                                        <span class="data-table__secondary">@(item.NotApplicableReason ?? "No reason recorded")</span>
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                            StatusBadges.Info,
+                                            "Not applicable",
+                                            item.NotApplicableReason ?? "No reason recorded"))
                                     </td>
                                 }
                                 else
                                 {
+                                    @* Value and length are two facts, not one string. Gluing
+                                       "(42 chars)" onto the title made a measurement compete with
+                                       the content it measures. *@
                                     <td data-label="Title">
-                                        @SeoListViewModel.Present(item.Title, item.TitleLength)
+                                        <span class="data-table__primary">@(string.IsNullOrEmpty(item.Title) ? "—" : item.Title)</span>
+                                        @if (!string.IsNullOrEmpty(item.Title))
+                                        {
+                                            <span class="data-table__secondary">@item.TitleLength characters</span>
+                                        }
                                         @if (item.TitleCount > 1)
                                         {
-                                            <span class="tag">@item.TitleCount titles</span>
+                                            <span class="data-table__secondary">@item.TitleCount titles found</span>
                                         }
                                     </td>
-                                    <td data-label="Description">@SeoListViewModel.Present(item.MetaDescription, item.MetaDescriptionLength)</td>
+                                    <td data-label="Description">
+                                        <span class="data-table__primary">@(string.IsNullOrEmpty(item.MetaDescription) ? "—" : item.MetaDescription)</span>
+                                        @if (!string.IsNullOrEmpty(item.MetaDescription))
+                                        {
+                                            <span class="data-table__secondary">@item.MetaDescriptionLength characters</span>
+                                        }
+                                    </td>
                                     <td data-label="Canonical">
-                                        <span class="target-url">@(item.CanonicalAbsoluteUrl ?? "—")</span>
+                                        <span class="data-table__primary target-url">@(item.CanonicalAbsoluteUrl ?? "—")</span>
                                         @if (item.CanonicalCount > 1)
                                         {
-                                            <span class="tag">@item.CanonicalCount canonicals</span>
+                                            <span class="data-table__secondary">@item.CanonicalCount canonicals found</span>
                                         }
                                     </td>
                                     <td data-label="Indexing">
-                                        <span class="badge" data-status="@(item.DeclaresNoIndex ? "warning" : "success")">
-                                            @(item.DeclaresNoIndex ? "noindex" : "Indexable")
-                                        </span>
-                                        <span class="data-table__secondary">Expected: @SeoListViewModel.DescribeExpectation(item)</span>
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                            item.DeclaresNoIndex ? StatusBadges.Warning : StatusBadges.Success,
+                                            item.DeclaresNoIndex ? "noindex" : "Indexable",
+                                            $"This environment expects: {SeoListViewModel.DescribeExpectation(item)}"))
                                     </td>
                                 }
                                 <td data-label="Findings">
                                     @if (item.OpenFindingCount == 0)
                                     {
-                                        <span class="badge" data-status="success">None</span>
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.Success, "None"))
                                     }
                                     else
                                     {
-
                                         <span class="finding-groups">
                                             @foreach (var group in item.FindingGroups)
                                             {
-                                                <span class="badge"
-                                                      data-status="@(SeoFindingGroups.SiteWide.Contains(group.Group) ? "danger" : "warning")">
-                                                    @group.Group @group.Count
-                                                </span>
+                                                @* The rules for this group only. FindingGroups is derived from
+                                                   FindingRuleKeys by the same SeoFindingGroups.Of, so grouping
+                                                   here cannot disagree with the count on the badge. *@
+                                                var groupRules = string.Join("; ", item.FindingRuleKeys
+                                                    .Where(key => SeoFindingGroups.Of(key) == group.Group)
+                                                    .Select(IssueDisplay.DescribeRule));
+
+                                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                                    SeoFindingGroups.SiteWide.Contains(group.Group) ? StatusBadges.Danger : StatusBadges.Warning,
+                                                    $"{group.Group} {group.Count}",
+                                                    groupRules))
                                             }
-                                        </span>
-                                        <span class="data-table__secondary">
-                                            @string.Join("; ", item.FindingRuleKeys.Select(IssueDisplay.DescribeRule))
                                         </span>
                                     }
                                     @if (item.DocumentTruncated)
                                     {
-
-                                        <span class="data-table__secondary">Response was truncated</span>
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                            StatusBadges.Neutral,
+                                            "Truncated",
+                                            "The response was longer than the read limit, so these values come from the part that was read."))
                                     }
                                 </td>
                                 <td data-label="Observed">@Html.Timestamp(item.ObservedAt)</td>
-
-                                <td data-label="PageSpeed">
-                                    <a class="button button--secondary" asp-controller="PageAudits" asp-action="Index" asp-route-endpointId="@item.EndpointId">
-                                        <span>PageSpeed</span>
-                                    </a>
-                                </td>
                             </tr>
                         }
                     </tbody>
@@ -190,6 +220,6 @@
                     }
                 </span>
             </nav>
-        }
-    </section>
+        </section>
+    }
 </div>

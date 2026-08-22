@@ -89,6 +89,16 @@ internal sealed class CrawlRunConfiguration : IEntityTypeConfiguration<CrawlRun>
         builder.HasIndex(run => new { run.EndpointId, run.StartedAt })
             .IsDescending(false, true);
 
+        // At most one crawl in flight per endpoint, enforced by the database rather than by the
+        // read that precedes the insert. Two people pressing Run crawl at the same moment both
+        // see no active run, and a crawl is the one operation here that fetches a whole site we
+        // do not own -- doing it twice at once is exactly what this phase's limits exist to
+        // prevent. The insert catches the violation and answers "already running".
+        builder.HasIndex(run => run.EndpointId)
+            .IsUnique()
+            .HasFilter("status = 'Running'")
+            .HasDatabaseName("ux_crawl_run_active");
+
         builder.HasOne(run => run.Endpoint).WithMany()
             .HasForeignKey(run => run.EndpointId)
             .OnDelete(DeleteBehavior.Restrict);

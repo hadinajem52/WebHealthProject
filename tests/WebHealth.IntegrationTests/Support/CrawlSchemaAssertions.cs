@@ -34,6 +34,7 @@ internal static class CrawlSchemaAssertions
         await VerifyRunStatusContractAsync(connectionString, endpointId);
         await VerifyOverrideContractAsync(connectionString, endpointId);
         await VerifySourceTargetUniquenessAsync(connectionString, endpointId);
+        await VerifyOneActiveRunPerEndpointAsync(connectionString, endpointId);
         await VerifyResultsCascadeWithTheirRunAsync(connectionString, endpointId);
         await VerifyReportingIndexServesTheFilterAsync(connectionString, endpointId);
     }
@@ -113,6 +114,29 @@ internal static class CrawlSchemaAssertions
         // The same pair in a different run is a different row: runs are compared, not merged.
         var otherRun = await InsertRunAsync(connectionString, endpointId);
         await InsertLinkAsync(connectionString, otherRun, "https://pairs.test/a", "https://pairs.test/gone");
+    }
+
+    /// <summary>
+    /// At most one crawl in flight per endpoint, enforced by <c>ux_crawl_run_active</c> rather
+    /// than by the read that precedes the insert. Two people pressing Run crawl at the same moment
+    /// both see no active run, and a crawl is the one operation here that fetches a whole site
+    /// this application does not own — doing that twice at once is what the limits in this phase
+    /// exist to prevent.
+    /// </summary>
+    private static async Task VerifyOneActiveRunPerEndpointAsync(string connectionString, Guid endpointId)
+    {
+        var first = await InsertRunningRunAsync(connectionString, endpointId);
+
+        var second = await Assert.ThrowsAsync<PostgresException>(() =>
+            InsertRunningRunAsync(connectionString, endpointId));
+        second.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+        second.ConstraintName.Should().Be("ux_crawl_run_active");
+
+        // The index is partial: finished runs do not hold the slot, or an endpoint could be
+        // crawled exactly once and never again.
+        await CloseRunAsync(connectionString, first);
+        var third = await InsertRunningRunAsync(connectionString, endpointId);
+        await CloseRunAsync(connectionString, third);
     }
 
     /// <summary>
@@ -265,6 +289,41 @@ internal static class CrawlSchemaAssertions
         command.Parameters.AddWithValue("seeds", $"{seedPrefix}/");
         await command.ExecuteNonQueryAsync();
         return runId;
+    }
+
+    private static async Task<Guid> InsertRunningRunAsync(string connectionString, Guid endpointId)
+    {
+        var runId = Guid.CreateVersion7();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO web_health.crawl_run
+                (id, endpoint_id, status, stop_reason, seed_urls, pages_fetched, links_recorded,
+                 robots_override_granted, robots_override_refused_because, query_policy,
+                 max_pages, max_depth, check_external_links, started_at, finished_at)
+            VALUES (@id, @endpoint, 'Running', 'FrontierExhausted', @seeds, 0, 0,
+                    false, 'NotRequested', 'Canonicalize', 1000, 5, false, now(), NULL);
+            """, connection);
+        command.Parameters.AddWithValue("id", runId);
+        command.Parameters.AddWithValue("endpoint", endpointId);
+        command.Parameters.AddWithValue("seeds", "https://active.test/");
+        await command.ExecuteNonQueryAsync();
+        return runId;
+    }
+
+    private static async Task CloseRunAsync(string connectionString, Guid runId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE web_health.crawl_run
+            SET status = 'Completed', stop_reason = 'FrontierExhausted', finished_at = now()
+            WHERE id = @id;
+            """, connection);
+        command.Parameters.AddWithValue("id", runId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task InsertLinkAsync(
