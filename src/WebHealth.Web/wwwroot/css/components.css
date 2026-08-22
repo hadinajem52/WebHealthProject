@@ -1078,6 +1078,26 @@ code,
     height: 2.75rem;
 }
 
+.filter-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-top: var(--space-5);
+    gap: var(--space-3);
+}
+
+.filter-inline .form-field {
+    min-width: 0;
+    flex: 1 1 18rem;
+    max-width: 26rem;
+}
+
+.filter-inline .form-field input,
+.filter-inline .form-field select,
+.filter-inline .button {
+    height: 3.125rem;
+}
+
 .table-scroll--flush {
     margin-top: 0;
 }

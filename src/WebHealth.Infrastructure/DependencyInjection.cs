@@ -198,13 +198,29 @@ public static class DependencyInjection
                     $"ConnectionStrings:{DatabaseConnectionName} is not configured.");
             }
 
+            // How often an idle worker asks the database whether anything is waiting. Every
+            // server polls on this interval whether or not there is work, so it is the floor on
+            // background database traffic: three servers at one second was measured at twenty
+            // three transactions per second against an otherwise idle instance, which is load a
+            // developer's machine pays for continuously and which competes with the request the
+            // person is actually waiting for. Configurable because the right answer differs by
+            // environment — a demo wants work picked up promptly, a workstation does not.
+            var queuePollInterval = configuration.GetValue<TimeSpan?>(
+                "Hangfire:QueuePollInterval") ?? TimeSpan.FromSeconds(5);
+            if (queuePollInterval < TimeSpan.FromSeconds(1)
+                || queuePollInterval > TimeSpan.FromMinutes(5))
+            {
+                throw new InvalidOperationException(
+                    "Hangfire:QueuePollInterval must be between one second and five minutes.");
+            }
+
             services.AddHangfire(configurationBuilder => configurationBuilder
                 .UsePostgreSqlStorage(bootstrapper => bootstrapper.UseNpgsqlConnection(connectionString),
                     new PostgreSqlStorageOptions
                     {
                         SchemaName = "hangfire",
                         PrepareSchemaIfNecessary = false,
-                        QueuePollInterval = TimeSpan.FromSeconds(1)
+                        QueuePollInterval = queuePollInterval
                     }));
             // Built before the server is registered rather than inside the callback: Hangfire
             // refuses a server with no queues, and with only an isolated-queue feature switched on

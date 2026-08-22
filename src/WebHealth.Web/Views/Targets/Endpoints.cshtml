@@ -16,18 +16,16 @@
         </div>
     </div>
 
-    <form method="get" class="filter-grid">
+    <form method="get" class="filter-inline">
         <div class="form-field">
             <label for="search">Search</label>
             <input id="search" name="search" type="search" value="@Model.Search" placeholder="Filter by URL, website or client" />
         </div>
-        <div class="filter-grid__actions">
-            <button class="button button--primary" type="submit">Filter</button>
-            @if (!string.IsNullOrWhiteSpace(Model.Search))
-            {
-                <a class="button button--secondary" asp-action="Endpoints">Clear</a>
-            }
-        </div>
+        <button class="button button--primary" type="submit">Filter</button>
+        @if (!string.IsNullOrWhiteSpace(Model.Search))
+        {
+            <a class="button button--secondary" asp-action="Endpoints">Clear</a>
+        }
     </form>
 
     @if (Model.Endpoints.Count == 0)

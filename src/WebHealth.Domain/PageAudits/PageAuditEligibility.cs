@@ -96,6 +96,12 @@ public static class PageAuditEligibility
 
         if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
         {
+            if (parsed.Scheme == Uri.UriSchemeFile
+                && !url.TrimStart().StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            {
+                return PageAuditEligibilityResult.Rejected(PageAuditIneligibilityReasons.UrlNotAbsolute);
+            }
+
             return PageAuditEligibilityResult.Rejected(PageAuditIneligibilityReasons.SchemeNotSupported);
         }
 

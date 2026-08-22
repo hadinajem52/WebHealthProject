@@ -16,8 +16,11 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
                 $"Set {ConnectionStringEnvironmentVariable} before running Entity Framework commands.");
         }
 
+        // Built from the configuration rather than from the compiled model: this context exists
+        // for the tooling that compares the two, and that comparison is meaningless if both
+        // sides come from the same generated snapshot.
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
-        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        PostgreSqlDbContextOptions.Configure(options, connectionString, useCompiledModel: false);
         return new ApplicationDbContext(options.Options);
     }
 }
