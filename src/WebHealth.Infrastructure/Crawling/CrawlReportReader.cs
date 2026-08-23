@@ -70,11 +70,12 @@ internal sealed class CrawlReportReader(
         await VisibleLinks(access)
             .Where(link => link.RunId == runId && link.SkipReason != null)
             .GroupBy(link => link.SkipReason!)
-            .Select(group => new CrawlSkipSummary(group.Key, group.Count()))
+            .Select(group => new { SkipReason = group.Key, Count = group.Count() })
             // Count first so the reason that governed the run leads, then the reason itself: two
             // reasons with the same count must not swap places between two reads of one run.
             .OrderByDescending(summary => summary.Count)
             .ThenBy(summary => summary.SkipReason)
+            .Select(summary => new CrawlSkipSummary(summary.SkipReason, summary.Count))
             .ToArrayAsync(cancellationToken);
 
     public async Task<CrawlComparison> CompareLatestAsync(
