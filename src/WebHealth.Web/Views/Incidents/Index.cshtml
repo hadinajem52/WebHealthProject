@@ -1,4 +1,4 @@
-﻿@model IncidentListViewModel
+@model IncidentListViewModel
 @{
     ViewData.SetTitle("Incidents");
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Incidents"));
@@ -10,16 +10,16 @@
 }
 
 <div class="stack">
-    <section class="card">
-        <div class="page-intro">
-            <div>
-                <h2 class="card__title">Incidents</h2>
-                <p class="card__subtitle">Confirmed availability issues across your assigned targets.</p>
-            </div>
-            <span class="tag">@listPage.TotalCount incident@(listPage.TotalCount == 1 ? null : "s")</span>
-        </div>
+    @* No card title here: the page heading already reads "Incidents". This card is the control
+       that scopes the list below it, so it carries only the explanation and the filters. *@
+    <section class="card" aria-labelledby="incidents-scope-label">
+        <p class="card__subtitle" id="incidents-scope-label">
+            Confirmed availability issues across your assigned targets. An incident opens only
+            after a failure is confirmed, so every row here is a repeated result rather than one
+            bad response.
+        </p>
 
-        <form method="get" class="filter-grid">
+        <form method="get" class="filter-bar">
             <div class="form-field">
                 <label asp-for="Status">Status</label>
                 <select asp-for="Status">
@@ -41,31 +41,58 @@
                     <option value="Warning">Warning</option>
                 </select>
             </div>
-            <label class="switch-field">
+            <label class="switch-field filter-bar__switch">
                 <input asp-for="UnacknowledgedOnly" type="checkbox" />
                 <span>Unacknowledged only</span>
             </label>
-            <div class="filter-grid__actions">
+            <div class="filter-bar__actions">
                 <button class="button button--primary" type="submit">
                     @await Html.PartialAsync("_Icon", "filter")
                     <span>Apply filters</span>
                 </button>
-                <a class="button button--secondary" asp-action="Index">
-                    @await Html.PartialAsync("_Icon", "close")
-                    <span>Clear</span>
-                </a>
+                @* Offered only when something is applied: a Clear control on an unfiltered list
+                   is an action with nothing to do. *@
+                @if (Model.HasFilters)
+                {
+                    <a class="button button--secondary" asp-action="Index">
+                        @await Html.PartialAsync("_Icon", "close")
+                        <span>Clear</span>
+                    </a>
+                }
             </div>
         </form>
+    </section>
 
-        @if (listPage.Items.Count == 0)
-        {
+    @if (listPage.Items.Count == 0)
+    {
+        <section class="card">
+            @* An empty list means two different things, and they need different words: nothing
+               matched what you asked for, or nothing has gone wrong at all. *@
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
-                "No incidents match these filters",
-                "Incidents open automatically when a monitored endpoint confirms a failure.",
+                Model.HasFilters
+                    ? "No incidents match these filters"
+                    : "No incidents have been opened",
+                Model.HasFilters
+                    ? "Clear the filters to see every incident on your assigned targets."
+                    : "Incidents open automatically when a monitored endpoint confirms a failure.",
                 "incidents"))
-        }
-        else
-        {
+        </section>
+    }
+    else
+    {
+        <section class="card" aria-labelledby="incidents-results-heading">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title" id="incidents-results-heading">Confirmed incidents</h3>
+                    @* The total across every page, which is what the reader is selecting from.
+                       Anything derived from this page's rows would read as a total and be wrong. *@
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "incidents")
+                        <span>@listPage.TotalCount incident@(listPage.TotalCount == 1 ? null : "s")</span>
+                    </p>
+                </div>
+            </div>
+
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table">
                     <caption class="visually-hidden">Incidents visible to your account</caption>
@@ -89,18 +116,53 @@
                                     <span class="data-table__secondary">@item.ClientName / @item.WebsiteName / @item.EnvironmentName</span>
                                 </td>
 
-                                <td data-label="Issue" title="@item.IssueKey">
+                                @* The issue key was a native title tooltip on the cell, which is
+                                   invisible until hovered and unreachable by keyboard. It is an
+                                   identifier a reader may need to quote, so it is shown. *@
+                                <td data-label="Issue">
                                     <span class="data-table__primary">@IssueDisplay.Describe(item.IssueKey)</span>
-                                    @if (item.RecurrenceCount > 0) { <span class="tag">Recurrence @item.RecurrenceCount</span> }
+                                    <span class="data-table__secondary">@item.IssueKey</span>
                                 </td>
-                                <td data-label="Severity">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(item.Severity), item.Severity))</td>
+
+                                <td data-label="Severity">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        StatusBadges.ForSeverity(item.Severity),
+                                        item.Severity))
+                                </td>
+
+                                @* Status, its label and the two facts that qualify it, in one
+                                   badge each. Loose secondary lines under a badge are what made
+                                   these rows read as unaligned blocks rather than a table. *@
                                 <td data-label="Status">
-                                    <span class="badge" data-status="@StatusBadges.ForIncidentStatus(item.Status)">@item.Status</span>
-                                    @if (item.AcknowledgedAt is null && item.Status != "Resolved" && item.Status != "Closed")
-                                    {
-                                        <span class="data-table__secondary">Unacknowledged</span>
-                                    }
+                                    <span class="badge-set">
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                            StatusBadges.ForIncidentStatus(item.Status),
+                                            IncidentStatusDisplay.Name(item.Status),
+                                            item.AcknowledgedAt is { } acknowledged
+                                                ? $"Acknowledged {acknowledged:yyyy-MM-dd HH:mm} UTC"
+                                                : null))
+
+                                        @if (item.AcknowledgedAt is null
+                                            && item.Status != "Resolved"
+                                            && item.Status != "Closed")
+                                        {
+                                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                                StatusBadges.Warning,
+                                                "Unacknowledged",
+                                                "Nobody has taken this incident yet. Acknowledging it records who is looking."))
+                                        }
+
+                                        @if (item.RecurrenceCount > 0)
+                                        {
+                                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                                StatusBadges.Neutral,
+                                                $"Recurrence {item.RecurrenceCount}",
+                                                "This endpoint has failed the same way before. The count is how many times "
+                                                + "the issue reopened rather than opening as a new incident."))
+                                        }
+                                    </span>
                                 </td>
+
                                 <td data-label="Opened">@Html.Timestamp(item.OpenedAt)</td>
                                 <td data-label="Owner">@item.OwnerDisplayName</td>
                                 <td data-label="Details">
@@ -133,6 +195,6 @@
                     }
                 </span>
             </nav>
-        }
-    </section>
+        </section>
+    }
 </div>

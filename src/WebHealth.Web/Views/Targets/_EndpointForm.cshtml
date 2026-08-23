@@ -2,29 +2,303 @@
 @using WebHealth.Domain.PageAudits
 @model EndpointFormViewModel
 @using WebHealth.Application.Registry
+
+@*
+    Six decisions, in the order they are actually made: what this endpoint is, whether we are
+    entitled to test it, how it is watched, what it should look like to a search engine, whether
+    Google may load it, and -- for production only -- why it may be plain HTTP.
+
+    Before, all twenty controls were one flat column with a paragraph of hint text under each.
+    Nothing said which fields were required, which applied only while a switch was on, or which
+    ones send data to a third party. Everything was equally loud, so nothing was read.
+*@
+
 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
-<div class="form-field"><label asp-for="Url"></label><input asp-for="Url" type="url" placeholder="https://example.com/health" /><span class="form-field__hint">Absolute HTTP/HTTPS only. Credentials, fragments, relative URLs and unsupported schemes are rejected.</span><span asp-validation-for="Url"></span></div>
-<div class="form-field"><label asp-for="OwnerSubjectId"></label><select asp-for="OwnerSubjectId"><option value="">Inherit website owner</option>@foreach(var owner in Model.Owners){<option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>}</select><span asp-validation-for="OwnerSubjectId"></span></div>
-<label class="switch-field"><input asp-for="IsEnabled" type="checkbox" /><span>Endpoint enabled</span></label>
-<label class="switch-field"><input asp-for="SchedulingEnabled" type="checkbox" data-shell-scheduling-toggle /><span>Run scheduled checks</span></label>
-<span class="form-field__hint">Clear this to monitor on demand only. The endpoint stays testable with Run now, and no checks are dispatched on the interval.</span>
-<div class="form-field" data-shell-interval-field data-inactive="@((!Model.SchedulingEnabled).ToString().ToLowerInvariant())"><label asp-for="IntervalMinutesOverride"></label><input asp-for="IntervalMinutesOverride" type="number" min="1" max="1440" readonly="@(!Model.CanConfigureInterval || !Model.SchedulingEnabled)" data-shell-interval-input data-permission-locked="@((!Model.CanConfigureInterval).ToString().ToLowerInvariant())" /><span class="form-field__hint">Applies only while scheduled checks are on; the value is kept if you turn them off. Leave empty for the five-minute Production or fifteen-minute non-Production default. Only Administrators can change this endpoint override.</span><span asp-validation-for="IntervalMinutesOverride"></span></div>
-<div class="form-field"><label asp-for="WarningThresholdMsOverride"></label><input asp-for="WarningThresholdMsOverride" type="number" min="@ResponseThresholdOverride.MinimumMs" max="@ResponseThresholdOverride.MaximumMs" /><span class="form-field__hint">Leave both threshold fields empty for the 1,500 ms warning and 3,000 ms critical defaults. A response at or above a threshold breaches it.</span><span asp-validation-for="WarningThresholdMsOverride"></span></div>
-<div class="form-field"><label asp-for="CriticalThresholdMsOverride"></label><input asp-for="CriticalThresholdMsOverride" type="number" min="@ResponseThresholdOverride.MinimumMs" max="@ResponseThresholdOverride.MaximumMs" /><span class="form-field__hint">Must be at or above the warning threshold. Set both values or neither.</span><span asp-validation-for="CriticalThresholdMsOverride"></span></div>
-<div class="form-field"><label asp-for="SeoIndexingExpectation"></label><select asp-for="SeoIndexingExpectation" class="form-select"><option value="@SeoIndexingExpectations.Default">Default for this environment</option><option value="@SeoIndexingExpectations.Indexable">Must be indexable</option><option value="@SeoIndexingExpectations.NoIndex">Must carry noindex</option></select><span class="form-field__hint">Default expects a production page to be indexable and a non-production page to carry <code>noindex</code>.</span><span asp-validation-for="SeoIndexingExpectation"></span></div>
-<div class="form-field"><label asp-for="SeoExpectedCanonicalHost"></label><input asp-for="SeoExpectedCanonicalHost" autocomplete="off" /><span class="form-field__hint">Leave blank to expect the endpoint's own host.</span><span asp-validation-for="SeoExpectedCanonicalHost"></span></div>
-<div class="form-check"><input asp-for="SeoDescriptionRequired" /><label asp-for="SeoDescriptionRequired"></label><span class="form-field__hint">Clear to disable the missing meta description rule for this endpoint.</span></div>
-<label class="switch-field"><input asp-for="PageAuditEnabled" type="checkbox" /><span>Enable Google PageSpeed SEO audits</span></label>
-<span class="form-field__hint">PageSpeed auditing sends this public URL to Google PageSpeed Insights and asks Google infrastructure to load it. Do not enable it for private, secret, authenticated or internal-only URLs.</span>
-<label class="switch-field"><input asp-for="PageAuditSchedulingEnabled" type="checkbox" /><span>Run PageSpeed audits on a schedule</span></label>
-<span class="form-field__hint">Leave this off to keep audits on demand only. Turning it off keeps the configuration and every score already recorded.</span>
-<div class="form-field"><label asp-for="PageAuditIntervalHours"></label><input asp-for="PageAuditIntervalHours" type="number" min="@PageAuditCadence.MinimumIntervalHours" max="@PageAuditCadence.MaximumIntervalHours" /><span class="form-field__hint">Between @PageAuditCadence.MinimumIntervalHours hours and @(PageAuditCadence.MaximumIntervalHours / 24) days. Each run asks Google to load the page, so a daily cadence is usually enough for a technical SEO score.</span><span asp-validation-for="PageAuditIntervalHours"></span></div>
-<div class="form-grid form-grid--two">
-    <div class="form-field"><label asp-for="TargetAuthorizationKind"></label><select asp-for="TargetAuthorizationKind"><option value="">No evidence recorded</option><option value="@TargetAuthorizationKinds.Owned">I own this target</option><option value="@TargetAuthorizationKinds.ExplicitPermission">I have explicit testing permission</option></select><span asp-validation-for="TargetAuthorizationKind"></span></div>
-    <div class="form-field"><label asp-for="TargetAuthorizationExpiresAt"></label><input asp-for="TargetAuthorizationExpiresAt" type="datetime-local" /><span class="form-field__hint">Optional. Expired evidence makes monitoring ineligible.</span><span asp-validation-for="TargetAuthorizationExpiresAt"></span></div>
-</div>
-<div class="form-field"><label asp-for="TargetAuthorizationEvidence"></label><textarea asp-for="TargetAuthorizationEvidence" rows="3"></textarea><span class="form-field__hint">Required when enabled. Record a safe personal reference, such as “domain owned by me” or a permission ticket; do not paste credentials or tokens.</span><span asp-validation-for="TargetAuthorizationEvidence"></span></div>
+
+<fieldset class="form-section">
+    <legend class="form-section__title">Endpoint</legend>
+    <p class="form-section__hint">The address to watch, and who answers for it.</p>
+
+    <div class="form-section__body">
+        <div class="form-field">
+            <label asp-for="Url">
+                @Html.DisplayNameFor(model => model.Url)
+                <span class="form-field__required">Required</span>
+            </label>
+            <input asp-for="Url" type="url" placeholder="https://example.com/health" />
+            <span class="form-field__hint">
+                An absolute http:// or https:// address. Credentials, fragments and relative
+                URLs are rejected.
+            </span>
+            <span asp-validation-for="Url"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="OwnerSubjectId">
+                @Html.DisplayNameFor(model => model.OwnerSubjectId)
+                <span class="form-field__optional">Optional</span>
+            </label>
+            <select asp-for="OwnerSubjectId">
+                <option value="">Inherit website owner</option>
+                @foreach (var owner in Model.Owners)
+                {
+                    <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+                }
+            </select>
+            <span class="form-field__hint">
+                Leave inherited unless this one endpoint is somebody else's responsibility.
+            </span>
+            <span asp-validation-for="OwnerSubjectId"></span>
+        </div>
+    </div>
+</fieldset>
+
+@* Second, because it decides whether anything below it may run at all. It was near the bottom,
+   under the thresholds, where it read as paperwork rather than as the gate it is. *@
+<fieldset class="form-section">
+    <legend class="form-section__title">Permission to test this target</legend>
+    <p class="form-section__hint">
+        Checks are only dispatched for a target we can show we are entitled to contact. Without
+        evidence here the endpoint is registered but never monitored.
+    </p>
+
+    <div class="form-section__body">
+        <div class="form-grid form-grid--two">
+            <div class="form-field">
+                <label asp-for="TargetAuthorizationKind"></label>
+                <select asp-for="TargetAuthorizationKind">
+                    <option value="">No evidence recorded</option>
+                    <option value="@TargetAuthorizationKinds.Owned">I own this target</option>
+                    <option value="@TargetAuthorizationKinds.ExplicitPermission">I have explicit testing permission</option>
+                </select>
+                <span asp-validation-for="TargetAuthorizationKind"></span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="TargetAuthorizationExpiresAt">
+                    @Html.DisplayNameFor(model => model.TargetAuthorizationExpiresAt)
+                    <span class="form-field__optional">Optional</span>
+                </label>
+                <input asp-for="TargetAuthorizationExpiresAt" type="datetime-local" />
+                <span class="form-field__hint">Once expired, monitoring stops.</span>
+                <span asp-validation-for="TargetAuthorizationExpiresAt"></span>
+            </div>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="TargetAuthorizationEvidence"></label>
+            <textarea asp-for="TargetAuthorizationEvidence" rows="3"
+                      placeholder="Domain owned by me"></textarea>
+            <span class="form-field__hint">
+                Required once a kind is chosen. A reference you can stand behind &mdash; never a
+                credential or token.
+            </span>
+            <span asp-validation-for="TargetAuthorizationEvidence"></span>
+        </div>
+    </div>
+</fieldset>
+
+<fieldset class="form-section">
+    <legend class="form-section__title">Availability checks</legend>
+    <p class="form-section__hint">
+        How often this endpoint is checked, and when a slow response counts as a problem.
+    </p>
+
+    <div class="form-section__body">
+        <div class="switch-block">
+            <label class="switch-field">
+                <input asp-for="IsEnabled" type="checkbox" aria-describedby="endpoint-enabled-hint" />
+                <span>Endpoint enabled</span>
+            </label>
+            <span class="form-field__hint" id="endpoint-enabled-hint">
+                Off keeps the endpoint and its history, and stops every kind of check.
+            </span>
+        </div>
+
+        <div class="switch-block">
+            <label class="switch-field">
+                <input asp-for="SchedulingEnabled" type="checkbox"
+                       data-shell-scheduling-toggle aria-describedby="endpoint-scheduling-hint" />
+                <span>Run scheduled checks</span>
+            </label>
+            <span class="form-field__hint" id="endpoint-scheduling-hint">
+                Off means on-demand only: Run now still works, nothing runs on a timer.
+            </span>
+        </div>
+
+        @* Dimmed with the switch above, because an interval means nothing while nothing is
+           scheduled -- but still editable, so the value survives being turned off and on. *@
+        <div class="form-dependent" data-shell-interval-field
+             data-inactive="@((!Model.SchedulingEnabled).ToString().ToLowerInvariant())">
+            <div class="form-field">
+                <label asp-for="IntervalMinutesOverride">
+                    @Html.DisplayNameFor(model => model.IntervalMinutesOverride)
+                    <span class="form-field__optional">Optional</span>
+                </label>
+                <input asp-for="IntervalMinutesOverride" type="number" min="1" max="1440"
+                       readonly="@((!Model.CanConfigureInterval || !Model.SchedulingEnabled) ? "readonly" : null)"
+                       data-shell-interval-input
+                       data-permission-locked="@((!Model.CanConfigureInterval).ToString().ToLowerInvariant())" />
+                <span class="form-field__hint">
+                    Blank uses the default: 5 minutes for Production, 15 for everything else.
+                    @if (!Model.CanConfigureInterval)
+                    {
+                        <text>Only an Administrator can change this.</text>
+                    }
+                </span>
+                <span asp-validation-for="IntervalMinutesOverride"></span>
+            </div>
+        </div>
+
+        @* Two numbers that are only valid together, so they sit together. Apart, the rule that
+           binds them was a sentence under each one and read as two separate rules. *@
+        <div class="form-grid form-grid--two">
+            <div class="form-field">
+                <label asp-for="WarningThresholdMsOverride">
+                    @Html.DisplayNameFor(model => model.WarningThresholdMsOverride)
+                    <span class="form-field__optional">Optional</span>
+                </label>
+                <input asp-for="WarningThresholdMsOverride" type="number"
+                       min="@ResponseThresholdOverride.MinimumMs" max="@ResponseThresholdOverride.MaximumMs"
+                       placeholder="1500" />
+                <span asp-validation-for="WarningThresholdMsOverride"></span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="CriticalThresholdMsOverride">
+                    @Html.DisplayNameFor(model => model.CriticalThresholdMsOverride)
+                    <span class="form-field__optional">Optional</span>
+                </label>
+                <input asp-for="CriticalThresholdMsOverride" type="number"
+                       min="@ResponseThresholdOverride.MinimumMs" max="@ResponseThresholdOverride.MaximumMs"
+                       placeholder="3000" />
+                <span asp-validation-for="CriticalThresholdMsOverride"></span>
+            </div>
+        </div>
+        <span class="form-field__hint">
+            Set both or neither; critical must be at or above warning. Blank uses the
+            1,500 ms and 3,000 ms defaults, and a response at or above a threshold breaches it.
+        </span>
+    </div>
+</fieldset>
+
+<fieldset class="form-section">
+    <legend class="form-section__title">SEO expectations</legend>
+    <p class="form-section__hint">
+        What this page should look like to a search engine. Findings are raised against these.
+    </p>
+
+    <div class="form-section__body">
+        <div class="form-field">
+            <label asp-for="SeoIndexingExpectation"></label>
+            <select asp-for="SeoIndexingExpectation" class="form-select">
+                <option value="@SeoIndexingExpectations.Default">Default for this environment</option>
+                <option value="@SeoIndexingExpectations.Indexable">Must be indexable</option>
+                <option value="@SeoIndexingExpectations.NoIndex">Must carry noindex</option>
+            </select>
+            <span class="form-field__hint">
+                The default expects Production to be indexable and everything else to carry
+                <code>noindex</code>.
+            </span>
+            <span asp-validation-for="SeoIndexingExpectation"></span>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="SeoExpectedCanonicalHost">
+                @Html.DisplayNameFor(model => model.SeoExpectedCanonicalHost)
+                <span class="form-field__optional">Optional</span>
+            </label>
+            <input asp-for="SeoExpectedCanonicalHost" autocomplete="off" placeholder="www.example.com" />
+            <span class="form-field__hint">Blank expects the endpoint's own host.</span>
+            <span asp-validation-for="SeoExpectedCanonicalHost"></span>
+        </div>
+
+        @* Was a bare checkbox among switches. One kind of boolean per form. *@
+        <div class="switch-block">
+            <label class="switch-field">
+                <input asp-for="SeoDescriptionRequired" type="checkbox" aria-describedby="seo-description-hint" />
+                <span>@Html.DisplayNameFor(model => model.SeoDescriptionRequired)</span>
+            </label>
+            <span class="form-field__hint" id="seo-description-hint">
+                Off stops the missing meta description finding for this endpoint.
+            </span>
+        </div>
+    </div>
+</fieldset>
+
+<fieldset class="form-section">
+    <legend class="form-section__title">Google PageSpeed audits</legend>
+    <p class="form-section__hint">
+        Optional technical SEO and performance scores from Google PageSpeed Insights.
+    </p>
+
+    <div class="form-section__body">
+        @* This one sends the URL to a third party, so it is a notice rather than a hint: it has
+           to be readable before the switch is touched, not after. *@
+        <p class="form-notice">
+            @await Html.PartialAsync("_Icon", "warning")
+            <span>
+                Enabling this sends this URL to Google and asks Google's infrastructure to load
+                the page. Never enable it for a private, authenticated or internal-only address.
+            </span>
+        </p>
+
+        <div class="switch-block">
+            <label class="switch-field">
+                <input asp-for="PageAuditEnabled" type="checkbox" data-shell-dependency="page-audits" />
+                <span>Enable Google PageSpeed audits</span>
+            </label>
+        </div>
+
+        <div class="form-dependent" data-shell-dependent-on="page-audits"
+             data-inactive="@((!Model.PageAuditEnabled).ToString().ToLowerInvariant())">
+            <div class="switch-block">
+                <label class="switch-field">
+                    <input asp-for="PageAuditSchedulingEnabled" type="checkbox" aria-describedby="page-audit-schedule-hint" />
+                    <span>Run PageSpeed audits on a schedule</span>
+                </label>
+                <span class="form-field__hint" id="page-audit-schedule-hint">
+                    Off keeps audits on demand. Turning it off keeps every score already recorded.
+                </span>
+            </div>
+
+            <div class="form-field">
+                <label asp-for="PageAuditIntervalHours"></label>
+                <input asp-for="PageAuditIntervalHours" type="number"
+                       min="@PageAuditCadence.MinimumIntervalHours" max="@PageAuditCadence.MaximumIntervalHours" />
+                <span class="form-field__hint">
+                    Between @PageAuditCadence.MinimumIntervalHours hours and
+                    @(PageAuditCadence.MaximumIntervalHours / 24) days. Each run asks Google to
+                    load the page, so daily is usually enough.
+                </span>
+                <span asp-validation-for="PageAuditIntervalHours"></span>
+            </div>
+        </div>
+    </div>
+</fieldset>
+
 @if (Model.IsProduction)
 {
-    <div class="form-field"><label asp-for="HttpExceptionReason"></label><textarea asp-for="HttpExceptionReason" rows="4" readonly="@(!Model.CanApproveHttp)"></textarea><span class="form-field__hint">HTTPS needs no exception. New or changed HTTP exceptions require an Administrator and a bounded reason.</span><span asp-validation-for="HttpExceptionReason"></span></div>
+    <fieldset class="form-section">
+        <legend class="form-section__title">Production HTTP exception</legend>
+        <p class="form-section__hint">
+            Only needed for a production endpoint served over plain HTTP.
+        </p>
+
+        <div class="form-section__body">
+            <p class="form-notice">
+                @await Html.PartialAsync("_Icon", "warning")
+                <span>
+                    An HTTPS endpoint needs nothing here. A new or changed exception requires an
+                    Administrator and a reason that will be kept with the endpoint.
+                </span>
+            </p>
+
+            <div class="form-field">
+                <label asp-for="HttpExceptionReason"></label>
+                <textarea asp-for="HttpExceptionReason" rows="4" readonly="@(!Model.CanApproveHttp ? "readonly" : null)"></textarea>
+                <span asp-validation-for="HttpExceptionReason"></span>
+            </div>
+        </div>
+    </fieldset>
 }

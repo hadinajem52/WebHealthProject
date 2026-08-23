@@ -18,5 +18,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\WebHealth.Application\WebHealth.Application.csproj" />
     <ProjectReference Include="..\..\src\WebHealth.Domain\WebHealth.Domain.csproj" />
+    <ProjectReference Include="..\..\src\WebHealth.Web\WebHealth.Web.csproj" />
   </ItemGroup>
 </Project>

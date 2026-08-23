@@ -1,26 +1,25 @@
-﻿@model AuditIndexViewModel
+@model AuditIndexViewModel
 @{
     ViewData.SetTitle("Audit history");
     ViewData.SetBreadcrumbs(Breadcrumbs.Administration(Url), new BreadcrumbItem("Audit"));
-    var firstVisible = Model.Result.TotalCount == 0
-        ? 0
-        : ((Model.Result.Page - 1) * Model.Result.PageSize) + 1;
-    var lastVisible = Math.Min(Model.Result.Page * Model.Result.PageSize, Model.Result.TotalCount);
-    var hasPrevious = Model.Result.Page > 1;
-    var hasNext = lastVisible < Model.Result.TotalCount;
+    var result = Model.Result;
+    var firstVisible = result.TotalCount == 0 ? 0 : ((result.Page - 1) * result.PageSize) + 1;
+    var lastVisible = Math.Min(result.Page * result.PageSize, result.TotalCount);
+    var hasPrevious = result.Page > 1;
+    var hasNext = lastVisible < result.TotalCount;
 }
 
 <div class="stack">
-    <section class="card">
-        <div class="page-intro">
-            <div>
-                <h2 class="card__title">Audit history</h2>
-                <p class="card__subtitle">Append-only security, administration, and assignment evidence.</p>
-            </div>
-            <span class="tag">@Model.Result.TotalCount event@(Model.Result.TotalCount == 1 ? null : "s")</span>
-        </div>
+    @* No card title here: the page heading already reads "Audit history". This card is the
+       control that scopes the trail below it, so it carries the explanation and the filters. *@
+    <section class="card" aria-labelledby="audit-scope-label">
+        <p class="card__subtitle" id="audit-scope-label">
+            Append-only evidence of security, administration and assignment actions. Entries are
+            never edited or removed, so this is what actually happened rather than the current
+            state of anything.
+        </p>
 
-        <form method="get" class="filter-grid">
+        <form method="get" class="filter-bar">
             <div class="form-field">
                 <label asp-for="FromDate">From (UTC)</label>
                 <input asp-for="FromDate" type="date" />
@@ -35,7 +34,7 @@
                     <option value="">All actors</option>
                     @foreach (var actor in Model.Actors)
                     {
-                        <option value="@actor.UserId">@actor.DisplayName · @actor.Email</option>
+                        <option value="@actor.UserId">@actor.DisplayName &middot; @actor.Email</option>
                     }
                 </select>
             </div>
@@ -45,43 +44,68 @@
                     <option value="">All actions</option>
                     @foreach (var action in Model.Actions)
                     {
-                        <option value="@action">@action.Replace('.', ' ')</option>
+                        <option value="@action">@AuditEventDisplay.ActionName(action)</option>
                     }
                 </select>
             </div>
             <div class="form-field">
                 <label asp-for="Entity"></label>
-                <input asp-for="Entity" list="audit-entity-types" placeholder="type or identifier" />
-                <datalist id="audit-entity-types">
+                <select asp-for="Entity">
+                    <option value="">All entities</option>
                     @foreach (var entityType in Model.EntityTypes)
                     {
-                        <option value="@entityType"></option>
+                        <option value="@entityType">@entityType.Replace('_', ' ')</option>
                     }
-                </datalist>
+                </select>
             </div>
-            <div class="filter-grid__actions">
+            <div class="filter-bar__actions">
                 <button class="button button--primary" type="submit">
                     @await Html.PartialAsync("_Icon", "filter")
                     <span>Apply filters</span>
                 </button>
-                <a class="button button--secondary" asp-action="Index">
-                    @await Html.PartialAsync("_Icon", "close")
-                    <span>Clear</span>
-                </a>
+                @* Offered only when something is applied: a Clear control on an unfiltered trail
+                   is an action with nothing to do. *@
+                @if (Model.HasFilters)
+                {
+                    <a class="button button--secondary" asp-action="Index">
+                        @await Html.PartialAsync("_Icon", "close")
+                        <span>Clear</span>
+                    </a>
+                }
             </div>
         </form>
     </section>
 
-    <section class="card">
-        @if (Model.Result.Events.Count == 0)
-        {
+    @if (result.Events.Count == 0)
+    {
+        <section class="card">
+            @* Two different facts, and they need different words: the filters excluded
+               everything, or nothing audited has happened yet. *@
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
-                "No audit events found",
-                "Adjust the filters or perform an audited administration action.",
+                Model.HasFilters
+                    ? "No audit events match these filters"
+                    : "No audit events recorded yet",
+                Model.HasFilters
+                    ? "Widen the dates, or clear the filters to see the whole trail."
+                    : "Administration, assignment and security actions are recorded here as they happen.",
                 "audit"))
-        }
-        else
-        {
+        </section>
+    }
+    else
+    {
+        <section class="card" aria-labelledby="audit-results-heading">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title" id="audit-results-heading">Recorded events</h3>
+                    @* The total across every page, which is what the reader is selecting from.
+                       Anything derived from this page's rows would read as a total and be wrong. *@
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "audit")
+                        <span>@result.TotalCount event@(result.TotalCount == 1 ? null : "s")</span>
+                    </p>
+                </div>
+            </div>
+
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table audit-table">
                     <caption class="visually-hidden">Filtered append-only audit events</caption>
@@ -90,8 +114,8 @@
                             <th scope="col">Time / actor</th>
                             <th scope="col">Action</th>
                             <th scope="col">Entity</th>
-                            <th scope="col">Safe changes</th>
                             <th scope="col">Outcome</th>
+                            <th scope="col">Safe changes</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -103,13 +127,24 @@
                                     <span class="data-table__secondary">@auditEvent.ActorDisplayName</span>
                                 </td>
                                 <td data-label="Action">
-                                    <span class="data-table__primary audit-action">@auditEvent.Action.Replace('.', ' ')</span>
+                                    <span class="data-table__primary audit-action">@AuditEventDisplay.ActionName(auditEvent.Action)</span>
                                     <code class="data-table__secondary">@auditEvent.Action</code>
                                 </td>
                                 <td data-label="Entity">
                                     <span class="data-table__primary">@auditEvent.EntityType</span>
                                     <span class="data-table__secondary code">@auditEvent.EntityIdentifier</span>
                                 </td>
+
+                                @* Moved ahead of the values column and given a real status style.
+                                   Every outcome used to render as the same neutral tag, so a
+                                   refusal looked exactly like a success -- in the one table read
+                                   specifically to find refusals. *@
+                                <td data-label="Outcome">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        AuditEventDisplay.OutcomeBadge(auditEvent.Outcome),
+                                        AuditEventDisplay.OutcomeName(auditEvent.Outcome)))
+                                </td>
+
                                 <td data-label="Safe changes">
                                     @if (auditEvent.BeforeValues.Count == 0 && auditEvent.AfterValues.Count == 0)
                                     {
@@ -117,8 +152,11 @@
                                     }
                                     else
                                     {
+                                        @* The summary says what is inside before it is opened.
+                                           "View values" gave no reason to open one row over
+                                           another, so every row had to be opened to find out. *@
                                         <details class="audit-changes">
-                                            <summary>View values</summary>
+                                            <summary>@AuditEventDisplay.DescribeValues(auditEvent)</summary>
                                             @if (auditEvent.BeforeValues.Count > 0)
                                             {
                                                 <p><strong>Before</strong></p>
@@ -142,7 +180,6 @@
                                         </details>
                                     }
                                 </td>
-                                <td data-label="Outcome"><span class="tag">@auditEvent.Outcome</span></td>
                             </tr>
                         }
                     </tbody>
@@ -150,7 +187,7 @@
             </div>
 
             <nav class="pagination" aria-label="Audit results pages">
-                <span>Showing @firstVisible–@lastVisible of @Model.Result.TotalCount</span>
+                <span>Showing @firstVisible–@lastVisible of @result.TotalCount</span>
                 <span class="pagination__actions">
                     @if (hasPrevious)
                     {
@@ -160,7 +197,7 @@
                            asp-route-actorUserId="@Model.ActorUserId"
                            asp-route-action="@Model.Action"
                            asp-route-entity="@Model.Entity"
-                           asp-route-page="@(Model.Result.Page - 1)">
+                           asp-route-page="@(result.Page - 1)">
                             @await Html.PartialAsync("_Icon", "arrow-left")
                             <span>Previous</span>
                         </a>
@@ -173,13 +210,13 @@
                            asp-route-actorUserId="@Model.ActorUserId"
                            asp-route-action="@Model.Action"
                            asp-route-entity="@Model.Entity"
-                           asp-route-page="@(Model.Result.Page + 1)">
+                           asp-route-page="@(result.Page + 1)">
                             <span>Next</span>
                             @await Html.PartialAsync("_Icon", "arrow-right")
                         </a>
                     }
                 </span>
             </nav>
-        }
-    </section>
+        </section>
+    }
 </div>
