@@ -69,7 +69,7 @@ Chrome tested the application against the isolated `webhealth_ajax_browser` Post
 | PageSpeed | One action queued Mobile and Desktop runs; both completed, each scored 80/100 with Lighthouse 13.4.1 and one history row | Passed |
 | Loading feedback | The PageSpeed control was disabled during submission, then the live region announced queued and completed states | Passed |
 | Endpoint lifecycle | Pause and Resume updated effective monitoring authoritatively and closed the action menu after each accepted mutation | Passed |
-| Notifications | Mark all as read changed the shared header from one unread notification to none unread and announced success | Passed |
+| Notifications | Mark all as read changed the shared header from one unread notification to none unread without a redundant success banner | Passed |
 | Incident lifecycle | Acknowledge, add note, and resolve all refreshed the workspace; the append-only timeline advanced from three to six events | Passed |
 | Maintenance lifecycle | A one-off endpoint window was created in `Asia/Beirut`, then cancelled through AJAX with Version 2 and Cancelled status | Passed |
 | Concurrency | Two tabs opened Client Version 1; the first saved Version 2 and the stale second form returned `409`, focused its alert, and preserved both submitted fields | Passed |
