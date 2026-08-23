@@ -71,7 +71,7 @@
         }
     }
 
-    function renderMessage(message, level, retry) {
+    function renderMessage(message, level, action) {
         if (!message) {
             return;
         }
@@ -95,18 +95,18 @@
         text.textContent = message;
         body.append(label, text);
 
-        if (retry) {
+        if (action) {
             var actions = document.createElement('div');
             actions.className = 'flash__actions';
-            var retryButton = document.createElement('button');
-            retryButton.type = 'button';
-            retryButton.className = 'button button--secondary';
-            retryButton.textContent = 'Retry';
-            retryButton.addEventListener('click', function () {
-                retryButton.disabled = true;
-                retry();
+            var actionButton = document.createElement('button');
+            actionButton.type = 'button';
+            actionButton.className = 'button button--secondary';
+            actionButton.textContent = action.label;
+            actionButton.addEventListener('click', function () {
+                actionButton.disabled = true;
+                action.run();
             }, { once: true });
-            actions.append(retryButton);
+            actions.append(actionButton);
             body.append(actions);
         }
 
@@ -126,10 +126,16 @@
         }
     }
 
-    function setBusy(source, selector, busy) {
-        source.toggleAttribute('data-ajax-loading', busy);
+    function setBusy(source, selector, busy, request) {
+        if (busy) {
+            source.webHealthAjaxBusyVersion = request.version;
+            source.toggleAttribute('data-ajax-loading', true);
+        } else if (source.webHealthAjaxBusyVersion === request.version) {
+            source.toggleAttribute('data-ajax-loading', false);
+            delete source.webHealthAjaxBusyVersion;
+        }
         var target = document.querySelector(selector);
-        if (target) {
+        if (target && (busy || isCurrentRequest(selector, request))) {
             target.setAttribute('aria-busy', busy ? 'true' : 'false');
         }
     }
@@ -287,7 +293,7 @@
         return payload;
     }
 
-    async function handleResponse(source, selector, response, historyMode, requestedUrl) {
+    async function handleResponse(source, selector, response, historyMode, requestedUrl, request) {
         if (response.status === 401) {
             renderMessage(statusMessage(401), 'error');
             navigateToLogin();
@@ -295,6 +301,9 @@
         }
 
         var payload = await readPayload(response);
+        if (!isCurrentRequest(selector, request)) {
+            return null;
+        }
         if (payload.kind === 'json') {
             return handleJson(source, selector, response, payload.value);
         }
@@ -324,7 +333,7 @@
         options.signal = request.controller.signal;
 
         if (source) {
-            setBusy(source, selector, true);
+            setBusy(source, selector, true, request);
         }
         document.dispatchEvent(new CustomEvent('webhealth:ajax-start', {
             detail: { source: source, target: selector, url: url }
@@ -335,19 +344,34 @@
             if (!isCurrentRequest(selector, request)) {
                 return null;
             }
-            return await handleResponse(source, selector, response, historyMode, url);
+            return await handleResponse(source, selector, response, historyMode, url, request);
         } catch (error) {
             if (error.name !== 'AbortError') {
-                renderMessage(navigator.onLine === false
+                var method = ((requestInit && requestInit.method) || 'GET').toUpperCase();
+                var isRead = method === 'GET' || method === 'HEAD';
+                var message = navigator.onLine === false
                     ? 'You are offline. Reconnect and try again.'
-                    : 'The network request failed. Try again.', 'error', function () {
-                        requestFragment(url, selector, source, historyMode, requestInit);
+                    : isRead
+                        ? 'The network request failed. Try again.'
+                        : 'The network request failed. The operation may have completed; reload before trying again.';
+                renderMessage(message, 'error', isRead
+                    ? {
+                        label: 'Retry',
+                        run: function () {
+                            requestFragment(url, selector, source, historyMode, requestInit);
+                        }
+                    }
+                    : {
+                        label: 'Reload page',
+                        run: function () {
+                            window.location.reload();
+                        }
                     });
             }
             return null;
         } finally {
             if (source) {
-                setBusy(source, selector, false);
+                setBusy(source, selector, false, request);
             }
             if (activeRequests.get(selector) === request.controller) {
                 activeRequests.delete(selector);
@@ -357,7 +381,7 @@
 
     function submitForm(event) {
         var form = event.target.closest('form[data-ajax-form]');
-        if (!form || event.defaultPrevented || submittingForms.has(form)) {
+        if (!form || event.defaultPrevented) {
             return;
         }
 
@@ -368,8 +392,12 @@
 
         event.preventDefault();
         var submitter = event.submitter;
-        var entries = formEntries(form, submitter);
         var method = (form.method || 'get').toUpperCase();
+        var isRead = method === 'GET' || method === 'HEAD';
+        if (!isRead && submittingForms.has(form)) {
+            return;
+        }
+        var entries = formEntries(form, submitter);
         var selector = targetSelector(form);
         var historyMode = form.getAttribute('data-ajax-history');
         var url = method === 'GET' ? buildUrl(action.toString(), entries) : action.toString();
@@ -377,12 +405,18 @@
             ? { method: 'GET' }
             : { method: method, body: formData(form, submitter) };
 
+        if (isRead) {
+            requestFragment(url, selector, form, historyMode, options);
+            return;
+        }
+
         submittingForms.add(form);
         setSubmitterBusy(submitter, true);
-        requestFragment(url, selector, form, historyMode, options).finally(function () {
-            submittingForms.delete(form);
-            setSubmitterBusy(submitter, false);
-        });
+        requestFragment(url, selector, form, historyMode, options)
+            .finally(function () {
+                submittingForms.delete(form);
+                setSubmitterBusy(submitter, false);
+            });
     }
 
     function activateLink(event) {

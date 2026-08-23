@@ -15,7 +15,8 @@ function loadAjax(options = {}) {
             href: 'https://localhost/Targets/Endpoints?search=old',
             origin: 'https://localhost',
             pathname: '/Targets/Endpoints',
-            search: '?search=old'
+            search: '?search=old',
+            reload() {}
         },
         history: options.history || {},
         addEventListener() {}
@@ -96,6 +97,98 @@ test('starting a newer request cancels the older request for the same target', a
 
     assert.equal(firstSignal.aborted, true);
     assert.equal(requestCount, 2);
+});
+
+test('an older response cannot replace content after slow body parsing', async () => {
+    let releaseFirstBody;
+    let replaced = false;
+    let requestCount = 0;
+    const current = {
+        setAttribute() {},
+        replaceWith() {
+            replaced = true;
+        }
+    };
+    const ajax = loadAjax({
+        document: {
+            querySelector(selector) {
+                return selector === '#target' ? current : null;
+            }
+        },
+        DOMParser: class DOMParser {
+            parseFromString() {
+                return {
+                    querySelector: () => ({ querySelector: () => null })
+                };
+            }
+        },
+        fetch() {
+            requestCount += 1;
+            if (requestCount === 1) {
+                return Promise.resolve({
+                    status: 200,
+                    ok: true,
+                    headers: { get: () => 'text/html' },
+                    text: () => new Promise(resolve => {
+                        releaseFirstBody = resolve;
+                    })
+                });
+            }
+            return Promise.resolve(textResponse(404, ''));
+        }
+    });
+
+    const first = ajax.load('/slow', '#target');
+    await new Promise(resolve => setImmediate(resolve));
+    const second = ajax.load('/newer', '#target');
+    await second;
+    releaseFirstBody('<div id="target"></div>');
+    await first;
+
+    assert.equal(replaced, false);
+});
+
+test('a newer GET form submission aborts the older filter request', async () => {
+    const handlers = {};
+    const target = { setAttribute() {} };
+    const form = formStub('#target', 'get', [['search', 'first']]);
+    let firstSignal;
+    let requestCount = 0;
+    loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            querySelector(selector) {
+                return selector === '#target' ? target : null;
+            }
+        },
+        history: { replaceState() {} },
+        fetch(url, init) {
+            requestCount += 1;
+            if (requestCount === 1) {
+                firstSignal = init.signal;
+                return new Promise((resolve, reject) => {
+                    init.signal.addEventListener('abort', () => {
+                        const error = new Error('Aborted');
+                        error.name = 'AbortError';
+                        reject(error);
+                    });
+                });
+            }
+            return Promise.resolve(textResponse(404, ''));
+        }
+    });
+
+    handlers.submit(submitEvent(form, null));
+    form.entries = [['search', 'second']];
+    handlers.submit(submitEvent(form, null));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(requestCount, 2);
+    assert.equal(firstSignal.aborted, true);
 });
 
 test('a submitted form is blocked until its current request finishes', async () => {
@@ -231,6 +324,57 @@ test('a network failure offers one retry that repeats the request', async () => 
 
     assert.equal(requestCount, 2);
     assert.equal(retryButton.disabled, true);
+});
+
+test('a failed POST offers a page reload without repeating an ambiguous mutation', async () => {
+    const handlers = {};
+    const target = { setAttribute() {} };
+    const region = {
+        classList: { add() {} },
+        replaceChildren(value) {
+            this.child = value;
+        }
+    };
+    const created = [];
+    let requestCount = 0;
+    let reloaded = false;
+    const form = formStub('#target');
+    loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            querySelector(selector) {
+                if (selector === '#target') {
+                    return target;
+                }
+                return selector === '[data-ajax-messages]' ? region : null;
+            },
+            createElement(tagName) {
+                const element = elementStub(tagName);
+                created.push(element);
+                return element;
+            }
+        },
+        fetch() {
+            requestCount += 1;
+            return Promise.reject(new Error('Response lost'));
+        }
+    });
+    window.location.reload = () => {
+        reloaded = true;
+    };
+
+    handlers.submit(submitEvent(form, null));
+    await new Promise(resolve => setImmediate(resolve));
+    const reloadButton = created.find(element => element.textContent === 'Reload page');
+    assert.ok(reloadButton);
+    reloadButton.listeners.click();
+
+    assert.equal(reloaded, true);
+    assert.equal(requestCount, 1);
 });
 
 test('a successful queued action closes its containing action menu', async () => {
