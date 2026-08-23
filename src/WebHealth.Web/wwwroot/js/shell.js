@@ -578,6 +578,28 @@
         sync();
     }
 
+    // Fields that only apply while a switch above them is on. Dimming is all this does: the
+    // inputs stay editable and keep submitting. Disabling them would drop values the reader had
+    // already typed, and the rule about when they apply belongs to the server either way.
+    function setUpDependentFields(toggle) {
+        var name = toggle.getAttribute('data-shell-dependency');
+        var dependents = document.querySelectorAll('[data-shell-dependent-on="' + name + '"]');
+
+        if (!dependents.length) {
+            return;
+        }
+
+        function sync() {
+            var inactive = toggle.checked ? 'false' : 'true';
+            dependents.forEach(function (dependent) {
+                dependent.setAttribute('data-inactive', inactive);
+            });
+        }
+
+        toggle.addEventListener('change', sync);
+        sync();
+    }
+
     onReady(function () {
         var sidebar = document.querySelector('[data-shell-sidebar]');
         var toggle = document.querySelector('[data-shell-toggle]');
@@ -650,6 +672,9 @@
         if (schedulingToggle && intervalField && intervalInput) {
             setUpIntervalAvailability(schedulingToggle, intervalField, intervalInput);
         }
+
+        document.querySelectorAll('[data-shell-dependency]')
+            .forEach(setUpDependentFields);
 
         document.querySelectorAll('[data-shell-password-toggle]')
             .forEach(setUpPasswordReveal);

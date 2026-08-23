@@ -725,6 +725,128 @@ code,
     max-width: 48rem;
 }
 
+/* Two fields that are one decision -- a warning threshold and its critical counterpart, a
+   permission and its expiry. Side by side they read as the pair they are; stacked, the rule that
+   binds them has to be repeated under each.
+
+   Both this class and its modifier were written in the endpoint and maintenance forms and never
+   defined anywhere, so every "two-column" row in this application has always been one column. */
+.form-grid {
+    display: grid;
+    gap: var(--space-5);
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 40rem) {
+    .form-grid--two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Form sections. A configuration form is a set of decisions about different things -- what the
+   endpoint is, whether we may test it, how often, what SEO shape it should have. As one flat
+   column of twenty controls it asks the reader to hold all of them at once and gives no way to
+   tell where one decision ends and the next begins. */
+.form-section {
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.form-section + .form-section {
+    margin-top: var(--space-6);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* A legend, not a heading: it names the group for assistive technology as well as the eye. It
+   sits outside the flex body below so no browser has to lay a legend out as a flex item. */
+.form-section__title {
+    padding: 0;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    line-height: 20px;
+}
+
+.form-section__hint {
+    margin-top: var(--space-2);
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    line-height: 18px;
+}
+
+.form-section__body {
+    display: flex;
+    margin-top: var(--space-4);
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+/* A switch and the sentence that explains it are one control, not a control followed by a stray
+   paragraph. Grouping them also gives the hint an id the input can point at. */
+.switch-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+/* Fields that only apply while the switch above them is on. Dimming is all this does: the
+   inputs stay editable and keep submitting, because the server owns that rule and a form that
+   silently dropped a value would be worse than one that shows it greyed. */
+.form-dependent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    transition: opacity var(--motion-fast) var(--motion-easing);
+}
+
+.form-dependent[data-inactive="true"] {
+    opacity: 0.55;
+}
+
+/* Reserved for what the reader must read before choosing: this control sends their URL to a
+   third party, or waives a production safety rule. An ordinary hint under an ordinary switch
+   does not carry that, because every other field has one too. */
+.form-notice {
+    display: flex;
+    padding: var(--space-3);
+    border: 1px solid var(--status-warning);
+    border-radius: var(--radius-tile);
+    background-color: var(--status-warning-surface);
+    color: var(--text-primary);
+    font-size: var(--font-size-xs);
+    gap: var(--space-3);
+    line-height: 18px;
+}
+
+.form-notice svg {
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    color: var(--status-warning-text);
+}
+
+/* Which fields must be filled, said rather than left to be discovered on submit. */
+.form-field__required {
+    margin-left: var(--space-2);
+    color: var(--text-secondary);
+    font-size: 0.625rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.form-field__optional {
+    margin-left: var(--space-2);
+    color: var(--color-gray-400);
+    font-size: 0.625rem;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .form-stack {
     display: flex;
     margin-top: var(--space-6);
@@ -1677,9 +1799,13 @@ code,
     }
 }
 
-.finding-groups {
+/* Several badges in one table cell. Was .finding-groups, named for the one page that had it;
+   the rule was never about findings, and a second page needing it should not mean a second
+   copy of four lines. */
+.badge-set {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-1);
 }
 
@@ -2144,6 +2270,21 @@ code,
 .filter-bar .form-field select,
 .filter-bar .button {
     height: 2.75rem;
+}
+
+/* A select renders its text below its own padding-top rather than centring it in the box, so a
+   shorter control that keeps the padding meant for a taller one sits low. These are 2.75rem
+   where the full-size fields are 3.125rem, and they inherited the 0.75rem padding, which put
+   every filter dropdown on the site about 3px below centre.
+
+   The padding is derived rather than guessed: half of whatever the box has left once the line
+   box and the two borders are taken out. Change the height or the line height and it still
+   centres. */
+.filter-bar .form-field input,
+.filter-bar .form-field select {
+    padding-top: calc((2.75rem - 1.5rem - 2px) / 2);
+    padding-bottom: calc((2.75rem - 1.5rem - 2px) / 2);
+    line-height: 1.5rem;
 }
 
 /* A switch has no label above it, so bottom alignment would sit it on the baseline of the

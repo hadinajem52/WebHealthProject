@@ -10,6 +10,15 @@ public sealed record IncidentListViewModel(
     bool UnacknowledgedOnly,
     FilterSummaryViewModel Summary)
 {
+    /// <summary>
+    /// Whether anything narrowed this list. A Clear control offered against an unfiltered list is
+    /// an action with nothing to do, and it reads as though a filter is applied when none is.
+    /// </summary>
+    public bool HasFilters =>
+        !string.IsNullOrWhiteSpace(Status)
+        || !string.IsNullOrWhiteSpace(Severity)
+        || UnacknowledgedOnly;
+
     /// <summary>BR-R01: what this list was narrowed to, named rather than implied.</summary>
     public static FilterSummaryViewModel Describe(
         DateTimeOffset asOf,

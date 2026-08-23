@@ -14,7 +14,12 @@ public sealed class AuditController(IAuditTrailReader auditTrail) : Controller
         DateOnly? fromDate,
         DateOnly? toDate,
         Guid? actorUserId,
-        string? action,
+        // From the query string only. The default route is {controller}/{action}/{id?}, and route
+        // values are bound ahead of query values, so a parameter named "action" was handed the
+        // name of this action -- "Index" -- on every request. The search was then filtered to an
+        // action nobody has ever recorded, which is why this page returned nothing at all and why
+        // choosing an action in the filter changed nothing.
+        [FromQuery] string? action,
         string? entity,
         int page = 1,
         CancellationToken cancellationToken = default)
