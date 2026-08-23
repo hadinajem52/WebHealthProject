@@ -7,6 +7,7 @@ using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
+using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
@@ -110,21 +111,33 @@ public sealed class IncidentsController(
         Guid id, Func<Task<IncidentMutationResult>> mutate, string successMessage)
     {
         var result = await mutate();
+        var detailsUrl = Url.Action(nameof(Details), new { id })!;
         switch (result.Status)
         {
             case IncidentMutationStatus.Succeeded:
-                TempData.AddFlashMessage(FlashLevel.Success, successMessage);
-                break;
+                return this.RedirectOrAjaxRefresh(
+                    detailsUrl,
+                    detailsUrl,
+                    successMessage,
+                    FlashLevel.Success);
             case IncidentMutationStatus.Forbidden:
                 return Forbid();
             case IncidentMutationStatus.NotFound:
                 return NotFound();
+            case IncidentMutationStatus.ConcurrencyConflict:
+                return this.RedirectOrAjaxRefresh(
+                    detailsUrl,
+                    detailsUrl,
+                    string.Join(" ", result.Errors),
+                    FlashLevel.Error,
+                    StatusCodes.Status409Conflict);
             default:
-                TempData.AddFlashMessage(FlashLevel.Error, string.Join(" ", result.Errors));
-                break;
+                return this.AjaxMessage(
+                    detailsUrl,
+                    string.Join(" ", result.Errors),
+                    FlashLevel.Error,
+                    StatusCodes.Status422UnprocessableEntity);
         }
-
-        return RedirectToAction(nameof(Details), new { id });
     }
 
     private RegistryAccessContext GetAccess()

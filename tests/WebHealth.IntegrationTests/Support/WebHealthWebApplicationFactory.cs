@@ -106,8 +106,19 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
 
     public HttpClient CreateHttpsClient(params string[] roles)
     {
+        return CreateHttpsClient(true, roles);
+    }
+
+    public HttpClient CreateHttpsClientWithoutRedirects(params string[] roles)
+    {
+        return CreateHttpsClient(false, roles);
+    }
+
+    private HttpClient CreateHttpsClient(bool allowAutoRedirect, string[] roles)
+    {
         var client = CreateClient(new WebApplicationFactoryClientOptions
         {
+            AllowAutoRedirect = allowAutoRedirect,
             BaseAddress = new Uri("https://localhost")
         });
         client.DefaultRequestHeaders.Add(TestAuthenticationHandler.HeaderName, "Test User");

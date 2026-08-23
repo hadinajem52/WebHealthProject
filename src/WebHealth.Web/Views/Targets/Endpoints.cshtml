@@ -66,6 +66,17 @@
                         <td data-label="Monitoring"><span class="badge" data-status="@(endpoint.MonitoringMode == EndpointMonitoringMode.Scheduled ? StatusBadges.Success : endpoint.MonitoringMode == EndpointMonitoringMode.Disabled ? StatusBadges.Info : StatusBadges.Warning)">@(endpoint.MonitoringMode switch { EndpointMonitoringMode.Scheduled => "Monitored", EndpointMonitoringMode.Paused => "Paused", EndpointMonitoringMode.Disabled => "Disabled", _ => "Manual only" })</span></td>
                         <td class="data-table__action" data-label="Actions">
                             <div class="data-table__action-group">
+                                @if (endpoint.CanTest)
+                                {
+                                    <form asp-controller="Checks"
+                                          asp-action="RunCheck"
+                                          asp-route-id="@endpoint.Id"
+                                          method="post"
+                                          data-ajax-form
+                                          data-ajax-target="#ajax-page">
+                                        <button class="button button--secondary" type="submit">Run now</button>
+                                    </form>
+                                }
                                 <a asp-action="Endpoint" asp-route-id="@endpoint.Id">Open<span class="visually-hidden"> @endpoint.DisplayUrl</span></a>
                             </div>
                         </td>

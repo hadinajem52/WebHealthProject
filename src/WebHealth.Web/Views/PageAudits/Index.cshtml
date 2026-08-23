@@ -9,6 +9,14 @@
     var selectedLabel = Model.Endpoints
         .FirstOrDefault(candidate => candidate.Id == Model.SelectedEndpointId)?.Label;
     var strategyLabel = PageAuditDisplay.DescribeStrategy(Model.SelectedStrategy);
+    var auditStatusUrl = run?.IsActive == true
+        ? Url.Action("Status", "PageAudits", new
+        {
+            endpointId = Model.SelectedEndpointId,
+            strategy = Model.SelectedStrategy,
+            runId = run.RunId
+        })
+        : null;
 
     static string StatusIcon(string tone) => tone switch
     {
@@ -20,7 +28,12 @@
     };
 }
 
-<div id="ajax-page" class="stack" data-ajax-region>
+<div id="ajax-page"
+     class="stack"
+     data-ajax-region
+     data-page-audits
+     data-page-audit-active="@(run?.IsActive == true ? "true" : "false")"
+     data-page-audit-status-url="@auditStatusUrl">
     @* No card title here: the page heading already reads "PageSpeed", and repeating it
        immediately below is a second first-level label for the same thing. The card is the
        control that scopes the page, so the control leads and the explanation follows it. *@
@@ -61,7 +74,7 @@
                 && Model.CanRunNow
                 && Model.Endpoints.Any(option => option.Id == runTarget))
             {
-                <form method="post" asp-action="RunNow">
+                <form method="post" asp-action="RunNow" data-ajax-form data-ajax-target="#ajax-page">
                     <input type="hidden" name="endpointId" value="@runTarget" />
                     <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
                     <button class="button button--secondary" type="submit"
@@ -236,8 +249,17 @@
                             <span>Google is running this audit@(run.AttemptCount > 1 ? $" · attempt {run.AttemptCount}" : null)</span>
                         </p>
                     </div>
+                    <div class="form-actions">
+                        <a class="button button--secondary"
+                           asp-action="Index"
+                           asp-route-endpointId="@Model.SelectedEndpointId"
+                           asp-route-strategy="@Model.SelectedStrategy"
+                           asp-route-runId="@run.RunId"
+                           data-ajax-link
+                           data-ajax-target="#ajax-page">Refresh status</a>
+                    </div>
                 </div>
-                <p class="card__subtitle">Reload the page in a moment to see the scores.</p>
+                <p class="card__subtitle">This page refreshes the audit status while it is active.</p>
             </section>
         }
 
@@ -550,3 +572,7 @@
         </section>
     }
 </div>
+
+@section Scripts {
+    <script src="~/js/page-audits.js" asp-append-version="true"></script>
+}

@@ -68,6 +68,8 @@ internal sealed class EmptyCrawlReportReader : ICrawlReportReader
 /// </summary>
 internal sealed class EmptyPageAuditReader : IPageAuditReader
 {
+    public static Guid QueuedRunId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000020");
+    public static Guid CompletedRunId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000021");
     /// <summary>
     /// A configured, enabled endpoint, so the page renders its whole surface — including the
     /// Run now control, whose authorization is what several of these tests are about.
@@ -95,20 +97,31 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
             strategy,
             24,
             null,
-            runId is { } requested && requested != Guid.Empty
-                ? RunOf(endpointId, strategy, requested)
-                : null,
+            ResolveRun(endpointId, strategy, runId),
             PageAuditItemCounts.Empty,
             PageAuditComparison.None));
+
+    private PageAuditRunSummary? ResolveRun(Guid endpointId, string strategy, Guid? runId)
+    {
+        if (runId == Guid.Empty)
+        {
+            return null;
+        }
+        if (runId is { } requested)
+        {
+            return RunOf(endpointId, strategy, requested);
+        }
+        return RunOf(endpointId, strategy, QueuedRunId);
+    }
 
     private static PageAuditRunSummary RunOf(Guid endpointId, string strategy, Guid runId) => new(
         runId,
         endpointId,
         PageAuditSources.Manual,
-        PageAuditRunStatuses.Queued,
+        runId == CompletedRunId ? PageAuditRunStatuses.Completed : PageAuditRunStatuses.Queued,
         "https://example.com/",
         null,
-        null,
+        runId == CompletedRunId ? 0.92m : null,
         strategy,
         "en-US",
         null,
@@ -118,7 +131,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
         0,
         DateTimeOffset.UtcNow,
         null,
-        null);
+        runId == CompletedRunId ? DateTimeOffset.UtcNow : null);
 
     public Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,

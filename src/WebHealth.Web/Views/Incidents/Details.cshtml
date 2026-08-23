@@ -40,7 +40,7 @@
     };
 }
 
-<div class="stack">
+<div id="ajax-page" class="stack" data-ajax-region data-incident-workspace>
     <section class="card">
         <div class="page-intro">
             <div>
@@ -73,7 +73,7 @@
                         <div class="action-menu__panel" id="incident-actions-menu" data-shell-menu-panel>
                             @if (canAcknowledge)
                             {
-                                <form asp-action="Acknowledge" method="post">
+                                <form asp-action="Acknowledge" method="post" data-ajax-form data-ajax-target="#ajax-page">
                                     <input type="hidden" name="id" value="@incident.Id" />
                                     <input type="hidden" name="version" value="@incident.Version" />
                                     <button class="action-menu__item" type="submit">
@@ -84,7 +84,7 @@
                             }
                             @if (canStartProgress)
                             {
-                                <form asp-action="StartProgress" method="post">
+                                <form asp-action="StartProgress" method="post" data-ajax-form data-ajax-target="#ajax-page">
                                     <input type="hidden" name="id" value="@incident.Id" />
                                     <input type="hidden" name="version" value="@incident.Version" />
                                     <button class="action-menu__item" type="submit">
@@ -95,7 +95,7 @@
                             }
                             @if (canCloseIncident)
                             {
-                                <form asp-action="Close" method="post">
+                                <form asp-action="Close" method="post" data-ajax-form data-ajax-target="#ajax-page">
                                     <input type="hidden" name="id" value="@incident.Id" />
                                     <input type="hidden" name="version" value="@incident.Version" />
                                     <button class="action-menu__item" type="submit">
@@ -222,7 +222,7 @@
 
             @if (canResolve)
             {
-                <form asp-action="Resolve" method="post" class="lifecycle-action-form">
+                <form asp-action="Resolve" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field"><label for="resolve-category">Resolution category</label><input id="resolve-category" type="text" name="category" maxlength="@IncidentLifecycleEngine.MaximumCategoryLength" required /></div>
@@ -235,7 +235,7 @@
             }
             @if (canAddNote)
             {
-                <form asp-action="AddNote" method="post" class="lifecycle-action-form">
+                <form asp-action="AddNote" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field"><label for="add-note">Note</label><textarea id="add-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
@@ -247,7 +247,7 @@
             }
             @if (canReassign)
             {
-                <form asp-action="Reassign" method="post" class="lifecycle-action-form">
+                <form asp-action="Reassign" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field">
@@ -267,7 +267,7 @@
             }
             @if (canForceClose)
             {
-                <form asp-action="ForceClose" method="post" class="lifecycle-action-form">
+                <form asp-action="ForceClose" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field"><label for="force-close-reason">Administrator reason</label><textarea id="force-close-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
@@ -279,7 +279,7 @@
             }
             @if (canReopen)
             {
-                <form asp-action="Reopen" method="post" class="lifecycle-action-form">
+                <form asp-action="Reopen" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
                     <input type="hidden" name="id" value="@incident.Id" />
                     <input type="hidden" name="version" value="@incident.Version" />
                     <div class="form-field"><label for="reopen-reason">Administrator reason</label><textarea id="reopen-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>

@@ -5,7 +5,7 @@
     var badge = unread > 9 ? "9+" : unread.ToString();
 }
 
-<div class="app-account app-notifications" data-shell-notifications data-open="false">
+<div id="notifications-region" class="app-account app-notifications" data-shell-notifications data-open="false">
     <button type="button"
             class="app-header__icon app-notifications__toggle"
             data-shell-notifications-toggle
@@ -32,7 +32,9 @@
             @if (unread > 0)
             {
                 <form asp-controller="Notifications" asp-action="MarkRead" method="post"
-                      asp-route-returnUrl="@returnUrl">
+                      asp-route-returnUrl="@returnUrl"
+                      data-ajax-form
+                      data-ajax-target="#notifications-region">
                     <button type="submit" class="app-notifications__action" title="Mark all as read">
                         @await Html.PartialAsync("_Icon", "check")
                         <span class="visually-hidden">Mark all as read</span>

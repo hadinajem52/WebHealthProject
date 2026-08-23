@@ -3,6 +3,7 @@
     ViewData.SetTitle(Model.Website.Name);
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), new BreadcrumbItem(Model.Website.Name));
 }
+<div id="ajax-page" data-ajax-region>
 <section class="card">
     <div class="page-intro">
         <div><h2 class="card__title">@Model.Website.Name</h2><p class="card__subtitle">@Model.Website.ClientName · Version @Model.Website.Version</p></div>
@@ -45,13 +46,14 @@
             </div>
             @if (Model.Website.IsDeleted)
             {
-                <form asp-action="RestoreWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--primary" type="submit">Restore website</button></form>
+                <form asp-action="RestoreWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--primary" type="submit">Restore website</button></form>
             }
             else
             {
-                @if (Model.Website.IsEnabled){<form asp-action="DisableWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--secondary" type="submit">Disable website</button></form>}
-                <form asp-action="DeleteWebsite" method="post"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--danger" type="submit">Archive website</button></form>
+                @if (Model.Website.IsEnabled){<form asp-action="DisableWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--secondary" type="submit">Disable website</button></form>}
+                <form asp-action="DeleteWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--danger" type="submit">Archive website</button></form>
             }
         </div>
     }
 </section>
+</div>

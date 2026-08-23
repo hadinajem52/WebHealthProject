@@ -58,49 +58,47 @@ internal sealed class EmptyRegistryMutationServices :
     IEnvironmentRegistryService,
     IEndpointRegistryService
 {
-    private static readonly RegistryMutationResult Missing =
-        RegistryMutationResult.Failure(RegistryMutationStatus.NotFound, "Record not found.");
+    public Task<RegistryMutationResult> CreateAsync(CreateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
+    public Task<RegistryMutationResult> UpdateAsync(UpdateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.ClientId);
+    public Task<RegistryMutationResult> CreateAsync(CreateWebsite command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
+    public Task<RegistryMutationResult> UpdateAsync(UpdateWebsite command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.WebsiteId);
+    public Task<RegistryMutationResult> CreateAsync(CreateEnvironment command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
+    public Task<RegistryMutationResult> UpdateAsync(UpdateEnvironment command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EnvironmentId);
+    public Task<RegistryMutationResult> CreateAsync(CreateEndpoint command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
+    public Task<RegistryMutationResult> UpdateAsync(UpdateEndpoint command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EndpointId);
+    public Task<RegistryMutationResult> DisableAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
+    public Task<RegistryMutationResult> DeleteAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
+    public Task<RegistryMutationResult> RestoreAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
+    public Task<RegistryMutationResult> PurgeAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
+    public Task<RegistryMutationResult> PauseScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
+    public Task<RegistryMutationResult> ResumeScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
 
-    public Task<RegistryMutationResult> CreateAsync(CreateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> UpdateAsync(UpdateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> CreateAsync(CreateWebsite command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> UpdateAsync(UpdateWebsite command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> CreateAsync(CreateEnvironment command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> UpdateAsync(UpdateEnvironment command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> CreateAsync(CreateEndpoint command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> UpdateAsync(UpdateEndpoint command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> DisableAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> DeleteAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> RestoreAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> PurgeAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> PauseScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<RegistryMutationResult> ResumeScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-
-    private static Task<RegistryMutationResult> Result() => Task.FromResult(Missing);
+    private static Task<RegistryMutationResult> Result(Guid id) =>
+        Task.FromResult(RegistryMutationResult.Success(id));
 }
 
 internal sealed class EmptyIncidentLifecycleService : IIncidentLifecycleService
 {
-    private static readonly IncidentMutationResult Missing =
-        IncidentMutationResult.Failure(IncidentMutationStatus.NotFound, "Incident not found.");
+    public Task<IncidentMutationResult> AcknowledgeAsync(IncidentVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentMutationResult> StartProgressAsync(IncidentVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentMutationResult> ResolveAsync(ResolveIncident command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentMutationResult> CloseAsync(IncidentVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentMutationResult> ForceCloseAsync(IncidentReasonCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentMutationResult> ReopenAsync(IncidentReasonCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentMutationResult> ReassignAsync(ReassignIncident command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentMutationResult> AddNoteAsync(IncidentNoteCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
 
-    public Task<IncidentMutationResult> AcknowledgeAsync(IncidentVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<IncidentMutationResult> StartProgressAsync(IncidentVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<IncidentMutationResult> ResolveAsync(ResolveIncident command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<IncidentMutationResult> CloseAsync(IncidentVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<IncidentMutationResult> ForceCloseAsync(IncidentReasonCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<IncidentMutationResult> ReopenAsync(IncidentReasonCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<IncidentMutationResult> ReassignAsync(ReassignIncident command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-    public Task<IncidentMutationResult> AddNoteAsync(IncidentNoteCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result();
-
-    private static Task<IncidentMutationResult> Result() => Task.FromResult(Missing);
+    private static Task<IncidentMutationResult> Result(Guid id) =>
+        Task.FromResult(IncidentMutationResult.Success(id));
 }
 
 internal sealed class EmptyManualCheckService : IManualCheckService
 {
+    public static Guid LogicalCheckId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000010");
+
     public Task<ManualCheckResult> RunNowAsync(Guid endpointId, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
-        Task.FromResult(ManualCheckResult.MonitorNotAvailable());
+        Task.FromResult(ManualCheckResult.Queued(LogicalCheckId));
 
     public Task<ManualCheckResult> RunCertificateNowAsync(Guid endpointId, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
-        Task.FromResult(ManualCheckResult.MonitorNotAvailable());
+        Task.FromResult(ManualCheckResult.Queued(LogicalCheckId));
 }
