@@ -175,7 +175,7 @@ test('run polling remains active through the bounded server retry lifecycle', as
     }
 });
 
-test('run polling announces the finished run once and stops', async () => {
+test('run polling stops when the run finishes, without announcing it', async () => {
     const messages = [];
     let host = runStatusHost();
     const finished = {
@@ -188,9 +188,6 @@ test('run polling announces the finished run once and stops', async () => {
             return null;
         },
         getAttribute(name) {
-            if (name === 'data-run-complete-message') {
-                return 'The PageSpeed audit finished.';
-            }
             return name === 'data-run-active' ? 'false' : null;
         }
     };
@@ -212,10 +209,7 @@ test('run polling announces the finished run once and stops', async () => {
     const first = nextTimer(runtime.timers);
     await first.handler();
 
-    assert.deepEqual(messages, [{
-        message: 'The PageSpeed audit finished.',
-        level: 'success'
-    }]);
+    assert.deepEqual(messages, []);
     assert.equal(
         runtime.timers.find(timer => !timer.cleared && timer !== first),
         undefined);

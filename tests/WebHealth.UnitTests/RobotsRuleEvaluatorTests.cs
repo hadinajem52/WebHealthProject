@@ -53,18 +53,18 @@ public sealed class RobotsRuleEvaluatorTests
     }
 
     [Fact]
-    public void Evaluate_RaisesABlockedProductionSiteAsCritical()
+    public void Evaluate_RaisesABlockedSiteAsAWarning()
     {
         var finding = Evaluate(Facts(content: BlockedEverything)).Single();
 
         finding.RuleKey.Should().Be(RobotsRules.BlocksSite);
-        finding.Severity.Should().Be(FindingSeverities.Critical,
-            "a production site telling every crawler to go away is the whole site leaving search");
+        finding.Severity.Should().Be(FindingSeverities.Warning,
+            "a site search cannot reach is still a site that serves traffic");
         finding.ObservedValue.Should().Be("Disallow: /");
     }
 
     [Fact]
-    public void Evaluate_RaisesABlockedNonProductionSiteOnlyAsAWarning() =>
+    public void Evaluate_RaisesABlockedSiteAsAWarningOffProductionToo() =>
         Evaluate(Facts(content: BlockedEverything), isProduction: false)
             .Single().Severity.Should().Be(FindingSeverities.Warning);
 
@@ -75,8 +75,13 @@ public sealed class RobotsRuleEvaluatorTests
 
         var finding = findings.Single();
         finding.RuleKey.Should().Be(RobotsRules.BlocksEndpoint);
-        finding.Severity.Should().Be(FindingSeverities.High, "production, but not the whole site");
+        finding.Severity.Should().Be(FindingSeverities.Warning, "production, but not the whole site");
     }
+
+    [Fact]
+    public void Evaluate_RaisesABlockedEndpointAsAWarningOffProductionToo() =>
+        Evaluate(Facts(content: "User-agent: *\nDisallow: /status"), isProduction: false)
+            .Single().Severity.Should().Be(FindingSeverities.Warning);
 
     [Fact]
     public void Evaluate_DoesNotReportTheEndpointSeparatelyWhenTheWholeSiteIsBlocked() =>

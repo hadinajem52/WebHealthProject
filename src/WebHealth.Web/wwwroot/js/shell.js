@@ -142,7 +142,9 @@
             return;
         }
 
-        openBadge = badge;
+        openBadge = null;
+        badgeTooltip.hidden = true;
+        badgeTooltip.style.visibility = 'hidden';
         badgeTooltip.textContent = detail;
         badgeTooltip.hidden = false;
         var anchor = badge.getBoundingClientRect();
@@ -156,9 +158,15 @@
         }
         badgeTooltip.style.left = left + 'px';
         badgeTooltip.style.top = top + 'px';
+        badgeTooltip.style.visibility = '';
+        openBadge = badge;
     }
 
-    function hideBadgeTooltip() {
+    function hideBadgeTooltip(badge) {
+        if (badge && openBadge !== badge) {
+            return;
+        }
+
         openBadge = null;
         if (badgeTooltip) {
             badgeTooltip.hidden = true;
@@ -187,11 +195,15 @@
             badge.addEventListener('mouseenter', function () {
                 showBadgeTooltip(badge);
             });
-            badge.addEventListener('mouseleave', hideBadgeTooltip);
+            badge.addEventListener('mouseleave', function () {
+                hideBadgeTooltip(badge);
+            });
             badge.addEventListener('focus', function () {
                 showBadgeTooltip(badge);
             });
-            badge.addEventListener('blur', hideBadgeTooltip);
+            badge.addEventListener('blur', function () {
+                hideBadgeTooltip(badge);
+            });
         });
 
         if (badgeListenersReady) {
@@ -819,6 +831,11 @@
     };
 
     document.addEventListener('webhealth:before-fragment-replace', function (event) {
+        var root = event.detail.root;
+        if (openBadge && (openBadge === root || root.contains(openBadge))) {
+            hideBadgeTooltip();
+        }
+
         elements(event.detail.root, '[data-shell-initialized]').forEach(function (element) {
             if (typeof element.webHealthDisposeMenu === 'function') {
                 element.webHealthDisposeMenu();

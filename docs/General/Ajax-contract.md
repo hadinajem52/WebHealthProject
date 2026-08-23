@@ -47,7 +47,6 @@ A page showing work that is still running refreshes itself instead of asking the
 | `data-run-url` | The address to re-read. It may be the page's own URL; the response is a fragment because the request carries `X-WebHealth-Ajax: 1`. |
 | `data-run-also` | Extra regions replaced from the same response, so a control outside the region can change with it. |
 | `data-run-lifetime` | Maximum polling lifetime in milliseconds. After it, polling stops with a message telling the reader to reload. |
-| `data-run-complete-message` | Flash message rendered once, when a poll observes the work has finished. |
 
 `data-run-scope` on an ancestor names the region's selector. Any enhanced request originating inside that ancestor stops polling, and a `202` JSON response carrying `statusUrl` starts it — that is how a Run-now button begins polling before its region has been re-rendered.
 

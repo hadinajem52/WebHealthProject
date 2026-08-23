@@ -55,14 +55,13 @@ public static class RobotsRuleEvaluator
         // No snapshot yet means no evidence, not a clean bill of health. The first refresh is at
         // most one TTL away, and inventing a finding from an empty cache would fire on every new
         // origin the moment it is registered.
-        return facts is null ? [] : [.. Rules(facts, userAgent, endpointPath, policy)];
+        return facts is null ? [] : [.. Rules(facts, userAgent, endpointPath)];
     }
 
     private static IEnumerable<NormalizedFinding> Rules(
         RobotsSnapshotFacts facts,
         string userAgent,
-        string endpointPath,
-        SeoPolicy policy)
+        string endpointPath)
     {
         if (facts.Status == RobotsSnapshotStatuses.Unavailable)
         {
@@ -71,7 +70,7 @@ public static class RobotsRuleEvaluator
         }
         else if (facts.Status == RobotsSnapshotStatuses.Fetched && !facts.HasApprovedException)
         {
-            foreach (var finding in BlockingRules(facts.Content, userAgent, endpointPath, policy))
+            foreach (var finding in BlockingRules(facts.Content, userAgent, endpointPath))
             {
                 yield return finding;
             }
@@ -89,8 +88,7 @@ public static class RobotsRuleEvaluator
     private static IEnumerable<NormalizedFinding> BlockingRules(
         string? content,
         string userAgent,
-        string endpointPath,
-        SeoPolicy policy)
+        string endpointPath)
     {
         var file = RobotsTxtParser.Parse(content);
         if (file.IsEmpty) yield break;
@@ -98,11 +96,9 @@ public static class RobotsRuleEvaluator
         var root = RobotsTxtParser.Evaluate(file, userAgent, "/");
         if (!root.IsAllowed)
         {
-            // The only Critical in the SEO family: a production site telling every crawler to go
-            // away is the whole site leaving search, not a detail to look at next sprint.
             yield return Finding(RobotsRules.BlocksSite,
                 $"Disallow: {root.MatchedRule!.Pattern}", "A crawlable site root",
-                policy.IsProduction ? FindingSeverities.Critical : FindingSeverities.Warning);
+                FindingSeverities.Warning);
             yield break;
         }
 
@@ -111,7 +107,7 @@ public static class RobotsRuleEvaluator
         {
             yield return Finding(RobotsRules.BlocksEndpoint,
                 $"Disallow: {endpoint.MatchedRule!.Pattern}", $"A crawlable {endpointPath}",
-                policy.EnvironmentSeverity);
+                FindingSeverities.Warning);
         }
     }
 
