@@ -12,7 +12,7 @@ Contract: `docs/General/Ajax-contract.md`
 
 | ID | Scope | Result |
 | --- | --- | --- |
-| AJAX-01 | Shared request detection, response headers, fragments, messages, status handling, local redirects, cancellation, history, busy state, and retry behavior | Complete |
+| AJAX-01 | Shared request detection, response headers, fragments, messages, status handling, local redirects, read cancellation, mutation serialization, history, busy state, and retry behavior | Complete |
 | AJAX-02 | Idempotent shell and fragment initialization, timezone reapplication, action-menu disposal, and dashboard chart lifecycle | Complete |
 | AJAX-03 | Dashboard, endpoint, website, incident, SEO, audit, check-history, crawl, and PageSpeed GET filters and pagination | Complete |
 | AJAX-04 | Notifications, incident lifecycle, registry lifecycle, maintenance cancellation, and endpoint scheduling mutations | Complete |
@@ -24,8 +24,9 @@ Contract: `docs/General/Ajax-contract.md`
 
 ## User-visible and authorization behavior
 
-- Enhanced reads update only their named content region, keep query strings authoritative, and restore state through Back and Forward.
-- Mutations disable their submit control, block duplicate POSTs, refresh authoritative server-rendered content, and announce the result through live status or alert regions.
+- Enhanced reads update only their named content region, keep query strings authoritative, and restore state through Back and Forward. Only reads supersede and cancel older reads.
+- Mutations disable their submit control, block duplicate POSTs, cannot be cancelled by same-target reads, refresh authoritative server-rendered content in the same request chain, and announce the result through live status or alert regions.
+- An ambiguous mutation failure leaves its target and submitter locked until reload or navigation so an uncertain POST cannot be repeated accidentally.
 - Validation and concurrency responses remain on the form. Validation focuses the summary; stale submitted values are preserved for non-sensitive forms.
 - Unauthenticated AJAX requests return `401` and deliberately navigate to the normal login page. Forbidden requests return `403`; login markup is never inserted into an application fragment.
 - Existing controller policies, antiforgery validation, assignment scope, administrator-only operations, SSRF controls, and local-redirect restrictions remain server-side.
@@ -43,12 +44,27 @@ Contract: `docs/General/Ajax-contract.md`
 | Command | Result |
 | --- | --- |
 | `dotnet test WebHealthProject.sln --no-restore` | 633 unit tests passed; 415 integration tests passed; 4 expected infrastructure-gated tests skipped |
-| `npm test` | Syntax checks passed; 11 JavaScript tests passed |
+| `npm test` | Syntax checks passed; 21 JavaScript tests passed |
 | `scripts/run-database-foundation-tests.ps1` | Passed on a clean isolated PostgreSQL database; all 22 ordered stages completed |
 
 The four normal solution-test skips are the PostgreSQL Testcontainer guard, dedicated database-foundation guard, SMTP delivery guard, and reporting performance guard. The database foundation test was run separately through its required script and passed.
 
-The automated coverage includes both normal and AJAX requests, antiforgery and authorization failures, unauthenticated and forbidden responses, validation, not-found, concurrency, partial success, full-page redirects, safe redirects, job `202` responses, request cancellation, out-of-order responses, duplicate-submit prevention, fragment initialization, history updates, retry safety, and menu closure.
+The automated coverage includes both normal and AJAX requests, production cookie challenges, antiforgery and authorization failures, authenticated runtime exceptions, validation, not-found, concurrency, partial success, full-page redirects, safe redirects, job `202` responses, read cancellation, mutation serialization, ambiguous mutation locking, out-of-order responses, duplicate-submit prevention, fragment initialization, authoritative refresh failures, malformed JSON, history updates, retry safety, polling pause and resume, polling error visibility, focus restoration, and menu closure.
+
+## Reviewer follow-up verification
+
+The reviewer correctly identified that the original target-wide cancellation rule could abort a non-idempotent POST when an unrelated read targeted the same region, and that an ambiguous POST failure re-enabled its submitter. Both findings were valid and fixed together with the related response, polling, focus, validation, cache, and history issues found during the audit.
+
+| Command or scenario | Result |
+| --- | --- |
+| Focused AJAX integration suite | 42 tests passed |
+| `npm test` | Syntax checks passed; 21 JavaScript tests passed |
+| Release web build used for Chrome testing | Passed with no warnings or errors |
+| Chrome notification, PageSpeed polling, Audit validation, and endpoint Pause/Resume flows | Passed; focus and partial-region behavior verified; no console warnings or errors |
+
+The follow-up integration tests exercise the production cookie challenge path, an actual authenticated runtime exception, the manual-check status URL through completion, notification refresh cache headers, AJAX Audit date validation, and the PageSpeed result-region contract. The JavaScript tests exercise same-target read/mutation races, uncertain POST outcomes, failed authoritative refreshes, JSON `422` refresh instructions, malformed success JSON, focus restoration, PageSpeed lifetime and visibility handling, and manual-check polling errors and reconnection.
+
+The solution-wide test command could not be rerun during this follow-up because unrelated concurrent edits in `HealthConfirmationEngine.cs` failed the repository's IDE0055 formatting gate before test execution. Those edits were not changed. The focused suites covering this work passed.
 
 ## Chrome end-to-end verification
 
@@ -81,6 +97,8 @@ Chrome tested the application against the isolated `webhealth_ajax_browser` Post
 
 The Chrome controller does not expose a per-tab JavaScript-disable switch. JavaScript-off compatibility was therefore verified through the full-request integration variants for every enhanced action; no persistent Chrome content setting was changed.
 
+The Chrome scenarios are manually reproducible verification records, not checked-in browser automation. Regression behavior that can run deterministically is covered in the JavaScript and integration suites described above.
+
 ## Data, security, operations, and compatibility
 
 - This work adds no database schema or migration changes.
@@ -92,4 +110,4 @@ The Chrome controller does not expose a per-tab JavaScript-disable switch. JavaS
 
 ## Self-review
 
-The review checked stale response suppression after body parsing, GET cancellation, POST duplicate blocking, busy-state versioning, safe retry behavior, fragment initializer idempotency, chart disposal, menu-listener disposal, menu closure, TempData success-message persistence, sensitive password clearing, and local-only navigation. The Chrome-discovered retry-message defect was fixed, covered by a JavaScript regression assertion, committed separately, and retested end to end.
+The review checked stale response suppression after body parsing, read-only cancellation, per-target mutation serialization, POST duplicate and ambiguous-outcome locking, busy-state versioning, authoritative refresh lifetime, safe retry behavior, invalid JSON handling, polling pause and resume, focus restoration, fragment initializer idempotency, chart disposal, menu-listener disposal, menu closure, TempData success-message persistence, sensitive password clearing, and local-only navigation. The Chrome-discovered retry-message defect was fixed, covered by a JavaScript regression assertion, committed separately, and retested end to end.
