@@ -46,27 +46,10 @@ internal sealed class IncidentAutomationService(
                 check, result, incidents, observedCertificateFingerprint, isMaintenance, now, cancellationToken);
         }
 
-        if (result.Outcome == HttpResultOutcomes.Healthy)
-        {
-            await ApplyRecoveryAsync(check, result, healthDecision, incidents, isMaintenance, now, cancellationToken);
-            return;
-        }
-
         var interruptedIncidentIds = await InterruptRecoveryAsync(
             check, result, incidents, now, cancellationToken);
-
-        // An issue can recover while the endpoint as a whole is still failing something else,
-        // so incidents for cleared issues resolve here rather than waiting for a wholly healthy
-        // result that may never arrive.
-        foreach (var incident in incidents
-            .Where(candidate => healthDecision.RecoveredIssueKeys.Contains(
-                candidate.IssueKey, StringComparer.Ordinal))
-            .ToArray())
-        {
-            await ResolveAsync(incident, check, result, isMaintenance, now, cancellationToken);
-            incidents.Remove(incident);
-        }
-
+        await ApplyRecoveryAsync(
+            check, result, healthDecision, incidents, isMaintenance, now, cancellationToken);
         await ApplyFailuresAsync(
             check, result, healthDecision, incidents, interruptedIncidentIds, isMaintenance, now, cancellationToken);
     }
@@ -183,28 +166,25 @@ internal sealed class IncidentAutomationService(
         LogicalCheck check,
         NormalizedCheckResult result,
         HealthConfirmationDecision healthDecision,
-        IReadOnlyCollection<Incident> incidents,
+        List<Incident> incidents,
         bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (healthDecision.Transition == HealthTransition.RecoveryStarted)
+        foreach (var incident in incidents.Where(candidate =>
+                     candidate.Status != IncidentStatuses.MonitoringRecovery
+                     && healthDecision.RecoveryStartedIssueKeys.Contains(
+                         candidate.IssueKey, StringComparer.Ordinal)))
         {
-            foreach (var incident in incidents.Where(candidate =>
-                         candidate.Status != IncidentStatuses.MonitoringRecovery))
-            {
-                await BeginRecoveryAsync(incident, check, result, now, cancellationToken);
-            }
+            await BeginRecoveryAsync(incident, check, result, now, cancellationToken);
         }
-        else if (healthDecision.Transition == HealthTransition.RecoveryConfirmed)
+
+        foreach (var incident in incidents.Where(candidate =>
+                     healthDecision.RecoveredIssueKeys.Contains(
+                         candidate.IssueKey, StringComparer.Ordinal)).ToArray())
         {
-            // incidents is already scoped to active statuses (LoadActiveAsync), so every entry here
-            // is eligible: incidents that never reached MonitoringRecovery (RecoveryConfirmationCount == 1,
-            // confirmed in a single pass) resolve directly, same as ones that went through it.
-            foreach (var incident in incidents)
-            {
-                await ResolveAsync(incident, check, result, isMaintenance, now, cancellationToken);
-            }
+            await ResolveAsync(incident, check, result, isMaintenance, now, cancellationToken);
+            incidents.Remove(incident);
         }
     }
 

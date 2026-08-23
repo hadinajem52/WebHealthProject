@@ -23,6 +23,12 @@ public static class RobotsRules
     public const string BlocksEndpoint = "Seo.RobotsBlocksEndpoint";
     public const string Unavailable = "Seo.RobotsUnavailable";
     public const string SitemapMissing = "Seo.SitemapMissing";
+
+    public static IReadOnlyList<string> BlockingIssueKeys { get; } =
+        [HttpIssueIdentity.Create(BlocksSite), HttpIssueIdentity.Create(BlocksEndpoint)];
+
+    public static IReadOnlyList<string> AllIssueKeys { get; } =
+        [.. BlockingIssueKeys, HttpIssueIdentity.Create(Unavailable), HttpIssueIdentity.Create(SitemapMissing)];
 }
 
 /// <summary>

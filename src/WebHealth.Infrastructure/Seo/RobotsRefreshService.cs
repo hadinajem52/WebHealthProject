@@ -31,6 +31,9 @@ internal sealed class RobotsRefreshService(
 
     private const int MaxSitemapCandidates = 3;
 
+    private TimeSpan RefreshLeadTime =>
+        TimeSpan.FromHours(Math.Min(1d, options.RobotsTtlHours / 2d));
+
     public async Task<RobotsRefreshResult> RefreshDueAsync(CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -90,8 +93,9 @@ internal sealed class RobotsRefreshService(
             })
             .ToArrayAsync(cancellationToken);
 
+        var refreshBoundary = now.Add(RefreshLeadTime);
         var fresh = (await dbContext.RobotsSnapshots.AsNoTracking()
-            .Where(snapshot => snapshot.ExpiresAt > now)
+            .Where(snapshot => snapshot.ExpiresAt > refreshBoundary)
             .Select(snapshot => snapshot.Origin)
             .ToArrayAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
 
@@ -112,8 +116,9 @@ internal sealed class RobotsRefreshService(
     private async Task<bool> TryClaimAsync(DueOrigin origin, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var expiry = now.AddHours(options.RobotsTtlHours);
+        var refreshBoundary = now.Add(RefreshLeadTime);
         var claimed = await dbContext.RobotsSnapshots
-            .Where(snapshot => snapshot.Origin == origin.Origin && snapshot.ExpiresAt <= now)
+            .Where(snapshot => snapshot.Origin == origin.Origin && snapshot.ExpiresAt <= refreshBoundary)
             .ExecuteUpdateAsync(setters => setters.SetProperty(snapshot => snapshot.ExpiresAt, expiry),
                 cancellationToken);
         if (claimed > 0) return true;
