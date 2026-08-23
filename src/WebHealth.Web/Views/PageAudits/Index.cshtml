@@ -31,26 +31,47 @@
             prediction of search ranking or traffic.
         </p>
 
-        <form method="get" class="filter-inline filter-inline--wide">
-            @* The form factor rides along as a hidden field rather than a second control: the
-               switch below already chooses it, and a select that could disagree with that switch
-               would make the same page reachable two ways. *@
-            <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
-            <div class="form-field">
-                <label for="endpointId">Endpoint</label>
-                <select id="endpointId" name="endpointId">
-                    <option value="">Select an endpoint</option>
-                    @foreach (var option in Model.Endpoints)
-                    {
-                        <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
-                    }
-                </select>
-            </div>
-            <button class="button button--primary" type="submit">
-                @await Html.PartialAsync("_Icon", "search")
-                <span>Show audits</span>
-            </button>
-        </form>
+        <div class="filter-inline filter-inline--wide">
+            <form method="get" class="filter-inline__group">
+                @* The form factor rides along as a hidden field rather than a second control: the
+                   switch below already chooses it, and a select that could disagree with that
+                   switch would make the same page reachable two ways. *@
+                <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
+                <div class="form-field">
+                    <label for="endpointId">Endpoint</label>
+                    <select id="endpointId" name="endpointId">
+                        <option value="">Select an endpoint</option>
+                        @foreach (var option in Model.Endpoints)
+                        {
+                            <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
+                        }
+                    </select>
+                </div>
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "search")
+                    <span>Show audits</span>
+                </button>
+            </form>
+
+            @* The selection has to be one the picker actually lists. An endpointId in the query
+               string that resolves to nothing leaves the select showing its placeholder, and a
+               Run now button beside a picker reading "Select an endpoint" offers to audit
+               something the page cannot name. *@
+            @if (Model.SelectedEndpointId is { } runTarget
+                && Model.CanRunNow
+                && Model.Endpoints.Any(option => option.Id == runTarget))
+            {
+                <form method="post" asp-action="RunNow">
+                    <input type="hidden" name="endpointId" value="@runTarget" />
+                    <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
+                    <button class="button button--secondary" type="submit"
+                            title="Asks Google to audit this page on mobile and desktop now. The scores appear once Google answers.">
+                        @await Html.PartialAsync("_Icon", "play")
+                        <span>Run now</span>
+                    </button>
+                </form>
+            }
+        </div>
 
         @if (Model.SelectedEndpointId is not null)
         {
@@ -105,21 +126,6 @@
                         <span>PageSpeed @strategyLabel &middot; @(run is null ? "No audit has run yet" : PageAuditDisplay.DescribeStatus(run))</span>
                     </p>
                 </div>
-
-                @if (Model.CanRunNow)
-                {
-                    <div class="form-actions">
-                        <form method="post" asp-action="RunNow">
-                            <input type="hidden" name="endpointId" value="@Model.SelectedEndpointId" />
-                            <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
-                            <button class="button button--primary" type="submit"
-                                    title="Asks Google to audit this page on every form factor now. The scores appear once Google answers.">
-                                @await Html.PartialAsync("_Icon", "play")
-                                <span>Run now</span>
-                            </button>
-                        </form>
-                    </div>
-                }
             </div>
 
             <div class="detail-list">
@@ -128,31 +134,24 @@
                     <span>Status</span>
                 </div>
                 <ul class="detail-list__items">
-                    @foreach (var score in summary.Scores)
-                    {
-                        <li>
-                            <div class="detail-list__row">
-                                <span class="detail-list__subject">
-                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
-                                    <span>@PageAuditDisplay.DescribeStrategy(score.Strategy) score</span>
-                                </span>
-                                <span class="detail-list__value">
-                                    @if (score.HasScore)
-                                    {
-                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.ScoreTone(score.Score), $"{score.Score} / 100"))
-                                        @if (score.MeasuredAt is { } measuredAt)
-                                        {
-                                            <span class="detail-list__note">@Html.Timestamp(measuredAt)</span>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("neutral", "Not measured"))
-                                    }
-                                </span>
-                            </div>
-                        </li>
-                    }
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
+                                <span>@strategyLabel score</span>
+                            </span>
+                            <span class="detail-list__value">
+                                @if (run is not null && run.HasScore)
+                                {
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.ScoreTone(run.Score), $"{run.Score} / 100"))
+                                }
+                                else
+                                {
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("neutral", "Not measured"))
+                                }
+                            </span>
+                        </div>
+                    </li>
                     <li>
                         <div class="detail-list__row">
                             <span class="detail-list__subject">

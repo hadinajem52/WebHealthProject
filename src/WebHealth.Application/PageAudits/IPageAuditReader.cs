@@ -100,23 +100,15 @@ public sealed record PageAuditComparison(
         Comparability == PageAuditComparability.LighthouseVersionChanged;
 }
 
-/// <summary>One form factor's newest score, as the summary carries it.</summary>
-public sealed record PageAuditStrategyScore(
-    string Strategy,
-    int? Score,
-    DateTimeOffset? MeasuredAt)
-{
-    public bool HasScore => Score is not null;
-}
-
 /// <summary>
 /// One endpoint's page-audit state.
 /// </summary>
 /// <remarks>
 /// Configuration is a property of the endpoint, not of a form factor: one audit covers mobile and
-/// desktop together, and there is no way to switch one on without the other. The strategy only
-/// names which form factor's run, audits and comparison are carried here, while the scores carry
-/// the newest number for every form factor - one audit with two numbers rather than two features.
+/// desktop together, and there is no way to switch one on without the other. Results are the other
+/// way round - the strategy names the one form factor whose run, audits and comparison are carried
+/// here, because a mobile page and a desktop page are measured separately and a reader looking at
+/// one is not asking about the other.
 /// </remarks>
 public sealed record PageAuditEndpointSummary(
     Guid EndpointId,
@@ -129,7 +121,6 @@ public sealed record PageAuditEndpointSummary(
     string Strategy,
     int IntervalHours,
     DateTimeOffset? NextDueAt,
-    IReadOnlyList<PageAuditStrategyScore> Scores,
     PageAuditRunSummary? LatestRun,
     PageAuditItemCounts Counts,
     PageAuditComparison Comparison)
@@ -141,7 +132,7 @@ public sealed record PageAuditEndpointSummary(
         string environmentName,
         string strategy) =>
         new(endpointId, endpointUrl, websiteName, environmentName, false, false, false,
-            strategy, 24, null, [], null, PageAuditItemCounts.Empty,
+            strategy, 24, null, null, PageAuditItemCounts.Empty,
             PageAuditComparison.None);
 }
 
