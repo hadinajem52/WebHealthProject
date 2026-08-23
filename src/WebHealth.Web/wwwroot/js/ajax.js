@@ -33,7 +33,7 @@
         return url.toString();
     }
 
-    function formEntries(form, submitter) {
+    function formData(form, submitter) {
         var data;
         try {
             data = new FormData(form, submitter || undefined);
@@ -43,7 +43,11 @@
                 data.append(submitter.name, submitter.value);
             }
         }
-        return Array.from(data.entries());
+        return data;
+    }
+
+    function formEntries(form, submitter) {
+        return Array.from(formData(form, submitter).entries());
     }
 
     function targetSelector(source) {
@@ -341,7 +345,7 @@
         var url = method === 'GET' ? buildUrl(action.toString(), entries) : action.toString();
         var options = method === 'GET'
             ? { method: 'GET' }
-            : { method: method, body: new FormData(form, submitter || undefined) };
+            : { method: method, body: formData(form, submitter) };
 
         submittingForms.add(form);
         setSubmitterBusy(submitter, true);

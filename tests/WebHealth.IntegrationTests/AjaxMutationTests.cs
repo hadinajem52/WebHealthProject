@@ -152,6 +152,95 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         Assert.DoesNotContain("<!DOCTYPE html>", completedContent, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("/Registry/CreateClient")]
+    [InlineData("/Registry/EditClient")]
+    [InlineData("/Registry/CreateWebsite")]
+    [InlineData("/Registry/EditWebsite")]
+    [InlineData("/Targets/CreateEnvironment")]
+    [InlineData("/Targets/EditEnvironment")]
+    [InlineData("/Maintenance/Create")]
+    [InlineData("/Maintenance/Edit")]
+    [InlineData("/Targets/CreateEndpoint")]
+    [InlineData("/Targets/EditEndpoint")]
+    [InlineData("/Administration/CreateTeam")]
+    [InlineData("/Administration/EditTeam")]
+    [InlineData("/Administration/CreateUser")]
+    [InlineData("/Administration/EditUser")]
+    public async Task CrudFormValidationReturnsReplaceableFragment(string path)
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var response = await PostAsync(client, path, token);
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains("id=\"ajax-form-region\"", content, StringComparison.Ordinal);
+        Assert.Contains("data-shell-validation-summary", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("<!DOCTYPE html>", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CrudFormValidationKeepsNormalFullPageFallback()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var response = await PostAsync(client, "/Registry/CreateClient", token);
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("<!DOCTYPE html>", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("data-shell-validation-summary", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CrudFormSuccessReturnsExplicitLocalNavigation()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var response = await PostAsync(
+            client,
+            "/Registry/CreateClient",
+            token,
+            ("Name", "AJAX client"),
+            ("OwnerSubjectId", Guid.NewGuid().ToString()));
+        using var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.StartsWith("/Registry/Client/", json.RootElement.GetProperty("redirectUrl").GetString(), StringComparison.Ordinal);
+        Assert.Contains("created", json.RootElement.GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task StaleEditReturnsConflictFragmentWithSubmittedValues()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+        var token = await GetAntiforgeryTokenAsync(client);
+        var submittedName = "Preserved stale client";
+
+        using var response = await PostAsync(
+            client,
+            "/Registry/EditClient",
+            token,
+            ("ClientId", Guid.NewGuid().ToString()),
+            ("Version", "-1"),
+            ("Name", submittedName),
+            ("OwnerSubjectId", Guid.NewGuid().ToString()));
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains(submittedName, content, StringComparison.Ordinal);
+        Assert.Contains("value=\"-1\"", content, StringComparison.Ordinal);
+        Assert.Contains("changed after you opened it", content, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<!DOCTYPE html>", content, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client)
     {
         var content = await client.GetStringAsync("/Targets/Endpoints");

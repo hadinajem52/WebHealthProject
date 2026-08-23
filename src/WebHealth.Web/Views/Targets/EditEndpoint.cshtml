@@ -23,7 +23,8 @@
         endpoint first, your changes are refused rather than silently overwriting theirs.
     </p>
 
-    <form asp-action="EditEndpoint" method="post" class="form-stack">
+    <form asp-action="EditEndpoint" method="post" class="form-stack" id="ajax-form-region" data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region">
+        <partial name="_AjaxValidationSummary" />
         <input asp-for="EndpointId" type="hidden" />
         <input asp-for="EnvironmentId" type="hidden" />
         <input asp-for="Version" type="hidden" />

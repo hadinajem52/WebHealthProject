@@ -35,10 +35,28 @@ public sealed record UpdateManagedTeam(
     long Version,
     IReadOnlyCollection<Guid> MemberUserIds);
 
-public sealed record TeamAdministrationResult(bool Succeeded, Guid? TeamId, IReadOnlyList<string> Errors)
+public enum TeamAdministrationStatus
 {
-    public static TeamAdministrationResult Success(Guid teamId) => new(true, teamId, []);
+    Succeeded,
+    ValidationFailed,
+    NotFound,
+    ConcurrencyConflict
+}
+
+public sealed record TeamAdministrationResult(
+    bool Succeeded,
+    Guid? TeamId,
+    IReadOnlyList<string> Errors,
+    TeamAdministrationStatus Status)
+{
+    public static TeamAdministrationResult Success(Guid teamId) =>
+        new(true, teamId, [], TeamAdministrationStatus.Succeeded);
 
     public static TeamAdministrationResult Failure(params IEnumerable<string> errors) =>
-        new(false, null, errors.ToArray());
+        Failure(TeamAdministrationStatus.ValidationFailed, errors);
+
+    public static TeamAdministrationResult Failure(
+        TeamAdministrationStatus status,
+        params IEnumerable<string> errors) =>
+        new(false, null, errors.ToArray(), status);
 }

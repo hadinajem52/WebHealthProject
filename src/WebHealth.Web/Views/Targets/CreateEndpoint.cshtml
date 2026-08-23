@@ -21,7 +21,8 @@
         a working default you can change later.
     </p>
 
-    <form asp-action="CreateEndpoint" method="post" class="form-stack">
+    <form asp-action="CreateEndpoint" method="post" class="form-stack" id="ajax-form-region" data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region">
+        <partial name="_AjaxValidationSummary" />
         <input asp-for="EnvironmentId" type="hidden" />
         <partial name="_EndpointForm" model="Model" />
 

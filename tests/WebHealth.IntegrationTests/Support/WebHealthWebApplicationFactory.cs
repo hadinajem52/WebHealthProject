@@ -5,7 +5,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebHealth.Application.Auditing;
+using WebHealth.Application.Administration;
+using WebHealth.Application.Assignments;
 using WebHealth.Application.Incidents;
+using WebHealth.Application.Maintenance;
 using WebHealth.Application.Notifications;
 using WebHealth.Application.Seo;
 using WebHealth.Application.Crawling;
@@ -71,6 +74,14 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddScoped<IIncidentLifecycleService, EmptyIncidentLifecycleService>();
             services.RemoveAll<IManualCheckService>();
             services.AddScoped<IManualCheckService, EmptyManualCheckService>();
+            services.RemoveAll<IMaintenanceReader>();
+            services.AddScoped<IMaintenanceReader, EmptyMaintenanceReader>();
+            services.RemoveAll<IMaintenanceWindowService>();
+            services.AddScoped<IMaintenanceWindowService, EmptyMaintenanceWindowService>();
+            services.RemoveAll<IUserAdministrationService>();
+            services.AddScoped<IUserAdministrationService, EmptyUserAdministrationService>();
+            services.RemoveAll<ITeamAdministrationService>();
+            services.AddScoped<ITeamAdministrationService, EmptyTeamAdministrationService>();
 
             // The PageSpeed page decides whether to offer Run now, and the action itself checks
             // the same thing. Both reach the database in production, so both are stubbed here.

@@ -12,7 +12,8 @@
     <h2 class="card__title">Create team</h2>
     <p class="card__subtitle">Membership becomes effective when the team is saved.</p>
 
-    <form asp-action="CreateTeam" method="post" class="form-stack">
+    <form asp-action="CreateTeam" method="post" class="form-stack" id="ajax-form-region" data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region">
+        <partial name="_AjaxValidationSummary" />
         <partial name="_TeamForm" model="Model" />
         <div class="form-actions">
             <button class="button button--primary" type="submit">

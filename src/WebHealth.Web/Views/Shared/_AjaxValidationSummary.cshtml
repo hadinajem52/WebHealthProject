@@ -1,0 +1,4 @@
+@if (Context.Request.IsWebHealthAjax())
+{
+    @await Html.PartialAsync("_ValidationSummary")
+}

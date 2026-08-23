@@ -1,7 +1,10 @@
 using WebHealth.Application.Auditing;
+using WebHealth.Application.Administration;
+using WebHealth.Application.Assignments;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Incidents;
+using WebHealth.Application.Maintenance;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -59,13 +62,13 @@ internal sealed class EmptyRegistryMutationServices :
     IEndpointRegistryService
 {
     public Task<RegistryMutationResult> CreateAsync(CreateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
-    public Task<RegistryMutationResult> UpdateAsync(UpdateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.ClientId);
+    public Task<RegistryMutationResult> UpdateAsync(UpdateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Updated(command.ClientId, command.Version);
     public Task<RegistryMutationResult> CreateAsync(CreateWebsite command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
-    public Task<RegistryMutationResult> UpdateAsync(UpdateWebsite command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.WebsiteId);
+    public Task<RegistryMutationResult> UpdateAsync(UpdateWebsite command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Updated(command.WebsiteId, command.Version);
     public Task<RegistryMutationResult> CreateAsync(CreateEnvironment command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
-    public Task<RegistryMutationResult> UpdateAsync(UpdateEnvironment command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EnvironmentId);
+    public Task<RegistryMutationResult> UpdateAsync(UpdateEnvironment command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Updated(command.EnvironmentId, command.Version);
     public Task<RegistryMutationResult> CreateAsync(CreateEndpoint command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
-    public Task<RegistryMutationResult> UpdateAsync(UpdateEndpoint command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EndpointId);
+    public Task<RegistryMutationResult> UpdateAsync(UpdateEndpoint command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Updated(command.EndpointId, command.Version);
     public Task<RegistryMutationResult> DisableAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
     public Task<RegistryMutationResult> DeleteAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
     public Task<RegistryMutationResult> RestoreAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
@@ -75,6 +78,83 @@ internal sealed class EmptyRegistryMutationServices :
 
     private static Task<RegistryMutationResult> Result(Guid id) =>
         Task.FromResult(RegistryMutationResult.Success(id));
+
+    private static Task<RegistryMutationResult> Updated(Guid id, long version) =>
+        version == -1
+            ? Task.FromResult(RegistryMutationResult.Failure(
+                RegistryMutationStatus.ConcurrencyConflict,
+                "This record changed after you opened it. Your submitted values have been preserved."))
+            : Result(id);
+}
+
+internal sealed class EmptyMaintenanceReader : IMaintenanceReader
+{
+    public static Guid ScopeId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000020");
+
+    public Task<IReadOnlyList<MaintenanceWindowListItem>> ListAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<MaintenanceWindowListItem>>([]);
+
+    public Task<MaintenanceWindowDetails?> FindAsync(Guid maintenanceWindowId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<MaintenanceWindowDetails?>(null);
+
+    public Task<IReadOnlyList<MaintenanceScopeOption>> ListScopeOptionsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<MaintenanceScopeOption>>([
+            new(MaintenanceScopeKind.Endpoint, ScopeId, "Example endpoint")
+        ]);
+}
+
+internal sealed class EmptyMaintenanceWindowService : IMaintenanceWindowService
+{
+    public static Guid WindowId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000021");
+
+    public Task<MaintenanceMutationResult> CreateAsync(CreateMaintenanceWindow command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
+        Task.FromResult(MaintenanceMutationResult.Success(WindowId));
+
+    public Task<MaintenanceMutationResult> UpdateAsync(UpdateMaintenanceWindow command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
+        Task.FromResult(MaintenanceMutationResult.Success(WindowId));
+
+    public Task<MaintenanceMutationResult> CancelAsync(CancelMaintenanceWindow command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
+        Task.FromResult(MaintenanceMutationResult.Success(command.MaintenanceWindowId));
+}
+
+internal sealed class EmptyUserAdministrationService : IUserAdministrationService
+{
+    public static Guid UserId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000030");
+    private static ManagedUser User { get; } = new(
+        UserId,
+        "Example user",
+        "example@example.test",
+        false,
+        ["Administrator"]);
+
+    public Task<IReadOnlyList<ManagedUser>> ListUsersAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ManagedUser>>([User]);
+
+    public Task<ManagedUser?> FindUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<ManagedUser?>(userId == UserId ? User : null);
+
+    public Task<UserAdministrationResult> CreateUserAsync(CreateManagedUser command, Guid actorUserId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(UserAdministrationResult.Success(UserId));
+
+    public Task<UserAdministrationResult> UpdateUserAsync(UpdateManagedUser command, Guid actorUserId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(UserAdministrationResult.Success(command.UserId));
+}
+
+internal sealed class EmptyTeamAdministrationService : ITeamAdministrationService
+{
+    public static Guid TeamId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000031");
+
+    public Task<IReadOnlyList<ManagedTeam>> ListTeamsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ManagedTeam>>([]);
+
+    public Task<ManagedTeam?> FindTeamAsync(Guid teamId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<ManagedTeam?>(null);
+
+    public Task<TeamAdministrationResult> CreateTeamAsync(CreateManagedTeam command, Guid actorUserId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(TeamAdministrationResult.Success(TeamId));
+
+    public Task<TeamAdministrationResult> UpdateTeamAsync(UpdateManagedTeam command, Guid actorUserId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(TeamAdministrationResult.Success(command.TeamId));
 }
 
 internal sealed class EmptyIncidentLifecycleService : IIncidentLifecycleService

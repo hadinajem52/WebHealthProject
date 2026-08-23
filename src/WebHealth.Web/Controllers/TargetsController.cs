@@ -98,7 +98,7 @@ public sealed class TargetsController(
         if (!ModelState.IsValid)
         {
             await RestoreWebsiteNameAsync(model, cancellationToken);
-            return View(model);
+            return this.ValidationView(nameof(CreateEnvironment), model);
         }
 
         var result = await environmentService.CreateAsync(
@@ -108,11 +108,12 @@ public sealed class TargetsController(
         {
             AddErrors(result.Errors);
             await RestoreWebsiteNameAsync(model, cancellationToken);
-            return View(model);
+            return this.ValidationView(nameof(CreateEnvironment), model);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Environment created successfully.");
-        return RedirectToAction(nameof(Environment), new { id = result.EntityId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Environment), new { id = result.EntityId })!,
+            "Environment created successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -138,7 +139,7 @@ public sealed class TargetsController(
         if (!ModelState.IsValid)
         {
             await RestoreWebsiteNameAsync(model, cancellationToken);
-            return View(model);
+            return this.ValidationView(nameof(EditEnvironment), model);
         }
 
         var result = await environmentService.UpdateAsync(
@@ -149,8 +150,9 @@ public sealed class TargetsController(
             return await HandleEnvironmentFailureAsync(model, result, cancellationToken);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Environment updated successfully.");
-        return RedirectToAction(nameof(Environment), new { id = model.EnvironmentId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Environment), new { id = model.EnvironmentId })!,
+            "Environment updated successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -170,7 +172,9 @@ public sealed class TargetsController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildEndpointFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateEndpoint),
+                await BuildEndpointFormAsync(model, cancellationToken));
         }
 
         var result = await endpointService.CreateAsync(
@@ -184,11 +188,14 @@ public sealed class TargetsController(
         if (!result.Succeeded)
         {
             AddErrors(result.Errors);
-            return View(await BuildEndpointFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateEndpoint),
+                await BuildEndpointFormAsync(model, cancellationToken));
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Endpoint and HTTP monitor created successfully.");
-        return RedirectToAction(nameof(Endpoint), new { id = result.EntityId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Endpoint), new { id = result.EntityId })!,
+            "Endpoint and HTTP monitor created successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -229,7 +236,9 @@ public sealed class TargetsController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildEndpointFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(EditEndpoint),
+                await BuildEndpointFormAsync(model, cancellationToken));
         }
 
         var result = await endpointService.UpdateAsync(
@@ -249,11 +258,17 @@ public sealed class TargetsController(
             }
 
             AddErrors(result.Errors);
-            return View(await BuildEndpointFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(EditEndpoint),
+                await BuildEndpointFormAsync(model, cancellationToken),
+                result.Status == RegistryMutationStatus.ConcurrencyConflict
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status422UnprocessableEntity);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Endpoint updated successfully.");
-        return RedirectToAction(nameof(Endpoint), new { id = model.EndpointId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Endpoint), new { id = model.EndpointId })!,
+            "Endpoint updated successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
@@ -332,7 +347,12 @@ public sealed class TargetsController(
 
         AddErrors(result.Errors);
         await RestoreWebsiteNameAsync(model, cancellationToken);
-        return View("EditEnvironment", model);
+        return this.ValidationView(
+            nameof(EditEnvironment),
+            model,
+            result.Status == RegistryMutationStatus.ConcurrencyConflict
+                ? StatusCodes.Status409Conflict
+                : StatusCodes.Status422UnprocessableEntity);
     }
 
     private async Task<IActionResult> ChangeStateAsync(
