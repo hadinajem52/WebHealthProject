@@ -312,7 +312,7 @@ test('a network failure offers one retry that repeats the request', async () => 
             requestCount += 1;
             return requestCount === 1
                 ? Promise.reject(new Error('Network unavailable'))
-                : Promise.resolve(textResponse(404, ''));
+                : Promise.resolve(jsonResponse(200, {}));
         }
     });
 
@@ -324,6 +324,7 @@ test('a network failure offers one retry that repeats the request', async () => 
 
     assert.equal(requestCount, 2);
     assert.equal(retryButton.disabled, true);
+    assert.equal(region.child, undefined);
 });
 
 test('a failed POST offers a page reload without repeating an ambiguous mutation', async () => {
