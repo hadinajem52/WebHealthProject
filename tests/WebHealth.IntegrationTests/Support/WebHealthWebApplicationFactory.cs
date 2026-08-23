@@ -12,6 +12,7 @@ using WebHealth.Application.Crawling;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Reporting;
+using WebHealth.Application.Monitoring;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -53,6 +54,23 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddScoped<ICrawlReportReader, EmptyCrawlReportReader>();
             services.RemoveAll<IPageAuditReader>();
             services.AddScoped<IPageAuditReader, EmptyPageAuditReader>();
+            services.RemoveAll<IAuditTrailReader>();
+            services.AddScoped<IAuditTrailReader, EmptyAuditTrailReader>();
+            services.RemoveAll<ICheckHistoryReader>();
+            services.AddScoped<ICheckHistoryReader, EmptyCheckHistoryReader>();
+            services.RemoveAll<IClientRegistryService>();
+            services.RemoveAll<IWebsiteRegistryService>();
+            services.RemoveAll<IEnvironmentRegistryService>();
+            services.RemoveAll<IEndpointRegistryService>();
+            services.AddScoped<EmptyRegistryMutationServices>();
+            services.AddScoped<IClientRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
+            services.AddScoped<IWebsiteRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
+            services.AddScoped<IEnvironmentRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
+            services.AddScoped<IEndpointRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
+            services.RemoveAll<IIncidentLifecycleService>();
+            services.AddScoped<IIncidentLifecycleService, EmptyIncidentLifecycleService>();
+            services.RemoveAll<IManualCheckService>();
+            services.AddScoped<IManualCheckService, EmptyManualCheckService>();
 
             // The PageSpeed page decides whether to offer Run now, and the action itself checks
             // the same thing. Both reach the database in production, so both are stubbed here.

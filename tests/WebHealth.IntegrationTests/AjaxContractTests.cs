@@ -68,4 +68,40 @@ public sealed class AjaxContractTests(WebHealthWebApplicationFactory factory)
         Assert.True(problem.RootElement.TryGetProperty("correlationId", out var correlationId));
         Assert.False(string.IsNullOrWhiteSpace(correlationId.GetString()));
     }
+
+    [Theory]
+    [InlineData("/Targets/Endpoints?search=example", ApplicationRoles.Viewer)]
+    [InlineData("/Registry/Websites", ApplicationRoles.Viewer)]
+    [InlineData("/Incidents?status=Open", ApplicationRoles.Viewer)]
+    [InlineData("/Seo?problemsOnly=true", ApplicationRoles.Viewer)]
+    [InlineData("/Audit?entity=Endpoint", ApplicationRoles.Administrator)]
+    [InlineData("/Crawl", ApplicationRoles.Viewer)]
+    [InlineData("/PageAudits", ApplicationRoles.Viewer)]
+    public async Task EnhancedReadPagesReturnReplaceableAjaxRegions(string path, string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+
+        using var response = await client.GetAsync(path);
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("id=\"ajax-page\"", content, StringComparison.Ordinal);
+        Assert.Contains("data-ajax-region", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("<!DOCTYPE html>", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CheckHistoryPaginationReturnsAReplaceableAjaxRegion()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+
+        using var response = await client.GetAsync($"/Checks/History?id={Guid.NewGuid()}&page=2");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("id=\"ajax-page\"", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("<!DOCTYPE html>", content, StringComparison.OrdinalIgnoreCase);
+    }
 }

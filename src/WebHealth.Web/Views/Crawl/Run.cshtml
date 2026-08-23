@@ -18,7 +18,7 @@
     };
 }
 
-<div class="stack">
+<div id="ajax-page" class="stack" data-ajax-region>
     @* No card title: the page heading already reads "Crawl run", and this run has no other
        identity to show -- the summary carries an endpoint id, not its URL. The status and what
        it means lead instead. *@
@@ -265,14 +265,14 @@
                 <span class="pagination__actions">
                     @if (Model.Offset > 0)
                     {
-                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.PreviousOffset">
+                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.PreviousOffset" data-ajax-link data-ajax-target="#ajax-page">
                             @await Html.PartialAsync("_Icon", "arrow-left")
                             <span>Previous</span>
                         </a>
                     }
                     @if (Model.HasMore)
                     {
-                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.NextOffset">
+                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.NextOffset" data-ajax-link data-ajax-target="#ajax-page">
                             <span>Next</span>
                             @await Html.PartialAsync("_Icon", "arrow-right")
                         </a>
