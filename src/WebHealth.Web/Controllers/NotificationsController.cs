@@ -21,8 +21,6 @@ public sealed class NotificationsController(INotificationFeedReader feedReader) 
         if (Request.IsWebHealthAjax())
         {
             return Ok(new AjaxFragmentViewModel(
-                "Notifications marked as read.",
-                "success",
                 RefreshUrl: Url.Action(nameof(Menu))));
         }
 

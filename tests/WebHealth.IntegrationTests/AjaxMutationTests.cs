@@ -97,6 +97,7 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("/Notifications/Menu", json.RootElement.GetProperty("refreshUrl").GetString());
+        Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("message").ValueKind);
     }
 
     [Fact]
