@@ -309,3 +309,75 @@ test('manual-check polling resumes after reconnecting without spending offline t
 
     assert.ok(nextTimer(runtime.timers));
 });
+
+test('a manual-check request cancelled by a pause resumes instead of counting as finished', async () => {
+    const runtime = loadPollingScript('checks.js', {
+        host: checkHost(),
+        ajax: {
+            load() {},
+            messageForStatus() {},
+            messageForProblem() {},
+            navigateToLogin() {},
+            renderMessage() {}
+        },
+        fetch(url, init) {
+            return new Promise((resolve, reject) => {
+                init.signal.addEventListener('abort', () => {
+                    const error = new Error('Aborted');
+                    error.name = 'AbortError';
+                    reject(error);
+                });
+            });
+        }
+    });
+
+    const first = nextTimer(runtime.timers);
+    const inFlight = first.handler();
+    document.hidden = true;
+    runtime.documentHandlers.visibilitychange();
+    await inFlight;
+    document.hidden = false;
+    runtime.documentHandlers.visibilitychange();
+
+    assert.ok(
+        runtime.timers.find(timer => !timer.cleared && timer !== first),
+        'hiding the tab mid-request must not end the poll');
+});
+
+test('run polling stops on a refusal rather than repeating it until the lifetime expires', async () => {
+    const runtime = loadPollingScript('run-status.js', {
+        host: runStatusHost(),
+        ajax: {
+            async load(url, selector, options) {
+                options.onStatus(404);
+                return null;
+            },
+            renderMessage() {}
+        }
+    });
+
+    const first = nextTimer(runtime.timers);
+    await first.handler();
+
+    assert.equal(
+        runtime.timers.find(timer => !timer.cleared && timer !== first),
+        undefined,
+        'a run that is gone answers the same way however often it is asked');
+});
+
+test('run polling retries a request that never reached the server', async () => {
+    const runtime = loadPollingScript('run-status.js', {
+        host: runStatusHost(),
+        ajax: {
+            async load() {
+                return null;
+            },
+            renderMessage() {}
+        }
+    });
+
+    const first = nextTimer(runtime.timers);
+    await first.handler();
+
+    assert.ok(runtime.timers.find(timer => !timer.cleared && timer !== first));
+});
