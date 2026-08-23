@@ -104,46 +104,11 @@ internal sealed class PageAuditReader(
             strategy,
             configured.IntervalSeconds / 3600,
             configured.SchedulingEnabled && configured.IsEnabled ? selectedTarget?.NextDueAt : null,
-            await ScoreboardAsync(access, endpointId, cancellationToken),
             selected,
             counts,
             comparison);
     }
 
-    /// <summary>
-    /// The newest score on every form factor, so one audit reads as one result with a number per
-    /// form factor rather than as two features a reader has to visit in turn.
-    /// </summary>
-    /// <remarks>
-    /// One small query per form factor rather than one grouped query. There are two of them, and
-    /// a per-group "newest row" is the shape LINQ translates worst - the version that reads
-    /// clearly here is also the version whose SQL is obvious.
-    /// </remarks>
-    private async Task<IReadOnlyList<PageAuditStrategyScore>> ScoreboardAsync(
-        RegistryAccessContext access,
-        Guid endpointId,
-        CancellationToken cancellationToken)
-    {
-        var scores = new List<PageAuditStrategyScore>(PageAuditStrategies.All.Length);
-        foreach (var strategy in PageAuditStrategies.All)
-        {
-            var latest = await RunsOf(access, endpointId, strategy)
-                .Where(run => run.RawScore != null
-                    && (run.Status == PageAuditRunStatuses.Completed
-                        || run.Status == PageAuditRunStatuses.CompletedWithWarnings))
-                .OrderByDescending(run => run.FinishedAt)
-                .ThenByDescending(run => run.Id)
-                .Select(run => new { run.RawScore, run.FinishedAt })
-                .FirstOrDefaultAsync(cancellationToken);
-
-            scores.Add(new PageAuditStrategyScore(
-                strategy,
-                PageAuditNormalization.ToDisplayScore(latest is null ? null : latest.RawScore),
-                latest?.FinishedAt));
-        }
-
-        return scores;
-    }
 
     public async Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,

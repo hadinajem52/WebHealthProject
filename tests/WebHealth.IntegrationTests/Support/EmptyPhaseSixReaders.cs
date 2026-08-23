@@ -95,8 +95,6 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
             strategy,
             24,
             null,
-            [.. PageAuditStrategies.All.Select(
-                candidate => new PageAuditStrategyScore(candidate, null, null))],
             runId is { } requested && requested != Guid.Empty
                 ? RunOf(endpointId, strategy, requested)
                 : null,

@@ -87,9 +87,6 @@ internal static class PageAuditReaderAssertions
         summary.IsEnabled.Should().BeTrue();
         summary.SchedulingEnabled.Should().BeTrue();
         summary.IntervalHours.Should().Be(24);
-        summary.Scores.Should().HaveCount(PageAuditStrategies.All.Length,
-            "one audit produces a number per form factor, measured or not");
-        summary.Scores.Should().OnlyContain(score => !score.HasScore);
         summary.LatestRun.Should().BeNull();
         summary.Counts.Total.Should().Be(0);
         summary.Comparison.CurrentRunId.Should().BeNull();
@@ -303,18 +300,11 @@ internal static class PageAuditReaderAssertions
             "one desktop run has been recorded, against several mobile ones")
             .Which.Strategy.Should().Be(PageAuditStrategies.Desktop);
 
-        // Both numbers travel with either reading, because the page shows one audit with a score
-        // per form factor rather than making a reader switch tabs to find the second.
-        foreach (var summary in new[] { desktop, mobile })
-        {
-            summary.Scores.Should().HaveCount(PageAuditStrategies.All.Length);
-            summary.Scores.Single(score => score.Strategy == PageAuditStrategies.Desktop)
-                .Score.Should().Be(64);
-            summary.Scores.Single(score => score.Strategy == PageAuditStrategies.Mobile)
-                .Score.Should().Be(75,
-                    "the newest scored mobile run is the one the version-change stage added; "
-                    + "the failed run after it produced no score to replace it");
-        }
+        // The score a reading carries is its own form factor's. A desktop number surfacing while
+        // mobile is selected would attribute one page's measurement to the other.
+        desktop.LatestRun!.Score.Should().Be(64);
+        mobile.LatestRun!.Score.Should().BeNull(
+            "the newest mobile run is the failed one, which produced no score of its own");
     }
 
     /// <summary>

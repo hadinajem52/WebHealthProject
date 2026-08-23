@@ -66,12 +66,6 @@
                         <td class="data-table__action" data-label="Actions">
                             <div class="data-table__action-group">
                                 <a asp-action="Endpoint" asp-route-id="@endpoint.Id">Open<span class="visually-hidden"> @endpoint.DisplayUrl</span></a>
-                                @if (endpoint.CanTest)
-                                {
-                                    <form asp-controller="Checks" asp-action="RunCheck" asp-route-id="@endpoint.Id" method="post">
-                                        <button class="button button--secondary" type="submit">Run now</button>
-                                    </form>
-                                }
                             </div>
                         </td>
                     </tr>
