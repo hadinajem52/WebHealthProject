@@ -2339,6 +2339,10 @@ code,
     display: none;
 }
 
+.ajax-messages .flash__actions {
+    margin-top: var(--space-2);
+}
+
 [aria-busy="true"] {
     cursor: progress;
 }

@@ -71,7 +71,7 @@
         }
     }
 
-    function renderMessage(message, level) {
+    function renderMessage(message, level, retry) {
         if (!message) {
             return;
         }
@@ -94,6 +94,21 @@
         text.className = 'flash__text';
         text.textContent = message;
         body.append(label, text);
+
+        if (retry) {
+            var actions = document.createElement('div');
+            actions.className = 'flash__actions';
+            var retryButton = document.createElement('button');
+            retryButton.type = 'button';
+            retryButton.className = 'button button--secondary';
+            retryButton.textContent = 'Retry';
+            retryButton.addEventListener('click', function () {
+                retryButton.disabled = true;
+                retry();
+            }, { once: true });
+            actions.append(retryButton);
+            body.append(actions);
+        }
 
         var dismiss = document.createElement('button');
         dismiss.type = 'button';
@@ -312,7 +327,9 @@
             if (error.name !== 'AbortError') {
                 renderMessage(navigator.onLine === false
                     ? 'You are offline. Reconnect and try again.'
-                    : 'The network request failed. Try again.', 'error');
+                    : 'The network request failed. Try again.', 'error', function () {
+                        requestFragment(url, selector, source, historyMode, requestInit);
+                    });
             }
             return null;
         } finally {

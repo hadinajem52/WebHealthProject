@@ -12,6 +12,8 @@ The AJAX layer changes rendering only. Controllers keep the same authorization, 
 
 Every enhanced request sends `X-WebHealth-Ajax: 1`. Razor renders the selected view without the shared layout for that request, leaving the target region as the response body.
 
+Only the newest request for a target may update it. A newer request aborts the older one, form submitters remain disabled while their request is active, and a network failure renders a same-request Retry action. Newly inserted fragments pass through the shared shell initializer before focus is moved to their validation summary or error region.
+
 ## Responses
 
 | Status | Contract |

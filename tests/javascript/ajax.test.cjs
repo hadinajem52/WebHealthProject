@@ -4,8 +4,10 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-function loadAjax() {
+function loadAjax(options = {}) {
     global.File = class File {};
+    global.FormData = options.FormData || global.FormData;
+    global.fetch = options.fetch || global.fetch;
     global.navigator = { onLine: true };
     global.window = {
         WebHealth: {},
@@ -15,15 +17,17 @@ function loadAjax() {
             pathname: '/Targets/Endpoints',
             search: '?search=old'
         },
-        history: {},
+        history: options.history || {},
         addEventListener() {}
     };
-    global.document = {
-        readyState: 'loading',
+    global.document = Object.assign({
+        readyState: options.readyState || 'loading',
         addEventListener() {},
+        dispatchEvent() {},
         querySelector() { return null; }
-    };
+    }, options.document || {});
     global.CustomEvent = class CustomEvent {};
+    global.DOMParser = options.DOMParser || global.DOMParser;
     var script = fs.readFileSync(
         path.join(__dirname, '../../src/WebHealth.Web/wwwroot/js/ajax.js'),
         'utf8');
@@ -31,9 +35,8 @@ function loadAjax() {
     return window.WebHealth.ajax;
 }
 
-const ajax = loadAjax();
-
 test('buildUrl replaces the old query and preserves repeated fields', () => {
+    const ajax = loadAjax();
     const url = ajax.buildUrl('/Targets/Endpoints?search=old', [
         ['search', 'api'],
         ['tag', 'one'],
@@ -44,6 +47,7 @@ test('buildUrl replaces the old query and preserves repeated fields', () => {
 });
 
 test('isLocalUrl accepts local paths and rejects external destinations', () => {
+    const ajax = loadAjax();
     assert.equal(ajax.isLocalUrl('/Incidents'), true);
     assert.equal(ajax.isLocalUrl('https://localhost/PageAudits'), true);
     assert.equal(ajax.isLocalUrl('https://example.com/'), false);
@@ -51,6 +55,7 @@ test('isLocalUrl accepts local paths and rejects external destinations', () => {
 });
 
 test('status messages cover the response contract', () => {
+    const ajax = loadAjax();
     assert.match(ajax.messageForStatus(401), /session/i);
     assert.match(ajax.messageForStatus(403), /permission/i);
     assert.match(ajax.messageForStatus(404), /no longer/i);
@@ -58,3 +63,235 @@ test('status messages cover the response contract', () => {
     assert.match(ajax.messageForStatus(422), /highlighted/i);
     assert.match(ajax.messageForStatus(500), /could not be completed/i);
 });
+
+test('starting a newer request cancels the older request for the same target', async () => {
+    const target = { setAttribute() {} };
+    let firstSignal;
+    let requestCount = 0;
+    const ajax = loadAjax({
+        document: {
+            querySelector(selector) {
+                return selector === '#target' ? target : null;
+            }
+        },
+        fetch(url, init) {
+            requestCount += 1;
+            if (requestCount === 1) {
+                firstSignal = init.signal;
+                return new Promise((resolve, reject) => {
+                    init.signal.addEventListener('abort', () => {
+                        const error = new Error('Aborted');
+                        error.name = 'AbortError';
+                        reject(error);
+                    });
+                });
+            }
+            return Promise.resolve(textResponse(404, ''));
+        }
+    });
+
+    const first = ajax.load('/first', '#target');
+    const second = ajax.load('/second', '#target');
+    await Promise.all([first, second]);
+
+    assert.equal(firstSignal.aborted, true);
+    assert.equal(requestCount, 2);
+});
+
+test('a submitted form is blocked until its current request finishes', async () => {
+    const handlers = {};
+    const target = { setAttribute() {} };
+    let finishRequest;
+    let requestCount = 0;
+    const form = formStub('#target');
+    const submitter = { disabled: false, dataset: {} };
+    loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            querySelector(selector) {
+                return selector === '#target' ? target : null;
+            }
+        },
+        fetch() {
+            requestCount += 1;
+            return new Promise(resolve => {
+                finishRequest = resolve;
+            });
+        }
+    });
+    const event = submitEvent(form, submitter);
+
+    handlers.submit(event);
+    handlers.submit(event);
+
+    assert.equal(requestCount, 1);
+    assert.equal(submitter.disabled, true);
+    finishRequest(textResponse(404, ''));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(submitter.disabled, false);
+});
+
+test('a successful GET form replaces its target, initializes it, and pushes history', async () => {
+    const handlers = {};
+    const pushed = [];
+    const incoming = {
+        querySelector() { return null; }
+    };
+    let replacedWith;
+    const current = {
+        setAttribute() {},
+        replaceWith(value) {
+            replacedWith = value;
+        }
+    };
+    const form = formStub('#ajax-page', 'get', [['search', 'api']]);
+    let initialized;
+    const ajax = loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        history: {
+            replaceState() {},
+            pushState(state, title, url) {
+                pushed.push({ state, url });
+            }
+        },
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            querySelector(selector) {
+                return selector === '#ajax-page' ? current : null;
+            }
+        },
+        DOMParser: class DOMParser {
+            parseFromString() {
+                return { querySelector: () => incoming };
+            }
+        },
+        fetch() {
+            return Promise.resolve(textResponse(200, '<div id="ajax-page"></div>'));
+        }
+    });
+    window.WebHealth.init = root => {
+        initialized = root;
+    };
+
+    handlers.submit(submitEvent(form, null));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(replacedWith, incoming);
+    assert.equal(initialized, incoming);
+    assert.equal(pushed.length, 1);
+    assert.equal(pushed[0].url, 'https://localhost/Registry?search=api');
+    assert.equal(pushed[0].state.ajaxTarget, '#ajax-page');
+    assert.equal(ajax.isLocalUrl(pushed[0].url), true);
+});
+
+test('a network failure offers one retry that repeats the request', async () => {
+    const target = { setAttribute() {} };
+    const region = {
+        classList: { add() {} },
+        replaceChildren(value) {
+            this.child = value;
+        }
+    };
+    const created = [];
+    let requestCount = 0;
+    const ajax = loadAjax({
+        document: {
+            querySelector(selector) {
+                if (selector === '#target') {
+                    return target;
+                }
+                return selector === '[data-ajax-messages]' ? region : null;
+            },
+            createElement(tagName) {
+                const element = elementStub(tagName);
+                created.push(element);
+                return element;
+            }
+        },
+        fetch() {
+            requestCount += 1;
+            return requestCount === 1
+                ? Promise.reject(new Error('Network unavailable'))
+                : Promise.resolve(textResponse(404, ''));
+        }
+    });
+
+    await ajax.load('/retryable', '#target');
+    const retryButton = created.find(element => element.textContent === 'Retry');
+    assert.ok(retryButton);
+    retryButton.listeners.click();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(requestCount, 2);
+    assert.equal(retryButton.disabled, true);
+});
+
+function textResponse(status, body) {
+    return {
+        status,
+        ok: status >= 200 && status < 300,
+        headers: { get: () => 'text/html' },
+        text: async () => body
+    };
+}
+
+class FormDataStub {
+    constructor(form) {
+        this.values = form.entries;
+    }
+
+    entries() {
+        return this.values[Symbol.iterator]();
+    }
+}
+
+function formStub(target, method = 'post', entries = []) {
+    const attributes = {
+        'data-ajax-target': target,
+        'data-ajax-history': method === 'get' ? 'push' : null
+    };
+    const form = {
+        action: 'https://localhost/Registry',
+        method,
+        entries,
+        toggleAttribute() {},
+        getAttribute(name) {
+            return attributes[name];
+        }
+    };
+    form.closest = () => form;
+    return form;
+}
+
+function submitEvent(form, submitter) {
+    return {
+        target: form,
+        submitter,
+        defaultPrevented: false,
+        preventDefault() {
+            this.defaultPrevented = true;
+        }
+    };
+}
+
+function elementStub(tagName) {
+    return {
+        tagName,
+        children: [],
+        listeners: {},
+        setAttribute() {},
+        append(...values) {
+            this.children.push(...values);
+        },
+        addEventListener(name, handler) {
+            this.listeners[name] = handler;
+        }
+    };
+}
