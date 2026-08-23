@@ -82,7 +82,9 @@ public sealed class RegistryController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildClientFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateClient),
+                await BuildClientFormAsync(model, cancellationToken));
         }
 
         var result = await clientService.CreateAsync(
@@ -92,11 +94,14 @@ public sealed class RegistryController(
         if (!result.Succeeded)
         {
             AddErrors(result.Errors);
-            return View(await BuildClientFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateClient),
+                await BuildClientFormAsync(model, cancellationToken));
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Client created successfully.");
-        return RedirectToAction(nameof(Client), new { id = result.EntityId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Client), new { id = result.EntityId })!,
+            "Client created successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -126,7 +131,9 @@ public sealed class RegistryController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildClientFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(EditClient),
+                await BuildClientFormAsync(model, cancellationToken));
         }
 
         var result = await clientService.UpdateAsync(
@@ -144,8 +151,9 @@ public sealed class RegistryController(
             return await HandleClientEditFailureAsync(model, result, cancellationToken);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Client updated successfully.");
-        return RedirectToAction(nameof(Client), new { id = model.ClientId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Client), new { id = model.ClientId })!,
+            "Client updated successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
@@ -173,7 +181,9 @@ public sealed class RegistryController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildWebsiteFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateWebsite),
+                await BuildWebsiteFormAsync(model, cancellationToken));
         }
 
         var result = await websiteService.CreateAsync(
@@ -189,11 +199,14 @@ public sealed class RegistryController(
         if (!result.Succeeded)
         {
             AddErrors(result.Errors);
-            return View(await BuildWebsiteFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateWebsite),
+                await BuildWebsiteFormAsync(model, cancellationToken));
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Website created successfully.");
-        return RedirectToAction(nameof(Website), new { id = result.EntityId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Website), new { id = result.EntityId })!,
+            "Website created successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -225,7 +238,9 @@ public sealed class RegistryController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildWebsiteFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(EditWebsite),
+                await BuildWebsiteFormAsync(model, cancellationToken));
         }
 
         var result = await websiteService.UpdateAsync(
@@ -244,8 +259,9 @@ public sealed class RegistryController(
             return await HandleWebsiteEditFailureAsync(model, result, cancellationToken);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Website updated successfully.");
-        return RedirectToAction(nameof(Website), new { id = model.WebsiteId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Website), new { id = model.WebsiteId })!,
+            "Website updated successfully.");
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
@@ -323,7 +339,12 @@ public sealed class RegistryController(
         }
 
         AddErrors(result.Errors);
-        return View("EditClient", await BuildClientFormAsync(model, cancellationToken));
+        return this.ValidationView(
+            nameof(EditClient),
+            await BuildClientFormAsync(model, cancellationToken),
+            result.Status == RegistryMutationStatus.ConcurrencyConflict
+                ? StatusCodes.Status409Conflict
+                : StatusCodes.Status422UnprocessableEntity);
     }
 
     private async Task<IActionResult> HandleWebsiteEditFailureAsync(
@@ -337,7 +358,12 @@ public sealed class RegistryController(
         }
 
         AddErrors(result.Errors);
-        return View("EditWebsite", await BuildWebsiteFormAsync(model, cancellationToken));
+        return this.ValidationView(
+            nameof(EditWebsite),
+            await BuildWebsiteFormAsync(model, cancellationToken),
+            result.Status == RegistryMutationStatus.ConcurrencyConflict
+                ? StatusCodes.Status409Conflict
+                : StatusCodes.Status422UnprocessableEntity);
     }
 
     private async Task<IActionResult> ChangeClientStateAsync(

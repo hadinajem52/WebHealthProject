@@ -5,6 +5,7 @@ using WebHealth.Application.Administration;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Identity;
+using WebHealth.Web.Ajax;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
 
@@ -39,7 +40,7 @@ public sealed class AdministrationController(
         if (!ModelState.IsValid)
         {
             model.Password = string.Empty;
-            return View(model);
+            return this.ValidationView(nameof(CreateUser), model);
         }
 
         var result = await userAdministration.CreateUserAsync(
@@ -50,11 +51,12 @@ public sealed class AdministrationController(
         if (!result.Succeeded)
         {
             AddErrors(result.Errors);
-            return View(model);
+            return this.ValidationView(nameof(CreateUser), model);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "User created successfully.");
-        return RedirectToAction(nameof(Users));
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Users))!,
+            "User created successfully.");
     }
 
     [HttpGet]
@@ -86,7 +88,7 @@ public sealed class AdministrationController(
         {
             model.NewPassword = null;
             await RestoreEmailAsync(model, cancellationToken);
-            return View(model);
+            return this.ValidationView(nameof(EditUser), model);
         }
 
         var result = await userAdministration.UpdateUserAsync(
@@ -103,12 +105,13 @@ public sealed class AdministrationController(
             model.NewPassword = null;
             AddErrors(result.Errors);
             await RestoreEmailAsync(model, cancellationToken);
-            return View(model);
+            return this.ValidationView(nameof(EditUser), model);
         }
 
         model.NewPassword = null;
-        TempData.AddFlashMessage(FlashLevel.Success, "User access updated successfully.");
-        return RedirectToAction(nameof(Users));
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Users))!,
+            "User access updated successfully.");
     }
 
     [HttpGet]
@@ -133,7 +136,9 @@ public sealed class AdministrationController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildTeamFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateTeam),
+                await BuildTeamFormAsync(model, cancellationToken));
         }
 
         var result = await teamAdministration.CreateTeamAsync(
@@ -143,11 +148,14 @@ public sealed class AdministrationController(
         if (!result.Succeeded)
         {
             AddErrors(result.Errors);
-            return View(await BuildTeamFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(CreateTeam),
+                await BuildTeamFormAsync(model, cancellationToken));
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Team created successfully.");
-        return RedirectToAction(nameof(Teams));
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Teams))!,
+            "Team created successfully.");
     }
 
     [HttpGet]
@@ -176,7 +184,9 @@ public sealed class AdministrationController(
     {
         if (!ModelState.IsValid)
         {
-            return View(await BuildTeamFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(EditTeam),
+                await BuildTeamFormAsync(model, cancellationToken));
         }
 
         var result = await teamAdministration.UpdateTeamAsync(
@@ -190,12 +200,23 @@ public sealed class AdministrationController(
             cancellationToken);
         if (!result.Succeeded)
         {
+            if (result.Status == TeamAdministrationStatus.NotFound)
+            {
+                return NotFound();
+            }
+
             AddErrors(result.Errors);
-            return View(await BuildTeamFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(EditTeam),
+                await BuildTeamFormAsync(model, cancellationToken),
+                result.Status == TeamAdministrationStatus.ConcurrencyConflict
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status422UnprocessableEntity);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Team assignment updated successfully.");
-        return RedirectToAction(nameof(Teams));
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Teams))!,
+            "Team assignment updated successfully.");
     }
 
     private Guid GetActorUserId()

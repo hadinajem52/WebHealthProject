@@ -6,7 +6,8 @@
 <section class="card form-card">
     <h2 class="card__title">Edit client</h2>
     <p class="card__subtitle">The original version is checked before this update is accepted.</p>
-    <form asp-action="EditClient" method="post" class="form-stack">
+    <form asp-action="EditClient" method="post" class="form-stack" id="ajax-form-region" data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region">
+        <partial name="_AjaxValidationSummary" />
         <input asp-for="ClientId" type="hidden" /><input asp-for="Version" type="hidden" />
         <partial name="_ClientForm" model="Model" />
         <div class="form-actions">

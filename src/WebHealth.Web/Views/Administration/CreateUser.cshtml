@@ -13,7 +13,8 @@
     <h2 class="card__title">Create application user</h2>
     <p class="card__subtitle">The initial password is accepted once and is never displayed or logged.</p>
 
-    <form asp-action="CreateUser" method="post" class="form-stack">
+    <form asp-action="CreateUser" method="post" class="form-stack" id="ajax-form-region" data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region">
+        <partial name="_AjaxValidationSummary" />
         <div class="form-field">
             <label asp-for="DisplayName"></label>
             <input asp-for="DisplayName" autocomplete="name" />

@@ -38,18 +38,19 @@ public sealed class MaintenanceController(
         if (!ModelState.IsValid || model.ScopeId is null)
         {
             if (model.ScopeId is null) ModelState.AddModelError(nameof(model.ScopeId), "Select the maintenance target.");
-            return View(await BuildFormAsync(model, cancellationToken));
+            return this.ValidationView(nameof(Create), await BuildFormAsync(model, cancellationToken));
         }
 
         var result = await maintenanceService.CreateAsync(ToCreate(model), GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
             AddErrors(result.Errors);
-            return View(await BuildFormAsync(model, cancellationToken));
+            return this.ValidationView(nameof(Create), await BuildFormAsync(model, cancellationToken));
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Maintenance window created.");
-        return RedirectToAction(nameof(Details), new { id = result.MaintenanceWindowId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Details), new { id = result.MaintenanceWindowId })!,
+            "Maintenance window created.");
     }
 
     [HttpGet]
@@ -88,7 +89,7 @@ public sealed class MaintenanceController(
         if (!ModelState.IsValid || model.ScopeId is null)
         {
             if (model.ScopeId is null) ModelState.AddModelError(nameof(model.ScopeId), "Select the maintenance target.");
-            return View(await BuildFormAsync(model, cancellationToken));
+            return this.ValidationView(nameof(Edit), await BuildFormAsync(model, cancellationToken));
         }
 
         var result = await maintenanceService.UpdateAsync(new(
@@ -100,11 +101,17 @@ public sealed class MaintenanceController(
         {
             if (result.Status == MaintenanceMutationStatus.NotFound) return NotFound();
             AddErrors(result.Errors);
-            return View(await BuildFormAsync(model, cancellationToken));
+            return this.ValidationView(
+                nameof(Edit),
+                await BuildFormAsync(model, cancellationToken),
+                result.Status == MaintenanceMutationStatus.ConcurrencyConflict
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status422UnprocessableEntity);
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, "Maintenance window updated as a new immutable occurrence.");
-        return RedirectToAction(nameof(Details), new { id = result.MaintenanceWindowId });
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Details), new { id = result.MaintenanceWindowId })!,
+            "Maintenance window updated as a new immutable occurrence.");
     }
 
     [HttpPost]

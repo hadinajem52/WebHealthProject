@@ -137,7 +137,9 @@ public sealed class TeamAdministrationService(
             cancellationToken);
         if (team is null)
         {
-            return TeamAdministrationResult.Failure("The team no longer exists.");
+            return TeamAdministrationResult.Failure(
+                TeamAdministrationStatus.NotFound,
+                "The team no longer exists.");
         }
 
         dbContext.Entry(team).Property(candidate => candidate.Version).OriginalValue = command.Version;
@@ -180,6 +182,7 @@ public sealed class TeamAdministrationService(
             await transaction.RollbackAsync(cancellationToken);
             dbContext.ChangeTracker.Clear();
             return TeamAdministrationResult.Failure(
+                TeamAdministrationStatus.ConcurrencyConflict,
                 "This team changed after you opened it. Reload the page and try again.");
         }
         catch (DbUpdateException exception) when (IsTeamNameConflict(exception))
