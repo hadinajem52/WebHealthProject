@@ -12,7 +12,9 @@ The AJAX layer changes rendering only. Controllers keep the same authorization, 
 
 Every enhanced request sends `X-WebHealth-Ajax: 1`. Razor renders the selected view without the shared layout for that request, leaving the target region as the response body.
 
-Only the newest request for a target may update it. A newer request aborts the older one, form submitters remain disabled while their request is active, and a network failure renders a same-request Retry action. Newly inserted fragments pass through the shared shell initializer before focus is moved to their validation summary or error region.
+Only the newest read request for a target may update it. A newer read aborts an older read. Mutations are serialized per target, cannot be aborted by reads, and delay same-target reads until the mutation and its authoritative refresh finish. Form submitters remain disabled while their mutation is active.
+
+A read network failure renders a same-request Retry action. An ambiguous mutation failure never offers an automatic retry: its target and submitter remain locked until the user reloads or navigates away. Newly inserted fragments pass through the shared shell initializer before focus is moved to their validation summary, error region, updated control, heading, or fragment root. Background polling does not steal focus.
 
 ## Responses
 
@@ -24,9 +26,11 @@ Only the newest request for a target may update it. A newer request aborts the o
 | 403 | Permission denied |
 | 404 | Record is not visible or no longer exists |
 | 409 | Concurrency conflict; submitted forms are preserved or stateful regions are refreshed |
-| 422 | HTML form fragment with validation messages |
+| 422 | HTML form fragment with validation messages, or JSON error with an authoritative refresh instruction |
 | 500 | Problem Details with a correlation identifier |
 
 JSON operations use `AjaxFragmentViewModel`: `message`, `level`, `redirectUrl`, `refreshUrl`, `statusUrl`, and `runId`. Redirect and refresh addresses must be same-origin.
+
+Successful GET history defaults to `push`. Refresh-only reads use `data-ajax-history="replace"` so repeated refreshes do not add duplicate Back-button entries.
 
 Normal login, logout, access-denied navigation, sidebar navigation, details-page links, exports, downloads, external links, and permanent purge remain standard requests.
