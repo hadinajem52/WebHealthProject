@@ -706,3 +706,93 @@ function elementStub(tagName) {
         }
     };
 }
+
+test('a comma-separated target replaces every named region from one response', async () => {
+    const replaced = [];
+    const ready = [];
+    const incoming = {
+        results: { querySelector: () => null },
+        action: { querySelector: () => null }
+    };
+    const current = {
+        results: {
+            setAttribute() {},
+            replaceWith(value) { replaced.push(value); }
+        },
+        action: {
+            setAttribute() {},
+            replaceWith(value) { replaced.push(value); }
+        }
+    };
+    loadAjax({
+        readyState: 'complete',
+        document: {
+            addEventListener() {},
+            dispatchEvent(event) {
+                if (event.type === 'webhealth:fragment-ready') {
+                    ready.push(event.detail.root);
+                }
+            },
+            querySelector(selector) {
+                if (selector === '#crawl-results') return current.results;
+                return selector === '#crawl-run-action' ? current.action : null;
+            }
+        },
+        DOMParser: class DOMParser {
+            parseFromString() {
+                return {
+                    querySelector(selector) {
+                        if (selector === '#crawl-results') return incoming.results;
+                        return selector === '#crawl-run-action' ? incoming.action : null;
+                    }
+                };
+            }
+        },
+        fetch() {
+            return Promise.resolve(textResponse(200, '<div></div>'));
+        }
+    });
+    global.CustomEvent = class CustomEvent {
+        constructor(type, init) {
+            this.type = type;
+            this.detail = init && init.detail;
+        }
+    };
+
+    const root = await window.WebHealth.ajax.load('/Crawl', '#crawl-results,#crawl-run-action');
+
+    assert.deepEqual(replaced, [incoming.results, incoming.action]);
+    assert.deepEqual(ready, [incoming.results, incoming.action]);
+    assert.equal(root, incoming.results);
+});
+
+test('a caller abort signal cancels the fragment request it was passed to', async () => {
+    const controller = new AbortController();
+    let observed;
+    loadAjax({
+        readyState: 'complete',
+        document: {
+            addEventListener() {},
+            querySelector() { return null; }
+        },
+        fetch(url, init) {
+            observed = init.signal;
+            return new Promise((resolve, reject) => {
+                init.signal.addEventListener('abort', () => {
+                    const error = new Error('Aborted');
+                    error.name = 'AbortError';
+                    reject(error);
+                });
+            });
+        }
+    });
+
+    const pending = window.WebHealth.ajax.load('/Crawl', '#crawl-results', {
+        abortSignal: controller.signal
+    });
+    controller.abort();
+    const result = await pending;
+
+    assert.equal(observed.aborted, true);
+    assert.equal(result, null);
+});

@@ -2,6 +2,7 @@
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Seo;
+using WebHealth.Domain.Crawling;
 using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.IntegrationTests.Support;
@@ -28,18 +29,41 @@ internal sealed class EmptySeoReader : ISeoReader
 
 internal sealed class EmptyCrawlReportReader : ICrawlReportReader
 {
+    /// <summary>
+    /// An endpoint whose crawl is still going, kept apart from the endpoint the Run crawl button
+    /// tests select: a running crawl replaces that button with the in-progress link, so sharing
+    /// one endpoint would make those tests fail for a reason that has nothing to do with them.
+    /// </summary>
+    public static Guid RunningEndpointId { get; } = Guid.Parse("2b7d4f10-0000-0000-0000-000000000030");
+
+    public static Guid RunningRunId { get; } = Guid.Parse("2b7d4f10-0000-0000-0000-000000000031");
+
     public Task<IReadOnlyList<CrawlRunSummary>> ListRunsAsync(
         Guid endpointId,
         int limit,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<CrawlRunSummary>>([]);
+        Task.FromResult<IReadOnlyList<CrawlRunSummary>>(
+            endpointId == RunningEndpointId ? [RunningRun()] : []);
 
     public Task<CrawlRunSummary?> FindRunAsync(
         Guid runId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<CrawlRunSummary?>(null);
+        Task.FromResult(runId == RunningRunId ? RunningRun() : null);
+
+    private static CrawlRunSummary RunningRun() => new(
+        RunningRunId,
+        RunningEndpointId,
+        CrawlRunStatuses.Running,
+        CrawlStopReasons.FrontierExhausted,
+        PagesFetched: 3,
+        LinksRecorded: 12,
+        BrokenLinkCount: 0,
+        RobotsOverrideGranted: false,
+        RobotsOverrideRefusedBecause: null,
+        StartedAt: DateTimeOffset.UnixEpoch,
+        FinishedAt: null);
 
     public Task<IReadOnlyList<CrawlBrokenLink>> ListBrokenLinksAsync(
         Guid runId,

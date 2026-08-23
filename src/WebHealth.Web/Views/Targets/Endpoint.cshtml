@@ -32,8 +32,9 @@
         : certificate.ValidationCategory;
 
     var latest = Model.LatestCheck;
-    var checkStatusUrl = latest is not null && latest.State != WebHealth.Domain.Monitoring.LogicalCheckStates.Completed
-        ? Url.Action("Status", "Checks", new { id = latest.LogicalCheckId })
+    var checkInFlight = latest is not null && latest.State != WebHealth.Domain.Monitoring.LogicalCheckStates.Completed;
+    var checkStatusUrl = checkInFlight
+        ? Url.Action("Status", "Checks", new { id = latest!.LogicalCheckId })
         : null;
 
     static string StatusIcon(string status) => status switch
@@ -451,9 +452,20 @@
     <div class="page-intro">
         <div>
             <h2 class="card__title" id="endpoint-latest-heading">Latest check</h2>
-            @{ var latestStatus = latest is null ? "warning" : StatusBadges.ForOutcome(latest.Outcome); }
+            @{
+                var latestStatus = latest is null ? "warning"
+                    : checkInFlight ? StatusBadges.Info
+                    : StatusBadges.ForOutcome(latest.Outcome);
+            }
             <p class="card__status" data-status="@latestStatus">
-                @await Html.PartialAsync("_Icon", StatusIcon(latestStatus))
+                @if (checkInFlight)
+                {
+                    @await Html.PartialAsync("_Spinner")
+                }
+                else
+                {
+                    @await Html.PartialAsync("_Icon", StatusIcon(latestStatus))
+                }
                 <span>Outcome &middot; @(latest is null ? "No checks yet" : latest.Outcome ?? latest.State)</span>
             </p>
         </div>
@@ -461,7 +473,7 @@
         @if (latest is not null)
         {
             <div class="form-actions">
-                @if (latest.State != WebHealth.Domain.Monitoring.LogicalCheckStates.Completed)
+                @if (checkInFlight)
                 {
                     <a class="button button--secondary"
                        asp-action="Endpoint"
@@ -504,9 +516,10 @@
                         </span>
                         <span class="detail-list__value">
                             @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                StatusBadges.ForOutcome(latest.Outcome),
+                                checkInFlight ? StatusBadges.Info : StatusBadges.ForOutcome(latest.Outcome),
                                 latest.Outcome ?? latest.State,
-                                latest.FailureCategory))
+                                latest.FailureCategory,
+                                checkInFlight))
                         </span>
                     </div>
                 </li>
@@ -570,5 +583,6 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/poller.js" asp-append-version="true"></script>
     <script src="~/js/checks.js" asp-append-version="true"></script>
 }

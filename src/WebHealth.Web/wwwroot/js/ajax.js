@@ -58,6 +58,13 @@
         return source.getAttribute('data-ajax-target') || DEFAULT_TARGET;
     }
 
+    function selectorList(selector) {
+        return selector
+            .split(',')
+            .map(function (part) { return part.trim(); })
+            .filter(function (part) { return part.length > 0; });
+    }
+
     function statusMessage(status) {
         switch (status) {
             case 401:
@@ -141,7 +148,7 @@
                 delete source.webHealthAjaxBusyVersion;
             }
         }
-        var target = document.querySelector(selector);
+        var target = document.querySelector(selectorList(selector)[0]);
         if (target && (busy || isCurrentRequest(selector, request))) {
             target.setAttribute('aria-busy', busy ? 'true' : 'false');
         }
@@ -208,24 +215,34 @@
 
     function replaceFragment(html, selector, status, url, source) {
         var parsed = new DOMParser().parseFromString(html, 'text/html');
-        var incoming = parsed.querySelector(selector);
-        var current = document.querySelector(selector);
-        if (!incoming || !current) {
+        var regions = selectorList(selector).map(function (one) {
+            return { incoming: parsed.querySelector(one), current: document.querySelector(one) };
+        });
+        var complete = regions.length > 0 && regions.every(function (region) {
+            return region.incoming && region.current;
+        });
+        if (!complete) {
             throw new Error('The server response did not contain the requested page region.');
         }
 
-        document.dispatchEvent(new CustomEvent('webhealth:before-fragment-replace', {
-            detail: { root: current }
-        }));
-        current.replaceWith(incoming);
-        if (window.WebHealth.init) {
-            window.WebHealth.init(incoming);
-        }
-        focusResponse(incoming, status, source);
-        document.dispatchEvent(new CustomEvent('webhealth:fragment-ready', {
-            detail: { root: incoming, status: status, url: url }
-        }));
-        return incoming;
+        regions.forEach(function (region) {
+            document.dispatchEvent(new CustomEvent('webhealth:before-fragment-replace', {
+                detail: { root: region.current }
+            }));
+            region.current.replaceWith(region.incoming);
+            if (window.WebHealth.init) {
+                window.WebHealth.init(region.incoming);
+            }
+        });
+
+        var primary = regions[0].incoming;
+        focusResponse(primary, status, source);
+        regions.forEach(function (region) {
+            document.dispatchEvent(new CustomEvent('webhealth:fragment-ready', {
+                detail: { root: region.incoming, status: status, url: url }
+            }));
+        });
+        return primary;
     }
 
     function problemMessage(payload, status) {
@@ -427,12 +444,23 @@
 
     async function executeRequest(url, selector, source, historyMode, requestInit, request) {
         var options = Object.assign({}, requestInit || {});
+        var caller = options.abortSignal;
+        delete options.abortSignal;
         options.headers = Object.assign({}, options.headers || {}, {
             'Accept': 'text/html, application/problem+json, application/json',
             'X-WebHealth-Ajax': '1'
         });
         options.credentials = 'same-origin';
         options.signal = request.controller.signal;
+        if (caller) {
+            if (caller.aborted) {
+                request.controller.abort();
+            } else {
+                caller.addEventListener('abort', function () {
+                    request.controller.abort();
+                }, { once: true });
+            }
+        }
 
         setBusy(source, selector, true, request);
         document.dispatchEvent(new CustomEvent('webhealth:ajax-start', {
@@ -592,8 +620,13 @@
         messageForStatus: statusMessage,
         messageForProblem: problemMessage,
         navigateToLogin: navigateToLogin,
-        load: function (url, selector) {
-            return requestFragment(url, selector || DEFAULT_TARGET, null, null, { method: 'GET' });
+        load: function (url, selector, options) {
+            return requestFragment(
+                url,
+                selector || DEFAULT_TARGET,
+                null,
+                null,
+                Object.assign({ method: 'GET' }, options || {}));
         },
         renderMessage: renderMessage
     };

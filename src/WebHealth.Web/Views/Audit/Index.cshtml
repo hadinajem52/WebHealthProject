@@ -111,12 +111,13 @@
             </div>
 
             <div class="table-scroll table-scroll--flush">
-                <table class="data-table audit-table">
+                <table class="data-table data-table--history audit-table">
                     <caption class="visually-hidden">Filtered append-only audit events</caption>
                     <thead>
                         <tr>
-                            <th scope="col">Time / actor</th>
-                            <th scope="col">Action</th>
+                            <th scope="col">Subject</th>
+                            <th scope="col">Action key</th>
+                            <th scope="col">Actor</th>
                             <th scope="col">Entity</th>
                             <th scope="col">Outcome</th>
                             <th scope="col">Safe changes</th>
@@ -126,14 +127,14 @@
                         @foreach (var auditEvent in Model.Result.Events)
                         {
                             <tr>
-                                <td data-label="Time / actor">
-                                    <span class="data-table__primary">@Html.TimestampWithSeconds(auditEvent.OccurredAt)</span>
-                                    <span class="data-table__secondary">@auditEvent.ActorDisplayName</span>
+                                <td data-label="Subject">
+                                    <span class="history-cell">
+                                        <span class="history-cell__subject audit-action">@AuditEventDisplay.ActionName(auditEvent.Action)</span>
+                                        <span class="history-cell__time">@Html.TimestampWithSeconds(auditEvent.OccurredAt)</span>
+                                    </span>
                                 </td>
-                                <td data-label="Action">
-                                    <span class="data-table__primary audit-action">@AuditEventDisplay.ActionName(auditEvent.Action)</span>
-                                    <code class="data-table__secondary">@auditEvent.Action</code>
-                                </td>
+                                <td data-label="Action key"><code class="data-table__secondary">@auditEvent.Action</code></td>
+                                <td data-label="Actor">@auditEvent.ActorDisplayName</td>
                                 <td data-label="Entity">
                                     <span class="data-table__primary">@auditEvent.EntityType</span>
                                     <span class="data-table__secondary code">@auditEvent.EntityIdentifier</span>

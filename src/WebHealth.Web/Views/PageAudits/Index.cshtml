@@ -31,7 +31,7 @@
 <div id="ajax-page"
      class="stack"
      data-ajax-region
-     data-page-audits>
+     data-run-scope="#page-audit-results">
     @* No card title here: the page heading already reads "PageSpeed", and repeating it
        immediately below is a second first-level label for the same thing. The card is the
        control that scopes the page, so the control leads and the explanation follows it. *@
@@ -109,9 +109,10 @@
 
     <div id="page-audit-results"
          class="stack"
-         data-page-audit-results
-         data-page-audit-active="@(run?.IsActive == true ? "true" : "false")"
-         data-page-audit-status-url="@auditStatusUrl">
+         data-run-status
+         data-run-active="@(run?.IsActive == true ? "true" : "false")"
+         data-run-url="@auditStatusUrl"
+         data-run-complete-message="The PageSpeed audit finished. This page now shows its scores.">
     @if (summary is null)
     {
         <section class="card">
@@ -140,7 +141,14 @@
                 <div>
                     <h3 class="card__title target-url">@(selectedLabel ?? "Selected endpoint")</h3>
                     <p class="card__status" data-status="@summaryTone">
-                        @await Html.PartialAsync("_Icon", StatusIcon(summaryTone))
+                        @if (run?.IsActive == true)
+                        {
+                            @await Html.PartialAsync("_Spinner")
+                        }
+                        else
+                        {
+                            @await Html.PartialAsync("_Icon", StatusIcon(summaryTone))
+                        }
                         <span>PageSpeed @strategyLabel &middot; @(run is null ? "No audit has run yet" : PageAuditDisplay.DescribeStatus(run))</span>
                     </p>
                 </div>
@@ -183,7 +191,11 @@
                                 }
                                 else
                                 {
-                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.StatusTone(run), PageAuditDisplay.DescribeStatus(run)))
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        PageAuditDisplay.StatusTone(run),
+                                        PageAuditDisplay.DescribeStatus(run),
+                                        null,
+                                        run.IsActive))
                                 }
                             </span>
                         </div>
@@ -528,14 +540,13 @@
                 </div>
             </div>
             <div class="table-scroll table-scroll--flush">
-                <table class="data-table">
+                <table class="data-table data-table--history">
                     <caption class="visually-hidden">@strategyLabel PageSpeed runs for the selected endpoint</caption>
                     <thead>
                         <tr>
-                            <th scope="col">Queued</th>
+                            <th scope="col">Subject</th>
                             <th scope="col">Status</th>
                             <th scope="col">Score</th>
-                            <th scope="col">Source</th>
                             <th scope="col">Lighthouse</th>
                             <th scope="col"><span class="visually-hidden">Details</span></th>
                         </tr>
@@ -544,9 +555,18 @@
                         @foreach (var historyRun in Model.Runs)
                         {
                             <tr>
-                                <td data-label="Queued">@Html.Timestamp(historyRun.QueuedAt)</td>
+                                <td data-label="Subject">
+                                    <span class="history-cell">
+                                        <span class="history-cell__subject">@historyRun.Source run</span>
+                                        <span class="history-cell__time">@Html.Timestamp(historyRun.QueuedAt)</span>
+                                    </span>
+                                </td>
                                 <td data-label="Status">
-                                    <span class="badge" data-status="@PageAuditDisplay.StatusTone(historyRun)">@PageAuditDisplay.DescribeStatus(historyRun)</span>
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        PageAuditDisplay.StatusTone(historyRun),
+                                        PageAuditDisplay.DescribeStatus(historyRun),
+                                        null,
+                                        historyRun.IsActive))
                                 </td>
                                 <td data-label="Score">
                                     @if (historyRun.HasScore)
@@ -558,7 +578,6 @@
                                         <span>—</span>
                                     }
                                 </td>
-                                <td data-label="Source">@historyRun.Source</td>
                                 <td data-label="Lighthouse">@(historyRun.LighthouseVersion ?? "—")</td>
                                 <td class="data-table__action" data-label="Details">
                                     <a asp-action="Index"
@@ -579,5 +598,6 @@
 </div>
 
 @section Scripts {
-    <script src="~/js/page-audits.js" asp-append-version="true"></script>
+    <script src="~/js/poller.js" asp-append-version="true"></script>
+    <script src="~/js/run-status.js" asp-append-version="true"></script>
 }
