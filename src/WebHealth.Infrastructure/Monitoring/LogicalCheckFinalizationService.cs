@@ -86,6 +86,7 @@ internal sealed class LogicalCheckFinalizationService(
         var now = timeProvider.GetUtcNow();
         var robotsFacts = await LoadRobotsFactsAsync(check, cancellationToken);
         var normalized = Normalize(check, command.Evidence, seoExtraction, robotsFacts, now);
+        var indeterminateIssueKeys = FindIndeterminateIssueKeys(check, command.Evidence, robotsFacts);
         var maintenance = await maintenanceEvaluator.FindActiveAsync(check.EndpointMonitorId, normalized.MeasuredAt, cancellationToken);
         AddHistory(check, normalized, command.Evidence, seoExtraction, maintenance, now);
         var counterMode = HealthConfirmationEngine.SelectCounterMode(
@@ -95,7 +96,7 @@ internal sealed class LogicalCheckFinalizationService(
             maintenance is not null,
             maintenance?.ContinueFailureCounter ?? false);
         var healthDecision = await ApplyHealthAsync(
-            check, normalized, counterMode, now, cancellationToken);
+            check, normalized, indeterminateIssueKeys, counterMode, now, cancellationToken);
         await incidentAutomation.ApplyAsync(
             check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken,
             // BR-C06: the fingerprint just observed decides which expiry incidents still have a
@@ -332,6 +333,28 @@ internal sealed class LogicalCheckFinalizationService(
                 ? "The target is not currently eligible for monitoring."
                 : "The execution retry limit was exhausted.",
             [], []);
+    }
+
+    private static IReadOnlyCollection<string> FindIndeterminateIssueKeys(
+        LogicalCheck check,
+        LogicalCheckTerminalEvidence evidence,
+        RobotsSnapshotFacts? robotsFacts)
+    {
+        if (MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType))
+        {
+            return [];
+        }
+
+        if (evidence is not HttpTransportEvidence http
+            || http.Result.Failure is not null
+            || robotsFacts is null)
+        {
+            return RobotsRules.AllIssueKeys;
+        }
+
+        return robotsFacts.Status == RobotsSnapshotStatuses.Unavailable
+            ? RobotsRules.BlockingIssueKeys
+            : [];
     }
 
     /// <summary>
@@ -663,6 +686,7 @@ internal sealed class LogicalCheckFinalizationService(
     private async Task<HealthConfirmationDecision> ApplyHealthAsync(
         LogicalCheck check,
         NormalizedCheckResult result,
+        IReadOnlyCollection<string> indeterminateIssueKeys,
         HealthCounterMode counterMode,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -682,6 +706,7 @@ internal sealed class LogicalCheckFinalizationService(
             health?.ConfirmedStatus ?? EndpointHealthStatuses.Unknown,
             states.Select(ToCounter).ToArray(),
             CheckResultIssues.Observe(result, check.ConfigurationSnapshot.FailureConfirmationCount),
+            indeterminateIssueKeys,
             result.Outcome == HttpResultOutcomes.Healthy,
             check.ConfigurationSnapshot.RecoveryConfirmationCount,
             counterMode));

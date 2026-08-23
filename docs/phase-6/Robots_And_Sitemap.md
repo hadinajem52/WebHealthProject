@@ -35,6 +35,11 @@ refresh that is delayed or switched off stops robots findings rather than contin
 policy nobody has re-read. A cache that outlives its TTL on the read path is not a cache; it is
 stale data wearing a timestamp.
 
+Missing or expired robots evidence is indeterminate for existing robots issues. It does not advance
+their recovery counters, change their incident status, or replace their confirmed endpoint-health
+evidence. Recovery begins only after a fresh snapshot positively evaluates the affected rule as
+passing. Other issue families on the same HTTP result continue through confirmation independently.
+
 ### 1.2 One fetch per origin is enforced, not hoped for
 
 Two workers can see the same origin as due. The refresh therefore **claims** an origin before
@@ -42,6 +47,10 @@ fetching: a conditional update moves its expiry forward, and only the worker who
 row proceeds; a missing row is claimed by inserting it, where the primary key settles the race. A
 worker that loses the claim skips the origin, because the fetch it would have made is the one
 already happening.
+
+The hourly job treats snapshots expiring within the next hour as due, capped at half the configured
+TTL. Refreshing ahead prevents an expiry at a fractional second after the hour from being skipped
+until the following hourly run without making a one-hour TTL immediately due again after refresh.
 
 ### 1.3 The representative endpoint must itself be authorized
 
@@ -185,6 +194,8 @@ Integration:
 - a 404 recorded as "no restrictions" and raising nothing;
 - a truncated fetch recorded as `Unavailable` rather than as a permissive policy;
 - an expired snapshot producing no findings until it is refreshed;
+- an expired snapshot preserving existing robots issue counters, health evidence and incident state;
+- another determinate issue recovering independently while robots evidence is unavailable;
 - a recorded exception suppressing BR-E07, set through the authorized service and audited;
 - the configured transport user agent selecting the group written for it;
 - a byte-order mark on the first line not costing the first group;

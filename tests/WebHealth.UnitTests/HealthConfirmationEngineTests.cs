@@ -1,6 +1,7 @@
 using FluentAssertions;
 using WebHealth.Application.Health;
 using WebHealth.Application.Monitoring;
+using WebHealth.Application.Seo;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Monitoring;
 using Xunit;
@@ -17,6 +18,9 @@ public sealed class HealthConfirmationEngineTests
 
     private static readonly string PageSizeIssueKey =
         HttpIssueIdentity.Create(PerformanceRules.PageTooLarge);
+
+    private static readonly string RobotsIssueKey =
+        HttpIssueIdentity.Create(RobotsRules.BlocksSite);
 
     [Fact]
     public void TwoConsecutiveFailures_ConfirmCritical()
@@ -262,6 +266,47 @@ public sealed class HealthConfirmationEngineTests
     }
 
     [Fact]
+    public void AnIndeterminateIssueDoesNotAccumulateRecoveryCredit()
+    {
+        var current = new[] { new HealthIssueCounter(RobotsIssueKey, 2, 0) };
+
+        var first = Evaluate(
+            EndpointHealthStatuses.Critical, current, [], true,
+            indeterminate: [RobotsIssueKey]);
+        var second = Evaluate(
+            EndpointHealthStatuses.Critical, first.Issues, [], true,
+            indeterminate: [RobotsIssueKey]);
+
+        second.Issues.Should().BeEquivalentTo(current);
+        first.RecoveryStartedIssueKeys.Should().BeEmpty();
+        second.RecoveredIssueKeys.Should().BeEmpty();
+        second.ConfirmedStatus.Should().BeNull();
+        second.Transition.Should().Be(HealthTransition.None);
+    }
+
+    [Fact]
+    public void ADeterminateIssueRecoversWhileAnotherIssueIsIndeterminate()
+    {
+        var current = new[]
+        {
+            new HealthIssueCounter(RobotsIssueKey, 2, 0),
+            new HealthIssueCounter(IssueKey, 2, 0)
+        };
+
+        var first = Evaluate(
+            EndpointHealthStatuses.Critical, current, [], true,
+            indeterminate: [RobotsIssueKey]);
+        var second = Evaluate(
+            EndpointHealthStatuses.Critical, first.Issues, [], true,
+            indeterminate: [RobotsIssueKey]);
+
+        first.RecoveryStartedIssueKeys.Should().ContainSingle().Which.Should().Be(IssueKey);
+        second.RecoveredIssueKeys.Should().ContainSingle().Which.Should().Be(IssueKey);
+        second.RecoveredIssueKeys.Should().NotContain(RobotsIssueKey);
+        second.ConfirmedStatus.Should().BeNull();
+    }
+
+    [Fact]
     public void AnObservedIssueWithAnInvalidSeverity_IsRejected()
     {
         var act = () => Evaluate(
@@ -288,6 +333,8 @@ public sealed class HealthConfirmationEngineTests
         IReadOnlyCollection<HealthIssueCounter> issues,
         IReadOnlyCollection<ObservedIssue> observed,
         bool isPassing,
-        HealthCounterMode mode = HealthCounterMode.Count) =>
-        HealthConfirmationEngine.Evaluate(new(status, issues, observed, isPassing, 2, mode));
+        HealthCounterMode mode = HealthCounterMode.Count,
+        IReadOnlyCollection<string>? indeterminate = null) =>
+        HealthConfirmationEngine.Evaluate(new(
+            status, issues, observed, indeterminate ?? [], isPassing, 2, mode));
 }

@@ -38,6 +38,7 @@ using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Application.Notifications;
+using WebHealth.Application.Seo;
 using WebHealth.Domain.Notifications;
 using WebHealth.Infrastructure.Notifications;
 using Xunit;
@@ -262,6 +263,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyMaintenanceClassifiedResultRetentionAsync(connectionString);
         await VerifyRecurringMaintenanceExpansionAsync(connectionString);
         await VerifySeoObservationContractAsync(connectionString);
+        await VerifyRobotsIncidentDoesNotRecoverWithoutFreshEvidenceAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
         await VerifyCrawlResultContractAsync(connectionString);
         await VerifyPageAuditContractAsync(connectionString);
@@ -4535,6 +4537,88 @@ internal static class DatabaseFoundationAssertions
             "'Sometimes', NULL, NULL",
             "ck_seo_observation_applicability");
         await VerifySeoDocumentIsNeverRetainedAsync(connectionString);
+    }
+
+    private static async Task VerifyRobotsIncidentDoesNotRecoverWithoutFreshEvidenceAsync(
+        string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var monitor = await CreateOwnedMonitorAsync(
+            scope, database, "http://robots-recovery.test/status");
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        var origin = RobotsRefreshService.OriginOf(monitor.Endpoint.NormalizedUrl);
+        database.RobotsSnapshots.Add(new RobotsSnapshot
+        {
+            Origin = origin,
+            Host = monitor.Endpoint.NormalizedHost,
+            Port = monitor.Endpoint.EffectivePort,
+            Status = RobotsSnapshotStatuses.Fetched,
+            Content = "User-agent: *\nDisallow: /",
+            FetchedAt = clock.GetUtcNow(),
+            ExpiresAt = clock.GetUtcNow().AddHours(1),
+            UpdatedAt = clock.GetUtcNow(),
+            Version = 1
+        });
+        await database.SaveChangesAsync();
+
+        await FinalizeScheduledResultAsync(database, monitor, 200, clock);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var confirmingCheckId = await FinalizeScheduledResultAsync(database, monitor, 200, clock);
+        var issueKey = HttpIssueIdentity.Create(RobotsRules.BlocksSite);
+        var incident = await database.Incidents.AsNoTracking().SingleAsync(candidate =>
+            candidate.EndpointMonitorId == monitor.Id && candidate.IssueKey == issueKey);
+        incident.Status.Should().Be(IncidentStatuses.Open);
+
+        clock.Advance(TimeSpan.FromHours(2));
+        var firstIndeterminateCheckId = await FinalizeScheduledResultAsync(database, monitor, 200, clock);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        var secondIndeterminateCheckId = await FinalizeScheduledResultAsync(database, monitor, 200, clock);
+
+        var indeterminateResults = await database.CheckResults.AsNoTracking()
+            .Where(result => result.LogicalCheckId == firstIndeterminateCheckId
+                || result.LogicalCheckId == secondIndeterminateCheckId)
+            .ToArrayAsync();
+        indeterminateResults.Should().OnlyContain(result => result.Outcome == HttpResultOutcomes.Healthy);
+        (await database.Findings.AsNoTracking().CountAsync(finding =>
+            finding.LogicalCheckId == firstIndeterminateCheckId
+            || finding.LogicalCheckId == secondIndeterminateCheckId)).Should().Be(0);
+        var issueState = await database.IssueStates.AsNoTracking().SingleAsync(state =>
+            state.EndpointMonitorId == monitor.Id && state.IssueKey == issueKey);
+        issueState.ConsecutiveFailures.Should().Be(2);
+        issueState.ConsecutiveRecoveries.Should().Be(0);
+        var health = await database.EndpointHealth.AsNoTracking().SingleAsync(candidate =>
+            candidate.EndpointMonitorId == monitor.Id);
+        health.ConfirmedStatus.Should().Be(EndpointHealthStatuses.Warning);
+        health.EvidenceLogicalCheckId.Should().Be(confirmingCheckId);
+        (await database.Incidents.AsNoTracking().SingleAsync(candidate => candidate.Id == incident.Id))
+            .Status.Should().Be(IncidentStatuses.Open);
+
+        database.ChangeTracker.Clear();
+        var snapshot = await database.RobotsSnapshots.SingleAsync(candidate => candidate.Origin == origin);
+        snapshot.FetchedAt = clock.GetUtcNow();
+        snapshot.ExpiresAt = clock.GetUtcNow().AddHours(24);
+        snapshot.UpdatedAt = clock.GetUtcNow();
+        await database.SaveChangesAsync();
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await FinalizeScheduledResultAsync(database, monitor, 200, clock);
+
+        (await database.Incidents.AsNoTracking().CountAsync(candidate =>
+            candidate.EndpointMonitorId == monitor.Id && candidate.IssueKey == issueKey)).Should().Be(1);
+        (await database.Incidents.AsNoTracking().SingleAsync(candidate => candidate.Id == incident.Id))
+            .Status.Should().Be(IncidentStatuses.Open);
+        await database.NotificationDeliveries
+            .Where(delivery => delivery.NotificationEvent.IncidentId == incident.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(delivery => delivery.State, NotificationDeliveryStates.Sent)
+                .SetProperty(delivery => delivery.NextAttemptAt, (DateTimeOffset?)null)
+                .SetProperty(delivery => delivery.SentAt, clock.GetUtcNow()));
     }
 
     /// <summary>
