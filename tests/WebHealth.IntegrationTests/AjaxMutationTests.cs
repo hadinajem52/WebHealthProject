@@ -26,8 +26,15 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.Equal(EmptyManualCheckService.LogicalCheckId, json.RootElement.GetProperty("runId").GetGuid());
-        Assert.Contains("/Checks/Status", json.RootElement.GetProperty("statusUrl").GetString(), StringComparison.Ordinal);
+        var statusUrl = json.RootElement.GetProperty("statusUrl").GetString();
+        Assert.Contains("/Checks/Status", statusUrl, StringComparison.Ordinal);
         Assert.Contains("queued", json.RootElement.GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+
+        using var statusResponse = await client.GetAsync(statusUrl);
+        using var statusJson = await ReadJsonAsync(statusResponse);
+
+        Assert.Equal(HttpStatusCode.OK, statusResponse.StatusCode);
+        Assert.Contains("/Targets/Endpoint", statusJson.RootElement.GetProperty("refreshUrl").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -96,8 +103,14 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         using var json = await ReadJsonAsync(response);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("/Notifications/Menu", json.RootElement.GetProperty("refreshUrl").GetString());
+        var refreshUrl = json.RootElement.GetProperty("refreshUrl").GetString();
+        Assert.Equal("/Notifications/Menu", refreshUrl);
         Assert.Equal(JsonValueKind.Null, json.RootElement.GetProperty("message").ValueKind);
+
+        using var menu = await client.GetAsync(refreshUrl);
+
+        Assert.Equal(HttpStatusCode.OK, menu.StatusCode);
+        Assert.True(menu.Headers.CacheControl?.NoStore == true);
     }
 
     [Fact]
@@ -149,6 +162,7 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.Accepted, active.StatusCode);
         Assert.Equal(HttpStatusCode.OK, completed.StatusCode);
         Assert.Contains("id=\"ajax-page\"", completedContent, StringComparison.Ordinal);
+        Assert.Contains("id=\"page-audit-results\"", completedContent, StringComparison.Ordinal);
         Assert.Contains("data-page-audit-active=\"false\"", completedContent, StringComparison.Ordinal);
         Assert.DoesNotContain("<!DOCTYPE html>", completedContent, StringComparison.OrdinalIgnoreCase);
     }

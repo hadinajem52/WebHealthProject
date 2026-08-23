@@ -1,5 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.IntegrationTests.Support;
 using WebHealth.Web.Ajax;
@@ -54,12 +59,38 @@ public sealed class AjaxContractTests(WebHealthWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task AjaxExceptionResponseUsesProblemDetailsWithCorrelationId()
+    public async Task ProductionCookieChallengeKeepsAnonymousAjaxPostUnauthorized()
     {
-        using var client = factory.CreateAnonymousHttpsClient(allowAutoRedirect: false);
+        using var cookieFactory = factory.WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services =>
+                services.PostConfigure<AuthenticationOptions>(options =>
+                {
+                    options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+                    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+                    options.DefaultForbidScheme = IdentityConstants.ApplicationScheme;
+                })));
+        using var client = cookieFactory.CreateClient(new()
+        {
+            AllowAutoRedirect = false,
+            BaseAddress = new Uri("https://localhost")
+        });
         client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
 
-        using var response = await client.GetAsync("/Home/Error");
+        using var response = await client.PostAsync(
+            "/Notifications/MarkRead",
+            new FormUrlEncodedContent([]));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task AjaxExceptionResponseUsesProblemDetailsWithCorrelationId()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+
+        using var response = await client.GetAsync("/__tests/runtime-error");
         var content = await response.Content.ReadAsStringAsync();
         using var problem = JsonDocument.Parse(content);
 
@@ -67,6 +98,21 @@ public sealed class AjaxContractTests(WebHealthWebApplicationFactory factory)
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         Assert.True(problem.RootElement.TryGetProperty("correlationId", out var correlationId));
         Assert.False(string.IsNullOrWhiteSpace(correlationId.GetString()));
+    }
+
+    [Fact]
+    public async Task ReversedAuditDatesReturnValidationInsideTheAjaxRegion()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+
+        using var response = await client.GetAsync("/Audit?fromDate=2026-08-23&toDate=2026-08-22");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Contains("id=\"ajax-page\"", content, StringComparison.Ordinal);
+        Assert.Contains("from date must be on or before", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("data-shell-validation-summary", content, StringComparison.Ordinal);
     }
 
     [Fact]

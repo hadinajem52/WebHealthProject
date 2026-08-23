@@ -10,6 +10,10 @@
 }
 
 <div id="ajax-page" class="stack" data-ajax-region>
+    @if (Context.Request.IsWebHealthAjax())
+    {
+        @await Html.PartialAsync("_ValidationSummary")
+    }
     @* No card title here: the page heading already reads "Audit history". This card is the
        control that scopes the trail below it, so it carries the explanation and the filters. *@
     <section class="card" aria-labelledby="audit-scope-label">

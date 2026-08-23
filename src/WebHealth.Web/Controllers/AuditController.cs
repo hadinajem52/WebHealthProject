@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Authorization;
+using WebHealth.Web.Ajax;
 using WebHealth.Web.Models;
 
 namespace WebHealth.Web.Controllers;
@@ -30,7 +31,7 @@ public sealed class AuditController(IAuditTrailReader auditTrail) : Controller
         }
 
         var query = new AuditSearchQuery(fromDate, toDate, actorUserId, action, entity, page);
-        return View(new AuditIndexViewModel
+        var model = new AuditIndexViewModel
         {
             FromDate = fromDate,
             ToDate = toDate,
@@ -43,6 +44,11 @@ public sealed class AuditController(IAuditTrailReader auditTrail) : Controller
             Actors = await auditTrail.ListActorsAsync(cancellationToken),
             Actions = await auditTrail.ListActionsAsync(cancellationToken),
             EntityTypes = await auditTrail.ListEntityTypesAsync(cancellationToken)
-        });
+        };
+        if (!ModelState.IsValid && Request.IsWebHealthAjax())
+        {
+            Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+        }
+        return View(model);
     }
 }
