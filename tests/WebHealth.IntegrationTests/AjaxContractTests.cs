@@ -69,6 +69,31 @@ public sealed class AjaxContractTests(WebHealthWebApplicationFactory factory)
         Assert.False(string.IsNullOrWhiteSpace(correlationId.GetString()));
     }
 
+    [Fact]
+    public async Task ForbiddenAjaxRequestReturnsForbiddenWithoutAccessDeniedNavigation()
+    {
+        using var client = factory.CreateHttpsClientWithoutRedirects(ApplicationRoles.Viewer);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+
+        using var response = await client.GetAsync("/Registry/CreateClient");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task MissingAjaxRecordReturnsNotFoundWithoutAFullLayout()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+
+        using var response = await client.GetAsync($"/Registry/Client/{Guid.NewGuid()}");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("<!DOCTYPE html>", content, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData("/Targets/Endpoints?search=example", ApplicationRoles.Viewer)]
     [InlineData("/Registry/Websites", ApplicationRoles.Viewer)]
