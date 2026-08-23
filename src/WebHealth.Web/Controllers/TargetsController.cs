@@ -7,6 +7,7 @@ using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
+using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
@@ -257,42 +258,42 @@ public sealed class TargetsController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DisableEnvironment(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, environmentService.DisableAsync, nameof(Environment), "Environment disabled.", cancellationToken);
+        ChangeStateAsync(id, version, environmentService.DisableAsync, nameof(Environment), nameof(Environment), "Environment disabled.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteEnvironment(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, environmentService.DeleteAsync, nameof(Archived), "Environment archived.", cancellationToken);
+        ChangeStateAsync(id, version, environmentService.DeleteAsync, nameof(Archived), nameof(Environment), "Environment archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEnvironment(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, environmentService.RestoreAsync, nameof(Archived), "Environment restored in a disabled state.", cancellationToken);
+        ChangeStateAsync(id, version, environmentService.RestoreAsync, nameof(Archived), nameof(Environment), "Environment restored in a disabled state.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DisableEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, endpointService.DisableAsync, nameof(Endpoint), "Endpoint disabled.", cancellationToken);
+        ChangeStateAsync(id, version, endpointService.DisableAsync, nameof(Endpoint), nameof(Endpoint), "Endpoint disabled.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, endpointService.DeleteAsync, nameof(Archived), "Endpoint archived.", cancellationToken);
+        ChangeStateAsync(id, version, endpointService.DeleteAsync, nameof(Archived), nameof(Endpoint), "Endpoint archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> PauseEndpointSchedule(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeStateAsync(id, version, endpointService.PauseScheduleAsync, nameof(Endpoint),
-            "Scheduled checks paused. Manual runs are still available.", cancellationToken);
+            nameof(Endpoint), "Scheduled checks paused. Manual runs are still available.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> ResumeEndpointSchedule(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeStateAsync(id, version, endpointService.ResumeScheduleAsync, nameof(Endpoint),
-            "Scheduled checks resumed.", cancellationToken);
+            nameof(Endpoint), "Scheduled checks resumed.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, endpointService.RestoreAsync, nameof(Archived), "Endpoint restored in a disabled state.", cancellationToken);
+        ChangeStateAsync(id, version, endpointService.RestoreAsync, nameof(Archived), nameof(Endpoint), "Endpoint restored in a disabled state.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
     public Task<IActionResult> PurgeEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeStateAsync(id, version, endpointService.PurgeAsync, nameof(Archived),
-            "Endpoint permanently deleted with all of its monitoring history.", cancellationToken);
+            nameof(Endpoint), "Endpoint permanently deleted with all of its monitoring history.", cancellationToken);
 
     private RegistryAccessContext GetAccess()
     {
@@ -337,7 +338,7 @@ public sealed class TargetsController(
     private async Task<IActionResult> ChangeStateAsync(
         Guid id, long version,
         Func<RegistryVersionCommand, RegistryAccessContext, CancellationToken, Task<RegistryMutationResult>> operation,
-        string redirectAction, string successMessage, CancellationToken cancellationToken)
+        string redirectAction, string detailsAction, string successMessage, CancellationToken cancellationToken)
     {
         var result = await operation(new(id, version), GetAccess(), cancellationToken);
         if (result.Status == RegistryMutationStatus.NotFound)
@@ -345,8 +346,24 @@ public sealed class TargetsController(
             return NotFound();
         }
 
-        TempData.AddFlashMessage(result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
-            result.Succeeded ? successMessage : string.Join(" ", result.Errors));
+        var message = result.Succeeded ? successMessage : string.Join(" ", result.Errors);
+        var level = result.Succeeded ? FlashLevel.Success : FlashLevel.Error;
+        if (Request.IsWebHealthAjax())
+        {
+            var statusCode = result.Succeeded
+                ? StatusCodes.Status200OK
+                : result.Status == RegistryMutationStatus.ConcurrencyConflict
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status422UnprocessableEntity;
+            return StatusCode(
+                statusCode,
+                new AjaxFragmentViewModel(
+                    message,
+                    level.ToString().ToLowerInvariant(),
+                    RefreshUrl: Url.Action(detailsAction, new { id })));
+        }
+
+        TempData.AddFlashMessage(level, message);
         return RedirectToAction(redirectAction, redirectAction is nameof(Environment) or nameof(Endpoint) ? new { id } : null);
     }
 

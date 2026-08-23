@@ -8,6 +8,7 @@ using WebHealth.Domain.PageAudits;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
+using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
@@ -44,54 +45,14 @@ public sealed class PageAuditsController(
         CancellationToken cancellationToken = default)
     {
         var access = GetAccess();
-
-        // Normalized rather than validated: the strategy names which of two measurements of the
-        // same page to read, so an unrecognised one is a wrong address that mobile answers, not
-        // an error worth a page.
         var selectedStrategy = PageAuditStrategies.Normalize(strategy);
-        var endpoints = await targetReader.ListAllEndpointsAsync(access, null, cancellationToken);
-        var options = endpoints
-            .Select(endpoint => new EndpointOption(
-                endpoint.Id,
-                $"{endpoint.WebsiteName} · {endpoint.EnvironmentName} · {endpoint.DisplayUrl}"))
-            .ToArray();
-
-        // Selecting nothing shows the picker rather than an arbitrary endpoint's score: the page
-        // should not imply that whichever endpoint sorted first is the one worth looking at.
-        if (endpointId is not { } selected)
-        {
-            return View(new PageAuditIndexViewModel(
-                options, null, selectedStrategy, null, [], [], false));
-        }
-
-        var summary = await pageAuditReader.GetEndpointSummaryAsync(
-            selected, selectedStrategy, runId, access, cancellationToken);
-        if (summary is null)
-        {
-            return NotFound();
-        }
-
-        // A run id that names nothing this endpoint owns is a wrong address, not an endpoint with
-        // no history. Rendering "no audit has run yet" would answer a different question than the
-        // one asked, and would read as though the run had been deleted.
-        if (runId is not null && summary.LatestRun is null)
-        {
-            return NotFound();
-        }
-
-        var runs = await pageAuditReader.ListRunsAsync(
-            selected, selectedStrategy, RunsListed, access, cancellationToken);
-        var items = summary.LatestRun is null
-            ? []
-            : await pageAuditReader.ListAuditItemsAsync(summary.LatestRun.RunId, access, cancellationToken);
-
-        // Whether to offer Run now is decided here rather than in the view, and it is the same
-        // authorization the action itself enforces - the button is a convenience, not the control.
-        var canRun = summary.IsEnabled
-            && await targetAuthorization.CanTestEndpointAsync(selected, access, cancellationToken);
-
-        return View(new PageAuditIndexViewModel(
-            options, selected, selectedStrategy, summary, runs, items, canRun));
+        var model = await BuildModelAsync(
+            endpointId,
+            selectedStrategy,
+            runId,
+            access,
+            cancellationToken);
+        return model is null ? NotFound() : View(model);
     }
 
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost, ValidateAntiForgeryToken]
@@ -116,33 +77,124 @@ public sealed class PageAuditsController(
         var result = await pageAuditRunner.QueueManualAsync(
             endpointId, access, cancellationToken);
 
+        string message;
+        FlashLevel level;
         if (!result.Succeeded)
         {
-            TempData.AddFlashMessage(FlashLevel.Warning, result.Error!);
+            message = result.Error!;
+            level = FlashLevel.Warning;
         }
         else if (result.WasAlreadyRunning)
         {
-            TempData.AddFlashMessage(
-                FlashLevel.Information,
-                "A PageSpeed audit for this endpoint is already running. Showing that one.");
+            message = "A PageSpeed audit for this endpoint is already running. Showing that one.";
+            level = FlashLevel.Information;
         }
         else
         {
-            // Counted, not named. One audit covers every form factor, so a partial answer is
-            // "the rest was already running" rather than a form factor the reader has to chase.
             var partial = result.AlreadyRunningCount > 0
                 ? " The rest was already running."
                 : null;
-            TempData.AddFlashMessage(
-                FlashLevel.Success,
-                "PageSpeed audit queued for mobile and desktop. Google runs each form factor, "
-                + $"so the scores appear once it answers.{partial}");
+            message = "PageSpeed audit queued for mobile and desktop. Google runs each form factor, "
+                + $"so the scores appear once it answers.{partial}";
+            level = FlashLevel.Success;
         }
 
-        // No run id: the reader shows the newest run on the selected strategy, which is the one
-        // this request just opened. Naming one would land a two-strategy request on a single form
-        // factor's run and read as though the other had not been asked for.
+        if (Request.IsWebHealthAjax())
+        {
+            if (!result.Succeeded)
+            {
+                return StatusCode(
+                    StatusCodes.Status422UnprocessableEntity,
+                    new AjaxFragmentViewModel(message, "warning"));
+            }
+
+            var summary = await pageAuditReader.GetEndpointSummaryAsync(
+                endpointId,
+                selectedStrategy,
+                null,
+                access,
+                cancellationToken);
+            var runId = summary?.LatestRun?.RunId;
+            return Accepted(new AjaxFragmentViewModel(
+                message,
+                level.ToString().ToLowerInvariant(),
+                StatusUrl: Url.Action(nameof(Status), new { endpointId, strategy = selectedStrategy, runId }),
+                RunId: runId));
+        }
+
+        TempData.AddFlashMessage(level, message);
         return RedirectToAction(nameof(Index), new { endpointId, strategy = selectedStrategy });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Status(
+        Guid endpointId,
+        string? strategy,
+        Guid? runId,
+        CancellationToken cancellationToken = default)
+    {
+        var selectedStrategy = PageAuditStrategies.Normalize(strategy);
+        var model = await BuildModelAsync(
+            endpointId,
+            selectedStrategy,
+            runId,
+            GetAccess(),
+            cancellationToken);
+        if (model is null)
+        {
+            return NotFound();
+        }
+
+        Response.StatusCode = model.Summary?.LatestRun?.IsActive == true
+            ? StatusCodes.Status202Accepted
+            : StatusCodes.Status200OK;
+        return View(nameof(Index), model);
+    }
+
+    private async Task<PageAuditIndexViewModel?> BuildModelAsync(
+        Guid? endpointId,
+        string strategy,
+        Guid? runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken)
+    {
+        var endpoints = await targetReader.ListAllEndpointsAsync(access, null, cancellationToken);
+        var options = endpoints
+            .Select(endpoint => new EndpointOption(
+                endpoint.Id,
+                $"{endpoint.WebsiteName} · {endpoint.EnvironmentName} · {endpoint.DisplayUrl}"))
+            .ToArray();
+        if (endpointId is not { } selected)
+        {
+            return new(options, null, strategy, null, [], [], false);
+        }
+
+        var summary = await pageAuditReader.GetEndpointSummaryAsync(
+            selected,
+            strategy,
+            runId,
+            access,
+            cancellationToken);
+        if (summary is null || runId is not null && summary.LatestRun is null)
+        {
+            return null;
+        }
+
+        var runs = await pageAuditReader.ListRunsAsync(
+            selected,
+            strategy,
+            RunsListed,
+            access,
+            cancellationToken);
+        var items = summary.LatestRun is null
+            ? []
+            : await pageAuditReader.ListAuditItemsAsync(
+                summary.LatestRun.RunId,
+                access,
+                cancellationToken);
+        var canRun = summary.IsEnabled
+            && await targetAuthorization.CanTestEndpointAsync(selected, access, cancellationToken);
+        return new(options, selected, strategy, summary, runs, items, canRun);
     }
 
     private RegistryAccessContext GetAccess()

@@ -8,6 +8,7 @@ using WebHealth.Domain.Maintenance;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
+using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
@@ -110,9 +111,28 @@ public sealed class MaintenanceController(
     public async Task<IActionResult> Cancel(Guid id, long version, CancellationToken cancellationToken)
     {
         var result = await maintenanceService.CancelAsync(new(id, version), GetAccess(), cancellationToken);
-        TempData.AddFlashMessage(result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
-            result.Succeeded ? "Maintenance window cancelled. Existing check evidence is retained." : string.Join(" ", result.Errors));
-        return RedirectToAction(nameof(Details), new { id });
+        if (result.Status == MaintenanceMutationStatus.Forbidden)
+        {
+            return Forbid();
+        }
+        if (result.Status == MaintenanceMutationStatus.NotFound)
+        {
+            return NotFound();
+        }
+
+        var detailsUrl = Url.Action(nameof(Details), new { id })!;
+        return this.RedirectOrAjaxRefresh(
+            detailsUrl,
+            detailsUrl,
+            result.Succeeded
+                ? "Maintenance window cancelled. Existing check evidence is retained."
+                : string.Join(" ", result.Errors),
+            result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
+            result.Succeeded
+                ? StatusCodes.Status200OK
+                : result.Status == MaintenanceMutationStatus.ConcurrencyConflict
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status422UnprocessableEntity);
     }
 
     private async Task<MaintenanceWindowFormViewModel> BuildFormAsync(MaintenanceWindowFormViewModel model, CancellationToken cancellationToken)

@@ -3,6 +3,7 @@
     ViewData.SetTitle(Model.Client.Name);
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Clients(Url), new BreadcrumbItem(Model.Client.Name));
 }
+<div id="ajax-page" data-ajax-region>
 <section class="card">
     <div class="page-intro">
         <div><h2 class="card__title">@Model.Client.Name</h2><p class="card__subtitle">Owned by @Model.Client.OwnerName · Version @Model.Client.Version</p></div>
@@ -30,12 +31,12 @@
         <div class="registry-lifecycle">
             @if (Model.Client.IsDeleted)
             {
-                <form asp-action="RestoreClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--primary" type="submit">Restore client</button></form>
+                <form asp-action="RestoreClient" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--primary" type="submit">Restore client</button></form>
             }
             else
             {
-                @if (Model.Client.IsActive){<form asp-action="DisableClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--secondary" type="submit">Disable client</button></form>}
-                <form asp-action="DeleteClient" method="post"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--danger" type="submit">Archive client</button></form>
+                @if (Model.Client.IsActive){<form asp-action="DisableClient" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--secondary" type="submit">Disable client</button></form>}
+                <form asp-action="DeleteClient" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--danger" type="submit">Archive client</button></form>
             }
         </div>
     }
@@ -50,3 +51,4 @@
         </tbody></table></div>
     }
 </section>
+</div>

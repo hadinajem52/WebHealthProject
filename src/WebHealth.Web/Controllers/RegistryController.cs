@@ -7,6 +7,7 @@ using WebHealth.Infrastructure.Identity;
 using WebHealth.Domain.Normalization;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
+using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
@@ -375,10 +376,29 @@ public sealed class RegistryController(
 
         if (!result.Succeeded)
         {
-            TempData.AddFlashMessage(FlashLevel.Error, string.Join(" ", result.Errors));
+            var message = string.Join(" ", result.Errors);
+            if (Request.IsWebHealthAjax())
+            {
+                return StatusCode(
+                    result.Status == RegistryMutationStatus.ConcurrencyConflict
+                        ? StatusCodes.Status409Conflict
+                        : StatusCodes.Status422UnprocessableEntity,
+                    new AjaxFragmentViewModel(
+                        message,
+                        "error",
+                        RefreshUrl: Url.Action(detailsAction, new { id })));
+            }
+            TempData.AddFlashMessage(FlashLevel.Error, message);
             return RedirectToAction(detailsAction, new { id });
         }
 
+        if (Request.IsWebHealthAjax())
+        {
+            return Ok(new AjaxFragmentViewModel(
+                successMessage,
+                "success",
+                RefreshUrl: Url.Action(detailsAction, new { id })));
+        }
         TempData.AddFlashMessage(FlashLevel.Success, successMessage);
         return RedirectToAction(listAction);
     }

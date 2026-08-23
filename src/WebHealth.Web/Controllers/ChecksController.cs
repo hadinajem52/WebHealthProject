@@ -7,6 +7,8 @@ using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
+using WebHealth.Web.Ajax;
+using WebHealth.Domain.Monitoring;
 
 namespace WebHealth.Web.Controllers;
 
@@ -32,22 +34,60 @@ public sealed class ChecksController(
 
     private IActionResult HandleManualCheckResult(Guid endpointId, ManualCheckResult result, string successMessage)
     {
+        var endpointUrl = Url.Action(nameof(TargetsController.Endpoint), "Targets", new { id = endpointId })!;
         switch (result.Status)
         {
             case ManualCheckStatus.Forbidden:
                 return Forbid();
             case ManualCheckStatus.MonitorNotAvailable:
-                TempData.AddFlashMessage(FlashLevel.Error, "This endpoint has no active monitor to run.");
-                break;
+                return this.AjaxMessage(
+                    endpointUrl,
+                    "This endpoint has no active monitor to run.",
+                    FlashLevel.Error,
+                    StatusCodes.Status422UnprocessableEntity);
             case ManualCheckStatus.SchedulingUnavailable:
-                TempData.AddFlashMessage(FlashLevel.Error, "Manual checks are unavailable while monitoring scheduling is disabled.");
-                break;
-            default:
-                TempData.AddFlashMessage(FlashLevel.Success, successMessage);
-                break;
+                return this.AjaxMessage(
+                    endpointUrl,
+                    "Manual checks are unavailable while monitoring scheduling is disabled.",
+                    FlashLevel.Error,
+                    StatusCodes.Status422UnprocessableEntity);
         }
 
-        return RedirectToAction(nameof(TargetsController.Endpoint), "Targets", new { id = endpointId });
+        if (Request.IsWebHealthAjax())
+        {
+            return StatusCode(
+                StatusCodes.Status202Accepted,
+                new AjaxFragmentViewModel(
+                    successMessage,
+                    "success",
+                    StatusUrl: Url.Action(nameof(Status), new { id = result.LogicalCheckId }),
+                    RunId: result.LogicalCheckId));
+        }
+
+        TempData.AddFlashMessage(FlashLevel.Success, successMessage);
+        return LocalRedirect(endpointUrl);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Status(Guid id, CancellationToken cancellationToken)
+    {
+        var check = await checkHistoryReader.FindCheckAsync(id, GetAccess(), cancellationToken);
+        if (check is null)
+        {
+            return NotFound();
+        }
+
+        var isComplete = check.State == LogicalCheckStates.Completed;
+        return StatusCode(
+            isComplete ? StatusCodes.Status200OK : StatusCodes.Status202Accepted,
+            new AjaxFragmentViewModel(
+                isComplete ? "Check completed." : null,
+                "success",
+                RefreshUrl: isComplete
+                    ? Url.Action(nameof(TargetsController.Endpoint), "Targets", new { id = check.EndpointId })
+                    : null,
+                StatusUrl: Url.Action(nameof(Status), new { id }),
+                RunId: id));
     }
 
     [HttpGet]
