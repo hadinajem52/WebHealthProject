@@ -154,6 +154,7 @@ internal sealed class CheckHistoryReader(
             .Include(candidate => candidate.InitiatedByUser)
             .Include(candidate => candidate.Result).ThenInclude(result => result!.Findings)
             .Include(candidate => candidate.Result).ThenInclude(result => result!.RedirectHops)
+            .AsSplitQuery()
             .SingleAsync(candidate => candidate.Id == logicalCheckId, cancellationToken);
 
         var result = check.Result;

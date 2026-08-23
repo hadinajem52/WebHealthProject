@@ -148,6 +148,7 @@
                             <tr>
                                 <td data-label="Subject">
                                     <span class="history-cell">
+                                        @await Html.PartialAsync("_HistoryMark", CrawlRunDisplay.StatusTone(run))
                                         <span class="history-cell__subject">@run.PagesFetched page@(run.PagesFetched == 1 ? null : "s") crawled</span>
                                         <span class="history-cell__time">@Html.Timestamp(run.StartedAt)</span>
                                     </span>

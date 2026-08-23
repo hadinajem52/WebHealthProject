@@ -187,6 +187,7 @@ internal sealed class LogicalCheckFinalizationService(
             .Include(check => check.Result)
             .Include(check => check.Attempts)
             .Include(check => check.DurableWork)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(check => check.Id == logicalCheckId, token);
 
     private static DurableWork? FindWork(LogicalCheck check, Guid workId) =>

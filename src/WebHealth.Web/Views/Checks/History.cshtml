@@ -90,18 +90,20 @@
                     <tbody>
                         @foreach (var item in history.Items)
                         {
+                            var itemInFlight = item.State != LogicalCheckStates.Completed;
+                            var itemTone = itemInFlight ? StatusBadges.Info : StatusBadges.ForOutcome(item.Outcome);
                             <tr>
                                 <td data-label="Subject">
                                     <span class="history-cell">
+                                        @await Html.PartialAsync("_HistoryMark", itemTone)
                                         <span class="history-cell__subject">@item.Source check</span>
                                         <span class="history-cell__time">@Html.TimestampWithSeconds((item.ScheduledFor ?? item.RequestedAt), "—")</span>
                                     </span>
                                 </td>
                                 <td data-label="Initiator">@(item.InitiatedByDisplayName ?? "—")</td>
                                 <td data-label="Outcome">
-                                    @{ var itemInFlight = item.State != LogicalCheckStates.Completed; }
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                        itemInFlight ? StatusBadges.Info : StatusBadges.ForOutcome(item.Outcome),
+                                        itemTone,
                                         item.Outcome ?? item.State,
                                         item.FailureCategory,
                                         itemInFlight))

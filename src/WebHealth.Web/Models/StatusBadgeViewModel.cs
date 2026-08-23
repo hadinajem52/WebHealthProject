@@ -1,3 +1,5 @@
+using WebHealth.Web.Shell;
+
 namespace WebHealth.Web.Models;
 
 /// <summary>
@@ -22,16 +24,5 @@ public sealed record StatusBadgeViewModel(
     string? Detail = null,
     bool Pending = false)
 {
-    /// <summary>
-    /// The glyph for a tier. Success, warning and danger get three visually distinct shapes;
-    /// anything unrecognised falls back to the neutral information mark rather than to no glyph
-    /// at all, so a pill is never colour-only by accident.
-    /// </summary>
-    public string Icon => Status switch
-    {
-        "success" => "success",
-        "warning" or "high" => "warning",
-        "danger" => "error",
-        _ => "information"
-    };
+    public string Icon => StatusBadges.Icon(Status);
 }

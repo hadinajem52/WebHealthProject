@@ -557,6 +557,7 @@
                             <tr>
                                 <td data-label="Subject">
                                     <span class="history-cell">
+                                        @await Html.PartialAsync("_HistoryMark", PageAuditDisplay.StatusTone(historyRun))
                                         <span class="history-cell__subject">@historyRun.Source run</span>
                                         <span class="history-cell__time">@Html.Timestamp(historyRun.QueuedAt)</span>
                                     </span>

@@ -15,10 +15,12 @@
 *@
 @{
     var pendingClass = Model.Pending ? " badge--pending" : null;
+    var badgeClass = $"badge{pendingClass}";
+    var detailedClass = $"badge badge--detailed{pendingClass}";
 }
 @if (string.IsNullOrWhiteSpace(Model.Detail))
 {
-    <span class="badge@pendingClass" data-status="@Model.Status">
+    <span class="@badgeClass" data-status="@Model.Status">
         @if (Model.Pending)
         {
             <span class="spinner spinner--badge" aria-hidden="true"></span>
@@ -28,7 +30,7 @@
 }
 else
 {
-    <span class="badge badge--detailed@pendingClass"
+    <span class="@detailedClass"
           data-status="@Model.Status"
           data-badge-detail="@Model.Detail"
           title="@Model.Detail"

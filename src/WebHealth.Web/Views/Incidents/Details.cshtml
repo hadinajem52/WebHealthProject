@@ -327,6 +327,7 @@
                             <tr>
                                 <td data-label="Subject">
                                     <span class="history-cell">
+                                        @await Html.PartialAsync("_HistoryMark", StatusBadges.Neutral)
                                         <span class="history-cell__subject">@IncidentEventDisplay.Name(entry.EventType)</span>
                                         <span class="history-cell__time">@Html.TimestampWithSeconds(entry.OccurredAt)</span>
                                     </span>
