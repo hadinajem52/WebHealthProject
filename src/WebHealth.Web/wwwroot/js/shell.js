@@ -9,6 +9,7 @@
     'use strict';
 
     document.documentElement.classList.add('js');
+    window.WebHealth = window.WebHealth || {};
 
     var SIDEBAR_COLLAPSE_STORAGE_KEY = 'webhealth.sidebar-collapsed';
 
@@ -35,10 +36,33 @@
     var WIDE_VIEWPORT = '(min-width: 62em)';
     var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+    function elements(root, selector) {
+        var matches = [];
+        if (root.nodeType === 1 && root.matches(selector)) {
+            matches.push(root);
+        }
+        return matches.concat(Array.prototype.slice.call(root.querySelectorAll(selector)));
+    }
+
+    function first(root, selector) {
+        return root.nodeType === 1 && root.matches(selector) ? root : root.querySelector(selector);
+    }
+
+    function beginInitialization(element) {
+        if (!element || element.getAttribute('data-shell-initialized') === 'true') {
+            return false;
+        }
+        element.setAttribute('data-shell-initialized', 'true');
+        return true;
+    }
+
     // An irreversible action asks once before it runs. The prompt is an
     // enhancement rather than the guard: the server refuses the same request
     // when the caller lacks the role or the endpoint is not archived.
     function setUpConfirmedSubmission() {
+        if (!beginInitialization(document.documentElement)) {
+            return;
+        }
         document.addEventListener('submit', function (event) {
             var form = event.target;
             if (!form || !form.hasAttribute || !form.hasAttribute('data-shell-confirm')) {
@@ -56,6 +80,9 @@
     // and drives the icon through CSS, so there is one source of truth rather than
     // three things to keep in step.
     function setUpPasswordReveal(toggle) {
+        if (!beginInitialization(toggle)) {
+            return;
+        }
         var field = toggle.parentElement;
         var input = field && field.querySelector('input');
         if (!input) {
@@ -105,88 +132,86 @@
     // the viewport rather than the badge, because the badges live inside table containers that
     // scroll horizontally, and anything absolutely positioned inside one of those is clipped by
     // it. One shared element is reused for every badge; there is only ever one visible.
-    function setUpBadgeTooltips() {
-        var badges = document.querySelectorAll('[data-badge-detail]');
+    var badgeTooltip = null;
+    var openBadge = null;
+    var badgeListenersReady = false;
+
+    function showBadgeTooltip(badge) {
+        var detail = badge.getAttribute('data-badge-detail');
+        if (!detail || !badgeTooltip) {
+            return;
+        }
+
+        openBadge = badge;
+        badgeTooltip.textContent = detail;
+        badgeTooltip.hidden = false;
+        var anchor = badge.getBoundingClientRect();
+        var size = badgeTooltip.getBoundingClientRect();
+        var gap = 8;
+        var left = anchor.left + (anchor.width / 2) - (size.width / 2);
+        left = Math.max(gap, Math.min(left, window.innerWidth - size.width - gap));
+        var top = anchor.top - size.height - gap;
+        if (top < gap) {
+            top = anchor.bottom + gap;
+        }
+        badgeTooltip.style.left = left + 'px';
+        badgeTooltip.style.top = top + 'px';
+    }
+
+    function hideBadgeTooltip() {
+        openBadge = null;
+        if (badgeTooltip) {
+            badgeTooltip.hidden = true;
+        }
+    }
+
+    function setUpBadgeTooltips(root) {
+        var badges = elements(root, '[data-badge-detail]');
         if (badges.length === 0) {
             return;
         }
 
-        var tooltip = document.createElement('div');
-        tooltip.className = 'badge-tooltip';
-        tooltip.setAttribute('role', 'tooltip');
-        tooltip.hidden = true;
-        document.body.appendChild(tooltip);
-
-        var openBadge = null;
-        var GAP = 8;
-
-        function show(badge) {
-            var detail = badge.getAttribute('data-badge-detail');
-            if (!detail) {
-                return;
-            }
-
-            openBadge = badge;
-            tooltip.textContent = detail;
-            tooltip.hidden = false;
-
-            // Measured after the text is in place, or the first badge hovered is positioned
-            // against the previous badge's dimensions.
-            var anchor = badge.getBoundingClientRect();
-            var size = tooltip.getBoundingClientRect();
-
-            var left = anchor.left + (anchor.width / 2) - (size.width / 2);
-            left = Math.max(GAP, Math.min(left, window.innerWidth - size.width - GAP));
-
-            // Above by preference, below when the badge is too near the top of the viewport.
-            var top = anchor.top - size.height - GAP;
-            if (top < GAP) {
-                top = anchor.bottom + GAP;
-            }
-
-            tooltip.style.left = left + 'px';
-            tooltip.style.top = top + 'px';
-        }
-
-        function hide() {
-            openBadge = null;
-            tooltip.hidden = true;
+        if (!badgeTooltip) {
+            badgeTooltip = document.createElement('div');
+            badgeTooltip.className = 'badge-tooltip';
+            badgeTooltip.setAttribute('role', 'tooltip');
+            badgeTooltip.hidden = true;
+            document.body.appendChild(badgeTooltip);
         }
 
         Array.prototype.forEach.call(badges, function (badge) {
-            // The styled popup replaces the native one; leaving the attribute in place would
-            // show both, one of them after a delay and in the wrong position.
+            if (!beginInitialization(badge)) {
+                return;
+            }
             badge.removeAttribute('title');
-
             badge.addEventListener('mouseenter', function () {
-                show(badge);
+                showBadgeTooltip(badge);
             });
-            badge.addEventListener('mouseleave', hide);
+            badge.addEventListener('mouseleave', hideBadgeTooltip);
             badge.addEventListener('focus', function () {
-                show(badge);
+                showBadgeTooltip(badge);
             });
-            badge.addEventListener('blur', hide);
+            badge.addEventListener('blur', hideBadgeTooltip);
         });
 
+        if (badgeListenersReady) {
+            return;
+        }
+        badgeListenersReady = true;
         document.addEventListener('keydown', function (event) {
             if (openBadge && event.key === 'Escape') {
                 openBadge.blur();
-                hide();
+                hideBadgeTooltip();
             }
         });
-
-        // A fixed element does not travel with the page, so it has to be dismissed rather than
-        // left floating over unrelated content. Capture, because the scroll usually happens in
-        // the table container rather than on the window.
         window.addEventListener('scroll', function () {
             if (openBadge) {
-                hide();
+                hideBadgeTooltip();
             }
         }, true);
-
         window.addEventListener('resize', function () {
             if (openBadge) {
-                hide();
+                hideBadgeTooltip();
             }
         });
     }
@@ -208,6 +233,9 @@
     }
 
     function setUpNavigationDrawer(sidebar, toggle, scrim, closeButton, content) {
+        if (!beginInitialization(sidebar)) {
+            return;
+        }
         var wideViewport = window.matchMedia(WIDE_VIEWPORT);
         var isOpen = false;
 
@@ -327,6 +355,9 @@
     }
 
     function setUpSidebarCollapse(button, tip) {
+        if (!beginInitialization(button)) {
+            return;
+        }
         var root = document.documentElement;
 
         function apply(collapsed) {
@@ -354,6 +385,9 @@
     // focus leaves it, so it never traps the user. Shared by the account, settings and
     // notification menus in the header, and by the dashboard filter.
     function setUpPopupMenu(container, toggle, menu) {
+        if (!beginInitialization(container)) {
+            return;
+        }
         var isOpen = false;
 
         function setOpen(open) {
@@ -516,6 +550,10 @@
     }
 
     function setUpTimezonePreference(options, zoneNameLabel) {
+        var pending = Array.prototype.filter.call(options, beginInitialization);
+        if (pending.length === 0) {
+            return;
+        }
         var zone = readStoredTimezone() || LOCAL_ZONE;
 
         if (zoneNameLabel) {
@@ -536,7 +574,7 @@
             applyTimezone(zone);
         }
 
-        Array.prototype.forEach.call(options, function (option) {
+        Array.prototype.forEach.call(pending, function (option) {
             option.addEventListener('change', function () {
                 if (!option.checked) {
                     return;
@@ -552,6 +590,9 @@
     }
 
     function setUpFlashDismissal(container) {
+        if (!beginInitialization(container)) {
+            return;
+        }
         var persistentFlashes = container.querySelectorAll('[data-shell-persistent-dismiss-key]');
         persistentFlashes.forEach(function (flash) {
             var key = flash.getAttribute('data-shell-persistent-dismiss-key');
@@ -565,7 +606,12 @@
         });
 
         if (!container.querySelector('.flash')) {
-            container.remove();
+            if (container.hasAttribute('data-ajax-messages')) {
+                container.replaceChildren();
+                container.classList.remove('flash-messages');
+            } else {
+                container.remove();
+            }
             return;
         }
 
@@ -599,7 +645,12 @@
                 return;
             }
 
-            container.remove();
+            if (container.hasAttribute('data-ajax-messages')) {
+                container.replaceChildren();
+                container.classList.remove('flash-messages');
+            } else {
+                container.remove();
+            }
             var main = document.getElementById('main-content');
             if (main) {
                 main.focus();
@@ -612,6 +663,9 @@
     // disabled: a disabled input is not submitted, which would silently clear a
     // stored override on the next save.
     function setUpIntervalAvailability(toggle, field, input) {
+        if (!beginInitialization(toggle)) {
+            return;
+        }
         var permissionLocked = input.getAttribute('data-permission-locked') === 'true';
 
         function sync() {
@@ -628,6 +682,9 @@
     // inputs stay editable and keep submitting. Disabling them would drop values the reader had
     // already typed, and the rule about when they apply belongs to the server either way.
     function setUpDependentFields(toggle) {
+        if (!beginInitialization(toggle)) {
+            return;
+        }
         var name = toggle.getAttribute('data-shell-dependency');
         var dependents = document.querySelectorAll('[data-shell-dependent-on="' + name + '"]');
 
@@ -646,35 +703,36 @@
         sync();
     }
 
-    onReady(function () {
-        var sidebar = document.querySelector('[data-shell-sidebar]');
-        var toggle = document.querySelector('[data-shell-toggle]');
-        var scrim = document.querySelector('[data-shell-scrim]');
-        var closeButton = document.querySelector('[data-shell-close]');
-        var content = document.querySelector('[data-shell-content]');
+    function initialize(root) {
+        root = root || document;
+        var sidebar = first(root, '[data-shell-sidebar]');
+        var toggle = first(root, '[data-shell-toggle]');
+        var scrim = first(root, '[data-shell-scrim]');
+        var closeButton = first(root, '[data-shell-close]');
+        var content = first(root, '[data-shell-content]');
 
         if (sidebar && toggle && scrim) {
             setUpNavigationDrawer(sidebar, toggle, scrim, closeButton, content);
         }
 
-        var collapseButton = document.querySelector('[data-shell-collapse]');
+        var collapseButton = first(root, '[data-shell-collapse]');
         if (collapseButton) {
             setUpSidebarCollapse(
                 collapseButton,
                 collapseButton.querySelector('[data-shell-collapse-tip]'));
         }
 
-        var account = document.querySelector('[data-shell-account]');
-        var accountToggle = document.querySelector('[data-shell-account-toggle]');
-        var accountMenu = document.querySelector('[data-shell-account-menu]');
+        var account = first(root, '[data-shell-account]');
+        var accountToggle = first(root, '[data-shell-account-toggle]');
+        var accountMenu = first(root, '[data-shell-account-menu]');
 
         if (account && accountToggle && accountMenu) {
             setUpPopupMenu(account, accountToggle, accountMenu);
         }
 
-        var notifications = document.querySelector('[data-shell-notifications]');
-        var notificationsToggle = document.querySelector('[data-shell-notifications-toggle]');
-        var notificationsMenu = document.querySelector('[data-shell-notifications-menu]');
+        var notifications = first(root, '[data-shell-notifications]');
+        var notificationsToggle = first(root, '[data-shell-notifications-toggle]');
+        var notificationsMenu = first(root, '[data-shell-notifications-menu]');
 
         if (notifications && notificationsToggle && notificationsMenu) {
             setUpPopupMenu(notifications, notificationsToggle, notificationsMenu);
@@ -682,9 +740,9 @@
 
         // The dashboard filter uses the same popup contract as the header menus, so its open,
         // Escape, click-away and focus-out behaviour cannot drift from theirs.
-        var filters = document.querySelector('[data-shell-filters]');
-        var filtersToggle = document.querySelector('[data-shell-filters-toggle]');
-        var filtersMenu = document.querySelector('[data-shell-filters-menu]');
+        var filters = first(root, '[data-shell-filters]');
+        var filtersToggle = first(root, '[data-shell-filters-toggle]');
+        var filtersMenu = first(root, '[data-shell-filters-menu]');
 
         if (filters && filtersToggle && filtersMenu) {
             setUpPopupMenu(filters, filtersToggle, filtersMenu);
@@ -692,7 +750,7 @@
 
         // Page-level dropdowns declare themselves, so a page can carry several of
         // them without the script naming each one.
-        document.querySelectorAll('[data-shell-menu]').forEach(function (container) {
+        elements(root, '[data-shell-menu]').forEach(function (container) {
             var menuToggle = container.querySelector('[data-shell-menu-toggle]');
             var menuPanel = container.querySelector('[data-shell-menu-panel]');
 
@@ -701,46 +759,56 @@
             }
         });
 
-        var settings = document.querySelector('[data-shell-settings]');
-        var settingsToggle = document.querySelector('[data-shell-settings-toggle]');
-        var settingsMenu = document.querySelector('[data-shell-settings-menu]');
+        var settings = first(root, '[data-shell-settings]');
+        var settingsToggle = first(root, '[data-shell-settings-toggle]');
+        var settingsMenu = first(root, '[data-shell-settings-menu]');
 
         if (settings && settingsToggle && settingsMenu) {
             setUpPopupMenu(settings, settingsToggle, settingsMenu);
         }
 
-        var timezoneOptions = document.querySelectorAll('[data-shell-timezone-option]');
+        var timezoneOptions = elements(root, '[data-shell-timezone-option]');
         if (timezoneOptions.length > 0) {
             setUpTimezonePreference(
                 timezoneOptions,
-                document.querySelector('[data-shell-timezone-name]'));
+                first(root, '[data-shell-timezone-name]'));
         }
+        applyTimezone(readStoredTimezone() || LOCAL_ZONE, root);
 
-        document.querySelectorAll('.flash-messages').forEach(setUpFlashDismissal);
+        elements(root, '.flash-messages').forEach(setUpFlashDismissal);
 
-        var schedulingToggle = document.querySelector('[data-shell-scheduling-toggle]');
-        var intervalField = document.querySelector('[data-shell-interval-field]');
-        var intervalInput = document.querySelector('[data-shell-interval-input]');
+        var schedulingToggle = first(root, '[data-shell-scheduling-toggle]');
+        var intervalField = first(root, '[data-shell-interval-field]');
+        var intervalInput = first(root, '[data-shell-interval-input]');
 
         if (schedulingToggle && intervalField && intervalInput) {
             setUpIntervalAvailability(schedulingToggle, intervalField, intervalInput);
         }
 
-        document.querySelectorAll('[data-shell-dependency]')
+        elements(root, '[data-shell-dependency]')
             .forEach(setUpDependentFields);
 
-        document.querySelectorAll('[data-shell-password-toggle]')
+        elements(root, '[data-shell-password-toggle]')
             .forEach(setUpPasswordReveal);
 
-        setUpBadgeTooltips();
+        setUpBadgeTooltips(root);
 
         setUpConfirmedSubmission();
 
         // A failed submission re-renders the page; move focus to the summary so
         // keyboard and screen-reader users start at the reported problem.
-        var validationSummary = document.querySelector('[data-shell-validation-summary]');
+        var validationSummary = first(root, '[data-shell-validation-summary]');
         if (validationSummary) {
             validationSummary.focus();
         }
+    }
+
+    window.WebHealth.init = initialize;
+    window.WebHealth.applyTimezone = function (root) {
+        applyTimezone(readStoredTimezone() || LOCAL_ZONE, root || document);
+    };
+
+    onReady(function () {
+        initialize(document);
     });
 })();

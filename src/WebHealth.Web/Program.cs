@@ -15,6 +15,7 @@ using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Notifications;
 using WebHealth.Infrastructure.Seo;
+using WebHealth.Web.Ajax;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -68,6 +69,28 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/Account/AccessDenied";
     options.LoginPath = "/Account/Login";
     options.SlidingExpiration = true;
+    options.Events.OnRedirectToLogin = context =>
+    {
+        if (context.Request.IsWebHealthAjax())
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        }
+
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        if (context.Request.IsWebHealthAjax())
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        }
+
+        context.Response.Redirect(context.RedirectUri);
+        return Task.CompletedTask;
+    };
 });
 builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     options.ValidationInterval = TimeSpan.FromMinutes(5));
