@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using WebHealth.Web.Ajax;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -44,6 +45,12 @@ internal sealed class TestAuthenticationHandler(
 
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
+        if (Request.IsWebHealthAjax())
+        {
+            Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        }
+
         var returnUrl = $"{Request.PathBase}{Request.Path}{Request.QueryString}";
         Response.Redirect($"/Account/Login{QueryString.Create("returnUrl", returnUrl)}");
         return Task.CompletedTask;

@@ -21,6 +21,7 @@
     // them, so these are drawn and labelled as the defaults rather than as this view's budget.
     var DEFAULT_WARNING_MS = 1500;
     var DEFAULT_CRITICAL_MS = 3000;
+    var charts = [];
 
     function readSeries(host) {
         try {
@@ -115,8 +116,11 @@
         return options;
     }
 
-    function render() {
-        var host = document.querySelector('[data-dashboard-trend]');
+    function render(root) {
+        root = root || document;
+        var host = root.nodeType === 1 && root.matches('[data-dashboard-trend]')
+            ? root
+            : root.querySelector('[data-dashboard-trend]');
         if (!host || typeof window.Chart === 'undefined') {
             return;
         }
@@ -133,9 +137,9 @@
         var prefersReducedMotion = window.matchMedia
             && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-        var availabilityCanvas = document.getElementById('dashboard-trend-availability');
+        var availabilityCanvas = host.querySelector('#dashboard-trend-availability');
         if (availabilityCanvas) {
-            new window.Chart(availabilityCanvas, {
+            charts.push(new window.Chart(availabilityCanvas, {
                 type: 'line',
                 data: {
                     labels: labels,
@@ -154,12 +158,12 @@
                     suggestedMin: 90,
                     suggestedMax: 100
                 })
-            });
+            }));
         }
 
-        var responseCanvas = document.getElementById('dashboard-trend-response');
+        var responseCanvas = host.querySelector('#dashboard-trend-response');
         if (responseCanvas) {
-            new window.Chart(responseCanvas, {
+            charts.push(new window.Chart(responseCanvas, {
                 type: 'line',
                 data: {
                     labels: labels,
@@ -201,13 +205,33 @@
                         color: cssValue('--status-danger-text', '#c53030')
                     }
                 ])]
-            });
+            }));
         }
     }
 
+    function destroy(root) {
+        charts = charts.filter(function (chart) {
+            if (!root.contains(chart.canvas)) {
+                return true;
+            }
+            chart.destroy();
+            return false;
+        });
+    }
+
+    window.WebHealth = window.WebHealth || {};
+    window.WebHealth.dashboard = { init: render, destroy: destroy };
+
+    document.addEventListener('webhealth:before-fragment-replace', function (event) {
+        destroy(event.detail.root);
+    });
+    document.addEventListener('webhealth:fragment-ready', function (event) {
+        render(event.detail.root);
+    });
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', render);
+        document.addEventListener('DOMContentLoaded', function () { render(document); });
     } else {
-        render();
+        render(document);
     }
 })();

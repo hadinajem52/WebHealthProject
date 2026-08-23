@@ -2,7 +2,9 @@
   "name": "web-health-project",
   "private": true,
   "scripts": {
-    "vendor": "node scripts/vendor-frontend-assets.mjs"
+    "vendor": "node scripts/vendor-frontend-assets.mjs",
+    "check:js": "node --check src/WebHealth.Web/wwwroot/js/shell.js && node --check src/WebHealth.Web/wwwroot/js/ajax.js && node --check src/WebHealth.Web/wwwroot/js/dashboard.js",
+    "test": "npm run check:js && node --test tests/javascript/*.test.cjs"
   },
   "dependencies": {
     "chart.js": "4.4.4"

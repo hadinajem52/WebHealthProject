@@ -8,6 +8,7 @@ using WebHealth.Application.Registry;
 using WebHealth.Application.Reporting;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
+using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
@@ -78,6 +79,17 @@ public class HomeController(
     [AllowAnonymous]
     public IActionResult Error()
     {
+        if (Request.IsWebHealthAjax())
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "The request could not be completed.",
+                extensions: new Dictionary<string, object?>
+                {
+                    ["correlationId"] = HttpContext.TraceIdentifier
+                });
+        }
+
         return View(ErrorViewModel.Create(500, HttpContext.TraceIdentifier));
     }
 

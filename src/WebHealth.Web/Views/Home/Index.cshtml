@@ -62,7 +62,7 @@
     }
 }
 
-<div class="stack">
+<div id="ajax-page" class="stack" data-ajax-region>
 
     <div class="scope-bar">
         <p class="scope-bar__summary">
@@ -117,7 +117,12 @@
                         </p>
                     </div>
 
-                    <form method="get" class="filter-menu__form" aria-labelledby="dashboard-filter-heading">
+                    <form method="get"
+                          class="filter-menu__form"
+                          aria-labelledby="dashboard-filter-heading"
+                          data-ajax-form
+                          data-ajax-target="#ajax-page"
+                          data-ajax-history="push">
 
                         <fieldset class="filter-menu__group">
                             <legend class="filter-menu__legend">Scope</legend>
@@ -222,7 +227,10 @@
 
                             @if (isFiltered || Model.HasFilterErrors)
                             {
-                                <a class="button button--secondary" asp-action="Index">
+                                <a class="button button--secondary"
+                                   asp-action="Index"
+                                   data-ajax-link
+                                   data-ajax-target="#ajax-page">
                                     @await Html.PartialAsync("_Icon", "close")
                                     <span>Clear</span>
                                 </a>
@@ -236,7 +244,11 @@
                 </div>
             </div>
 
-            <a class="button button--secondary" asp-action="Index" asp-all-route-data="routeValues">
+            <a class="button button--secondary"
+               asp-action="Index"
+               asp-all-route-data="routeValues"
+               data-ajax-link
+               data-ajax-target="#ajax-page">
                 @await Html.PartialAsync("_Icon", "clock")
                 <span>Refresh</span>
             </a>
@@ -531,14 +543,14 @@
                     <span class="pagination__actions">
                         @if (query.Page > 1)
                         {
-                            <a class="button button--secondary" asp-action="Index" asp-all-route-data="routeValues" asp-route-Page="@(query.Page - 1)">
+                            <a class="button button--secondary" asp-action="Index" asp-all-route-data="routeValues" asp-route-Page="@(query.Page - 1)" data-ajax-link data-ajax-target="#ajax-page">
                                 @await Html.PartialAsync("_Icon", "arrow-left")
                                 <span>Previous</span>
                             </a>
                         }
                         @if (query.Page < dataset.TotalPages)
                         {
-                            <a class="button button--secondary" asp-action="Index" asp-all-route-data="routeValues" asp-route-Page="@(query.Page + 1)">
+                            <a class="button button--secondary" asp-action="Index" asp-all-route-data="routeValues" asp-route-Page="@(query.Page + 1)" data-ajax-link data-ajax-target="#ajax-page">
                                 <span>Next</span>
                                 @await Html.PartialAsync("_Icon", "arrow-right")
                             </a>

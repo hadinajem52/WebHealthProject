@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="~/css/components.css" asp-append-version="true" />
 
     <script src="~/js/shell.js" asp-append-version="true"></script>
+    <script src="~/js/ajax.js" asp-append-version="true"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -132,6 +133,7 @@
             </header>
 
             <main id="main-content" class="app-content" tabindex="-1">
+                <div id="ajax-messages" class="ajax-messages" data-ajax-messages aria-live="polite" aria-atomic="true"></div>
                 @await Html.PartialAsync("_FlashMessages")
                 @await Html.PartialAsync("_ValidationSummary")
                 @RenderBody()
