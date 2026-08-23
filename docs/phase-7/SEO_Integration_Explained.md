@@ -12,7 +12,7 @@
 
 Not a full performance tester. Not a rank predictor.
 
-We call **one Google API** (`runPagespeed`), ask for **one category** (`seo`), on **one strategy** (`mobile`), in **one language** (`en-US`), and store only what we need.
+We call **one Google API** (`runPagespeed`), ask for **one category** (`seo`), on **both strategies** (`mobile` and `desktop` — one audit, one request each), in **one language** (`en-US`), and store only what we need.
 
 **You see:** `Lighthouse technical SEO score: 92 / 100` + a list of audits + history + delta vs last run.
 
@@ -152,7 +152,7 @@ erDiagram
         uuid endpoint_id FK
         string provider "PageSpeedInsights"
         string category "Seo"
-        string strategy "Mobile (Desktop ready but hidden)"
+        string strategy "Mobile or Desktop (one row each)"
         bool is_enabled
         bool scheduling_enabled
         int interval_seconds "6h - 30d, default 24h"
@@ -244,7 +244,7 @@ GET https://pagespeedonline.googleapis.com/pagespeedonline/v5/runPagespeed
 ```
 
 - `category=seo` is **always** sent (default would be performance).
-- `strategy` is **always** explicit (`mobile` in V1).
+- `strategy` is **always** explicit (`mobile` or `desktop`, never Google's own default).
 - `locale=en-US` fixes titles/descriptions so stored text is stable.
 - Base host `pagespeedonline.googleapis.com` is a **constant**, not config — prevents abuse as a generic HTTP client.
 - Endpoint URL is built with a URI builder, escaped exactly once.
@@ -394,7 +394,7 @@ One view (`Views/PageAudits/Index.cshtml`) in the dashboard card style:
 Keep `/Seo` focused on WebHealth's own policy checks. Add a compact line:
 
 ```
-PageSpeed: 92 Mobile, audited 4h ago → View audits
+PageSpeed: 92 Mobile / 84 Desktop, audited 4h ago → View audits
 ```
 
 Links to `/PageAudits?endpointId=...`. We **do not** merge Lighthouse audits into `SeoFindingGroups` in V1 — those groups are built around stable WebHealth rule keys.

@@ -1,9 +1,10 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
+using WebHealth.Domain.PageAudits;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
@@ -38,10 +39,16 @@ public sealed class PageAuditsController(
     [HttpGet]
     public async Task<IActionResult> Index(
         Guid? endpointId,
+        string? strategy,
         Guid? runId,
         CancellationToken cancellationToken = default)
     {
         var access = GetAccess();
+
+        // Normalized rather than validated: the strategy names which of two measurements of the
+        // same page to read, so an unrecognised one is a wrong address that mobile answers, not
+        // an error worth a page.
+        var selectedStrategy = PageAuditStrategies.Normalize(strategy);
         var endpoints = await targetReader.ListAllEndpointsAsync(access, null, cancellationToken);
         var options = endpoints
             .Select(endpoint => new EndpointOption(
@@ -53,11 +60,12 @@ public sealed class PageAuditsController(
         // should not imply that whichever endpoint sorted first is the one worth looking at.
         if (endpointId is not { } selected)
         {
-            return View(new PageAuditIndexViewModel(options, null, null, [], [], false));
+            return View(new PageAuditIndexViewModel(
+                options, null, selectedStrategy, null, [], [], false));
         }
 
         var summary = await pageAuditReader.GetEndpointSummaryAsync(
-            selected, runId, access, cancellationToken);
+            selected, selectedStrategy, runId, access, cancellationToken);
         if (summary is null)
         {
             return NotFound();
@@ -71,7 +79,8 @@ public sealed class PageAuditsController(
             return NotFound();
         }
 
-        var runs = await pageAuditReader.ListRunsAsync(selected, RunsListed, access, cancellationToken);
+        var runs = await pageAuditReader.ListRunsAsync(
+            selected, selectedStrategy, RunsListed, access, cancellationToken);
         var items = summary.LatestRun is null
             ? []
             : await pageAuditReader.ListAuditItemsAsync(summary.LatestRun.RunId, access, cancellationToken);
@@ -81,13 +90,21 @@ public sealed class PageAuditsController(
         var canRun = summary.IsEnabled
             && await targetAuthorization.CanTestEndpointAsync(selected, access, cancellationToken);
 
-        return View(new PageAuditIndexViewModel(options, selected, summary, runs, items, canRun));
+        return View(new PageAuditIndexViewModel(
+            options, selected, selectedStrategy, summary, runs, items, canRun));
     }
 
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> RunNow(Guid endpointId, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> RunNow(
+        Guid endpointId,
+        string? strategy,
+        CancellationToken cancellationToken = default)
     {
         var access = GetAccess();
+
+        // One request audits every form factor, so the strategy here only decides which of the
+        // two results the reader lands on afterwards.
+        var selectedStrategy = PageAuditStrategies.Normalize(strategy);
 
         // The policy above says this user may test targets at all; this says they may test *this*
         // one. Without the second check an endpoint id in a form post would be permission enough.
@@ -111,12 +128,21 @@ public sealed class PageAuditsController(
         }
         else
         {
+            // Counted, not named. One audit covers every form factor, so a partial answer is
+            // "the rest was already running" rather than a form factor the reader has to chase.
+            var partial = result.AlreadyRunningCount > 0
+                ? " The rest was already running."
+                : null;
             TempData.AddFlashMessage(
                 FlashLevel.Success,
-                "PageSpeed audit queued. Google runs the audit, so the score appears once it answers.");
+                "PageSpeed audit queued for mobile and desktop. Google runs each form factor, "
+                + $"so the scores appear once it answers.{partial}");
         }
 
-        return RedirectToAction(nameof(Index), new { endpointId, runId = result.RunId });
+        // No run id: the reader shows the newest run on the selected strategy, which is the one
+        // this request just opened. Naming one would land a two-strategy request on a single form
+        // factor's run and read as though the other had not been asked for.
+        return RedirectToAction(nameof(Index), new { endpointId, strategy = selectedStrategy });
     }
 
     private RegistryAccessContext GetAccess()

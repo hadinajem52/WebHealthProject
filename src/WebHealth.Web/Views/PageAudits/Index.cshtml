@@ -8,6 +8,7 @@
     var comparison = summary?.Comparison;
     var selectedLabel = Model.Endpoints
         .FirstOrDefault(candidate => candidate.Id == Model.SelectedEndpointId)?.Label;
+    var strategyLabel = PageAuditDisplay.DescribeStrategy(Model.SelectedStrategy);
 
     static string StatusIcon(string tone) => tone switch
     {
@@ -31,6 +32,10 @@
         </p>
 
         <form method="get" class="filter-inline filter-inline--wide">
+            @* The form factor rides along as a hidden field rather than a second control: the
+               switch below already chooses it, and a select that could disagree with that switch
+               would make the same page reachable two ways. *@
+            <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
             <div class="form-field">
                 <label for="endpointId">Endpoint</label>
                 <select id="endpointId" name="endpointId">
@@ -46,6 +51,26 @@
                 <span>Show audits</span>
             </button>
         </form>
+
+        @if (Model.SelectedEndpointId is not null)
+        {
+            @* Links rather than a client-side toggle, because the form factor is part of the
+               address: each is a separate measurement of the page with its own runs and its own
+               history, so switching has to be shareable and has to survive a reload. *@
+            <nav class="segmented" aria-label="Form factor">
+                @foreach (var strategy in PageAuditStrategies.All)
+                {
+                    var isSelected = strategy == Model.SelectedStrategy;
+                    <a class="segmented__option"
+                       aria-current="@(isSelected ? "page" : null)"
+                       asp-action="Index"
+                       asp-route-endpointId="@Model.SelectedEndpointId"
+                       asp-route-strategy="@strategy">
+                        @PageAuditDisplay.DescribeStrategy(strategy)
+                    </a>
+                }
+            </nav>
+        }
     </section>
 
     @if (summary is null)
@@ -62,7 +87,7 @@
         <section class="card">
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "PageSpeed auditing is off for this endpoint",
-                "Enable it on the endpoint to have Google audit this page. Enabling sends the URL to Google and asks Google infrastructure to load it, so it is only suitable for public pages.",
+                "Enable it on the endpoint to have Google audit this page on mobile and desktop. Enabling sends the URL to Google and asks Google infrastructure to load it, so it is only suitable for public pages.",
                 "reports"))
         </section>
     }
@@ -77,7 +102,7 @@
                     <h3 class="card__title target-url">@(selectedLabel ?? "Selected endpoint")</h3>
                     <p class="card__status" data-status="@summaryTone">
                         @await Html.PartialAsync("_Icon", StatusIcon(summaryTone))
-                        <span>PageSpeed &middot; @(run is null ? "No audit has run yet" : PageAuditDisplay.DescribeStatus(run))</span>
+                        <span>PageSpeed @strategyLabel &middot; @(run is null ? "No audit has run yet" : PageAuditDisplay.DescribeStatus(run))</span>
                     </p>
                 </div>
 
@@ -86,8 +111,9 @@
                     <div class="form-actions">
                         <form method="post" asp-action="RunNow">
                             <input type="hidden" name="endpointId" value="@Model.SelectedEndpointId" />
+                            <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
                             <button class="button button--primary" type="submit"
-                                    title="Asks Google to audit this page now. The score appears once Google answers.">
+                                    title="Asks Google to audit this page on every form factor now. The scores appear once Google answers.">
                                 @await Html.PartialAsync("_Icon", "play")
                                 <span>Run now</span>
                             </button>
@@ -102,29 +128,36 @@
                     <span>Status</span>
                 </div>
                 <ul class="detail-list__items">
-                    <li>
-                        <div class="detail-list__row">
-                            <span class="detail-list__subject">
-                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
-                                <span>Lighthouse technical SEO score</span>
-                            </span>
-                            <span class="detail-list__value">
-                                @if (run is not null && run.HasScore)
-                                {
-                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.ScoreTone(run.Score), $"{run.Score} / 100"))
-                                }
-                                else
-                                {
-                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("neutral", "Not measured"))
-                                }
-                            </span>
-                        </div>
-                    </li>
+                    @foreach (var score in summary.Scores)
+                    {
+                        <li>
+                            <div class="detail-list__row">
+                                <span class="detail-list__subject">
+                                    <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
+                                    <span>@PageAuditDisplay.DescribeStrategy(score.Strategy) score</span>
+                                </span>
+                                <span class="detail-list__value">
+                                    @if (score.HasScore)
+                                    {
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.ScoreTone(score.Score), $"{score.Score} / 100"))
+                                        @if (score.MeasuredAt is { } measuredAt)
+                                        {
+                                            <span class="detail-list__note">@Html.Timestamp(measuredAt)</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel("neutral", "Not measured"))
+                                    }
+                                </span>
+                            </div>
+                        </li>
+                    }
                     <li>
                         <div class="detail-list__row">
                             <span class="detail-list__subject">
                                 <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
-                                <span>Latest run</span>
+                                <span>Latest @strategyLabel.ToLowerInvariant() run</span>
                             </span>
                             <span class="detail-list__value">
                                 @if (run is null)
@@ -136,15 +169,6 @@
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(PageAuditDisplay.StatusTone(run), PageAuditDisplay.DescribeStatus(run)))
                                 }
                             </span>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="detail-list__row">
-                            <span class="detail-list__subject">
-                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "settings")</span>
-                                <span>Strategy</span>
-                            </span>
-                            <span class="detail-list__value">@summary.Strategy</span>
                         </div>
                     </li>
                     <li>
@@ -212,7 +236,7 @@
                         </p>
                     </div>
                 </div>
-                <p class="card__subtitle">Reload the page in a moment to see the score.</p>
+                <p class="card__subtitle">Reload the page in a moment to see the scores.</p>
             </section>
         }
 
@@ -352,7 +376,7 @@
         <section class="card">
             <div class="page-intro">
                 <div>
-                    <h3 class="card__title">Audits</h3>
+                    <h3 class="card__title">@strategyLabel audits</h3>
                     <p class="card__status" data-status="@(summary.Counts.Failed > 0 ? "danger" : "success")">
                         @await Html.PartialAsync("_Icon", summary.Counts.Failed > 0 ? "error" : "success")
                         <span>@summary.Counts.Failed failed &middot; @summary.Counts.Passed passed</span>
@@ -472,13 +496,13 @@
                     <h3 class="card__title">Run history</h3>
                     <p class="card__status" data-status="neutral">
                         @await Html.PartialAsync("_Icon", "clock")
-                        <span>@Model.Runs.Count run@(Model.Runs.Count == 1 ? null : "s") &middot; select one to see the audits it recorded</span>
+                        <span>@Model.Runs.Count @strategyLabel.ToLowerInvariant() run@(Model.Runs.Count == 1 ? null : "s") &middot; select one to see the audits it recorded</span>
                     </p>
                 </div>
             </div>
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table">
-                    <caption class="visually-hidden">PageSpeed runs for the selected endpoint</caption>
+                    <caption class="visually-hidden">@strategyLabel PageSpeed runs for the selected endpoint</caption>
                     <thead>
                         <tr>
                             <th scope="col">Queued</th>
@@ -513,6 +537,7 @@
                                     <a class="button button--secondary"
                                        asp-action="Index"
                                        asp-route-endpointId="@Model.SelectedEndpointId"
+                                       asp-route-strategy="@Model.SelectedStrategy"
                                        asp-route-runId="@historyRun.RunId">
                                         <span>View</span>
                                     </a>

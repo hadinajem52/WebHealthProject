@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
@@ -27,7 +27,7 @@ internal static class PageAuditReaderAssertions
         Guid endpointId)
     {
         var access = new RegistryAccessContext(administratorId, [ApplicationRoles.Administrator]);
-        var targetId = await SeedTargetAsync(database, endpointId);
+        var targetId = await SeedTargetAsync(database, endpointId, PageAuditStrategies.Mobile);
 
         await VerifyAnUnauditedEndpointReadsAsConfiguredButUnmeasuredAsync(reader, access, endpointId);
         var firstRunId = await VerifyTheFirstRunHasNothingToCompareAgainstAsync(
@@ -37,10 +37,15 @@ internal static class PageAuditReaderAssertions
             database, reader, access, targetId, endpointId);
         await VerifyAMajorVersionChangeIsLabelledAsync(database, reader, access, targetId, endpointId);
         await VerifyAFailedRunIsNotComparedAsync(database, reader, access, targetId, endpointId);
+        await VerifyTheTwoFormFactorsReadApartAsync(database, reader, access, endpointId);
+        await VerifyConfigurationIsEndpointLevelAsync(database, reader, access, endpointId);
         await VerifyAnotherClientsEndpointIsNotReadableAsync(database, reader, endpointId);
     }
 
-    private static async Task<Guid> SeedTargetAsync(ApplicationDbContext database, Guid endpointId)
+    private static async Task<Guid> SeedTargetAsync(
+        ApplicationDbContext database,
+        Guid endpointId,
+        string strategy)
     {
         var now = DateTimeOffset.UtcNow;
         var targetId = Guid.NewGuid();
@@ -50,7 +55,7 @@ internal static class PageAuditReaderAssertions
             EndpointId = endpointId,
             Provider = PageAuditProviders.PageSpeedInsights,
             Category = PageAuditCategories.Seo,
-            Strategy = PageAuditStrategies.Mobile,
+            Strategy = strategy,
             IsEnabled = true,
             SchedulingEnabled = true,
             IntervalSeconds = 86400,
@@ -74,13 +79,17 @@ internal static class PageAuditReaderAssertions
         RegistryAccessContext access,
         Guid endpointId)
     {
-        var summary = await reader.GetEndpointSummaryAsync(endpointId, null, access);
+        var summary = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, null, access);
 
         summary.Should().NotBeNull();
         summary!.IsConfigured.Should().BeTrue();
         summary.IsEnabled.Should().BeTrue();
         summary.SchedulingEnabled.Should().BeTrue();
         summary.IntervalHours.Should().Be(24);
+        summary.Scores.Should().HaveCount(PageAuditStrategies.All.Length,
+            "one audit produces a number per form factor, measured or not");
+        summary.Scores.Should().OnlyContain(score => !score.HasScore);
         summary.LatestRun.Should().BeNull();
         summary.Counts.Total.Should().Be(0);
         summary.Comparison.CurrentRunId.Should().BeNull();
@@ -94,9 +103,11 @@ internal static class PageAuditReaderAssertions
         Guid endpointId)
     {
         var runId = await AddCompletedRunAsync(
-            database, targetId, endpointId, 0.82m, "11.4.0", DateTimeOffset.UtcNow.AddHours(-2));
+            database, targetId, endpointId, PageAuditStrategies.Mobile, 0.82m, "11.4.0",
+            DateTimeOffset.UtcNow.AddHours(-2));
 
-        var summary = await reader.GetEndpointSummaryAsync(endpointId, null, access);
+        var summary = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, null, access);
 
         summary!.LatestRun!.RunId.Should().Be(runId);
         summary.LatestRun.Score.Should().Be(82, "0.82 rounds to 82 on the documented rule");
@@ -129,7 +140,8 @@ internal static class PageAuditReaderAssertions
             ("canonical", PageAuditItemStatuses.Error, null, 10)
         ]);
 
-        var summary = await reader.GetEndpointSummaryAsync(endpointId, null, access);
+        var summary = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, null, access);
 
         summary!.Counts.Passed.Should().Be(2);
         summary.Counts.Failed.Should().Be(1);
@@ -153,9 +165,11 @@ internal static class PageAuditReaderAssertions
         Guid endpointId)
     {
         var runId = await AddCompletedRunAsync(
-            database, targetId, endpointId, 0.91m, "11.4.0", DateTimeOffset.UtcNow.AddHours(-1));
+            database, targetId, endpointId, PageAuditStrategies.Mobile, 0.91m, "11.4.0",
+            DateTimeOffset.UtcNow.AddHours(-1));
 
-        var summary = await reader.GetEndpointSummaryAsync(endpointId, null, access);
+        var summary = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, null, access);
 
         summary!.LatestRun!.RunId.Should().Be(runId);
         summary.Comparison.CurrentScore.Should().Be(91);
@@ -178,9 +192,11 @@ internal static class PageAuditReaderAssertions
         Guid endpointId)
     {
         var runId = await AddCompletedRunAsync(
-            database, targetId, endpointId, 0.75m, "12.0.1", DateTimeOffset.UtcNow.AddMinutes(-30));
+            database, targetId, endpointId, PageAuditStrategies.Mobile, 0.75m, "12.0.1",
+            DateTimeOffset.UtcNow.AddMinutes(-30));
 
-        var summary = await reader.GetEndpointSummaryAsync(endpointId, null, access);
+        var summary = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, null, access);
 
         summary!.LatestRun!.RunId.Should().Be(runId);
         summary.Comparison.PreviousScore.Should().Be(91);
@@ -225,7 +241,8 @@ internal static class PageAuditReaderAssertions
         await database.SaveChangesAsync();
         database.ChangeTracker.Clear();
 
-        var summary = await reader.GetEndpointSummaryAsync(endpointId, null, access);
+        var summary = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, null, access);
 
         summary!.LatestRun!.RunId.Should().Be(runId, "the newest run is shown whatever its status");
         summary.LatestRun.HasScore.Should().BeFalse();
@@ -241,8 +258,100 @@ internal static class PageAuditReaderAssertions
             .ThenByDescending(run => run.Id)
             .Select(run => run.Id)
             .FirstAsync();
-        var selected = await reader.GetEndpointSummaryAsync(endpointId, lastScored, access);
+        var selected = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, lastScored, access);
         selected!.Comparison.PreviousRunId.Should().NotBeNull();
+    }
+
+    /// <summary>
+    /// Mobile and desktop are two measurements of the same page, not two views of one result.
+    /// Reading either must never pick up the other's runs: a desktop score shown under mobile
+    /// would report a form factor the page never audited that way.
+    /// </summary>
+    private static async Task VerifyTheTwoFormFactorsReadApartAsync(
+        ApplicationDbContext database,
+        IPageAuditReader reader,
+        RegistryAccessContext access,
+        Guid endpointId)
+    {
+        var desktopTargetId = await SeedTargetAsync(
+            database, endpointId, PageAuditStrategies.Desktop);
+        var desktopRunId = await AddCompletedRunAsync(
+            database, desktopTargetId, endpointId, PageAuditStrategies.Desktop, 0.64m, "11.4.0",
+            DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var desktop = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Desktop, null, access);
+
+        desktop!.Strategy.Should().Be(PageAuditStrategies.Desktop);
+        desktop.LatestRun!.RunId.Should().Be(desktopRunId);
+        desktop.LatestRun.Score.Should().Be(64);
+        desktop.Comparison.PreviousRunId.Should().BeNull(
+            "the mobile history is a different measurement, not this run's previous score");
+
+        var mobile = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Mobile, null, access);
+
+        mobile!.Strategy.Should().Be(PageAuditStrategies.Mobile);
+        mobile.LatestRun!.RunId.Should().NotBe(desktopRunId,
+            "a desktop run is never the endpoint's newest mobile run, however recent it is");
+
+        var desktopRuns = await reader.ListRunsAsync(
+            endpointId, PageAuditStrategies.Desktop, 20, access);
+
+        desktopRuns.Should().ContainSingle(
+            "one desktop run has been recorded, against several mobile ones")
+            .Which.Strategy.Should().Be(PageAuditStrategies.Desktop);
+
+        // Both numbers travel with either reading, because the page shows one audit with a score
+        // per form factor rather than making a reader switch tabs to find the second.
+        foreach (var summary in new[] { desktop, mobile })
+        {
+            summary.Scores.Should().HaveCount(PageAuditStrategies.All.Length);
+            summary.Scores.Single(score => score.Strategy == PageAuditStrategies.Desktop)
+                .Score.Should().Be(64);
+            summary.Scores.Single(score => score.Strategy == PageAuditStrategies.Mobile)
+                .Score.Should().Be(75,
+                    "the newest scored mobile run is the one the version-change stage added; "
+                    + "the failed run after it produced no score to replace it");
+        }
+    }
+
+    /// <summary>
+    /// Auditing is one setting on the endpoint. A form factor whose own target row is missing -
+    /// a database that has not applied the desktop migration yet - must still read as configured
+    /// and enabled, because the alternative tells an operator to switch on something that is
+    /// already on.
+    /// </summary>
+    private static async Task VerifyConfigurationIsEndpointLevelAsync(
+        ApplicationDbContext database,
+        IPageAuditReader reader,
+        RegistryAccessContext access,
+        Guid endpointId)
+    {
+        var desktopTargetIds = await database.PageAuditTargets.AsNoTracking()
+            .Where(target => target.EndpointId == endpointId
+                && target.Strategy == PageAuditStrategies.Desktop)
+            .Select(target => target.Id)
+            .ToArrayAsync();
+        await database.PageAuditRuns
+            .Where(run => desktopTargetIds.Contains(run.PageAuditTargetId))
+            .ExecuteDeleteAsync();
+        await database.PageAuditTargets
+            .Where(target => desktopTargetIds.Contains(target.Id))
+            .ExecuteDeleteAsync();
+        database.ChangeTracker.Clear();
+
+        var desktop = await reader.GetEndpointSummaryAsync(
+            endpointId, PageAuditStrategies.Desktop, null, access);
+
+        desktop!.IsConfigured.Should().BeTrue(
+            "PageSpeed is configured on the endpoint, not on one form factor");
+        desktop.IsEnabled.Should().BeTrue();
+        desktop.SchedulingEnabled.Should().BeTrue();
+        desktop.IntervalHours.Should().Be(24);
+        desktop.NextDueAt.Should().BeNull("this form factor has no row to be due from");
+        desktop.LatestRun.Should().BeNull();
     }
 
     /// <summary>
@@ -262,15 +371,18 @@ internal static class PageAuditReaderAssertions
             .FirstAsync();
         var viewerWithNoGrants = new RegistryAccessContext(strangerId, [ApplicationRoles.Viewer]);
 
-        (await reader.GetEndpointSummaryAsync(endpointId, null, viewerWithNoGrants))
+        (await reader.GetEndpointSummaryAsync(
+                endpointId, PageAuditStrategies.Mobile, null, viewerWithNoGrants))
             .Should().BeNull("a Viewer with no grant over this endpoint may not read its audits");
-        (await reader.ListRunsAsync(endpointId, 20, viewerWithNoGrants)).Should().BeEmpty();
+        (await reader.ListRunsAsync(endpointId, PageAuditStrategies.Mobile, 20, viewerWithNoGrants))
+            .Should().BeEmpty();
     }
 
     private static async Task<Guid> AddCompletedRunAsync(
         ApplicationDbContext database,
         Guid targetId,
         Guid endpointId,
+        string strategy,
         decimal rawScore,
         string lighthouseVersion,
         DateTimeOffset finishedAt)
@@ -288,7 +400,7 @@ internal static class PageAuditReaderAssertions
             RawScore = rawScore,
             Provider = PageAuditProviders.PageSpeedInsights,
             Category = PageAuditCategories.Seo,
-            Strategy = PageAuditStrategies.Mobile,
+            Strategy = strategy,
             Locale = "en-US",
             LighthouseVersion = lighthouseVersion,
             AttemptCount = 1,

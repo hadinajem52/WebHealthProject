@@ -10,6 +10,28 @@
 
     document.documentElement.classList.add('js');
 
+    var SIDEBAR_COLLAPSE_STORAGE_KEY = 'webhealth.sidebar-collapsed';
+
+    function readStoredSidebarCollapsed() {
+        try {
+            return window.localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === 'true';
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function storeSidebarCollapsed(collapsed) {
+        try {
+            window.localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, collapsed ? 'true' : 'false');
+        } catch (error) {
+            return;
+        }
+    }
+
+    document.documentElement.setAttribute(
+        'data-sidebar-collapsed',
+        readStoredSidebarCollapsed() ? 'true' : 'false');
+
     var WIDE_VIEWPORT = '(min-width: 62em)';
     var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -302,6 +324,30 @@
         } else if (typeof wideViewport.addListener === 'function') {
             wideViewport.addListener(onViewportChange);
         }
+    }
+
+    function setUpSidebarCollapse(button, tip) {
+        var root = document.documentElement;
+
+        function apply(collapsed) {
+            root.setAttribute('data-sidebar-collapsed', collapsed ? 'true' : 'false');
+            button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+
+            var label = collapsed ? 'Open sidebar' : 'Close sidebar';
+            button.setAttribute('aria-label', label);
+
+            if (tip) {
+                tip.textContent = label;
+            }
+        }
+
+        apply(root.getAttribute('data-sidebar-collapsed') === 'true');
+
+        button.addEventListener('click', function () {
+            var collapsed = root.getAttribute('data-sidebar-collapsed') !== 'true';
+            apply(collapsed);
+            storeSidebarCollapsed(collapsed);
+        });
     }
 
     // A non-modal popup: it closes on Escape, on a click outside it, and as soon as
@@ -609,6 +655,13 @@
 
         if (sidebar && toggle && scrim) {
             setUpNavigationDrawer(sidebar, toggle, scrim, closeButton, content);
+        }
+
+        var collapseButton = document.querySelector('[data-shell-collapse]');
+        if (collapseButton) {
+            setUpSidebarCollapse(
+                collapseButton,
+                collapseButton.querySelector('[data-shell-collapse-tip]'));
         }
 
         var account = document.querySelector('[data-shell-account]');

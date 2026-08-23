@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.PageAudits;
 using WebHealth.Infrastructure.Persistence;
@@ -55,9 +55,11 @@ internal static class PageAuditConfiguration
     /// whether anything changed so the caller can decide what to record.
     /// </summary>
     /// <remarks>
-    /// A disabled target is kept rather than deleted. Deleting it would orphan the run history
-    /// that references it, and switching the feature off is not a request to forget every score
-    /// it ever produced.
+    /// One row per form factor, kept in step by the same submission: an endpoint is audited on
+    /// mobile and on desktop, and the two scores are only comparable when both were configured
+    /// the same way. A disabled target is kept rather than deleted. Deleting it would orphan the
+    /// run history that references it, and switching the feature off is not a request to forget
+    /// every score it ever produced.
     /// </remarks>
     public static async Task<bool> ApplyAsync(
         ApplicationDbContext dbContext,
@@ -68,14 +70,44 @@ internal static class PageAuditConfiguration
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var target = await dbContext.PageAuditTargets.SingleOrDefaultAsync(
-            candidate => candidate.EndpointId == endpointId
+        var targets = await dbContext.PageAuditTargets
+            .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.Provider == PageAuditProviders.PageSpeedInsights
-                && candidate.Category == PageAuditCategories.Seo
-                && candidate.Strategy == PageAuditStrategies.Mobile,
-            cancellationToken);
+                && candidate.Category == PageAuditCategories.Seo)
+            .ToArrayAsync(cancellationToken);
 
-        var intervalSeconds = intervalHours * 3600;
+        var changed = false;
+        foreach (var strategy in PageAuditStrategies.All)
+        {
+            changed |= ApplyStrategy(
+                dbContext,
+                endpointId,
+                strategy,
+                targets.SingleOrDefault(candidate => candidate.Strategy == strategy),
+                enabled,
+                schedulingEnabled,
+                intervalHours * 3600,
+                now);
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// One form factor's row. The strategies share every setting the form collects, so the loop
+    /// above applies the same configuration to each rather than the page asking twice for a
+    /// cadence that would only ever be answered the same way.
+    /// </summary>
+    private static bool ApplyStrategy(
+        ApplicationDbContext dbContext,
+        Guid endpointId,
+        string strategy,
+        PageAuditTarget? target,
+        bool enabled,
+        bool schedulingEnabled,
+        int intervalSeconds,
+        DateTimeOffset now)
+    {
         if (target is null)
         {
             // Nothing to store for an endpoint that never had the feature turned on: an empty row
@@ -91,7 +123,7 @@ internal static class PageAuditConfiguration
                 EndpointId = endpointId,
                 Provider = PageAuditProviders.PageSpeedInsights,
                 Category = PageAuditCategories.Seo,
-                Strategy = PageAuditStrategies.Mobile,
+                Strategy = strategy,
                 IsEnabled = true,
                 SchedulingEnabled = schedulingEnabled,
                 IntervalSeconds = intervalSeconds,
@@ -145,16 +177,20 @@ internal static class PageAuditConfiguration
         Guid endpointId,
         CancellationToken cancellationToken)
     {
+        // Read from one row rather than all of them: every strategy carries the configuration the
+        // form submitted, so they agree by construction, and an endpoint configured before the
+        // desktop strategy existed still has the mobile row this finds.
         var target = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.Provider == PageAuditProviders.PageSpeedInsights
-                && candidate.Category == PageAuditCategories.Seo
-                && candidate.Strategy == PageAuditStrategies.Mobile)
+                && candidate.Category == PageAuditCategories.Seo)
+            .OrderBy(candidate => candidate.Strategy)
+            .ThenBy(candidate => candidate.Id)
             .Select(candidate => new PageAuditConfigurationState(
                 candidate.IsEnabled,
                 candidate.SchedulingEnabled,
                 candidate.IntervalSeconds / 3600))
-            .SingleOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken);
         return target ?? PageAuditConfigurationState.Default;
     }
 
