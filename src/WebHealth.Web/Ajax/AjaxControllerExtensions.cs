@@ -26,6 +26,7 @@ public static class AjaxControllerExtensions
     {
         if (controller.Request.IsWebHealthAjax())
         {
+            controller.TempData.AddFlashMessage(level, message);
             return controller.Ok(new AjaxFragmentViewModel(
                 message,
                 LevelName(level),
