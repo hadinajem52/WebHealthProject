@@ -34,3 +34,23 @@ JSON operations use `AjaxFragmentViewModel`: `message`, `level`, `redirectUrl`, 
 Successful GET history defaults to `push`. Refresh-only reads use `data-ajax-history="replace"` so repeated refreshes do not add duplicate Back-button entries.
 
 Normal login, logout, access-denied navigation, sidebar navigation, details-page links, exports, downloads, external links, and permanent purge remain standard requests.
+
+## Live run status
+
+A page showing work that is still running refreshes itself instead of asking the reader to reload. `poller.js` owns the schedule — backoff, pause while the tab is hidden or the browser is offline, and a bounded lifetime. `run-status.js` drives it from markup; `checks.js` drives it from the manual-check JSON status contract above.
+
+`data-run-status` marks the region to refresh. It needs an `id`, because that id is the selector the response is read from. On it:
+
+| Attribute | Meaning |
+|---|---|
+| `data-run-active` | `true` while work is in progress. Polling starts only when it is `true` and stops on the first response that is not. |
+| `data-run-url` | The address to re-read. It may be the page's own URL; the response is a fragment because the request carries `X-WebHealth-Ajax: 1`. |
+| `data-run-also` | Extra regions replaced from the same response, so a control outside the region can change with it. |
+| `data-run-lifetime` | Maximum polling lifetime in milliseconds. After it, polling stops with a message telling the reader to reload. |
+| `data-run-complete-message` | Flash message rendered once, when a poll observes the work has finished. |
+
+`data-run-scope` on an ancestor names the region's selector. Any enhanced request originating inside that ancestor stops polling, and a `202` JSON response carrying `statusUrl` starts it — that is how a Run-now button begins polling before its region has been re-rendered.
+
+`data-ajax-target` accepts a comma-separated list, and every named region must be present in the response or none is replaced. Polling requests are reads: they never move focus, and a newer request for the same target aborts an older one.
+
+A run still in progress is drawn with a turning mark rather than a still badge, so a page that refreshes itself is distinguishable from one that has stopped updating. `StatusBadgeViewModel.Pending` renders it inside a badge; `_Spinner` renders it beside a card status line or inside a button.

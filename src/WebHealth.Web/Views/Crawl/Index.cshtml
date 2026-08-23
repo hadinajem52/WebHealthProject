@@ -1,11 +1,16 @@
 @model CrawlIndexViewModel
+@using WebHealth.Domain.Crawling
 @{
     ViewData.SetTitle("Broken links");
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Broken links"));
     var comparison = Model.Comparison;
+    var isRunning = Model.ActiveRunId is not null;
+    var statusUrl = Model.SelectedEndpointId is { } polled
+        ? Url.Action("Index", new { endpointId = polled })
+        : null;
 }
 
-<div id="ajax-page" class="stack" data-ajax-region>
+<div id="ajax-page" class="stack" data-ajax-region data-run-scope="#crawl-results">
     @* No card title here: the page heading already reads "Broken links". This card is the
        control that scopes everything below it, so it carries the explanation and the picker. *@
     <section class="card" aria-labelledby="crawl-scope-label">
@@ -39,34 +44,50 @@
                string that resolves to nothing leaves the select showing its placeholder, and a
                Run crawl button beside a picker reading "Select an endpoint" offers to crawl
                something the page cannot name. *@
-            @if (Model.SelectedEndpointId is { } runTarget
-                && Model.CanRunNow
-                && Model.Endpoints.Any(option => option.Id == runTarget))
-            {
-                @if (Model.ActiveRunId is { } activeRunId)
+            @* The action is a region of its own because the poller swaps it: a crawl that finished
+               while the page sat open must not leave "Crawl in progress" beside a run that has
+               stopped. It is display: contents, so it adds no box to the row. *@
+            <div id="crawl-run-action" class="filter-inline__action">
+                @if (Model.SelectedEndpointId is { } runTarget
+                    && Model.CanRunNow
+                    && Model.Endpoints.Any(option => option.Id == runTarget))
                 {
-                    @* One crawl per endpoint is a database constraint, so a second press could
-                       only be refused. Offer the run that is already going instead. *@
-                    <a class="button button--secondary" asp-action="Run" asp-route-id="@activeRunId">
-                        @await Html.PartialAsync("_Icon", "clock")
-                        <span>Crawl in progress</span>
-                    </a>
+                    @if (Model.ActiveRunId is { } activeRunId)
+                    {
+                        @* One crawl per endpoint is a database constraint, so a second press could
+                           only be refused. Offer the run that is already going instead. *@
+                        <a class="button button--secondary" asp-action="Run" asp-route-id="@activeRunId">
+                            @await Html.PartialAsync("_Spinner")
+                            <span>Crawl in progress</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <form method="post" asp-action="RunNow">
+                            <input type="hidden" name="endpointId" value="@runTarget" />
+                            <button class="button button--secondary" type="submit"
+                                    title="Fetches this site page by page and checks every link it finds. External links are not fetched.">
+                                @await Html.PartialAsync("_Icon", "play")
+                                <span>Run crawl</span>
+                            </button>
+                        </form>
+                    }
                 }
-                else
-                {
-                    <form method="post" asp-action="RunNow">
-                        <input type="hidden" name="endpointId" value="@runTarget" />
-                        <button class="button button--secondary" type="submit"
-                                title="Fetches this site page by page and checks every link it finds. External links are not fetched.">
-                            @await Html.PartialAsync("_Icon", "play")
-                            <span>Run crawl</span>
-                        </button>
-                    </form>
-                }
-            }
+            </div>
         </div>
     </section>
 
+    @* Everything a running crawl changes lives in here, so the poller can replace it without
+       touching the endpoint picker above: replacing a select the reader is using would close
+       its dropdown and discard an unsubmitted choice. *@
+    <div id="crawl-results"
+         class="stack"
+         data-run-status
+         data-run-active="@(isRunning ? "true" : "false")"
+         data-run-url="@statusUrl"
+         data-run-also="#crawl-run-action"
+         data-run-lifetime="1860000"
+         data-run-complete-message="The crawl finished. This page now shows its result.">
     @if (Model.SelectedEndpointId is null)
     {
         <section class="card">
@@ -91,21 +112,31 @@
             <div class="page-intro">
                 <div>
                     <h3 class="card__title" id="crawl-history-heading">Crawl history</h3>
-                    <p class="card__status" data-status="neutral">
-                        @await Html.PartialAsync("_Icon", "clock")
-                        <span>@Model.Runs.Count crawl@(Model.Runs.Count == 1 ? null : "s") recorded</span>
+                    <p class="card__status" data-status="@(isRunning ? "info" : "neutral")">
+                        @if (isRunning)
+                        {
+                            @await Html.PartialAsync("_Spinner")
+                        }
+                        else
+                        {
+                            @await Html.PartialAsync("_Icon", "clock")
+                        }
+                        <span>
+                            @Model.Runs.Count crawl@(Model.Runs.Count == 1 ? null : "s") recorded@(isRunning
+                                ? " · one is still running, and this list updates itself"
+                                : null)
+                        </span>
                     </p>
                 </div>
             </div>
 
             <div class="table-scroll table-scroll--flush">
-                <table class="data-table">
+                <table class="data-table data-table--history">
                     <caption class="visually-hidden">Crawl runs for the selected endpoint</caption>
                     <thead>
                         <tr>
-                            <th scope="col">Started</th>
+                            <th scope="col">Subject</th>
                             <th scope="col">Status</th>
-                            <th scope="col">Pages</th>
                             <th scope="col">Broken links</th>
                             <th scope="col">Robots override</th>
                             <th scope="col"><span class="visually-hidden">Details</span></th>
@@ -115,16 +146,21 @@
                         @foreach (var run in Model.Runs)
                         {
                             <tr>
-                                <td data-label="Started">@Html.Timestamp(run.StartedAt)</td>
+                                <td data-label="Subject">
+                                    <span class="history-cell">
+                                        <span class="history-cell__subject">@run.PagesFetched page@(run.PagesFetched == 1 ? null : "s") crawled</span>
+                                        <span class="history-cell__time">@Html.Timestamp(run.StartedAt)</span>
+                                    </span>
+                                </td>
                                 @* The stop reason was its own column of long sentences. It is what
                                    the status means, so it belongs behind the status badge. *@
                                 <td data-label="Status">
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                         CrawlRunDisplay.StatusTone(run),
                                         CrawlRunDisplay.DescribeStatus(run),
-                                        CrawlRunDisplay.DescribeStopReason(run)))
+                                        CrawlRunDisplay.DescribeStopReason(run),
+                                        run.Status == CrawlRunStatuses.Running))
                                 </td>
-                                <td data-label="Pages">@run.PagesFetched</td>
                                 <td data-label="Broken links">
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                         run.BrokenLinkCount == 0 ? StatusBadges.Success : StatusBadges.Warning,
@@ -272,4 +308,10 @@
             }
         </section>
     }
+    </div>
 </div>
+
+@section Scripts {
+    <script src="~/js/poller.js" asp-append-version="true"></script>
+    <script src="~/js/run-status.js" asp-append-version="true"></script>
+}

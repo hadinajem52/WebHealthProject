@@ -8,7 +8,6 @@ function loadPollingScript(fileName, options = {}) {
     const documentHandlers = {};
     const windowHandlers = {};
     const timers = [];
-    const host = options.host;
     Object.defineProperty(global, 'navigator', {
         value: { onLine: options.online !== false },
         configurable: true,
@@ -21,6 +20,7 @@ function loadPollingScript(fileName, options = {}) {
             documentHandlers[name] = handler;
         },
         querySelector(selector) {
+            const host = options.host;
             return host && host.matches(selector) ? host : null;
         }
     };
@@ -39,27 +39,30 @@ function loadPollingScript(fileName, options = {}) {
         }
     };
     global.fetch = options.fetch;
-    const script = fs.readFileSync(
-        path.join(__dirname, '../../src/WebHealth.Web/wwwroot/js', fileName),
-        'utf8');
-    vm.runInThisContext(script);
+    ['poller.js', fileName].forEach(name => {
+        const script = fs.readFileSync(
+            path.join(__dirname, '../../src/WebHealth.Web/wwwroot/js', name),
+            'utf8');
+        vm.runInThisContext(script);
+    });
     return { documentHandlers, windowHandlers, timers };
 }
 
-function pageAuditHost(active = true, statusUrl = '/PageAudits/Status?id=1') {
+function runStatusHost(active = true, statusUrl = '/PageAudits/Status?id=1') {
     return {
         nodeType: 1,
+        id: 'page-audit-results',
         matches(selector) {
-            return selector === '[data-page-audit-results]';
+            return selector === '[data-run-status]' || selector === '#page-audit-results';
         },
         querySelector() {
             return null;
         },
         getAttribute(name) {
-            if (name === 'data-page-audit-active') {
+            if (name === 'data-run-active') {
                 return active ? 'true' : 'false';
             }
-            return name === 'data-page-audit-status-url' ? statusUrl : null;
+            return name === 'data-run-url' ? statusUrl : null;
         }
     };
 }
@@ -83,15 +86,19 @@ function nextTimer(timers) {
     return timers.find(timer => !timer.cleared);
 }
 
-test('PageSpeed polling replaces only its results region', async () => {
+test('run polling replaces only its declared region', async () => {
     const calls = [];
     const messages = [];
-    const runtime = loadPollingScript('page-audits.js', {
-        host: pageAuditHost(),
+    let host = runStatusHost();
+    const runtime = loadPollingScript('run-status.js', {
+        get host() {
+            return host;
+        },
         ajax: {
             async load(url, selector) {
                 calls.push({ url, selector });
-                return pageAuditHost(false, null);
+                host = runStatusHost(false, null);
+                return host;
             },
             renderMessage(message, level) {
                 messages.push({ message, level });
@@ -108,17 +115,17 @@ test('PageSpeed polling replaces only its results region', async () => {
     assert.deepEqual(messages, []);
 });
 
-test('PageSpeed polling pauses hidden time and resumes within the server retry window', () => {
+test('run polling pauses hidden time and resumes within the server retry window', () => {
     const originalNow = Date.now;
     let now = 1000;
     Date.now = () => now;
     try {
         const messages = [];
-        const runtime = loadPollingScript('page-audits.js', {
-            host: pageAuditHost(),
+        const runtime = loadPollingScript('run-status.js', {
+            host: runStatusHost(),
             ajax: {
                 async load() {
-                    return pageAuditHost();
+                    return runStatusHost();
                 },
                 renderMessage(message, level) {
                     messages.push({ message, level });
@@ -139,17 +146,17 @@ test('PageSpeed polling pauses hidden time and resumes within the server retry w
     }
 });
 
-test('PageSpeed polling remains active through the bounded server retry lifecycle', async () => {
+test('run polling remains active through the bounded server retry lifecycle', async () => {
     const originalNow = Date.now;
     let now = 0;
     Date.now = () => now;
     try {
         const messages = [];
-        const runtime = loadPollingScript('page-audits.js', {
-            host: pageAuditHost(),
+        const runtime = loadPollingScript('run-status.js', {
+            host: runStatusHost(),
             ajax: {
                 async load() {
-                    return pageAuditHost();
+                    return runStatusHost();
                 },
                 renderMessage(message, level) {
                     messages.push({ message, level });
@@ -166,6 +173,52 @@ test('PageSpeed polling remains active through the bounded server retry lifecycl
     } finally {
         Date.now = originalNow;
     }
+});
+
+test('run polling announces the finished run once and stops', async () => {
+    const messages = [];
+    let host = runStatusHost();
+    const finished = {
+        nodeType: 1,
+        id: 'page-audit-results',
+        matches(selector) {
+            return selector === '[data-run-status]' || selector === '#page-audit-results';
+        },
+        querySelector() {
+            return null;
+        },
+        getAttribute(name) {
+            if (name === 'data-run-complete-message') {
+                return 'The PageSpeed audit finished.';
+            }
+            return name === 'data-run-active' ? 'false' : null;
+        }
+    };
+    const runtime = loadPollingScript('run-status.js', {
+        get host() {
+            return host;
+        },
+        ajax: {
+            async load() {
+                host = finished;
+                return finished;
+            },
+            renderMessage(message, level) {
+                messages.push({ message, level });
+            }
+        }
+    });
+
+    const first = nextTimer(runtime.timers);
+    await first.handler();
+
+    assert.deepEqual(messages, [{
+        message: 'The PageSpeed audit finished.',
+        level: 'success'
+    }]);
+    assert.equal(
+        runtime.timers.find(timer => !timer.cleared && timer !== first),
+        undefined);
 });
 
 test('manual-check polling reports server failures through the shared AJAX messages', async () => {

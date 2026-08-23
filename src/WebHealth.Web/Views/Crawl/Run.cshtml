@@ -7,6 +7,7 @@
         new BreadcrumbItem("Crawl run"));
     var run = Model.Run;
     var runTone = CrawlRunDisplay.StatusTone(run);
+    var isRunning = run.Status == CrawlRunStatuses.Running;
 
     static string StatusIcon(string tone) => tone switch
     {
@@ -18,7 +19,17 @@
     };
 }
 
-<div id="ajax-page" class="stack" data-ajax-region>
+@* The whole page is one run, so the poller replaces all of it: there is no control here whose
+   state a swap could discard. *@
+<div id="ajax-page"
+     class="stack"
+     data-ajax-region
+     data-run-scope="#ajax-page"
+     data-run-status
+     data-run-active="@(isRunning ? "true" : "false")"
+     data-run-url="@Url.Action("Run", new { id = run.RunId, offset = Model.Offset })"
+     data-run-lifetime="1860000"
+     data-run-complete-message="The crawl finished. This page now shows its result.">
     @* No card title: the page heading already reads "Crawl run", and this run has no other
        identity to show -- the summary carries an endpoint id, not its URL. The status and what
        it means lead instead. *@
@@ -26,7 +37,14 @@
         <div class="page-intro">
             <div>
                 <p class="card__status" data-status="@runTone" id="crawl-run-label">
-                    @await Html.PartialAsync("_Icon", StatusIcon(runTone))
+                    @if (isRunning)
+                    {
+                        @await Html.PartialAsync("_Spinner")
+                    }
+                    else
+                    {
+                        @await Html.PartialAsync("_Icon", StatusIcon(runTone))
+                    }
                     <span>@CrawlRunDisplay.DescribeStatus(run) &middot; @CrawlRunDisplay.DescribeStopReason(run)</span>
                 </p>
             </div>
@@ -105,12 +123,13 @@
                         <span class="detail-list__value">
                             @* "No" is a verdict, and a crawl still walking the site has not
                                earned one yet. *@
-                            @if (run.Status == CrawlRunStatuses.Running)
+                            @if (isRunning)
                             {
                                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                     StatusBadges.Info,
                                     "Not yet",
-                                    "The crawl is still running, so how much of the site it covers is not settled."))
+                                    "The crawl is still running, so how much of the site it covers is not settled.",
+                                    true))
                             }
                             else
                             {
@@ -282,3 +301,8 @@
         }
     </section>
 </div>
+
+@section Scripts {
+    <script src="~/js/poller.js" asp-append-version="true"></script>
+    <script src="~/js/run-status.js" asp-append-version="true"></script>
+}

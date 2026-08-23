@@ -13,19 +13,30 @@
 
     tabindex makes the badge focusable so the popup is reachable by keyboard, not only by hover.
 *@
+@{
+    var pendingClass = Model.Pending ? " badge--pending" : null;
+}
 @if (string.IsNullOrWhiteSpace(Model.Detail))
 {
-    <span class="badge" data-status="@Model.Status">
+    <span class="badge@pendingClass" data-status="@Model.Status">
+        @if (Model.Pending)
+        {
+            <span class="spinner spinner--badge" aria-hidden="true"></span>
+        }
         <span class="badge__label">@Model.Label</span>
     </span>
 }
 else
 {
-    <span class="badge badge--detailed"
+    <span class="badge badge--detailed@pendingClass"
           data-status="@Model.Status"
           data-badge-detail="@Model.Detail"
           title="@Model.Detail"
           tabindex="0">
+        @if (Model.Pending)
+        {
+            <span class="spinner spinner--badge" aria-hidden="true"></span>
+        }
         <span class="badge__label">@Model.Label</span>
         <span class="badge__info" aria-hidden="true">@await Html.PartialAsync("_Icon", "information")</span>
         <span class="visually-hidden">&mdash; @Model.Detail</span>

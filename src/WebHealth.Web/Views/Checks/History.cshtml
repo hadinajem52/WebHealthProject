@@ -7,10 +7,20 @@
     var lastVisible = Math.Min(history.Page * history.PageSize, history.TotalCount);
     var hasPrevious = history.Page > 1;
     var hasNext = lastVisible < history.TotalCount;
-
+    var anyInFlight = history.Items.Any(item => item.State != LogicalCheckStates.Completed);
 }
 
-<div id="ajax-page" class="stack" data-ajax-region>
+@* A check that has not completed yet is still being worked on, so the list refreshes itself
+   until every row on this page has an outcome. *@
+<div id="ajax-page"
+     class="stack"
+     data-ajax-region
+     data-run-scope="#ajax-page"
+     data-run-status
+     data-run-active="@(anyInFlight ? "true" : "false")"
+     data-run-url="@Url.Action("History", new { id = history.EndpointId, page = history.Page })"
+     data-run-lifetime="120000"
+     data-run-complete-message="Every check on this page has finished.">
     <section class="card">
         <div class="page-intro">
             <div>
@@ -63,12 +73,11 @@
                 </div>
             }
             <div class="table-scroll table-scroll--flush">
-                <table class="data-table">
+                <table class="data-table data-table--history">
                     <caption class="visually-hidden">Scheduled and manual checks for this endpoint</caption>
                     <thead>
                         <tr>
-                            <th scope="col">Time</th>
-                            <th scope="col">Source</th>
+                            <th scope="col">Subject</th>
                             <th scope="col">Initiator</th>
                             <th scope="col">Outcome</th>
                             <th scope="col">Duration</th>
@@ -82,14 +91,20 @@
                         @foreach (var item in history.Items)
                         {
                             <tr>
-                                <td data-label="Time">@Html.TimestampWithSeconds((item.ScheduledFor ?? item.RequestedAt), "—")</td>
-                                <td data-label="Source"><span class="tag">@item.Source</span></td>
+                                <td data-label="Subject">
+                                    <span class="history-cell">
+                                        <span class="history-cell__subject">@item.Source check</span>
+                                        <span class="history-cell__time">@Html.TimestampWithSeconds((item.ScheduledFor ?? item.RequestedAt), "—")</span>
+                                    </span>
+                                </td>
                                 <td data-label="Initiator">@(item.InitiatedByDisplayName ?? "—")</td>
                                 <td data-label="Outcome">
+                                    @{ var itemInFlight = item.State != LogicalCheckStates.Completed; }
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                        StatusBadges.ForOutcome(item.Outcome),
-                                        item.Outcome ?? "Pending",
-                                        item.FailureCategory))
+                                        itemInFlight ? StatusBadges.Info : StatusBadges.ForOutcome(item.Outcome),
+                                        item.Outcome ?? item.State,
+                                        item.FailureCategory,
+                                        itemInFlight))
                                     @foreach (var incident in item.KnownIncidents)
                                     {
                                         <a class="known-issue" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.IncidentId"
@@ -133,3 +148,8 @@
         }
     </section>
 </div>
+
+@section Scripts {
+    <script src="~/js/poller.js" asp-append-version="true"></script>
+    <script src="~/js/run-status.js" asp-append-version="true"></script>
+}

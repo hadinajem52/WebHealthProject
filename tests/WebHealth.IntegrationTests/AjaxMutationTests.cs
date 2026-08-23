@@ -163,7 +163,7 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         Assert.Equal(HttpStatusCode.OK, completed.StatusCode);
         Assert.Contains("id=\"ajax-page\"", completedContent, StringComparison.Ordinal);
         Assert.Contains("id=\"page-audit-results\"", completedContent, StringComparison.Ordinal);
-        Assert.Contains("data-page-audit-active=\"false\"", completedContent, StringComparison.Ordinal);
+        Assert.Contains("data-run-active=\"false\"", completedContent, StringComparison.Ordinal);
         Assert.DoesNotContain("<!DOCTYPE html>", completedContent, StringComparison.OrdinalIgnoreCase);
     }
 

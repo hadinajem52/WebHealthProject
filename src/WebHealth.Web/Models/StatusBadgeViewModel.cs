@@ -11,7 +11,16 @@ namespace WebHealth.Web.Models;
 /// Optional extra wording read only by assistive technology, for a pill whose visible label is
 /// short enough to be ambiguous out of context.
 /// </param>
-public sealed record StatusBadgeViewModel(string Status, string Label, string? Detail = null)
+/// <param name="Pending">
+/// Whether the state the pill names is still being worked on. A pending pill carries a turning
+/// mark beside its label, so a page that refreshes itself is distinguishable from one that has
+/// stopped updating.
+/// </param>
+public sealed record StatusBadgeViewModel(
+    string Status,
+    string Label,
+    string? Detail = null,
+    bool Pending = false)
 {
     /// <summary>
     /// The glyph for a tier. Success, warning and danger get three visually distinct shapes;

@@ -312,12 +312,11 @@
         else
         {
             <div class="table-scroll table-scroll--flush">
-                <table class="data-table">
+                <table class="data-table data-table--history">
                     <caption class="visually-hidden">Incident timeline</caption>
                     <thead>
                         <tr>
-                            <th scope="col">When</th>
-                            <th scope="col">Event</th>
+                            <th scope="col">Subject</th>
                             <th scope="col">Detail</th>
                             <th scope="col">Actor</th>
                         </tr>
@@ -326,8 +325,12 @@
                         @foreach (var entry in incident.Timeline)
                         {
                             <tr>
-                                <td data-label="When">@Html.TimestampWithSeconds(entry.OccurredAt)</td>
-                                <td data-label="Event"><span class="tag">@entry.EventType</span></td>
+                                <td data-label="Subject">
+                                    <span class="history-cell">
+                                        <span class="history-cell__subject">@IncidentEventDisplay.Name(entry.EventType)</span>
+                                        <span class="history-cell__time">@Html.TimestampWithSeconds(entry.OccurredAt)</span>
+                                    </span>
+                                </td>
                                 <td data-label="Detail">
                                     @if (entry.EventType == "StatusChanged")
                                     {

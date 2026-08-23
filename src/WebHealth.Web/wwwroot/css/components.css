@@ -567,6 +567,45 @@ code,
     text-transform: none;
 }
 
+.history-cell {
+    position: relative;
+    display: block;
+    padding-left: 1.75rem;
+}
+
+.data-table--history tbody .history-cell::before {
+    position: absolute;
+    top: 1.5rem;
+    bottom: -1.1875rem;
+    left: 0;
+    width: 2px;
+    border-radius: 1px;
+    background-color: var(--border-subtle);
+    content: "";
+}
+
+.data-table--history tbody tr:last-child .history-cell::before {
+    bottom: auto;
+    height: 1.125rem;
+}
+
+.history-cell__subject {
+    display: block;
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    line-height: var(--line-height-tight);
+}
+
+.history-cell__time {
+    display: block;
+    margin-top: var(--space-1);
+    color: var(--color-gray-400);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    line-height: var(--line-height-base);
+}
+
 .known-issue {
     display: block;
     width: fit-content;
@@ -1313,7 +1352,7 @@ code,
 }
 
 .audit-table {
-    min-width: 62rem;
+    min-width: 68rem;
 }
 
 .audit-changes summary {
@@ -1530,6 +1569,14 @@ code,
 
     .data-table__action {
         text-align: left !important;
+    }
+
+    .history-cell {
+        padding-left: 0;
+    }
+
+    .data-table--history tbody .history-cell::before {
+        display: none;
     }
 }
 
@@ -2353,4 +2400,51 @@ code,
 
 [data-ajax-loading] button[type="submit"] {
     cursor: wait;
+}
+
+.spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spinner-rotate 0.9s linear infinite;
+}
+
+.spinner--badge {
+    width: 0.75rem;
+    height: 0.75rem;
+}
+
+@keyframes spinner-rotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner {
+        border-top-color: currentColor;
+        opacity: 0.6;
+        animation: none;
+    }
+}
+
+.card__status .spinner {
+    color: var(--status-info);
+}
+
+.badge--pending {
+    gap: 0.375rem;
+}
+
+.button .spinner {
+    width: 0.9375rem;
+    height: 0.9375rem;
+}
+
+.filter-inline__action {
+    display: contents;
 }

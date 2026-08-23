@@ -4,7 +4,8 @@
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Endpoints(Url), Breadcrumbs.Endpoint(Url, Model.Check.EndpointId, Model.Check.EndpointDisplayUrl), new BreadcrumbItem("Check history", Url.Action("History", new { id = Model.Check.EndpointId })), new BreadcrumbItem("Check details"));
     var check = Model.Check;
     var hasResult = check.Outcome is not null;
-    var outcomeStatus = StatusBadges.ForOutcome(check.Outcome);
+    var inFlight = check.State != LogicalCheckStates.Completed;
+    var outcomeStatus = inFlight ? StatusBadges.Info : StatusBadges.ForOutcome(check.Outcome);
 
     static string StatusIcon(string status) => status switch
     {
@@ -14,14 +15,31 @@
     };
 }
 
-<div class="stack">
+@* A check that has not completed is still being worked on, so the page refreshes itself until
+   it has an outcome rather than leaving the reader to reload. *@
+<div id="ajax-page"
+     class="stack"
+     data-ajax-region
+     data-run-scope="#ajax-page"
+     data-run-status
+     data-run-active="@(inFlight ? "true" : "false")"
+     data-run-url="@Url.Action("Check", new { id = check.LogicalCheckId })"
+     data-run-lifetime="120000"
+     data-run-complete-message="The check finished. This page now shows its result.">
     <section class="card">
         <div class="page-intro">
             <div>
                 <h2 class="card__title target-url">@check.EndpointDisplayUrl</h2>
                 <p class="card__status" data-status="@outcomeStatus">
-                    @await Html.PartialAsync("_Icon", StatusIcon(outcomeStatus))
-                    <span>Check outcome &middot; @(check.Outcome ?? "Pending")</span>
+                    @if (inFlight)
+                    {
+                        @await Html.PartialAsync("_Spinner")
+                    }
+                    else
+                    {
+                        @await Html.PartialAsync("_Icon", StatusIcon(outcomeStatus))
+                    }
+                    <span>Check outcome &middot; @(check.Outcome ?? check.State)</span>
                 </p>
             </div>
             <div class="form-actions">
@@ -98,7 +116,7 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
                             <span>Outcome</span>
                         </span>
-                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? "Pending", check.FailureCategory))</span>
+                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? check.State, check.FailureCategory, inFlight))</span>
                     </div>
                 </li>
                 <li>
@@ -360,3 +378,8 @@
         }
     </section>
 </div>
+
+@section Scripts {
+    <script src="~/js/poller.js" asp-append-version="true"></script>
+    <script src="~/js/run-status.js" asp-append-version="true"></script>
+}
