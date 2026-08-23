@@ -144,6 +144,7 @@ internal sealed class EndpointRegistryService(
             .ThenInclude(environment => environment.Website)
             .Include(candidate => candidate.Monitors)
             .Include(candidate => candidate.TargetAuthorizations)
+            .AsSingleQuery()
             .SingleOrDefaultAsync(candidate => candidate.Id == command.EndpointId, cancellationToken);
         if (endpoint is null)
         {
@@ -294,6 +295,7 @@ internal sealed class EndpointRegistryService(
             .Include(candidate => candidate.Monitors)
             .Include(candidate => candidate.TargetAuthorizations)
             .AsNoTracking()
+            .AsSingleQuery()
             .SingleOrDefaultAsync(cancellationToken);
         if (endpoint is null)
         {

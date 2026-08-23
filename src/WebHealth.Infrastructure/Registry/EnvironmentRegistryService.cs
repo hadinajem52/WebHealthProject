@@ -93,6 +93,7 @@ internal sealed class EnvironmentRegistryService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var environment = await dbContext.Environments
             .Include(candidate => candidate.Endpoints).ThenInclude(endpoint => endpoint.Monitors)
+            .AsSingleQuery()
             .SingleOrDefaultAsync(candidate => candidate.Id == command.EnvironmentId, cancellationToken);
         if (environment is null)
         {
@@ -171,6 +172,7 @@ internal sealed class EnvironmentRegistryService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var environment = await dbContext.Environments
             .Include(candidate => candidate.Endpoints).ThenInclude(endpoint => endpoint.Monitors)
+            .AsSingleQuery()
             .SingleOrDefaultAsync(candidate => candidate.Id == command.EntityId, cancellationToken);
         if (environment is null)
         {

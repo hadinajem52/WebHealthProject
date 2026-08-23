@@ -129,6 +129,7 @@
                             <tr>
                                 <td data-label="Subject">
                                     <span class="history-cell">
+                                        @await Html.PartialAsync("_HistoryMark", AuditEventDisplay.OutcomeBadge(auditEvent.Outcome))
                                         <span class="history-cell__subject audit-action">@AuditEventDisplay.ActionName(auditEvent.Action)</span>
                                         <span class="history-cell__time">@Html.TimestampWithSeconds(auditEvent.OccurredAt)</span>
                                     </span>

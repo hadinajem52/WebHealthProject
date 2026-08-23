@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using WebHealth.Infrastructure;
 using WebHealth.Infrastructure.Identity;
@@ -566,7 +567,11 @@ internal static class DatabaseFoundationAssertions
         {
             ["ConnectionStrings:WebHealth"] = connectionString
         }).Build();
-        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+        var queryWarnings = new MultipleCollectionWarningRecorder();
+        await using var services = new ServiceCollection()
+            .AddLogging(logging => logging.AddProvider(queryWarnings))
+            .AddInfrastructure(configuration)
+            .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var environmentService = scope.ServiceProvider.GetRequiredService<IEnvironmentRegistryService>();
@@ -836,6 +841,7 @@ internal static class DatabaseFoundationAssertions
             && !(payload.BeforeValues ?? string.Empty).Contains("Updated integration fixture", StringComparison.Ordinal)
             && !(payload.AfterValues ?? string.Empty).Contains("Updated integration fixture", StringComparison.Ordinal));
 
+        queryWarnings.Count.Should().Be(0);
     }
 
     private static async Task VerifyMonitoringExecutionFoundationAsync(string connectionString)
@@ -997,7 +1003,10 @@ internal static class DatabaseFoundationAssertions
         {
             ["ConnectionStrings:WebHealth"] = connectionString
         }).Build();
-        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration)
+        var queryWarnings = new MultipleCollectionWarningRecorder();
+        await using var services = new ServiceCollection()
+            .AddLogging(logging => logging.AddProvider(queryWarnings))
+            .AddInfrastructure(configuration)
             .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -1182,6 +1191,7 @@ internal static class DatabaseFoundationAssertions
             .State.Should().Be(LogicalCheckStates.Completed);
 
         await VerifyHttpHistoryConstraintsAsync(connectionString, logicalCheckId);
+        queryWarnings.Count.Should().Be(0);
     }
 
     private static async Task VerifyHttpHistoryConstraintsAsync(
@@ -2576,7 +2586,10 @@ internal static class DatabaseFoundationAssertions
             ["Monitoring:Scheduling:Enabled"] = "true"
         }).Build();
         var queue = new RecordingLogicalCheckQueue();
-        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration)
+        var queryWarnings = new MultipleCollectionWarningRecorder();
+        await using var services = new ServiceCollection()
+            .AddLogging(logging => logging.AddProvider(queryWarnings))
+            .AddInfrastructure(configuration)
             .AddSingleton<ILogicalCheckQueue>(queue)
             .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
@@ -2824,6 +2837,7 @@ internal static class DatabaseFoundationAssertions
         (await historyReader.FindCheckAsync(manualCheckId, developerAccess)).Should().BeNull();
         (await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess)).Should().NotBeNull();
         (await historyReader.FindCheckAsync(manualCheckId, administratorAccess)).Should().NotBeNull();
+        queryWarnings.Count.Should().Be(0);
     }
 
     private static async Task VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(string connectionString)
@@ -3861,8 +3875,11 @@ internal static class DatabaseFoundationAssertions
         {
             ["ConnectionStrings:WebHealth"] = connectionString
         }).Build();
-        await using var services = new ServiceCollection().AddLogging()
-            .AddInfrastructure(configuration).BuildServiceProvider();
+        var queryWarnings = new MultipleCollectionWarningRecorder();
+        await using var services = new ServiceCollection()
+            .AddLogging(logging => logging.AddProvider(queryWarnings))
+            .AddInfrastructure(configuration)
+            .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
@@ -4290,6 +4307,7 @@ internal static class DatabaseFoundationAssertions
         (await database.RobotsSnapshots.AsNoTracking()
             .CountAsync(snapshot => snapshot.Host == "endpoint-purge-bystander.test"))
             .Should().Be(1, "purging one origin leaves every other origin's policy in place");
+        queryWarnings.Count.Should().Be(0);
     }
 
     /// <summary>

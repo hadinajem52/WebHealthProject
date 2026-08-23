@@ -25,6 +25,19 @@ public static class StatusBadges
     /// </summary>
     public const string Neutral = "neutral";
 
+    /// <summary>
+    /// The glyph for a tier. Success, warning and danger get three visually distinct shapes;
+    /// anything unrecognised falls back to the neutral information mark rather than to no glyph
+    /// at all, so a state is never colour-only by accident.
+    /// </summary>
+    public static string Icon(string status) => status switch
+    {
+        Success => "success",
+        Warning or High => "warning",
+        Danger => "error",
+        _ => "information"
+    };
+
     public static string ForSeverity(string? severity) => severity switch
     {
         FindingSeverities.Critical => Danger,
