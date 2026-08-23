@@ -4,6 +4,7 @@
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Websites"));
 }
 
+<div id="ajax-page" data-ajax-region>
 <section class="card">
     <div class="page-intro">
         <div>
@@ -26,7 +27,7 @@
 
     @if (Model.Tags.Count > 0)
     {
-        <form method="get" class="filter-grid registry-tag-filter">
+        <form method="get" class="filter-grid registry-tag-filter" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
             <div class="form-field">
                 <label for="tagId">Tag</label>
                 <select id="tagId" name="tagId">
@@ -41,7 +42,7 @@
                 <button class="button button--primary" type="submit">Filter</button>
                 @if (Model.SelectedTagId is not null)
                 {
-                    <a class="button button--secondary" asp-action="Websites">Clear</a>
+                    <a class="button button--secondary" asp-action="Websites" data-ajax-link data-ajax-target="#ajax-page">Clear</a>
                 }
             </div>
         </form>
@@ -91,3 +92,4 @@
         </div>
     }
 </section>
+</div>

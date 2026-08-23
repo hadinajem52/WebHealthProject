@@ -5,7 +5,7 @@
     var comparison = Model.Comparison;
 }
 
-<div class="stack">
+<div id="ajax-page" class="stack" data-ajax-region>
     @* No card title here: the page heading already reads "Broken links". This card is the
        control that scopes everything below it, so it carries the explanation and the picker. *@
     <section class="card" aria-labelledby="crawl-scope-label">
@@ -18,7 +18,7 @@
            they cannot share a form element. The row is the flex container and each form is an
            item in it. *@
         <div class="filter-inline filter-inline--wide">
-            <form method="get" class="filter-inline__group">
+            <form method="get" class="filter-inline__group" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
                 <div class="form-field">
                     <label for="endpointId">Endpoint</label>
                     <select id="endpointId" name="endpointId">

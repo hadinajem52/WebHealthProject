@@ -9,7 +9,7 @@
     var hasNext = lastVisible < listPage.TotalCount;
 }
 
-<div class="stack">
+<div id="ajax-page" class="stack" data-ajax-region>
     @* No card title here: the page heading already reads "Incidents". This card is the control
        that scopes the list below it, so it carries only the explanation and the filters. *@
     <section class="card" aria-labelledby="incidents-scope-label">
@@ -19,7 +19,7 @@
             bad response.
         </p>
 
-        <form method="get" class="filter-bar">
+        <form method="get" class="filter-bar" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
             <div class="form-field">
                 <label asp-for="Status">Status</label>
                 <select asp-for="Status">
@@ -54,7 +54,7 @@
                    is an action with nothing to do. *@
                 @if (Model.HasFilters)
                 {
-                    <a class="button button--secondary" asp-action="Index">
+                    <a class="button button--secondary" asp-action="Index" data-ajax-link data-ajax-target="#ajax-page">
                         @await Html.PartialAsync("_Icon", "close")
                         <span>Clear</span>
                     </a>
@@ -179,14 +179,14 @@
                 <span class="pagination__actions">
                     @if (hasPrevious)
                     {
-                        <a class="button button--secondary" asp-route-page="@(listPage.Page - 1)" asp-route-status="@Model.Status" asp-route-severity="@Model.Severity" asp-route-unacknowledgedOnly="@Model.UnacknowledgedOnly">
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page - 1)" asp-route-status="@Model.Status" asp-route-severity="@Model.Severity" asp-route-unacknowledgedOnly="@Model.UnacknowledgedOnly" data-ajax-link data-ajax-target="#ajax-page">
                             @await Html.PartialAsync("_Icon", "arrow-left")
                             <span>Previous</span>
                         </a>
                     }
                     @if (hasNext)
                     {
-                        <a class="button button--secondary" asp-route-page="@(listPage.Page + 1)" asp-route-status="@Model.Status" asp-route-severity="@Model.Severity" asp-route-unacknowledgedOnly="@Model.UnacknowledgedOnly">
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page + 1)" asp-route-status="@Model.Status" asp-route-severity="@Model.Severity" asp-route-unacknowledgedOnly="@Model.UnacknowledgedOnly" data-ajax-link data-ajax-target="#ajax-page">
                             <span>Next</span>
                             @await Html.PartialAsync("_Icon", "arrow-right")
                         </a>

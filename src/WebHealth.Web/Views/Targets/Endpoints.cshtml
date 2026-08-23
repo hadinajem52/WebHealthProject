@@ -4,6 +4,7 @@
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Endpoints"));
 }
 
+<div id="ajax-page" data-ajax-region>
 <section class="card">
     <div class="page-intro">
         <div>
@@ -16,7 +17,7 @@
         </div>
     </div>
 
-    <form method="get" class="filter-inline">
+    <form method="get" class="filter-inline" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
         <div class="form-field">
             <label for="search">Search</label>
             <input id="search" name="search" type="search" value="@Model.Search" placeholder="Filter by URL, website or client" />
@@ -24,7 +25,7 @@
         <button class="button button--primary" type="submit">Filter</button>
         @if (!string.IsNullOrWhiteSpace(Model.Search))
         {
-            <a class="button button--secondary" asp-action="Endpoints">Clear</a>
+            <a class="button button--secondary" asp-action="Endpoints" data-ajax-link data-ajax-target="#ajax-page">Clear</a>
         }
     </form>
 
@@ -75,3 +76,4 @@
         </div>
     }
 </section>
+</div>
