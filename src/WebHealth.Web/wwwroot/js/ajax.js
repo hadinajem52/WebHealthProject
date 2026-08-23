@@ -445,7 +445,9 @@
     async function executeRequest(url, selector, source, historyMode, requestInit, request) {
         var options = Object.assign({}, requestInit || {});
         var caller = options.abortSignal;
+        var reportStatus = options.onStatus;
         delete options.abortSignal;
+        delete options.onStatus;
         options.headers = Object.assign({}, options.headers || {}, {
             'Accept': 'text/html, application/problem+json, application/json',
             'X-WebHealth-Ajax': '1'
@@ -471,6 +473,9 @@
             var response = await fetch(url, options);
             if (!isCurrentRequest(selector, request)) {
                 return null;
+            }
+            if (reportStatus) {
+                reportStatus(response.status);
             }
             var result = await handleResponse(source, selector, response, historyMode, url, request);
             return request.isAmbiguous ? AMBIGUOUS_MUTATION : result;

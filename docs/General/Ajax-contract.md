@@ -53,4 +53,6 @@ A page showing work that is still running refreshes itself instead of asking the
 
 `data-ajax-target` accepts a comma-separated list, and every named region must be present in the response or none is replaced. Polling requests are reads: they never move focus, and a newer request for the same target aborts an older one.
 
+A refusal ends polling rather than repeating it: `401`, `403`, `404`, and a response whose named regions are missing all mean the same answer would come back however often it is asked. Only a request that never reached the server, a `429`, or a `5xx` is retried. A request cancelled because the tab was hidden or the browser went offline is neither: it is discarded, and the poll resumes where it paused.
+
 A run still in progress is drawn with a turning mark rather than a still badge, so a page that refreshes itself is distinguishable from one that has stopped updating. `StatusBadgeViewModel.Pending` renders it inside a badge; `_Spinner` renders it beside a card status line or inside a button.

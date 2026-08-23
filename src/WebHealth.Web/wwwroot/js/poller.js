@@ -44,9 +44,15 @@
             pending = false;
         }
 
+        // A paused request is cancelled, not answered. Its outcome has to be discarded rather
+        // than acted on: the abort surfaces to the caller as a failure, and treating that as a
+        // terminal answer would clear the target the resume is supposed to come back to.
         function pause() {
             clearTimer();
-            abort();
+            if (controller) {
+                generation += 1;
+                abort();
+            }
             if (target && !pausedAt) {
                 pausedAt = Date.now();
             }
