@@ -217,6 +217,31 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task CrudNavigationPreservesTheSuccessMessageOnTheDestinationPage()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var response = await PostAsync(
+            client,
+            "/Administration/CreateUser",
+            token,
+            ("DisplayName", "AJAX user"),
+            ("Email", "ajax-user@example.test"),
+            ("Password", "Testing1234!"),
+            ("Roles", ApplicationRoles.Viewer));
+        using var json = await ReadJsonAsync(response);
+        var redirectUrl = json.RootElement.GetProperty("redirectUrl").GetString();
+        client.DefaultRequestHeaders.Remove(AjaxResponseHeaders.Request);
+
+        var destination = await client.GetStringAsync(redirectUrl!);
+
+        Assert.Contains("User created successfully.", destination, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\"", destination, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StaleEditReturnsConflictFragmentWithSubmittedValues()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
