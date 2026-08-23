@@ -5,6 +5,7 @@ using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Incidents;
 using WebHealth.Application.Maintenance;
+using WebHealth.Domain.Monitoring;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -45,8 +46,42 @@ internal sealed class EmptyCheckHistoryReader : ICheckHistoryReader
     public Task<CheckDetails?> FindCheckAsync(
         Guid logicalCheckId,
         RegistryAccessContext access,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<CheckDetails?>(null);
+        CancellationToken cancellationToken = default)
+    {
+        var completedAt = DateTimeOffset.UtcNow;
+        return Task.FromResult<CheckDetails?>(logicalCheckId == EmptyManualCheckService.LogicalCheckId
+            ? new CheckDetails(
+                LogicalCheckId: logicalCheckId,
+                EndpointId: EmptyTargetRegistryReader.Endpoint.Id,
+                EndpointDisplayUrl: EmptyTargetRegistryReader.Endpoint.DisplayUrl,
+                Source: LogicalCheckSources.Manual,
+                State: LogicalCheckStates.Completed,
+                ScheduledFor: null,
+                RequestedAt: completedAt,
+                InitiatedByDisplayName: "Test User",
+                CreatedAt: completedAt,
+                StartedAt: completedAt,
+                CompletedAt: completedAt,
+                Outcome: "Success",
+                FailureCategory: null,
+                HttpStatus: 200,
+                TotalDurationMs: 100,
+                DnsDurationMs: null,
+                ConnectDurationMs: null,
+                TlsDurationMs: null,
+                TtfbDurationMs: null,
+                TransferredLength: null,
+                DecodedLength: null,
+                LengthSource: null,
+                MonitorSource: null,
+                MeasuredAt: completedAt,
+                ResponseTruncated: false,
+                SafeDiagnostic: null,
+                CountsForUptime: false,
+                Findings: [],
+                RedirectHops: [])
+            : null);
+    }
 
     public Task<CheckHistoryItem?> FindLatestForEndpointAsync(
         Guid endpointId,

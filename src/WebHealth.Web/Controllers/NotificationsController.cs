@@ -28,5 +28,6 @@ public sealed class NotificationsController(INotificationFeedReader feedReader) 
     }
 
     [HttpGet]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Menu() => ViewComponent("NotificationsMenu");
 }

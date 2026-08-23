@@ -31,9 +31,7 @@
 <div id="ajax-page"
      class="stack"
      data-ajax-region
-     data-page-audits
-     data-page-audit-active="@(run?.IsActive == true ? "true" : "false")"
-     data-page-audit-status-url="@auditStatusUrl">
+     data-page-audits>
     @* No card title here: the page heading already reads "PageSpeed", and repeating it
        immediately below is a second first-level label for the same thing. The card is the
        control that scopes the page, so the control leads and the explanation follows it. *@
@@ -109,6 +107,11 @@
         }
     </section>
 
+    <div id="page-audit-results"
+         class="stack"
+         data-page-audit-results
+         data-page-audit-active="@(run?.IsActive == true ? "true" : "false")"
+         data-page-audit-status-url="@auditStatusUrl">
     @if (summary is null)
     {
         <section class="card">
@@ -256,7 +259,8 @@
                            asp-route-strategy="@Model.SelectedStrategy"
                            asp-route-runId="@run.RunId"
                            data-ajax-link
-                           data-ajax-target="#ajax-page">Refresh status</a>
+                           data-ajax-target="#page-audit-results"
+                           data-ajax-history="replace">Refresh status</a>
                     </div>
                 </div>
                 <p class="card__subtitle">This page refreshes the audit status while it is active.</p>
@@ -571,6 +575,7 @@
             </div>
         </section>
     }
+    </div>
 </div>
 
 @section Scripts {

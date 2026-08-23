@@ -417,7 +417,7 @@
         };
 
         container.addEventListener('webhealth:close-menu', function () {
-            close(false);
+            close(true);
         }, { signal: listenerController.signal });
 
         toggle.addEventListener('click', function () {

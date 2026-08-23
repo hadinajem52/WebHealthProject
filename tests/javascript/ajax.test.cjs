@@ -9,7 +9,7 @@ function loadAjax(options = {}) {
     global.FormData = options.FormData || global.FormData;
     global.fetch = options.fetch || global.fetch;
     global.navigator = { onLine: true };
-    global.window = {
+    global.window = Object.assign({
         WebHealth: {},
         location: {
             href: 'https://localhost/Targets/Endpoints?search=old',
@@ -20,7 +20,7 @@ function loadAjax(options = {}) {
         },
         history: options.history || {},
         addEventListener() {}
-    };
+    }, options.window || {});
     global.document = Object.assign({
         readyState: options.readyState || 'loading',
         addEventListener() {},
@@ -66,7 +66,7 @@ test('status messages cover the response contract', () => {
 });
 
 test('starting a newer request cancels the older request for the same target', async () => {
-    const target = { setAttribute() {} };
+    const target = { setAttribute() {}, toggleAttribute() {} };
     let firstSignal;
     let requestCount = 0;
     const ajax = loadAjax({
@@ -228,11 +228,81 @@ test('a submitted form is blocked until its current request finishes', async () 
     assert.equal(submitter.disabled, false);
 });
 
+test('same-target reads and history restoration wait for a mutation without aborting it', async () => {
+    const documentHandlers = {};
+    const windowHandlers = {};
+    const target = { setAttribute() {}, toggleAttribute() {} };
+    const form = formStub('#target');
+    let finishMutation;
+    let mutationSignal;
+    let requestCount = 0;
+    const ajax = loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        window: {
+            WebHealth: {},
+            location: {
+                href: 'https://localhost/Targets/Endpoints?search=restored',
+                origin: 'https://localhost',
+                pathname: '/Targets/Endpoints',
+                search: '?search=restored',
+                reload() {}
+            },
+            history: { replaceState() {} },
+            addEventListener(name, handler) {
+                windowHandlers[name] = handler;
+            }
+        },
+        document: {
+            addEventListener(name, handler) {
+                documentHandlers[name] = handler;
+            },
+            querySelector(selector) {
+                return selector === '#target' ? target : null;
+            }
+        },
+        fetch(url, init) {
+            requestCount += 1;
+            if (requestCount === 1) {
+                mutationSignal = init.signal;
+                return new Promise(resolve => {
+                    finishMutation = resolve;
+                });
+            }
+            return Promise.resolve(textResponse(404, ''));
+        }
+    });
+
+    documentHandlers.submit(submitEvent(form, null));
+    const pollingRead = ajax.load('/poll', '#target');
+    windowHandlers.popstate({ state: { ajaxTarget: '#target' } });
+    await pollingRead;
+
+    assert.equal(requestCount, 1);
+    assert.equal(mutationSignal.aborted, false);
+
+    finishMutation(jsonResponse(200, {}));
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(requestCount, 2);
+    assert.equal(mutationSignal.aborted, false);
+});
+
 test('a successful GET form replaces its target, initializes it, and pushes history', async () => {
     const handlers = {};
     const pushed = [];
+    let focused = false;
+    const heading = {
+        setAttribute() {},
+        focus() {
+            focused = true;
+        }
+    };
     const incoming = {
-        querySelector() { return null; }
+        querySelector(selector) {
+            return selector === 'h1, h2, h3' ? heading : null;
+        }
     };
     let replacedWith;
     const current = {
@@ -282,6 +352,7 @@ test('a successful GET form replaces its target, initializes it, and pushes hist
     assert.equal(pushed[0].url, 'https://localhost/Registry?search=api');
     assert.equal(pushed[0].state.ajaxTarget, '#ajax-page');
     assert.equal(ajax.isLocalUrl(pushed[0].url), true);
+    assert.equal(focused, true);
 });
 
 test('a network failure offers one retry that repeats the request', async () => {
@@ -340,6 +411,7 @@ test('a failed POST offers a page reload without repeating an ambiguous mutation
     let requestCount = 0;
     let reloaded = false;
     const form = formStub('#target');
+    const submitter = { disabled: false, dataset: {} };
     loadAjax({
         readyState: 'complete',
         FormData: FormDataStub,
@@ -368,13 +440,162 @@ test('a failed POST offers a page reload without repeating an ambiguous mutation
         reloaded = true;
     };
 
-    handlers.submit(submitEvent(form, null));
+    const event = submitEvent(form, submitter);
+    handlers.submit(event);
     await new Promise(resolve => setImmediate(resolve));
+    handlers.submit(event);
     const reloadButton = created.find(element => element.textContent === 'Reload page');
     assert.ok(reloadButton);
+    assert.equal(submitter.disabled, true);
+    assert.equal(requestCount, 1);
     reloadButton.listeners.click();
 
     assert.equal(reloaded, true);
+    assert.equal(requestCount, 1);
+});
+
+test('a JSON error refreshes authoritative state before releasing the mutation', async () => {
+    const handlers = {};
+    const incoming = { querySelector() { return null; } };
+    let replacedWith;
+    const target = {
+        setAttribute() {},
+        replaceWith(value) {
+            replacedWith = value;
+        }
+    };
+    const form = formStub('#target');
+    let requestCount = 0;
+    loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            dispatchEvent() {},
+            querySelector(selector) {
+                return selector === '#target' ? target : null;
+            }
+        },
+        DOMParser: class DOMParser {
+            parseFromString() {
+                return { querySelector: () => incoming };
+            }
+        },
+        fetch() {
+            requestCount += 1;
+            return requestCount === 1
+                ? Promise.resolve(jsonResponse(422, {
+                    message: 'State changed.',
+                    level: 'error',
+                    refreshUrl: '/details'
+                }))
+                : Promise.resolve(textResponse(200, '<div id="target"></div>'));
+        }
+    });
+
+    handlers.submit(submitEvent(form, null));
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(requestCount, 2);
+    assert.equal(replacedWith, incoming);
+});
+
+test('a failed authoritative refresh releases the target busy state and locks the mutation', async () => {
+    const handlers = {};
+    const busyValues = [];
+    const target = {
+        setAttribute(name, value) {
+            if (name === 'aria-busy') {
+                busyValues.push(value);
+            }
+        }
+    };
+    const form = formStub('#target');
+    const submitter = { disabled: false, dataset: {} };
+    let requestCount = 0;
+    loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            querySelector(selector) {
+                return selector === '#target' ? target : null;
+            }
+        },
+        fetch() {
+            requestCount += 1;
+            return requestCount === 1
+                ? Promise.resolve(jsonResponse(200, { refreshUrl: '/details' }))
+                : Promise.reject(new Error('Refresh failed'));
+        }
+    });
+
+    handlers.submit(submitEvent(form, submitter));
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.deepEqual(busyValues, ['true', 'false']);
+    assert.equal(submitter.disabled, true);
+});
+
+test('malformed successful JSON is treated as an ambiguous protocol failure', async () => {
+    const handlers = {};
+    const target = { setAttribute() {} };
+    const region = {
+        classList: { add() {} },
+        replaceChildren(value) {
+            this.child = value;
+        }
+    };
+    const created = [];
+    const form = formStub('#target');
+    const submitter = { disabled: false, dataset: {} };
+    let requestCount = 0;
+    loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            querySelector(selector) {
+                if (selector === '#target') {
+                    return target;
+                }
+                return selector === '[data-ajax-messages]' ? region : null;
+            },
+            createElement(tagName) {
+                const element = elementStub(tagName);
+                created.push(element);
+                return element;
+            }
+        },
+        fetch() {
+            requestCount += 1;
+            return Promise.resolve({
+                status: 200,
+                ok: true,
+                headers: { get: () => 'application/json' },
+                async json() {
+                    throw new Error('Malformed JSON');
+                }
+            });
+        }
+    });
+
+    const event = submitEvent(form, submitter);
+    handlers.submit(event);
+    await new Promise(resolve => setImmediate(resolve));
+    handlers.submit(event);
+
+    const message = created.find(element => element.className === 'flash__text');
+    assert.match(message.textContent, /invalid response/i);
+    assert.equal(submitter.disabled, true);
     assert.equal(requestCount, 1);
 });
 
@@ -456,7 +677,7 @@ function formStub(target, method = 'post', entries = []) {
             return attributes[name];
         }
     };
-    form.closest = () => form;
+    form.closest = selector => selector === 'form[data-ajax-form]' ? form : null;
     return form;
 }
 

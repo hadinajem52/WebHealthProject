@@ -3,9 +3,13 @@
 
     var AJAX_HEADER = 'X-WebHealth-Ajax';
     var DEFAULT_TARGET = '#ajax-page';
-    var activeRequests = new Map();
+    var activeReads = new Map();
+    var activeMutations = new Map();
+    var pendingReads = new Map();
+    var ambiguousTargets = new Set();
     var requestVersions = new Map();
     var submittingForms = new WeakSet();
+    var AMBIGUOUS_MUTATION = {};
 
     window.WebHealth = window.WebHealth || {};
 
@@ -128,12 +132,14 @@
     }
 
     function setBusy(source, selector, busy, request) {
-        if (busy) {
-            source.webHealthAjaxBusyVersion = request.version;
-            source.toggleAttribute('data-ajax-loading', true);
-        } else if (source.webHealthAjaxBusyVersion === request.version) {
-            source.toggleAttribute('data-ajax-loading', false);
-            delete source.webHealthAjaxBusyVersion;
+        if (source) {
+            if (busy) {
+                source.webHealthAjaxBusyVersion = request.version;
+                source.toggleAttribute('data-ajax-loading', true);
+            } else if (source.webHealthAjaxBusyVersion === request.version) {
+                source.toggleAttribute('data-ajax-loading', false);
+                delete source.webHealthAjaxBusyVersion;
+            }
         }
         var target = document.querySelector(selector);
         if (target && (busy || isCurrentRequest(selector, request))) {
@@ -158,36 +164,49 @@
         delete submitter.dataset.ajaxWasDisabled;
     }
 
-    function nextRequest(selector) {
+    function nextRequest(selector, isRead) {
         var version = (requestVersions.get(selector) || 0) + 1;
         requestVersions.set(selector, version);
-        var previous = activeRequests.get(selector);
+        var previous = activeReads.get(selector);
         if (previous) {
             previous.abort();
         }
         var controller = new AbortController();
-        activeRequests.set(selector, controller);
-        return { controller: controller, version: version };
+        if (isRead) {
+            activeReads.set(selector, controller);
+        }
+        return { controller: controller, version: version, isRead: isRead };
     }
 
     function isCurrentRequest(selector, request) {
         return requestVersions.get(selector) === request.version;
     }
 
-    function focusResponse(root, status) {
+    function focusResponse(root, status, source) {
         var summary = root.querySelector('[data-shell-validation-summary]');
         if (summary) {
             summary.focus();
             return;
         }
 
-        if (status >= 400 && root.focus) {
-            root.setAttribute('tabindex', '-1');
-            root.focus();
+        if (status < 400 && source && source.closest('[data-shell-notifications]')) {
+            var notificationToggle = root.querySelector('[data-shell-notifications-toggle]');
+            if (notificationToggle) {
+                notificationToggle.focus();
+                return;
+            }
+        }
+
+        if (status >= 400 || source) {
+            var destination = status < 400 ? root.querySelector('h1, h2, h3') || root : root;
+            if (destination.focus) {
+                destination.setAttribute('tabindex', '-1');
+                destination.focus();
+            }
         }
     }
 
-    function replaceFragment(html, selector, status, url) {
+    function replaceFragment(html, selector, status, url, source) {
         var parsed = new DOMParser().parseFromString(html, 'text/html');
         var incoming = parsed.querySelector(selector);
         var current = document.querySelector(selector);
@@ -202,7 +221,7 @@
         if (window.WebHealth.init) {
             window.WebHealth.init(incoming);
         }
-        focusResponse(incoming, status);
+        focusResponse(incoming, status, source);
         document.dispatchEvent(new CustomEvent('webhealth:fragment-ready', {
             detail: { root: incoming, status: status, url: url }
         }));
@@ -232,7 +251,7 @@
             try {
                 return { kind: 'json', value: await response.json() };
             } catch (error) {
-                return { kind: 'json', value: null };
+                return { kind: 'invalid-json', value: null };
             }
         }
         return { kind: 'html', value: await response.text() };
@@ -258,24 +277,63 @@
         }
     }
 
-    async function refreshFragment(url, selector) {
+    function reloadAction() {
+        return {
+            label: 'Reload page',
+            run: function () {
+                window.location.reload();
+            }
+        };
+    }
+
+    function lockAmbiguousMutation(selector, request, message) {
+        request.isAmbiguous = true;
+        ambiguousTargets.add(selector);
+        renderMessage(message, 'error', reloadAction());
+    }
+
+    async function refreshFragment(url, selector, source, request) {
         if (!isLocalUrl(url)) {
             throw new Error('The server returned an invalid refresh address.');
         }
-        return requestFragment(url, selector, null, null);
+        var response = await fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'text/html, application/problem+json, application/json',
+                'X-WebHealth-Ajax': '1'
+            },
+            signal: request.controller.signal
+        });
+        if (!isCurrentRequest(selector, request)) {
+            return null;
+        }
+        return handleResponse(source, selector, response, null, url, request);
     }
 
-    async function handleJson(source, selector, response, payload) {
-        if (!response.ok && response.status !== 409) {
-            renderMessage(problemMessage(payload, response.status), 'error');
+    async function handleJson(source, selector, response, payload, request) {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            if (!request.isRead && response.ok) {
+                lockAmbiguousMutation(
+                    selector,
+                    request,
+                    'The server returned an invalid response. The operation may have completed; reload before trying again.');
+            } else {
+                renderMessage('The server returned an invalid response.', 'error');
+            }
             return null;
+        }
+
+        var isError = !response.ok && response.status !== 409;
+        if (isError) {
+            renderMessage(problemMessage(payload, response.status), 'error');
         }
 
         if (response.ok) {
             closeContainingMenu(source);
         }
 
-        if (payload && payload.message) {
+        if (!isError && payload.message) {
             renderMessage(payload.message, payload.level);
         }
         if (payload && payload.redirectUrl) {
@@ -287,7 +345,7 @@
             return null;
         }
         if (payload && payload.refreshUrl) {
-            await refreshFragment(payload.refreshUrl, selector);
+            await refreshFragment(payload.refreshUrl, selector, source, request);
         }
 
         dispatchResponse(source, selector, response, payload);
@@ -305,8 +363,19 @@
         if (!isCurrentRequest(selector, request)) {
             return null;
         }
+        if (payload.kind === 'invalid-json') {
+            if (!request.isRead && response.ok) {
+                lockAmbiguousMutation(
+                    selector,
+                    request,
+                    'The server returned an invalid response. The operation may have completed; reload before trying again.');
+            } else {
+                renderMessage('The server returned an invalid response.', 'error');
+            }
+            return null;
+        }
         if (payload.kind === 'json') {
-            return handleJson(source, selector, response, payload.value);
+            return handleJson(source, selector, response, payload.value, request);
         }
 
         if (!response.ok && response.status !== 409 && response.status !== 422) {
@@ -314,7 +383,10 @@
             return null;
         }
 
-        var root = replaceFragment(payload.value, selector, response.status, requestedUrl);
+        var root = replaceFragment(payload.value, selector, response.status, requestedUrl, source);
+        if (request.isRead && response.ok) {
+            ambiguousTargets.delete(selector);
+        }
         if (historyMode === 'push') {
             window.history.pushState({ ajaxTarget: selector }, '', requestedUrl);
         } else if (historyMode === 'replace') {
@@ -323,8 +395,37 @@
         return root;
     }
 
-    async function requestFragment(url, selector, source, historyMode, requestInit) {
-        var request = nextRequest(selector);
+    function queueRead(url, selector, source, historyMode, requestInit) {
+        var previous = pendingReads.get(selector);
+        if (previous) {
+            previous.resolve(null);
+        }
+        return new Promise(function (resolve) {
+            pendingReads.set(selector, {
+                url: url,
+                source: source,
+                historyMode: historyMode,
+                requestInit: requestInit,
+                resolve: resolve
+            });
+        });
+    }
+
+    function runPendingRead(selector) {
+        var pending = pendingReads.get(selector);
+        if (!pending) {
+            return;
+        }
+        pendingReads.delete(selector);
+        requestFragment(
+            pending.url,
+            selector,
+            pending.source,
+            pending.historyMode,
+            pending.requestInit).then(pending.resolve);
+    }
+
+    async function executeRequest(url, selector, source, historyMode, requestInit, request) {
         var options = Object.assign({}, requestInit || {});
         options.headers = Object.assign({}, options.headers || {}, {
             'Accept': 'text/html, application/problem+json, application/json',
@@ -333,9 +434,7 @@
         options.credentials = 'same-origin';
         options.signal = request.controller.signal;
 
-        if (source) {
-            setBusy(source, selector, true, request);
-        }
+        setBusy(source, selector, true, request);
         document.dispatchEvent(new CustomEvent('webhealth:ajax-start', {
             detail: { source: source, target: selector, url: url }
         }));
@@ -345,39 +444,64 @@
             if (!isCurrentRequest(selector, request)) {
                 return null;
             }
-            return await handleResponse(source, selector, response, historyMode, url, request);
+            var result = await handleResponse(source, selector, response, historyMode, url, request);
+            return request.isAmbiguous ? AMBIGUOUS_MUTATION : result;
         } catch (error) {
             if (error.name !== 'AbortError') {
-                var method = ((requestInit && requestInit.method) || 'GET').toUpperCase();
-                var isRead = method === 'GET' || method === 'HEAD';
                 var message = navigator.onLine === false
                     ? 'You are offline. Reconnect and try again.'
-                    : isRead
+                    : request.isRead
                         ? 'The network request failed. Try again.'
                         : 'The network request failed. The operation may have completed; reload before trying again.';
-                renderMessage(message, 'error', isRead
-                    ? {
+                if (!request.isRead) {
+                    lockAmbiguousMutation(selector, request, message);
+                } else {
+                    renderMessage(message, 'error', {
                         label: 'Retry',
                         run: function () {
                             requestFragment(url, selector, source, historyMode, requestInit);
                         }
-                    }
-                    : {
-                        label: 'Reload page',
-                        run: function () {
-                            window.location.reload();
-                        }
                     });
+                }
             }
-            return null;
+            return request.isAmbiguous ? AMBIGUOUS_MUTATION : null;
         } finally {
-            if (source) {
-                setBusy(source, selector, false, request);
-            }
-            if (activeRequests.get(selector) === request.controller) {
-                activeRequests.delete(selector);
+            setBusy(source, selector, false, request);
+            if (activeReads.get(selector) === request.controller) {
+                activeReads.delete(selector);
             }
         }
+    }
+
+    function requestFragment(url, selector, source, historyMode, requestInit) {
+        var method = ((requestInit && requestInit.method) || 'GET').toUpperCase();
+        var isRead = method === 'GET' || method === 'HEAD';
+        if (isRead && activeMutations.has(selector)) {
+            return queueRead(url, selector, source, historyMode, requestInit);
+        }
+        if (!isRead && (activeMutations.has(selector) || ambiguousTargets.has(selector))) {
+            renderMessage(
+                ambiguousTargets.has(selector)
+                    ? 'Reload this page before making another change.'
+                    : 'Another update is still in progress.',
+                'warning',
+                ambiguousTargets.has(selector) ? reloadAction() : null);
+            return Promise.resolve(null);
+        }
+
+        var request = nextRequest(selector, isRead);
+        var operation = executeRequest(url, selector, source, historyMode, requestInit, request);
+        if (isRead) {
+            return operation;
+        }
+        activeMutations.set(selector, operation);
+        operation.finally(function () {
+            if (activeMutations.get(selector) === operation) {
+                activeMutations.delete(selector);
+                runPendingRead(selector);
+            }
+        });
+        return operation;
     }
 
     function submitForm(event) {
@@ -414,9 +538,11 @@
         submittingForms.add(form);
         setSubmitterBusy(submitter, true);
         requestFragment(url, selector, form, historyMode, options)
-            .finally(function () {
-                submittingForms.delete(form);
-                setSubmitterBusy(submitter, false);
+            .then(function (result) {
+                if (result !== AMBIGUOUS_MUTATION) {
+                    submittingForms.delete(form);
+                    setSubmitterBusy(submitter, false);
+                }
             });
     }
 
@@ -464,6 +590,8 @@
         buildUrl: buildUrl,
         isLocalUrl: isLocalUrl,
         messageForStatus: statusMessage,
+        messageForProblem: problemMessage,
+        navigateToLogin: navigateToLogin,
         load: function (url, selector) {
             return requestFragment(url, selector || DEFAULT_TARGET, null, null, { method: 'GET' });
         },

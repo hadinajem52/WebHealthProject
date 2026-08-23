@@ -123,7 +123,9 @@ app.UseSerilogRequestLogging(options =>
         "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
 });
 app.UseMiddleware<SafeExceptionLoggingMiddleware>();
-app.UseStatusCodePagesWithReExecute("/Home/HttpStatusCode", "?code={0}");
+app.UseWhen(
+    context => !context.Request.IsWebHealthAjax(),
+    branch => branch.UseStatusCodePagesWithReExecute("/Home/HttpStatusCode", "?code={0}"));
 
 app.UseHttpsRedirection();
 app.UseRouting();

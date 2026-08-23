@@ -248,7 +248,8 @@
                asp-action="Index"
                asp-all-route-data="routeValues"
                data-ajax-link
-               data-ajax-target="#ajax-page">
+               data-ajax-target="#ajax-page"
+               data-ajax-history="replace">
                 @await Html.PartialAsync("_Icon", "clock")
                 <span>Refresh</span>
             </a>

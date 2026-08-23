@@ -1,0 +1,258 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const vm = require('node:vm');
+
+function loadPollingScript(fileName, options = {}) {
+    const documentHandlers = {};
+    const windowHandlers = {};
+    const timers = [];
+    const host = options.host;
+    Object.defineProperty(global, 'navigator', {
+        value: { onLine: options.online !== false },
+        configurable: true,
+        writable: true
+    });
+    global.document = {
+        hidden: options.hidden === true,
+        readyState: 'complete',
+        addEventListener(name, handler) {
+            documentHandlers[name] = handler;
+        },
+        querySelector(selector) {
+            return host && host.matches(selector) ? host : null;
+        }
+    };
+    global.window = {
+        WebHealth: { ajax: options.ajax },
+        addEventListener(name, handler) {
+            windowHandlers[name] = handler;
+        },
+        setTimeout(handler, delay) {
+            const timer = { handler, delay, cleared: false };
+            timers.push(timer);
+            return timer;
+        },
+        clearTimeout(timer) {
+            timer.cleared = true;
+        }
+    };
+    global.fetch = options.fetch;
+    const script = fs.readFileSync(
+        path.join(__dirname, '../../src/WebHealth.Web/wwwroot/js', fileName),
+        'utf8');
+    vm.runInThisContext(script);
+    return { documentHandlers, windowHandlers, timers };
+}
+
+function pageAuditHost(active = true, statusUrl = '/PageAudits/Status?id=1') {
+    return {
+        nodeType: 1,
+        matches(selector) {
+            return selector === '[data-page-audit-results]';
+        },
+        querySelector() {
+            return null;
+        },
+        getAttribute(name) {
+            if (name === 'data-page-audit-active') {
+                return active ? 'true' : 'false';
+            }
+            return name === 'data-page-audit-status-url' ? statusUrl : null;
+        }
+    };
+}
+
+function checkHost(statusUrl = '/Checks/Status?id=1') {
+    return {
+        nodeType: 1,
+        matches(selector) {
+            return selector === '[data-endpoint-details]';
+        },
+        querySelector() {
+            return null;
+        },
+        getAttribute(name) {
+            return name === 'data-check-status-url' ? statusUrl : null;
+        }
+    };
+}
+
+function nextTimer(timers) {
+    return timers.find(timer => !timer.cleared);
+}
+
+test('PageSpeed polling replaces only its results region', async () => {
+    const calls = [];
+    const messages = [];
+    const runtime = loadPollingScript('page-audits.js', {
+        host: pageAuditHost(),
+        ajax: {
+            async load(url, selector) {
+                calls.push({ url, selector });
+                return pageAuditHost(false, null);
+            },
+            renderMessage(message, level) {
+                messages.push({ message, level });
+            }
+        }
+    });
+
+    await nextTimer(runtime.timers).handler();
+
+    assert.deepEqual(calls, [{
+        url: '/PageAudits/Status?id=1',
+        selector: '#page-audit-results'
+    }]);
+    assert.deepEqual(messages, []);
+});
+
+test('PageSpeed polling pauses hidden time and resumes within the server retry window', () => {
+    const originalNow = Date.now;
+    let now = 1000;
+    Date.now = () => now;
+    try {
+        const messages = [];
+        const runtime = loadPollingScript('page-audits.js', {
+            host: pageAuditHost(),
+            ajax: {
+                async load() {
+                    return pageAuditHost();
+                },
+                renderMessage(message, level) {
+                    messages.push({ message, level });
+                }
+            }
+        });
+
+        document.hidden = true;
+        runtime.documentHandlers.visibilitychange();
+        now += 1000000;
+        document.hidden = false;
+        runtime.documentHandlers.visibilitychange();
+
+        assert.ok(nextTimer(runtime.timers));
+        assert.deepEqual(messages, []);
+    } finally {
+        Date.now = originalNow;
+    }
+});
+
+test('PageSpeed polling remains active through the bounded server retry lifecycle', async () => {
+    const originalNow = Date.now;
+    let now = 0;
+    Date.now = () => now;
+    try {
+        const messages = [];
+        const runtime = loadPollingScript('page-audits.js', {
+            host: pageAuditHost(),
+            ajax: {
+                async load() {
+                    return pageAuditHost();
+                },
+                renderMessage(message, level) {
+                    messages.push({ message, level });
+                }
+            }
+        });
+
+        const first = nextTimer(runtime.timers);
+        now = 700000;
+        await first.handler();
+
+        assert.ok(runtime.timers.find(timer => !timer.cleared && timer !== first));
+        assert.deepEqual(messages, []);
+    } finally {
+        Date.now = originalNow;
+    }
+});
+
+test('manual-check polling reports server failures through the shared AJAX messages', async () => {
+    const messages = [];
+    const runtime = loadPollingScript('checks.js', {
+        host: checkHost(),
+        ajax: {
+            load() {},
+            messageForStatus(status) {
+                return `status ${status}`;
+            },
+            messageForProblem(payload) {
+                return `${payload.detail} Reference: ${payload.correlationId}`;
+            },
+            navigateToLogin() {},
+            renderMessage(message, level) {
+                messages.push({ message, level });
+            }
+        },
+        fetch() {
+            return Promise.resolve({
+                status: 500,
+                ok: false,
+                json: async () => ({ detail: 'Server failed.', correlationId: 'abc' })
+            });
+        }
+    });
+
+    await nextTimer(runtime.timers).handler();
+
+    assert.deepEqual(messages, [{
+        message: 'Server failed. Reference: abc',
+        level: 'error'
+    }]);
+});
+
+test('manual-check polling navigates to login on an expired session', async () => {
+    const messages = [];
+    let navigated = false;
+    const runtime = loadPollingScript('checks.js', {
+        host: checkHost(),
+        ajax: {
+            load() {},
+            messageForStatus() {
+                return 'Your session has expired.';
+            },
+            messageForProblem() {},
+            navigateToLogin() {
+                navigated = true;
+            },
+            renderMessage(message, level) {
+                messages.push({ message, level });
+            }
+        },
+        fetch() {
+            return Promise.resolve({ status: 401, ok: false });
+        }
+    });
+
+    await nextTimer(runtime.timers).handler();
+
+    assert.equal(navigated, true);
+    assert.deepEqual(messages, [{
+        message: 'Your session has expired.',
+        level: 'error'
+    }]);
+});
+
+test('manual-check polling resumes after reconnecting without spending offline time', () => {
+    const runtime = loadPollingScript('checks.js', {
+        host: checkHost(),
+        online: false,
+        ajax: {
+            load() {},
+            messageForStatus() {},
+            messageForProblem() {},
+            navigateToLogin() {},
+            renderMessage() {}
+        },
+        fetch() {
+            throw new Error('Fetch should not run while offline.');
+        }
+    });
+
+    assert.equal(nextTimer(runtime.timers), undefined);
+    navigator.onLine = true;
+    runtime.windowHandlers.online();
+
+    assert.ok(nextTimer(runtime.timers));
+});
