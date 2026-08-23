@@ -117,14 +117,14 @@ the monitoring worker is the same trap 6.2 rejected for HTML.
 
 | Rule key | Rule | Fires when | Severity |
 |---|---|---|---|
-| `Seo.RobotsBlocksSite` | BR-E07 | the applicable group disallows the site root (`Disallow: /` with no narrower `Allow`) | production `Critical`, else Warning |
-| `Seo.RobotsBlocksEndpoint` | BR-E07 | the endpoint's own path is disallowed while the root is not | production `High`, else Warning |
+| `Seo.RobotsBlocksSite` | BR-E07 | the applicable group disallows the site root (`Disallow: /` with no narrower `Allow`) | Warning |
+| `Seo.RobotsBlocksEndpoint` | BR-E07 | the endpoint's own path is disallowed while the root is not | Warning |
 | `Seo.RobotsUnavailable` | BR-E06 | the origin's `robots.txt` could not be fetched or returned 5xx | Warning |
 | `Seo.SitemapMissing` | BR-E08 | a sitemap is required for the origin and none is reachable | Warning |
 
-`Seo.RobotsBlocksSite` is the only `Critical` in the SEO family. A production site that tells every
-crawler to go away is not a misconfiguration to look at next sprint; it is the whole site
-disappearing from search, which is the loss BR-E07 is about.
+Nothing in the SEO family is `Critical`, and neither robots rule varies by environment. Both are
+`Warning` everywhere: a site that search cannot reach is still a site that serves traffic, and
+`Critical` stays reserved for availability so the severity vocabulary keeps its meaning.
 
 ### 3.1 A 404 is a valid answer
 

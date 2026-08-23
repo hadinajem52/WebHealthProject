@@ -28,8 +28,7 @@
      data-run-status
      data-run-active="@(isRunning ? "true" : "false")"
      data-run-url="@Url.Action("Run", new { id = run.RunId, offset = Model.Offset })"
-     data-run-lifetime="1860000"
-     data-run-complete-message="The crawl finished. This page now shows its result.">
+     data-run-lifetime="1860000">
     @* No card title: the page heading already reads "Crawl run", and this run has no other
        identity to show -- the summary carries an endpoint id, not its URL. The status and what
        it means lead instead. *@

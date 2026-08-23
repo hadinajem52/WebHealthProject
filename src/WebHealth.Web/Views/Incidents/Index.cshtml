@@ -143,6 +143,7 @@
                                                 : null))
 
                                         @if (item.AcknowledgedAt is null
+                                            && item.Status != "Open"
                                             && item.Status != "Resolved"
                                             && item.Status != "Closed")
                                         {

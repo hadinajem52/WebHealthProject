@@ -111,8 +111,7 @@
          class="stack"
          data-run-status
          data-run-active="@(run?.IsActive == true ? "true" : "false")"
-         data-run-url="@auditStatusUrl"
-         data-run-complete-message="The PageSpeed audit finished. This page now shows its scores.">
+         data-run-url="@auditStatusUrl">
     @if (summary is null)
     {
         <section class="card">

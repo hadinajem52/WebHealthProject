@@ -1694,6 +1694,12 @@ code,
 
 .status-tile__value a {
     color: inherit;
+    text-decoration: none;
+}
+
+.status-tile__value a:hover,
+.status-tile__value a:focus-visible {
+    text-decoration: underline;
 }
 
 .status-tile[data-tone="danger"] .status-tile__value {

@@ -6,7 +6,6 @@
 
     var hostSelector = null;
     var regionSelectors = null;
-    var completeMessage = null;
     var lastStatus = 0;
 
     var poller = window.WebHealth.createPoller({
@@ -42,9 +41,6 @@
             return host.getAttribute('data-run-url') || url;
         }
 
-        if (completeMessage) {
-            window.WebHealth.ajax.renderMessage(completeMessage, 'success');
-        }
         return false;
     }
 
@@ -55,7 +51,6 @@
         hostSelector = '#' + host.id;
         var companions = host.getAttribute('data-run-also');
         regionSelectors = companions ? hostSelector + ',' + companions : hostSelector;
-        completeMessage = host.getAttribute('data-run-complete-message');
         return parseInt(host.getAttribute('data-run-lifetime'), 10) || 0;
     }
 
