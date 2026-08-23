@@ -104,6 +104,7 @@
             actionButton.textContent = action.label;
             actionButton.addEventListener('click', function () {
                 actionButton.disabled = true;
+                region.replaceChildren();
                 action.run();
             }, { once: true });
             actions.append(actionButton);
