@@ -414,6 +414,7 @@ internal static class CrawlSchemaAssertions
             ("https://cmp.test/a", "https://cmp.test/fixed", CrawlLinkClassifications.Healthy),
             ("https://cmp.test/a", "https://cmp.test/still", CrawlLinkClassifications.Broken),
             ("https://cmp.test/a", "https://cmp.test/new", CrawlLinkClassifications.Broken));
+        await WriteSkipsAsync(services, currentRun);
 
         await using var scope = services.CreateAsyncScope();
         var reader = scope.ServiceProvider.GetRequiredService<ICrawlReportReader>();
@@ -432,6 +433,11 @@ internal static class CrawlSchemaAssertions
         var broken = await reader.ListBrokenLinksAsync(currentRun, limit: 100, access);
         broken.Should().HaveCount(2, "a healthy link is not a broken-link report row");
         broken.Should().OnlyContain(link => link.SourceUrl == "https://cmp.test/a");
+
+        var skips = await reader.ListSkipReasonsAsync(currentRun, access);
+        skips.Should().Equal(
+            new CrawlSkipSummary(CrawlSkipReasons.RobotsDisallowed, 2),
+            new CrawlSkipSummary(CrawlSkipReasons.TargetNotAuthorized, 1));
 
         var runs = await reader.ListRunsAsync(endpointId, 2, access);
         runs.Should().HaveCount(2);
@@ -708,6 +714,21 @@ internal static class CrawlSchemaAssertions
         Guid runId,
         params (string Source, string Target, string Classification)[] links) =>
         WriteRunAsync(services, endpointId, runId, CrawlStopReasons.FrontierExhausted, links);
+
+    private static async Task WriteSkipsAsync(IServiceProvider services, Guid runId)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var sink = scope.ServiceProvider.GetRequiredService<ICrawlResultSink>();
+        await sink.RecordLinkAsync(new(
+            runId, "https://cmp.test/a", "https://cmp.test/blocked-1", true, 1,
+            CrawlLinkClassifications.Skipped, null, 0, null, CrawlSkipReasons.RobotsDisallowed, null));
+        await sink.RecordLinkAsync(new(
+            runId, "https://cmp.test/a", "https://cmp.test/blocked-2", true, 1,
+            CrawlLinkClassifications.Skipped, null, 0, null, CrawlSkipReasons.RobotsDisallowed, null));
+        await sink.RecordLinkAsync(new(
+            runId, "https://cmp.test/a", "https://external.test/blocked", false, 1,
+            CrawlLinkClassifications.Skipped, null, 0, null, CrawlSkipReasons.TargetNotAuthorized, null));
+    }
 
     private static async Task WriteRunAsync(
         IServiceProvider services,
