@@ -388,6 +388,7 @@
         if (!beginInitialization(container)) {
             return;
         }
+        var listenerController = new AbortController();
         var isOpen = false;
 
         function setOpen(open) {
@@ -410,6 +411,15 @@
 
         setOpen(false);
 
+        container.webHealthDisposeMenu = function () {
+            close(false);
+            listenerController.abort();
+        };
+
+        container.addEventListener('webhealth:close-menu', function () {
+            close(false);
+        }, { signal: listenerController.signal });
+
         toggle.addEventListener('click', function () {
             if (isOpen) {
                 close(false);
@@ -420,25 +430,25 @@
                     focusable[0].focus();
                 }
             }
-        });
+        }, { signal: listenerController.signal });
 
         document.addEventListener('keydown', function (event) {
             if (isOpen && event.key === 'Escape') {
                 close(true);
             }
-        });
+        }, { signal: listenerController.signal });
 
         document.addEventListener('pointerdown', function (event) {
             if (isOpen && !container.contains(event.target)) {
                 close(false);
             }
-        });
+        }, { signal: listenerController.signal });
 
         container.addEventListener('focusout', function (event) {
             if (isOpen && !container.contains(event.relatedTarget)) {
                 close(false);
             }
-        });
+        }, { signal: listenerController.signal });
     }
 
     /*
@@ -807,6 +817,14 @@
     window.WebHealth.applyTimezone = function (root) {
         applyTimezone(readStoredTimezone() || LOCAL_ZONE, root || document);
     };
+
+    document.addEventListener('webhealth:before-fragment-replace', function (event) {
+        elements(event.detail.root, '[data-shell-initialized]').forEach(function (element) {
+            if (typeof element.webHealthDisposeMenu === 'function') {
+                element.webHealthDisposeMenu();
+            }
+        });
+    });
 
     onReady(function () {
         initialize(document);

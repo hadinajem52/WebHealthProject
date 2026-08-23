@@ -242,6 +242,15 @@
         }));
     }
 
+    function closeContainingMenu(source) {
+        var menu = source && source.closest
+            ? source.closest('[data-shell-menu]')
+            : null;
+        if (menu) {
+            menu.dispatchEvent(new CustomEvent('webhealth:close-menu'));
+        }
+    }
+
     async function refreshFragment(url, selector) {
         if (!isLocalUrl(url)) {
             throw new Error('The server returned an invalid refresh address.');
@@ -253,6 +262,10 @@
         if (!response.ok && response.status !== 409) {
             renderMessage(problemMessage(payload, response.status), 'error');
             return null;
+        }
+
+        if (response.ok) {
+            closeContainingMenu(source);
         }
 
         if (payload && payload.message) {

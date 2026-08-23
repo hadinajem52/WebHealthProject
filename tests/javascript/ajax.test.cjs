@@ -233,12 +233,57 @@ test('a network failure offers one retry that repeats the request', async () => 
     assert.equal(retryButton.disabled, true);
 });
 
+test('a successful queued action closes its containing action menu', async () => {
+    const handlers = {};
+    const target = { setAttribute() {} };
+    let closed = false;
+    const menu = {
+        dispatchEvent(event) {
+            closed = event instanceof CustomEvent;
+        }
+    };
+    const form = formStub('#target');
+    form.closest = selector => selector === '[data-shell-menu]' ? menu : form;
+    loadAjax({
+        readyState: 'complete',
+        FormData: FormDataStub,
+        document: {
+            addEventListener(name, handler) {
+                handlers[name] = handler;
+            },
+            querySelector(selector) {
+                return selector === '#target' ? target : null;
+            }
+        },
+        fetch() {
+            return Promise.resolve(jsonResponse(202, {
+                message: 'Check queued.',
+                statusUrl: '/Checks/Status?id=1'
+            }));
+        }
+    });
+
+    handlers.submit(submitEvent(form, null));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(closed, true);
+});
+
 function textResponse(status, body) {
     return {
         status,
         ok: status >= 200 && status < 300,
         headers: { get: () => 'text/html' },
         text: async () => body
+    };
+}
+
+function jsonResponse(status, body) {
+    return {
+        status,
+        ok: status >= 200 && status < 300,
+        headers: { get: () => 'application/json' },
+        json: async () => body
     };
 }
 
