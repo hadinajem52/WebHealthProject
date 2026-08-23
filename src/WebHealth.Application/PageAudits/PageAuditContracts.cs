@@ -1,4 +1,4 @@
-using WebHealth.Application.Registry;
+﻿using WebHealth.Application.Registry;
 
 namespace WebHealth.Application.PageAudits;
 
@@ -115,18 +115,21 @@ public sealed record PageAuditExecutionOutcome(
 }
 
 /// <summary>
-/// What happened to a run somebody asked for by hand. An existing run is a distinct answer from
-/// a new one, so the page can say "already running" rather than implying it started something.
+/// What happened to the audits somebody asked for by hand. Counted rather than named, because one
+/// request opens a run per form factor: an existing run is a distinct answer from a new one, so
+/// the page can say "already running" rather than implying it started something.
 /// </summary>
-public sealed record PageAuditManualResult(Guid? RunId, bool WasAlreadyRunning, string? Error)
+public sealed record PageAuditManualResult(int QueuedCount, int AlreadyRunningCount, string? Error)
 {
-    public bool Succeeded => RunId is not null;
+    public bool Succeeded => Error is null;
 
-    public static PageAuditManualResult Queued(Guid runId) => new(runId, false, null);
+    /// <summary>Every audit asked for was already in flight, so nothing new was started.</summary>
+    public bool WasAlreadyRunning => QueuedCount == 0 && AlreadyRunningCount > 0;
 
-    public static PageAuditManualResult AlreadyRunning(Guid runId) => new(runId, true, null);
+    public static PageAuditManualResult Opened(int queuedCount, int alreadyRunningCount) =>
+        new(queuedCount, alreadyRunningCount, null);
 
-    public static PageAuditManualResult Rejected(string error) => new(null, false, error);
+    public static PageAuditManualResult Rejected(string error) => new(0, 0, error);
 }
 
 /// <summary>

@@ -58,7 +58,7 @@ Endpoint
 - Provider: Google PageSpeed Insights API v5.
 - API method: `runPagespeed`.
 - Lighthouse category: `seo` only.
-- Strategy: `mobile` only. The schema allows `desktop` without a migration; the UI does not offer it.
+- Strategy: `mobile` and `desktop`, together. One audit covers both form factors: enabling, scheduling and Run now are single decisions that open a run per strategy, so a cadence costs two requests rather than one. The page shows both scores and switches only between the audits behind them.
 - Locale: fixed to `en-US` so stored titles and descriptions are stable.
 - Eligibility: public, non-authenticated HTTP/HTTPS pages only.
 - Scheduling default: disabled per endpoint until explicitly enabled.
@@ -436,7 +436,7 @@ Constraints and indexes:
 - Index `(is_enabled, scheduling_enabled, next_due_at, id)` or a partial index covering enabled scheduled targets.
 - Provider/category/strategy enumerations enforced by named checks.
 
-V1 UI creates or updates only a `Mobile` + `Seo` + `PageSpeedInsights` row. The schema remains ready for desktop without a migration.
+The endpoint form creates or updates one `Seo` + `PageSpeedInsights` row per strategy, both carrying the configuration it submitted; there is no per-strategy control, and the reader answers enablement from the endpoint rather than from one row. `20260823114917_PageAuditDesktopStrategy` backfills the desktop row for endpoints configured before it existed.
 
 ### 6.2 `page_audit_run`
 
@@ -917,7 +917,7 @@ Suggested controls:
 ```text
 [ ] Enable Google PageSpeed SEO audits
 [ ] Run PageSpeed audits on a schedule
-Strategy: Mobile (V1; hidden field)
+Strategy: Mobile and Desktop (both; deliberately not a control)
 Interval: 24 hours (optional Administrator override)
 ```
 
@@ -1050,7 +1050,7 @@ Keep `/Seo` focused on WebHealth's latest extracted values and policy findings.
 Add a compact PageSpeed column or secondary action once the PageAudits reader exists, for example:
 
 ```text
-PageSpeed: 92 Mobile, audited 4h ago
+PageSpeed: 92 Mobile / 84 Desktop, audited 4h ago
 ```
 
 The PageSpeed score should link to the PageAudits page. Do not merge Lighthouse audit failures into `SeoFindingGroups` in V1 because those groups currently map stable WebHealth rule keys and feed server-side filtering.
@@ -1172,7 +1172,7 @@ Each increment should be independently reviewable and leave the application in a
 
 ### 16.1 - Contracts, eligibility, normalization, and fixtures (1-1.5 days)
 
-**Decide first:** public-only limitation, mobile-only V1, fixed locale, no CrUX dependency, no raw JSON retention.
+**Decide first:** public-only limitation, mobile and desktop per endpoint, fixed locale, no CrUX dependency, no raw JSON retention.
 
 Deliver:
 
@@ -1459,7 +1459,7 @@ unbounded provider error bodies
 
 Metrics backends, quota alerting, and provider health checks are out of scope. Do not call PageSpeed from `/health/ready`: a Google outage must not make WebHealth unready. Readiness may verify only that the API key is present when scheduling is enabled and that scheduling options are valid.
 
-Quota is handled in behavior, not alerting: bounded dispatch batch, one worker, explicit 429 retry with `Retry-After`, and the ability to disable scheduling without deleting configuration or history. At one mobile audit per endpoint per day, 100 enabled endpoints is 100 requests per day.
+Quota is handled in behavior, not alerting: bounded dispatch batch, one worker, explicit 429 retry with `Retry-After`, and the ability to disable scheduling without deleting configuration or history. At one mobile and one desktop audit per endpoint per day, 100 enabled endpoints is 200 requests per day.
 
 ---
 

@@ -1,13 +1,25 @@
-@{
+﻿@{
     var currentController = ViewContext.RouteData.Values["controller"] as string;
     var currentAction = ViewContext.RouteData.Values["action"] as string;
     var groupIndex = 0;
 }
 <nav id="app-sidebar" class="app-sidebar" aria-label="Primary" data-shell-sidebar data-open="false">
-    <a class="app-brand" asp-controller="Home" asp-action="Index">
-        <span class="app-brand__mark">@await Html.PartialAsync("_Icon", "brand")</span>
-        <span>WebHealth</span>
-    </a>
+    <div class="app-sidebar__head">
+        <a class="app-brand" asp-controller="Home" asp-action="Index">
+            <span class="app-brand__mark">@await Html.PartialAsync("_Icon", "brand")</span>
+            <span class="app-brand__name">WebHealth</span>
+        </a>
+
+        <button type="button"
+                class="app-sidebar__collapse"
+                data-shell-collapse
+                aria-controls="app-sidebar"
+                aria-expanded="true"
+                aria-label="Close sidebar">
+            @await Html.PartialAsync("_Icon", "sidebar")
+            <span class="app-tip" aria-hidden="true" data-shell-collapse-tip>Close sidebar</span>
+        </button>
+    </div>
 
     <button type="button" class="app-sidebar__close" data-shell-close>
         @await Html.PartialAsync("_Icon", "close")
@@ -43,6 +55,7 @@
                                aria-current="@(isCurrent ? "page" : null)">
                                 <span class="app-nav__icon">@await Html.PartialAsync("_Icon", item.IconKey)</span>
                                 <span class="app-nav__label">@item.Text</span>
+                                <span class="app-nav__tooltip" aria-hidden="true">@item.Text</span>
                             </a>
                         }
                         else
@@ -50,6 +63,7 @@
                             <span class="app-nav__link is-planned" aria-disabled="true">
                                 <span class="app-nav__icon">@await Html.PartialAsync("_Icon", item.IconKey)</span>
                                 <span class="app-nav__label">@item.Text</span>
+                                <span class="app-nav__tooltip" aria-hidden="true">@item.Text</span>
                                 <span class="app-nav__badge">Planned</span>
                             </span>
                         }
@@ -61,7 +75,8 @@
 
     <div class="app-sidebar__support">
         <span class="app-sidebar__support-icon">@await Html.PartialAsync("_Icon", "diagnostics")</span>
-        <p class="app-sidebar__support-title">System status</p>
+        <p class="app-sidebar__support-title"><span class="app-sidebar__support-name">System status</span></p>
+        <span class="app-sidebar__tooltip" aria-hidden="true">System status</span>
         <p class="app-sidebar__support-state">
             <span class="app-sidebar__support-dot" aria-hidden="true"></span>
             <span>Application responding</span>

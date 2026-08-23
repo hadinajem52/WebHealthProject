@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Domain.PageAudits;
@@ -31,6 +31,7 @@ internal sealed class PageAuditReader(
 
     public async Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
+        string strategy,
         Guid? runId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
@@ -52,34 +53,45 @@ internal sealed class PageAuditReader(
             return null;
         }
 
-        var target = await dbContext.PageAuditTargets.AsNoTracking()
+        // Every form factor's row, because auditing is one setting on the endpoint rather than
+        // one per form factor. Reading only the selected strategy's row would let a database that
+        // has not been migrated yet render "auditing is off" for a feature that is plainly on.
+        var targets = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.Provider == PageAuditProviders.PageSpeedInsights
                 && candidate.Category == PageAuditCategories.Seo)
             .OrderBy(candidate => candidate.Strategy)
             .ThenBy(candidate => candidate.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (target is null)
+            .ToArrayAsync(cancellationToken);
+        if (targets.Length == 0)
         {
             return PageAuditEndpointSummary.NotConfigured(
-                endpoint.Id, endpoint.DisplayUrl, endpoint.WebsiteName, endpoint.EnvironmentName);
+                endpoint.Id, endpoint.DisplayUrl, endpoint.WebsiteName, endpoint.EnvironmentName,
+                strategy);
         }
+
+        // The rows carry the same configuration by construction, so any of them answers the
+        // endpoint-level questions. Only the due time is the selected form factor's own.
+        var configured = targets[0];
+        var selectedTarget = targets.SingleOrDefault(
+            candidate => candidate.Strategy == strategy);
 
         // An explicit run id selects a historical run; without one the newest run is shown,
         // whatever its status, so a queued or failed run is visible rather than hidden behind the
         // last one that happened to succeed.
+        var runs = RunsOf(access, endpointId, strategy);
         var selected = runId is { } requested
-            ? await Project(RunsOf(access, endpointId).Where(run => run.Id == requested))
+            ? await Project(runs.Where(run => run.Id == requested))
                 .SingleOrDefaultAsync(cancellationToken)
-            : await Project(Ordered(RunsOf(access, endpointId)))
+            : await Project(Ordered(runs))
                 .FirstOrDefaultAsync(cancellationToken);
 
         var counts = selected is null
             ? PageAuditItemCounts.Empty
             : await CountItemsAsync(selected.RunId, cancellationToken);
-        var comparison = selected is null
+        var comparison = selected is null || selectedTarget is null
             ? PageAuditComparison.None
-            : await CompareAsync(access, target.Id, selected, cancellationToken);
+            : await CompareAsync(access, selectedTarget.Id, selected, cancellationToken);
 
         return new PageAuditEndpointSummary(
             endpoint.Id,
@@ -87,22 +99,59 @@ internal sealed class PageAuditReader(
             endpoint.WebsiteName,
             endpoint.EnvironmentName,
             IsConfigured: true,
-            target.IsEnabled,
-            target.SchedulingEnabled,
-            target.Strategy,
-            target.IntervalSeconds / 3600,
-            target.SchedulingEnabled && target.IsEnabled ? target.NextDueAt : null,
+            configured.IsEnabled,
+            configured.SchedulingEnabled,
+            strategy,
+            configured.IntervalSeconds / 3600,
+            configured.SchedulingEnabled && configured.IsEnabled ? selectedTarget?.NextDueAt : null,
+            await ScoreboardAsync(access, endpointId, cancellationToken),
             selected,
             counts,
             comparison);
     }
 
+    /// <summary>
+    /// The newest score on every form factor, so one audit reads as one result with a number per
+    /// form factor rather than as two features a reader has to visit in turn.
+    /// </summary>
+    /// <remarks>
+    /// One small query per form factor rather than one grouped query. There are two of them, and
+    /// a per-group "newest row" is the shape LINQ translates worst - the version that reads
+    /// clearly here is also the version whose SQL is obvious.
+    /// </remarks>
+    private async Task<IReadOnlyList<PageAuditStrategyScore>> ScoreboardAsync(
+        RegistryAccessContext access,
+        Guid endpointId,
+        CancellationToken cancellationToken)
+    {
+        var scores = new List<PageAuditStrategyScore>(PageAuditStrategies.All.Length);
+        foreach (var strategy in PageAuditStrategies.All)
+        {
+            var latest = await RunsOf(access, endpointId, strategy)
+                .Where(run => run.RawScore != null
+                    && (run.Status == PageAuditRunStatuses.Completed
+                        || run.Status == PageAuditRunStatuses.CompletedWithWarnings))
+                .OrderByDescending(run => run.FinishedAt)
+                .ThenByDescending(run => run.Id)
+                .Select(run => new { run.RawScore, run.FinishedAt })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            scores.Add(new PageAuditStrategyScore(
+                strategy,
+                PageAuditNormalization.ToDisplayScore(latest is null ? null : latest.RawScore),
+                latest?.FinishedAt));
+        }
+
+        return scores;
+    }
+
     public async Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,
+        string strategy,
         int limit,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        await Project(Ordered(RunsOf(access, endpointId))
+        await Project(Ordered(RunsOf(access, endpointId, strategy))
                 .Take(Math.Clamp(limit, 1, MaxRunsListed)))
             .ToArrayAsync(cancellationToken);
 
@@ -217,8 +266,12 @@ internal sealed class PageAuditReader(
             CountOf(PageAuditItemStatuses.Error));
     }
 
-    private IQueryable<PageAuditRun> RunsOf(RegistryAccessContext access, Guid endpointId) =>
-        VisibleRuns(access).Where(run => run.EndpointId == endpointId);
+    private IQueryable<PageAuditRun> RunsOf(
+        RegistryAccessContext access,
+        Guid endpointId,
+        string strategy) =>
+        VisibleRuns(access)
+            .Where(run => run.EndpointId == endpointId && run.Strategy == strategy);
 
     /// <summary>
     /// Newest first, with unfinished runs at the top: a queued or running audit is the most

@@ -1,4 +1,4 @@
-using WebHealth.Application.Registry;
+﻿using WebHealth.Application.Registry;
 using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.Application.PageAudits;
@@ -100,10 +100,24 @@ public sealed record PageAuditComparison(
         Comparability == PageAuditComparability.LighthouseVersionChanged;
 }
 
+/// <summary>One form factor's newest score, as the summary carries it.</summary>
+public sealed record PageAuditStrategyScore(
+    string Strategy,
+    int? Score,
+    DateTimeOffset? MeasuredAt)
+{
+    public bool HasScore => Score is not null;
+}
+
 /// <summary>
-/// One endpoint's page-audit state: how it is configured, its latest run, what that run found, and
-/// how it compares with the run before it.
+/// One endpoint's page-audit state.
 /// </summary>
+/// <remarks>
+/// Configuration is a property of the endpoint, not of a form factor: one audit covers mobile and
+/// desktop together, and there is no way to switch one on without the other. The strategy only
+/// names which form factor's run, audits and comparison are carried here, while the scores carry
+/// the newest number for every form factor - one audit with two numbers rather than two features.
+/// </remarks>
 public sealed record PageAuditEndpointSummary(
     Guid EndpointId,
     string EndpointUrl,
@@ -115,6 +129,7 @@ public sealed record PageAuditEndpointSummary(
     string Strategy,
     int IntervalHours,
     DateTimeOffset? NextDueAt,
+    IReadOnlyList<PageAuditStrategyScore> Scores,
     PageAuditRunSummary? LatestRun,
     PageAuditItemCounts Counts,
     PageAuditComparison Comparison)
@@ -123,9 +138,10 @@ public sealed record PageAuditEndpointSummary(
         Guid endpointId,
         string endpointUrl,
         string websiteName,
-        string environmentName) =>
+        string environmentName,
+        string strategy) =>
         new(endpointId, endpointUrl, websiteName, environmentName, false, false, false,
-            PageAuditStrategies.Mobile, 24, null, null, PageAuditItemCounts.Empty,
+            strategy, 24, null, [], null, PageAuditItemCounts.Empty,
             PageAuditComparison.None);
 }
 
@@ -137,14 +153,21 @@ public sealed record PageAuditEndpointSummary(
 /// </summary>
 public interface IPageAuditReader
 {
+    /// <summary>
+    /// One endpoint's page-audit state, with the strategy choosing which form factor's run and
+    /// audits to read. It selects a measurement, never a configuration: every form factor is
+    /// enabled, scheduled and run together.
+    /// </summary>
     Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
+        string strategy,
         Guid? runId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,
+        string strategy,
         int limit,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);

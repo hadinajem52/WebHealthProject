@@ -1,4 +1,4 @@
-namespace WebHealth.Domain.PageAudits;
+﻿namespace WebHealth.Domain.PageAudits;
 
 /// <summary>
 /// Who ran the audit. Stored on every run so history stays interpretable after the target's
@@ -30,7 +30,22 @@ public static class PageAuditStrategies
     public const string MobileParameter = "mobile";
     public const string DesktopParameter = "desktop";
 
+    /// <summary>
+    /// Every form factor an endpoint is audited on. Google scores the same page differently on
+    /// each, so both are asked for and both are kept: a mobile score alone answers half the
+    /// question, and a reader comparing the two needs them measured the same day.
+    /// </summary>
+    public static readonly string[] All = [Mobile, Desktop];
+
     public static bool IsSupported(string value) => value is Mobile or Desktop;
+
+    /// <summary>
+    /// The strategy a request asked to read, defaulting to mobile. The value arrives in a query
+    /// string, so an unrecognised one is a wrong address rather than an error worth a page: mobile
+    /// is what the feature has always recorded, and is what Google itself reports first.
+    /// </summary>
+    public static string Normalize(string? value) =>
+        string.Equals(value, Desktop, StringComparison.OrdinalIgnoreCase) ? Desktop : Mobile;
 
     /// <summary>
     /// The query value for a stored strategy. Always sent explicitly: the API's own default is

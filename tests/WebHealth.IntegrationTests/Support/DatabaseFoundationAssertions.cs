@@ -82,7 +82,8 @@ internal static class DatabaseFoundationAssertions
         "20260820184410_PageAuditFoundation",
         "20260821071613_PageAuditItemRestrictDelete",
         "20260822122047_CrawlRunActiveUniqueIndex",
-        "20260822215850_CrawlRunCoverageLimited"
+        "20260822215850_CrawlRunCoverageLimited",
+        "20260823114917_PageAuditDesktopStrategy"
     ];
 
     private static readonly string[] ExpectedTables =

@@ -1,4 +1,4 @@
-using WebHealth.Application.Crawling;
+﻿using WebHealth.Application.Crawling;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Seo;
@@ -80,6 +80,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
     /// </remarks>
     public Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
+        string strategy,
         Guid? runId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
@@ -91,16 +92,18 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
             IsConfigured: true,
             IsEnabled: true,
             SchedulingEnabled: true,
-            PageAuditStrategies.Mobile,
+            strategy,
             24,
             null,
+            [.. PageAuditStrategies.All.Select(
+                candidate => new PageAuditStrategyScore(candidate, null, null))],
             runId is { } requested && requested != Guid.Empty
-                ? RunOf(endpointId, requested)
+                ? RunOf(endpointId, strategy, requested)
                 : null,
             PageAuditItemCounts.Empty,
             PageAuditComparison.None));
 
-    private static PageAuditRunSummary RunOf(Guid endpointId, Guid runId) => new(
+    private static PageAuditRunSummary RunOf(Guid endpointId, string strategy, Guid runId) => new(
         runId,
         endpointId,
         PageAuditSources.Manual,
@@ -108,7 +111,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
         "https://example.com/",
         null,
         null,
-        PageAuditStrategies.Mobile,
+        strategy,
         "en-US",
         null,
         null,
@@ -121,6 +124,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
 
     public Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,
+        string strategy,
         int limit,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
@@ -144,7 +148,8 @@ internal sealed class RecordingPageAuditRunner : IPageAuditRunner
         CancellationToken cancellationToken = default)
     {
         Requested.Add(endpointId);
-        return Task.FromResult(PageAuditManualResult.Queued(Guid.NewGuid()));
+        return Task.FromResult(
+            PageAuditManualResult.Opened(PageAuditStrategies.All.Length, 0));
     }
 }
 

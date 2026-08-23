@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -100,9 +100,9 @@ public sealed class PageAuditSchedulingService(
     }
 
     /// <summary>
-    /// Opens a run somebody asked for by hand. Returns the run already in flight rather than
-    /// failing when one exists: the person wants a fresh score, and a run that is about to produce
-    /// one satisfies that better than an error does.
+    /// Opens the runs somebody asked for by hand: one per enabled form factor. A strategy already
+    /// in flight is left alone rather than failing the request, because the person wants a fresh
+    /// score and a run about to produce one satisfies that better than an error does.
     /// </summary>
     public async Task<PageAuditManualResult> QueueManualAsync(
         Guid endpointId,
@@ -120,14 +120,15 @@ public sealed class PageAuditSchedulingService(
                 "You are not authorized to run an audit against this endpoint.");
         }
 
-        var target = await dbContext.PageAuditTargets.AsNoTracking()
+        var targets = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.Provider == PageAuditProviders.PageSpeedInsights
                 && candidate.Category == PageAuditCategories.Seo
                 && candidate.IsEnabled)
             .OrderBy(candidate => candidate.Strategy)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (target is null)
+            .ThenBy(candidate => candidate.Id)
+            .ToArrayAsync(cancellationToken);
+        if (targets.Length == 0)
         {
             return PageAuditManualResult.Rejected(
                 "PageSpeed auditing is not enabled for this endpoint.");
@@ -156,18 +157,82 @@ public sealed class PageAuditSchedulingService(
             return PageAuditManualResult.Rejected(DescribeIneligibility(eligibility.Reason));
         }
 
-        var existing = await dbContext.PageAuditRuns.AsNoTracking()
-            .Where(run => run.PageAuditTargetId == target.Id
-                && (run.Status == PageAuditRunStatuses.Queued
-                    || run.Status == PageAuditRunStatuses.Running))
-            .Select(run => run.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (existing != Guid.Empty)
+        var opened = new List<Guid>();
+        var alreadyRunning = 0;
+        foreach (var target in targets)
         {
-            return PageAuditManualResult.AlreadyRunning(existing);
+            var runId = await OpenManualRunAsync(
+                target, endpoint.NormalizedUrl, access.UserId, now, cancellationToken);
+            if (runId is { } identifier)
+            {
+                opened.Add(identifier);
+            }
+            else
+            {
+                alreadyRunning++;
+            }
         }
 
-        var runId = OpenRun(target, endpoint.NormalizedUrl, PageAuditSources.Manual, access.UserId, now);
+        if (opened.Count == 0)
+        {
+            return PageAuditManualResult.Opened(0, alreadyRunning);
+        }
+
+        try
+        {
+            foreach (var runId in opened)
+            {
+                queue.Enqueue(runId);
+            }
+        }
+        catch (Exception exception)
+        {
+            // Runs are committed before they are enqueued so a lost job leaves evidence rather
+            // than nothing. That bargain assumes a worker exists to lose the job. With scheduling
+            // off there is no queue and no reconciliation sweep, so a committed run would sit
+            // Queued forever and its target's active-run index would refuse every later request.
+            // Retiring them here keeps the failure to the one request that caused it.
+            foreach (var runId in opened)
+            {
+                await RetireUnreachableRunAsync(runId, cancellationToken);
+            }
+
+            logger.LogError(
+                exception,
+                "PageAudit runs could not be queued and were retired. EndpointId={EndpointId}",
+                endpointId);
+            return PageAuditManualResult.Rejected(
+                "PageSpeed audits are not running on this instance, so the audit could not be "
+                + "started. Enable PageAudits:Scheduling to run them.");
+        }
+
+        logger.LogInformation(
+            "PageAudit runs queued by request. Count={Count} EndpointId={EndpointId}",
+            opened.Count, endpointId);
+        return PageAuditManualResult.Opened(opened.Count, alreadyRunning);
+    }
+
+    /// <summary>
+    /// Commits one form factor's run, or reports that one is already in flight for it.
+    /// </summary>
+    /// <remarks>
+    /// Saved per target rather than as one batch. A batch that violated the partial unique index
+    /// on a single strategy would roll back the strategies that had nothing wrong with them, so a
+    /// mobile audit already running would silently cost the reader their desktop one.
+    /// </remarks>
+    private async Task<Guid?> OpenManualRunAsync(
+        PageAuditTarget target,
+        string requestedUrl,
+        Guid requestedByUserId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (await FindActiveRunAsync(target.Id, cancellationToken) is not null)
+        {
+            return null;
+        }
+
+        var runId = OpenRun(target, requestedUrl, PageAuditSources.Manual, requestedByUserId, now);
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -178,41 +243,16 @@ public sealed class PageAuditSchedulingService(
             // is doing exactly what this one would have, so it is the answer rather than an error.
             // Anything else is a real failure and is rethrown.
             dbContext.ChangeTracker.Clear();
-            var winner = await FindActiveRunAsync(target.Id, cancellationToken);
-            if (winner is null)
+            if (await FindActiveRunAsync(target.Id, cancellationToken) is null)
             {
                 throw;
             }
 
-            return PageAuditManualResult.AlreadyRunning(winner.Value);
+            return null;
         }
 
         dbContext.ChangeTracker.Clear();
-        try
-        {
-            queue.Enqueue(runId);
-        }
-        catch (Exception exception)
-        {
-            // The run is committed before it is enqueued so a lost job leaves evidence rather than
-            // nothing. That bargain assumes a worker exists to lose the job. With scheduling off
-            // there is no queue and no reconciliation sweep, so a committed run would sit Queued
-            // forever and its target's active-run index would refuse every later request. Retiring
-            // it here keeps the failure to the one request that caused it.
-            await RetireUnreachableRunAsync(runId, cancellationToken);
-            logger.LogError(
-                exception,
-                "PageAudit run could not be queued and was retired. PageAuditRunId={PageAuditRunId}",
-                runId);
-            return PageAuditManualResult.Rejected(
-                "PageSpeed audits are not running on this instance, so the audit could not be "
-                + "started. Enable PageAudits:Scheduling to run them.");
-        }
-
-        logger.LogInformation(
-            "PageAudit run queued by request. PageAuditRunId={PageAuditRunId} EndpointId={EndpointId}",
-            runId, endpointId);
-        return PageAuditManualResult.Queued(runId);
+        return runId;
     }
 
     private async Task<IReadOnlyList<Guid>> OpenDueRunsAsync(CancellationToken cancellationToken)

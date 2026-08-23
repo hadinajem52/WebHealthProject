@@ -1,12 +1,16 @@
-using WebHealth.Application.PageAudits;
+﻿using WebHealth.Application.PageAudits;
 using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.Web.Models;
 
-/// <summary>The endpoint picker, the selected run, and the audits behind its score.</summary>
+/// <summary>
+/// The endpoint picker, the form factor being read, the selected run, and the audits behind its
+/// score.
+/// </summary>
 public sealed record PageAuditIndexViewModel(
     IReadOnlyList<EndpointOption> Endpoints,
     Guid? SelectedEndpointId,
+    string SelectedStrategy,
     PageAuditEndpointSummary? Summary,
     IReadOnlyList<PageAuditRunSummary> Runs,
     IReadOnlyList<PageAuditItemView> Items,
@@ -93,6 +97,16 @@ public static class PageAuditDisplay
             _ => "Failed"
         };
     }
+
+    /// <summary>
+    /// The form factor, as a person names it. The stored value is already the English word, so
+    /// this exists to keep the page from spelling one strategy differently in two places.
+    /// </summary>
+    public static string DescribeStrategy(string strategy) => strategy switch
+    {
+        PageAuditStrategies.Desktop => "Desktop",
+        _ => "Mobile"
+    };
 
     public static string ItemTone(string status) => status switch
     {

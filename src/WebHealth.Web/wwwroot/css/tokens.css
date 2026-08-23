@@ -139,6 +139,7 @@
     --line-height-base: 1.5;
 
     --sidebar-width: 16.53125rem;
+    --sidebar-rail-width: 4.5rem;
     --sidebar-inset: 1.125rem;
     --sidebar-inset-top: 2.75rem;
     --content-max-width: 90rem;

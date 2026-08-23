@@ -142,6 +142,44 @@ svg {
     height: 1.375rem;
 }
 
+.app-sidebar__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 0.84375rem;
+    gap: var(--space-2);
+}
+
+.app-sidebar__collapse {
+    position: relative;
+    display: none;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: var(--radius-tile);
+    background: none;
+    color: var(--sidebar-label);
+    cursor: pointer;
+    font: inherit;
+    transition: background-color var(--motion-fast) var(--motion-easing),
+        color var(--motion-fast) var(--motion-easing),
+        opacity var(--motion-fast) var(--motion-easing);
+}
+
+.app-sidebar__collapse:hover {
+    background-color: var(--sidebar-item-surface);
+    box-shadow: var(--shadow-card);
+    color: var(--sidebar-label-active);
+}
+
+.app-sidebar__collapse svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
 .app-sidebar__divider {
     height: 1px;
     margin: 1.71875rem 0.40625rem 1.40625rem;
@@ -204,6 +242,13 @@ svg {
 
 .app-nav__label {
     min-width: 0;
+    opacity: 1;
+    transition: opacity var(--motion-fast) var(--motion-easing);
+}
+
+.app-nav__tooltip,
+.app-sidebar__tooltip {
+    display: none;
 }
 
 a.app-nav__link:hover {
@@ -272,6 +317,11 @@ a.app-nav__link:hover {
     font-size: var(--font-size-sm);
     font-weight: 700;
     line-height: var(--line-height-tight);
+}
+
+.app-sidebar__support-name {
+    opacity: 1;
+    transition: opacity var(--motion-fast) var(--motion-easing);
 }
 
 .app-sidebar__support-state {
@@ -705,6 +755,174 @@ html:not(.js) .app-header__toggle {
     .js .app-header__toggle,
     .app-scrim {
         display: none;
+    }
+
+    .js .app-sidebar {
+        transition: width var(--motion-base) var(--motion-easing),
+            flex-basis var(--motion-base) var(--motion-easing);
+    }
+
+    .js .app-sidebar__collapse {
+        display: inline-flex;
+    }
+
+    .app-tip,
+    html[data-sidebar-collapsed="true"] .app-nav__tooltip,
+    html[data-sidebar-collapsed="true"] .app-sidebar__tooltip {
+        position: absolute;
+        z-index: 60;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-tile);
+        background-color: var(--color-gray-700);
+        box-shadow: var(--shadow-raised);
+        color: var(--color-white);
+        font-size: var(--font-size-xs);
+        font-weight: 400;
+        line-height: var(--line-height-base);
+        opacity: 0;
+        pointer-events: none;
+        text-transform: none;
+        white-space: nowrap;
+        transition: opacity var(--motion-fast) var(--motion-easing);
+    }
+
+    html[data-sidebar-collapsed="true"] .app-nav__tooltip,
+    html[data-sidebar-collapsed="true"] .app-sidebar__tooltip {
+        display: block;
+    }
+
+    .app-tip {
+        top: calc(100% + var(--space-2));
+        right: 0;
+    }
+
+    .app-sidebar__collapse:hover .app-tip,
+    .app-sidebar__collapse:focus-visible .app-tip,
+    html[data-sidebar-collapsed="true"] .app-nav__link:hover .app-nav__tooltip,
+    html[data-sidebar-collapsed="true"] .app-nav__link:focus-visible .app-nav__tooltip,
+    html[data-sidebar-collapsed="true"] .app-sidebar__support:hover .app-sidebar__tooltip {
+        opacity: 1;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-tip,
+    html[data-sidebar-collapsed="true"] .app-nav__tooltip,
+    html[data-sidebar-collapsed="true"] .app-sidebar__tooltip {
+        top: 50%;
+        right: auto;
+        left: calc(100% + var(--space-2));
+        transform: translateY(-50%);
+    }
+
+    html[data-sidebar-collapsed="false"] .app-nav__label,
+    html[data-sidebar-collapsed="false"] .app-sidebar__support-name {
+        transition-delay: var(--motion-base);
+    }
+
+    html[data-sidebar-collapsed="true"] .app-nav__label,
+    html[data-sidebar-collapsed="true"] .app-sidebar__support-name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        border: 0;
+        clip-path: inset(50%);
+        opacity: 0;
+        white-space: nowrap;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar {
+        width: var(--sidebar-rail-width);
+        align-items: center;
+        flex-basis: var(--sidebar-rail-width);
+        padding-left: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar__head {
+        position: relative;
+        width: 3rem;
+        height: 3rem;
+        justify-content: center;
+        padding-right: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-brand {
+        margin-left: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-brand__mark {
+        transition: opacity var(--motion-fast) var(--motion-easing);
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar__head:hover .app-brand__mark,
+    html[data-sidebar-collapsed="true"] .app-sidebar__head:has(.app-sidebar__collapse:focus-visible) .app-brand__mark {
+        opacity: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-brand__name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar__collapse {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar__head:hover .app-sidebar__collapse,
+    html[data-sidebar-collapsed="true"] .app-sidebar__collapse:focus-visible {
+        opacity: 1;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar__divider {
+        width: 2.5rem;
+        margin-right: auto;
+        margin-left: auto;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-nav__group {
+        padding: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-nav__group + .app-nav__group {
+        margin-top: var(--space-2);
+    }
+
+    html[data-sidebar-collapsed="true"] .app-nav__heading,
+    html[data-sidebar-collapsed="true"] .app-nav__badge,
+    html[data-sidebar-collapsed="true"] .app-sidebar__support-state,
+    html[data-sidebar-collapsed="true"] .app-sidebar__support-text,
+    html[data-sidebar-collapsed="true"] .app-sidebar__support-link {
+        display: none;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-nav__link {
+        position: relative;
+        width: 3rem;
+        height: 3rem;
+        justify-content: center;
+        padding: 0;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar__support {
+        position: relative;
+        width: auto;
+        margin: 0;
+        padding: 0;
+        background: none;
+    }
+
+    html[data-sidebar-collapsed="true"] .app-sidebar__support-title {
+        margin: 0;
     }
 }
 

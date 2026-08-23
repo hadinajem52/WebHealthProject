@@ -1,4 +1,4 @@
-@using WebHealth.Application.Seo
+﻿@using WebHealth.Application.Seo
 @using WebHealth.Domain.PageAudits
 @model EndpointFormViewModel
 @using WebHealth.Application.Registry
@@ -229,7 +229,8 @@
 <fieldset class="form-section">
     <legend class="form-section__title">Google PageSpeed audits</legend>
     <p class="form-section__hint">
-        Optional technical SEO and performance scores from Google PageSpeed Insights.
+        Optional technical SEO and performance scores from Google PageSpeed Insights. One audit
+        covers mobile and desktop, so each run costs two Google requests.
     </p>
 
     <div class="form-section__body">
@@ -269,7 +270,7 @@
                 <span class="form-field__hint">
                     Between @PageAuditCadence.MinimumIntervalHours hours and
                     @(PageAuditCadence.MaximumIntervalHours / 24) days. Each run asks Google to
-                    load the page, so daily is usually enough.
+                    load the page on both form factors, so daily is usually enough.
                 </span>
                 <span asp-validation-for="PageAuditIntervalHours"></span>
             </div>
