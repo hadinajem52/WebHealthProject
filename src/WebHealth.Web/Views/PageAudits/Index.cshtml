@@ -532,14 +532,11 @@
                                 </td>
                                 <td data-label="Source">@historyRun.Source</td>
                                 <td data-label="Lighthouse">@(historyRun.LighthouseVersion ?? "—")</td>
-                                <td data-label="Details">
-                                    <a class="button button--secondary"
-                                       asp-action="Index"
+                                <td class="data-table__action" data-label="Details">
+                                    <a asp-action="Index"
                                        asp-route-endpointId="@Model.SelectedEndpointId"
                                        asp-route-strategy="@Model.SelectedStrategy"
-                                       asp-route-runId="@historyRun.RunId">
-                                        <span>View</span>
-                                    </a>
+                                       asp-route-runId="@historyRun.RunId">View</a>
                                 </td>
                             </tr>
                         }

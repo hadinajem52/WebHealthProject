@@ -165,10 +165,8 @@
 
                                 <td data-label="Opened">@Html.Timestamp(item.OpenedAt)</td>
                                 <td data-label="Owner">@item.OwnerDisplayName</td>
-                                <td data-label="Details">
-                                    <a class="button button--secondary" asp-action="Details" asp-route-id="@item.Id">
-                                        <span>View</span>
-                                    </a>
+                                <td class="data-table__action" data-label="Details">
+                                    <a asp-action="Details" asp-route-id="@item.Id">View<span class="visually-hidden"> incident for @item.EndpointDisplayUrl</span></a>
                                 </td>
                             </tr>
                         }

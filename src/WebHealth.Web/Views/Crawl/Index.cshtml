@@ -134,10 +134,8 @@
                                             : "This crawl did not cover the whole scope, so links it never reached are not counted."))
                                 </td>
                                 <td data-label="Robots override">@(run.RobotsOverrideGranted ? "Granted" : "No")</td>
-                                <td data-label="Details">
-                                    <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId">
-                                        <span>View</span>
-                                    </a>
+                                <td class="data-table__action" data-label="Details">
+                                    <a asp-action="Run" asp-route-id="@run.RunId">View</a>
                                 </td>
                             </tr>
                         }

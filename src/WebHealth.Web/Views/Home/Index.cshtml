@@ -416,11 +416,8 @@
                                     @RelativeTime.Describe(incident.OpenedAt, asOf)
                                 </td>
                                 <td data-label="Owner">@incident.OwnerName</td>
-                                <td data-label="Details">
-                                    <a class="button button--secondary" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.Id">
-                                        <span>View</span>
-                                        <span class="visually-hidden">incident for @incident.EndpointDisplayUrl</span>
-                                    </a>
+                                <td class="data-table__action" data-label="Details">
+                                    <a asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.Id">View<span class="visually-hidden"> incident for @incident.EndpointDisplayUrl</span></a>
                                 </td>
                             </tr>
                         }
