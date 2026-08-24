@@ -135,7 +135,9 @@ internal sealed class IncidentReader(
                 incidentEvent.OccurredAt))
             .ToArray();
 
-        var evidence = incident.Evidence.OrderBy(item => item.CapturedAt)
+        var evidence = incident.Evidence
+            .OrderByDescending(item => item.CapturedAt)
+            .ThenByDescending(item => item.Id)
             .Select(item => new IncidentEvidenceItem(item.Id, item.EvidenceType, item.EvidenceRole, item.CapturedAt))
             .ToArray();
 

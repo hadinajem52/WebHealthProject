@@ -23,7 +23,7 @@
     <span class="@badgeClass" data-status="@Model.Status">
         @if (Model.Pending)
         {
-            <span class="spinner spinner--badge" aria-hidden="true"></span>
+            <span class="spinner spinner--badge" aria-hidden="true" data-preserve-animation></span>
         }
         <span class="badge__label">@Model.Label</span>
     </span>
@@ -37,7 +37,7 @@ else
           tabindex="0">
         @if (Model.Pending)
         {
-            <span class="spinner spinner--badge" aria-hidden="true"></span>
+            <span class="spinner spinner--badge" aria-hidden="true" data-preserve-animation></span>
         }
         <span class="badge__label">@Model.Label</span>
         <span class="badge__info" aria-hidden="true">@await Html.PartialAsync("_Icon", "information")</span>

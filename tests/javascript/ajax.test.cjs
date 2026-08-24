@@ -355,6 +355,59 @@ test('a successful GET form replaces its target, initializes it, and pushes hist
     assert.equal(focused, true);
 });
 
+test('a fragment refresh preserves a continuing animation element', async () => {
+    const spinner = { className: 'spinner', marker: 'existing' };
+    let inserted;
+    let removed = false;
+    const placeholder = {
+        className: 'spinner spinner--badge',
+        replaceWith(value) {
+            this.replacement = value;
+        }
+    };
+    const incoming = {
+        querySelector() { return null; },
+        querySelectorAll(selector) {
+            return selector === '[data-preserve-animation]' ? [placeholder] : [];
+        }
+    };
+    const current = {
+        setAttribute() {},
+        querySelectorAll(selector) {
+            return selector === '[data-preserve-animation]' ? [spinner] : [];
+        },
+        before(value) {
+            inserted = value;
+        },
+        remove() {
+            removed = true;
+        }
+    };
+    const ajax = loadAjax({
+        document: {
+            querySelector(selector) {
+                return selector === '#target' ? current : null;
+            }
+        },
+        DOMParser: class DOMParser {
+            parseFromString() {
+                return { querySelector: () => incoming };
+            }
+        },
+        fetch() {
+            return Promise.resolve(textResponse(200, '<div id="target"></div>'));
+        }
+    });
+
+    const root = await ajax.load('/status', '#target');
+
+    assert.equal(root, incoming);
+    assert.equal(inserted, incoming);
+    assert.equal(placeholder.replacement, spinner);
+    assert.equal(spinner.className, 'spinner spinner--badge');
+    assert.equal(removed, true);
+});
+
 test('a network failure offers one retry that repeats the request', async () => {
     const target = { setAttribute() {} };
     const region = {

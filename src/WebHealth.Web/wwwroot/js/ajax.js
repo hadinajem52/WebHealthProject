@@ -213,6 +213,27 @@
         }
     }
 
+    function animationElements(root) {
+        return root.querySelectorAll
+            ? Array.prototype.slice.call(root.querySelectorAll('[data-preserve-animation]'))
+            : [];
+    }
+
+    function replaceRegion(current, incoming) {
+        var currentAnimations = animationElements(current);
+        var incomingAnimations = animationElements(incoming);
+        if (currentAnimations.length === 0 || currentAnimations.length !== incomingAnimations.length) {
+            current.replaceWith(incoming);
+            return;
+        }
+        current.before(incoming);
+        incomingAnimations.forEach(function (incomingAnimation, index) {
+            currentAnimations[index].className = incomingAnimation.className;
+            incomingAnimation.replaceWith(currentAnimations[index]);
+        });
+        current.remove();
+    }
+
     function replaceFragment(html, selector, status, url, source) {
         var parsed = new DOMParser().parseFromString(html, 'text/html');
         var regions = selectorList(selector).map(function (one) {
@@ -229,7 +250,7 @@
             document.dispatchEvent(new CustomEvent('webhealth:before-fragment-replace', {
                 detail: { root: region.current }
             }));
-            region.current.replaceWith(region.incoming);
+            replaceRegion(region.current, region.incoming);
             if (window.WebHealth.init) {
                 window.WebHealth.init(region.incoming);
             }

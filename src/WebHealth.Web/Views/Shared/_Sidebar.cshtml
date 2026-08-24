@@ -72,16 +72,4 @@
             </ul>
         </div>
     }
-
-    <div class="app-sidebar__support">
-        <span class="app-sidebar__support-icon">@await Html.PartialAsync("_Icon", "diagnostics")</span>
-        <p class="app-sidebar__support-title"><span class="app-sidebar__support-name">System status</span></p>
-        <span class="app-sidebar__tooltip" aria-hidden="true">System status</span>
-        <p class="app-sidebar__support-state">
-            <span class="app-sidebar__support-dot" aria-hidden="true"></span>
-            <span>Application responding</span>
-        </p>
-        <p class="app-sidebar__support-text">Signed in and served by this instance.</p>
-        <a class="app-sidebar__support-link" href="/health/ready">Runtime readiness</a>
-    </div>
 </nav>
