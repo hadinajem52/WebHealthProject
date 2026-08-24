@@ -2074,7 +2074,8 @@ code,
     color: var(--color-teal-300);
 }
 
-.card__status[data-status="warning"] svg {
+.card__status[data-status="warning"] svg,
+.card__status[data-status="high"] svg {
     color: var(--status-warning);
 }
 

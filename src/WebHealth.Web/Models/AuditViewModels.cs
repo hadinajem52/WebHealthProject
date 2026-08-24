@@ -59,10 +59,29 @@ public static class AuditEventDisplay
             : char.ToUpperInvariant(outcome[0]) + outcome[1..];
 
     /// <summary>
+    /// The verb half of an action key is stored as a run-together lowercase word (BR: the writer
+    /// lowercases the enum name, e.g. <c>FailureRecorded</c> becomes <c>failurerecorded</c>), so
+    /// the word boundary can't be recovered from casing. This maps the compound verbs back to a
+    /// spaced form; anything not listed is already a single word.
+    /// </summary>
+    private static readonly Dictionary<string, string> CompoundVerbSpacing = new(StringComparer.Ordinal)
+    {
+        ["failurerecorded"] = "failure recorded",
+        ["recoverystarted"] = "recovery started",
+        ["recoveryinterrupted"] = "recovery interrupted",
+        ["inprogress"] = "in progress",
+        ["noteadded"] = "note added",
+        ["forceclosed"] = "force closed",
+        ["schedulepaused"] = "schedule paused",
+        ["scheduleresumed"] = "schedule resumed"
+    };
+
+    /// <summary>
     /// A dotted key is how the action is stored and correlated; the spaced form is how it reads.
     /// Both are shown, so neither the reader nor a support request has to translate.
     /// </summary>
-    public static string ActionName(string action) => action.Replace('.', ' ');
+    public static string ActionName(string action) =>
+        string.Join(' ', action.Split('.').Select(part => CompoundVerbSpacing.GetValueOrDefault(part, part)));
 
     /// <summary>
     /// What opening the disclosure will show, said before it is opened. "View values" gave no

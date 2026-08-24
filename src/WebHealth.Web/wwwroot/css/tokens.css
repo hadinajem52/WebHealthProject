@@ -151,8 +151,6 @@
     --sidebar-icon: var(--color-teal-300);
     --sidebar-icon-active: var(--color-white);
     --sidebar-icon-active-surface: var(--color-teal-300);
-    --sidebar-support-surface: var(--color-teal-600);
-    --sidebar-support-text: var(--color-white);
     --sidebar-divider: var(--divider-line);
 
     --focus-ring-color: var(--color-teal-300);

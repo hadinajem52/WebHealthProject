@@ -9,6 +9,7 @@
     var isActive = incident.Status is "Open" or "Acknowledged" or "InProgress" or "MonitoringRecovery";
 
     var incidentStatus = StatusBadges.ForIncidentStatus(incident.Status);
+    var severityStatus = StatusBadges.ForSeverity(incident.Severity);
 
     // Each flag reproduces exactly the condition the form was rendered under before, so
     // moving the controls into a menu and a separate card cannot widen what anyone can do.
@@ -45,12 +46,11 @@
         <div class="page-intro">
             <div>
                 <h2 class="card__title target-url">@incident.EndpointDisplayUrl</h2>
-                <p class="card__status" data-status="@incidentStatus">
+                <p class="card__status" data-status="@severityStatus">
                     @await Html.PartialAsync("_Icon", StatusIcon(incidentStatus))
                     <span>@IssueDisplay.Describe(incident.IssueKey) &middot; @IncidentStatusDisplay.Name(incident.Status)</span>
                 </p>
                 <p class="card__subtitle">@incident.ClientName / @incident.WebsiteName / @incident.EnvironmentName</p>
-                <p class="card__subtitle code">@incident.IssueKey</p>
             </div>
             <div class="form-actions">
                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(incident.Severity), incident.Severity))
@@ -335,7 +335,7 @@
                                 <td data-label="Detail">
                                     @if (entry.EventType == "StatusChanged")
                                     {
-                                        @:@entry.FromStatus → @entry.ToStatus
+                                        @:@IncidentStatusDisplay.Name(entry.FromStatus ?? "") → @IncidentStatusDisplay.Name(entry.ToStatus ?? "")
                                     }
                                     else if (entry.EventType == "Reassigned")
                                     {
