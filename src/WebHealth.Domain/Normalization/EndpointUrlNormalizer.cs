@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
 namespace WebHealth.Domain.Normalization;
@@ -71,6 +71,11 @@ public static class EndpointUrlNormalizer
         if (uri.Host.Contains('%', StringComparison.Ordinal))
         {
             errors.Add("Endpoint hosts cannot contain an IPv6 zone identifier.");
+        }
+
+        if (uri.Host.Length > 0 && !UrlTextNormalization.HasReadableHost(uri))
+        {
+            errors.Add("Enter a URL whose host is a valid internationalized domain name.");
         }
 
         return errors;

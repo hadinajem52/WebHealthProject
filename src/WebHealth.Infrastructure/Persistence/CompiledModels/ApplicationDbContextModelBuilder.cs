@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("3dc98cea-f296-4e46-bd3c-76c7dc252985"), entityTypeCount: 50)
+            : base(skipDetectChanges: false, modelId: new Guid("071cbb19-01db-464e-bd5b-ad1f79ad4d7e"), entityTypeCount: 50)
         {
         }
 

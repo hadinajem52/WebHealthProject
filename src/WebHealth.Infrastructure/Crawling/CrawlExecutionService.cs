@@ -40,7 +40,7 @@ internal sealed class CrawlExecutionService(
     TimeProvider timeProvider,
     ILogger<CrawlExecutionService> logger) : ICrawlExecutionService
 {
-    public async Task<CrawlRunOutcome> ExecuteAsync(
+    public async Task<CrawlRunOutcome?> ExecuteAsync(
         CrawlRunRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -54,17 +54,30 @@ internal sealed class CrawlExecutionService(
                 CrawlRunSettings.From(request), timeProvider.GetUtcNow()),
             cancellationToken);
 
+        // Nothing below this line may reach the network until the run is ours. Hangfire redelivers
+        // a job whose worker died, and a second delivery that crawled would fetch the whole site
+        // again — the automatic retry this queue switched off, arriving by another route.
+        var executionClaimId = Guid.NewGuid();
+        if (!await sink.TryClaimRunAsync(request.RunId, executionClaimId, cancellationToken))
+        {
+            logger.LogWarning(
+                "Crawl run was already claimed or no longer in flight, so this delivery performed "
+                + "nothing. CrawlRunId={CrawlRunId} EndpointId={EndpointId}",
+                request.RunId, request.EndpointId);
+            return null;
+        }
+
         var scope = BuildScope(request, out var seedErrors);
         var errors = seedErrors.Concat(scope?.Validate() ?? []).ToArray();
         if (errors.Length > 0)
         {
             var invalid = CrawlRunOutcome.Invalid(request.RunId, errors);
-            await sink.RecordRunOutcomeAsync(invalid, cancellationToken);
+            await sink.RecordRunOutcomeAsync(invalid, executionClaimId, cancellationToken);
             return invalid;
         }
 
         var run = new CrawlRunExecution(
-            request, scope!, options, transportOptions.UserAgent, timeProvider,
+            request, scope!, options, transportOptions.UserAgent, timeProvider, executionClaimId,
             new(transport, linkExtractor, robotsReader, sink, targetAuthorizer, requestBudget,
                 rateLimiter, logger));
         return await run.ExecuteAsync(cancellationToken);
@@ -129,6 +142,9 @@ internal sealed class CrawlRunExecution
     private readonly DateTimeOffset _deadline;
     private readonly string _userAgent;
 
+    /// <summary>What this execution owns the run by. The finish is refused without it.</summary>
+    private readonly Guid _executionClaimId;
+
     /// <summary>Guards the frontier, the ledger and the bookkeeping they are advanced with.</summary>
     private readonly Lock _lock = new();
 
@@ -164,6 +180,7 @@ internal sealed class CrawlRunExecution
         CrawlSchedulingOptions options,
         string userAgent,
         TimeProvider timeProvider,
+        Guid executionClaimId,
         CrawlDependencies dependencies)
     {
         ArgumentNullException.ThrowIfNull(scope);
@@ -171,6 +188,7 @@ internal sealed class CrawlRunExecution
         _options = options;
         _dependencies = dependencies;
         _timeProvider = timeProvider;
+        _executionClaimId = executionClaimId;
         _frontier = new(scope, request.Limits);
         _deadline = timeProvider.GetUtcNow() + options.MaxDuration;
         _userAgent = userAgent;
@@ -242,7 +260,19 @@ internal sealed class CrawlRunExecution
 
         var outcome = Summarize(
             cancelled || cancellationToken.IsCancellationRequested, failure, durationExceeded);
-        await _dependencies.Sink.RecordRunOutcomeAsync(outcome, CancellationToken.None);
+
+        // A finish this execution no longer owns is dropped, not forced. It means the run was
+        // closed while this worker was still going — the reconciliation sweep judging it abandoned
+        // — and overwriting that would report a retired run as completed.
+        if (!await _dependencies.Sink.RecordRunOutcomeAsync(
+            outcome, _executionClaimId, CancellationToken.None))
+        {
+            _dependencies.Logger.LogWarning(
+                "Crawl run outcome was dropped because the run had already been closed by "
+                + "reconciliation. CrawlRunId={CrawlRunId} EndpointId={EndpointId}",
+                _request.RunId, _request.EndpointId);
+        }
+
         return outcome;
     }
 

@@ -173,8 +173,10 @@ public static class DependencyInjection
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
         services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
+        services.AddScoped<ICrawlReconciler, CrawlReconciler>();
         services.AddScoped<ICrawlExecutionService, CrawlExecutionService>();
         services.AddScoped<CrawlRunJob>();
+        services.AddScoped<CrawlReconciliationJob>();
         // Only when a crawl worker exists. HangfireCrawlRunQueue needs IBackgroundJobClient, which
         // is registered only when some feature enables Hangfire at all; registering it
         // unconditionally makes resolving ICrawlRunner throw on an instance with everything off,

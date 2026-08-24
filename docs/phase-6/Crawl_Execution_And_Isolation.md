@@ -100,6 +100,48 @@ The final flush still runs on the cancellation path, so a target that was discov
 reached is recorded as `Unknown` with skip reason `RunStopped` rather than vanishing. It is
 deliberately not `Healthy` and deliberately not absent — "nobody looked at this" has to be visible.
 
+### 4.1 A process that dies records no outcome at all
+
+Cancellation is graceful and writes an outcome. A process that dies does not: `RecordRunOutcomeAsync`
+runs from inside `CrawlRunJob`, so a crash or a restart mid-crawl leaves the row `Running` with no
+finish time, for ever. That is worse than it first looks. The page goes on reporting a crawl in
+progress against a process that is gone, and `ux_crawl_run_active` refuses every later run for that
+endpoint — while the page, seeing an active run, replaces the Run crawl control with "Crawl in
+progress". The only cleanup was reached through that control, so the state that needed repairing was
+exactly the state that hid the repair.
+
+`CrawlReconciliationJob` closes that loop. It runs every fifteen minutes on the crawl queue and calls
+`ICrawlReconciler.RetireAbandonedRunsAsync`, which marks any run still `Running` past `MaxDuration` plus
+a fifteen-minute margin as `Failed`, with a reason saying the process performing it is gone. Failed
+rather than deleted: the run happened, and whatever links it recorded before dying stay attached to
+it. Opening a run still sweeps that endpoint first, so a manual request is never refused by a run
+that is already dead and does not have to wait for the recurring pass.
+
+The margin is what keeps a slow crawl safe. A run is only retired well past the duration limit it
+would have stopped itself at, so the cadence decides how long a page keeps reporting a crawl that has
+already gone — not how eagerly a live crawl is cut short.
+
+The sweep runs on the crawl queue's own workers, so it waits behind crawls already running there.
+That is the accepted bound of this recovery: it repairs runs whose process is gone, and after a
+restart nothing is holding a worker. A crawl that is hung but still alive is not repaired until its
+process ends.
+
+### 4.2 The execution claim
+
+Retiring a row does not stop a worker, and Hangfire redelivers a job whose process died —
+`AutomaticRetry(Attempts = 0)` governs a job that *failed*, not one whose worker vanished. Two things
+follow that section 4.1 alone does not survive: a redelivered job would crawl the whole site a second
+time, which is the automatic retry this queue switched off arriving by another route; and a worker
+that outlived the sweep would write `Completed` over the row reconciliation had already closed,
+leaving a history that contradicts what happened.
+
+`crawl_run.execution_claim_id` fences both. Before an execution touches the network it takes the run
+in one conditional UPDATE — claimed only while the row is `Running` and unclaimed — and a delivery
+that loses that race performs nothing at all. The finish is the same shape: one UPDATE conditional on
+the row still being `Running` and still carrying this execution's claim, so a late outcome is dropped
+rather than applied. It is a claim rather than a lease because a crawl has no legitimate second
+attempt; the endpoint is released by the sweep closing the row, not by the claim expiring.
+
 ## 5. Source-target reporting (BR-L07)
 
 A target is **fetched once** — that is 6.5's revisit rule — but it may be **linked from many pages**,
@@ -185,6 +227,8 @@ payload, where nothing validates them.
 | Only a 2xx response is a page to follow | `CrawlRunExecution.ShouldFollow` | `CrawlExecutionTests` |
 | A refused href is recorded, not dropped | `CrawlRunExecution.RecordRejectedHref` | `CrawlExecutionTests` |
 | BR-L10 cancellation preserves findings | `CrawlRun`, `CrawlLinkLedger.Flush` | `CrawlExecutionTests`, `CrawlLinkLedgerTests` |
+| An abandoned run is retired, a slow one is not (section 4.1) | `CrawlReconciliationJob`, `CrawlReconciler.RetireAbandonedRunsAsync` | `CrawlSchemaAssertions.VerifyAbandonedRunsAreRetiredAsync` |
+| A redelivered job performs nothing, and a late outcome is dropped (section 4.2) | `CrawlResultSink.TryClaimRunAsync`, `CrawlResultSink.RecordRunOutcomeAsync` | `CrawlSchemaAssertions.VerifyExecutionClaimFencesARetiredRunAsync` |
 | Isolation (section 1) | queue, work kind, request budget | `CrawlIsolationTests` |
 
 AC-08's own sentence — "a crawl stays within scope, respects limits and reports a broken internal

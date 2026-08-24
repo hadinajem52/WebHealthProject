@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.Monitoring;
@@ -163,6 +164,7 @@ internal static class CrawlTestHarness
             NullLogger<CrawlExecutionService>.Instance);
 
         var outcome = await service.ExecuteAsync(request, cancellationToken);
+        outcome.Should().NotBeNull("the harness's sink grants the claim, so the run is performed");
         return (outcome, sink);
     }
 

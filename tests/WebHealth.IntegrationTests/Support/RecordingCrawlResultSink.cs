@@ -19,6 +19,12 @@ internal sealed class RecordingCrawlResultSink : ICrawlResultSink
 
     public CrawlRunStart? Start { get; private set; }
 
+    /// <summary>The claim the execution took, so a test can see the run was owned before it ran.</summary>
+    public Guid? ExecutionClaimId { get; private set; }
+
+    /// <summary>Set to refuse the claim, as a redelivered job's sink would.</summary>
+    public bool RefuseClaim { get; set; }
+
     public Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default)
     {
         Start = start;
@@ -31,9 +37,23 @@ internal sealed class RecordingCrawlResultSink : ICrawlResultSink
         return Task.CompletedTask;
     }
 
-    public Task RecordRunOutcomeAsync(CrawlRunOutcome outcome, CancellationToken cancellationToken = default)
+    public Task<bool> TryClaimRunAsync(
+        Guid runId,
+        Guid executionClaimId,
+        CancellationToken cancellationToken = default)
     {
+        if (RefuseClaim) return Task.FromResult(false);
+        ExecutionClaimId = executionClaimId;
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> RecordRunOutcomeAsync(
+        CrawlRunOutcome outcome,
+        Guid executionClaimId,
+        CancellationToken cancellationToken = default)
+    {
+        if (executionClaimId != ExecutionClaimId) return Task.FromResult(false);
         Outcome = outcome;
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 }

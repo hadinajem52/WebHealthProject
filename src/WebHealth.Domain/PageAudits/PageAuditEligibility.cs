@@ -1,5 +1,6 @@
-using System.Net;
+﻿using System.Net;
 using WebHealth.Domain.Monitoring;
+using WebHealth.Domain.Normalization;
 
 namespace WebHealth.Domain.PageAudits;
 
@@ -128,11 +129,12 @@ public static class PageAuditEligibility
     {
         // IdnHost rather than Host: a unicode host and its punycode form are the same host, and
         // only one of them would match the suffix list.
-        var host = parsed.IdnHost.TrimEnd('.').ToLowerInvariant();
-        if (host.Length == 0)
+        if (!UrlTextNormalization.HasReadableHost(parsed))
         {
             return PageAuditEligibilityResult.Rejected(PageAuditIneligibilityReasons.HostNotPublic);
         }
+
+        var host = parsed.IdnHost.TrimEnd('.').ToLowerInvariant();
 
         if (IPAddress.TryParse(parsed.Host.Trim('[', ']'), out var literal))
         {

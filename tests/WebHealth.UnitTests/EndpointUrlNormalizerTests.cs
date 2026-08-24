@@ -11,6 +11,7 @@ public sealed class EndpointUrlNormalizerTests
     [InlineData("ftp://example.com/file")]
     [InlineData("https://user:secret@example.com/")]
     [InlineData("https://example.com/path#section")]
+    [InlineData("https://ex�ample.com/")]
     public void Normalize_RejectsUnsupportedOrAmbiguousInput(string value)
     {
         EndpointUrlNormalizer.Normalize(value).Succeeded.Should().BeFalse();

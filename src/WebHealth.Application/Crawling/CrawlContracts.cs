@@ -131,14 +131,43 @@ public interface ICrawlResultSink
 {
     Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Takes ownership of a run for one execution, answering false when somebody else already
+    /// holds it or the run is no longer in flight.
+    /// </summary>
+    /// <remarks>
+    /// Hangfire redelivers a job whose process died mid-execution, and no retry setting prevents
+    /// that: <c>AutomaticRetry</c> governs a job that failed, not one whose worker vanished. A
+    /// redelivered crawl would fetch the whole site a second time and then overwrite the outcome
+    /// the reconciliation sweep had already recorded. The claim is what makes an execution
+    /// exactly-once: it is taken and never re-taken, so the second delivery of a run finds it
+    /// owned and does nothing.
+    /// </remarks>
+    Task<bool> TryClaimRunAsync(
+        Guid runId,
+        Guid executionClaimId,
+        CancellationToken cancellationToken = default);
+
     Task RecordLinkAsync(CrawlLinkRecord record, CancellationToken cancellationToken = default);
 
-    Task RecordRunOutcomeAsync(CrawlRunOutcome outcome, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Finalises the run this execution owns, answering false when the row was closed by somebody
+    /// else first -- which is what the reconciliation sweep does to a run it judged abandoned.
+    /// A finish written over that would report a run as completed after it had been retired.
+    /// </summary>
+    Task<bool> RecordRunOutcomeAsync(
+        CrawlRunOutcome outcome,
+        Guid executionClaimId,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ICrawlExecutionService
 {
-    Task<CrawlRunOutcome> ExecuteAsync(
+    /// <summary>
+    /// Performs a run, or answers null when the run is not this execution's to perform: a job
+    /// redelivered after its process died finds the run already claimed and must not crawl again.
+    /// </summary>
+    Task<CrawlRunOutcome?> ExecuteAsync(
         CrawlRunRequest request,
         CancellationToken cancellationToken = default);
 }
@@ -356,6 +385,37 @@ public interface ICrawlRunner
         Guid endpointId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Repairs crawl rows nobody owns any more. Separate from <see cref="ICrawlRunner" /> because it
+/// is not a request on anyone's behalf: the runner opens one authorized crawl for one endpoint,
+/// and this closes runs across every endpoint with no access context at all. One contract carrying
+/// both would offer a user-facing service a repair capability that reaches the whole table.
+/// </summary>
+public interface ICrawlReconciler
+{
+    /// <summary>
+    /// Closes every run left in flight by a process that died before it could record an outcome,
+    /// and answers how many it closed.
+    /// </summary>
+    /// <remarks>
+    /// Recovery must not depend on somebody pressing Run crawl. That control is exactly what the
+    /// page hides while a run is active, so an abandoned run would otherwise leave its endpoint
+    /// with no way back — the page reporting a crawl in progress, and the only cleanup behind a
+    /// button that state removes.
+    /// <para>
+    /// Retiring a run does not stop the process performing it, so a run that was merely slow can
+    /// still be alive after this closes its row. That is safe rather than merely tolerable: the
+    /// execution claim makes the finish conditional on the row still being in flight, so a late
+    /// worker's outcome is dropped instead of reopening a run this closed.
+    /// </para>
+    /// </remarks>
+    Task<int> RetireAbandonedRunsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>The same sweep narrowed to one endpoint, so opening a run is never refused by a
+    /// run whose process is already gone.</summary>
+    Task<int> RetireAbandonedRunsAsync(Guid endpointId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

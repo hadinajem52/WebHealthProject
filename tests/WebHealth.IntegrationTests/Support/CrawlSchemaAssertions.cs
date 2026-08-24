@@ -37,6 +37,134 @@ internal static class CrawlSchemaAssertions
         await VerifyOneActiveRunPerEndpointAsync(connectionString, endpointId);
         await VerifyResultsCascadeWithTheirRunAsync(connectionString, endpointId);
         await VerifyReportingIndexServesTheFilterAsync(connectionString, endpointId);
+        await VerifyAbandonedRunsAreRetiredAsync(connectionString, endpointId);
+        await VerifyExecutionClaimFencesARetiredRunAsync(connectionString, endpointId);
+    }
+
+    /// <summary>
+    /// The other half of retiring a run: the worker the sweep gave up on may still be alive.
+    /// <para>
+    /// Hangfire redelivers a job whose process died — <c>AutomaticRetry(0)</c> governs a job that
+    /// failed, not one whose worker vanished — so without a claim a second delivery would fetch the
+    /// whole site again and then write Completed over the row reconciliation had already closed.
+    /// Both halves are asserted here because either one alone still leaves a run whose recorded
+    /// history contradicts what happened.
+    /// </para>
+    /// </summary>
+    private static async Task VerifyExecutionClaimFencesARetiredRunAsync(
+        string connectionString,
+        Guid endpointId)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+
+        var runId = await InsertRunningRunAsync(connectionString, endpointId, TimeSpan.FromHours(6));
+        await using var scope = services.CreateAsyncScope();
+        var sink = scope.ServiceProvider.GetRequiredService<ICrawlResultSink>();
+
+        var owner = Guid.NewGuid();
+        (await sink.TryClaimRunAsync(runId, owner)).Should().BeTrue(
+            "the first delivery of a job finds the run unclaimed");
+        (await sink.TryClaimRunAsync(runId, Guid.NewGuid())).Should().BeFalse(
+            "a redelivered job must not crawl a site the first delivery is already crawling");
+
+        await RetireAbandonedRunsAsync(services);
+
+        (await sink.RecordRunOutcomeAsync(new(
+            runId, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+            9, 9, false, CrawlOverrideRefusals.NotRequested, []), owner)).Should().BeFalse(
+            "a worker that outlived the sweep must not reopen the run it closed");
+
+        var retired = await ReadRunAsync(connectionString, runId);
+        retired.Status.Should().Be(CrawlRunStatuses.Failed,
+            "the retirement stands: the late outcome was dropped, not applied");
+        retired.FailureReason.Should().NotBeNullOrWhiteSpace();
+
+        (await sink.TryClaimRunAsync(runId, Guid.NewGuid())).Should().BeFalse(
+            "a run that is no longer in flight is nobody's to perform");
+
+        await DeleteRunsAsync(connectionString, runId);
+    }
+
+    /// <summary>
+    /// A crawl records its outcome from inside its own job, so a process that dies mid-run leaves
+    /// the row Running for ever: the page goes on reporting a crawl in progress, and the endpoint's
+    /// active-run index refuses every later request. The sweep is what closes it, and it must not
+    /// close a run that is merely slow.
+    /// </summary>
+    private static async Task VerifyAbandonedRunsAreRetiredAsync(
+        string connectionString,
+        Guid endpointId)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+
+        // Well past MaxDuration plus the sweep's margin, so the run is abandoned by any reading of
+        // the clock rather than by a boundary this test would have to keep in step with.
+        var abandoned = await InsertRunningRunAsync(connectionString, endpointId, TimeSpan.FromHours(6));
+        await RetireAbandonedRunsAsync(services);
+        var retired = await ReadRunAsync(connectionString, abandoned);
+
+        retired.Status.Should().Be(CrawlRunStatuses.Failed,
+            "a run whose process is gone must stop reporting itself as in flight");
+        retired.StopReason.Should().Be(CrawlStopReasons.Failed);
+        retired.FinishedAt.Should().NotBeNull(
+            "ck_crawl_run_finished_when_terminal pairs a terminal status with a finish time");
+        retired.FailureReason.Should().NotBeNullOrWhiteSpace(
+            "the reader is owed why the run was closed without an outcome of its own");
+
+        // Only possible because the row above is no longer Running: ux_crawl_run_active permits one
+        // active run per endpoint, which is precisely what an abandoned run holds hostage.
+        var live = await InsertRunningRunAsync(connectionString, endpointId, TimeSpan.Zero);
+        await RetireAbandonedRunsAsync(services);
+        (await ReadRunAsync(connectionString, live)).Status.Should().Be(CrawlRunStatuses.Running,
+            "a crawl that has only just started is slow, not abandoned");
+
+        await DeleteRunsAsync(connectionString, abandoned, live);
+    }
+
+    private static async Task RetireAbandonedRunsAsync(IServiceProvider services)
+    {
+        await using var scope = services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<ICrawlReconciler>().RetireAbandonedRunsAsync();
+    }
+
+    private static async Task<(string Status, string StopReason, DateTimeOffset? FinishedAt, string? FailureReason)>
+        ReadRunAsync(string connectionString, Guid runId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT status, stop_reason, finished_at, failure_reason
+            FROM web_health.crawl_run WHERE id = @id;
+            """, connection);
+        command.Parameters.AddWithValue("id", runId);
+        await using var reader = await command.ExecuteReaderAsync();
+        (await reader.ReadAsync()).Should().BeTrue($"crawl run {runId} should still exist");
+        return (
+            reader.GetString(0),
+            reader.GetString(1),
+            await reader.IsDBNullAsync(2) ? null : reader.GetFieldValue<DateTimeOffset>(2),
+            await reader.IsDBNullAsync(3) ? null : reader.GetString(3));
+    }
+
+    private static async Task DeleteRunsAsync(string connectionString, params Guid[] runIds)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "DELETE FROM web_health.crawl_run WHERE id = ANY(@ids);", connection);
+        command.Parameters.AddWithValue("ids", runIds);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task VerifyColumnsAsync(string connectionString)
@@ -46,7 +174,7 @@ internal static class CrawlSchemaAssertions
             "links_recorded", "robots_override_granted", "robots_override_refused_because",
             "allowed_hosts", "allowed_path_prefixes", "query_policy", "max_pages", "max_depth",
             "check_external_links", "failure_reason", "coverage_limited", "started_at",
-            "finished_at");
+            "finished_at", "execution_claim_id");
 
         (await ColumnsOfAsync(connectionString, "crawl_link_result")).Should().BeEquivalentTo(
             "id", "run_id", "source_url", "source_url_hash", "target_url", "target_url_hash",
@@ -292,7 +420,10 @@ internal static class CrawlSchemaAssertions
         return runId;
     }
 
-    private static async Task<Guid> InsertRunningRunAsync(string connectionString, Guid endpointId)
+    private static async Task<Guid> InsertRunningRunAsync(
+        string connectionString,
+        Guid endpointId,
+        TimeSpan startedAgo = default)
     {
         var runId = Guid.CreateVersion7();
         await using var connection = new NpgsqlConnection(connectionString);
@@ -304,11 +435,12 @@ internal static class CrawlSchemaAssertions
                  robots_override_granted, robots_override_refused_because, query_policy,
                  max_pages, max_depth, check_external_links, started_at, finished_at)
             VALUES (@id, @endpoint, 'Running', 'FrontierExhausted', @seeds, 0, 0,
-                    false, 'NotRequested', 'Canonicalize', 1000, 5, false, now(), NULL);
+                    false, 'NotRequested', 'Canonicalize', 1000, 5, false, now() - @startedAgo, NULL);
             """, connection);
         command.Parameters.AddWithValue("id", runId);
         command.Parameters.AddWithValue("endpoint", endpointId);
         command.Parameters.AddWithValue("seeds", "https://active.test/");
+        command.Parameters.AddWithValue("startedAgo", startedAgo);
         await command.ExecuteNonQueryAsync();
         return runId;
     }
@@ -575,7 +707,7 @@ internal static class CrawlSchemaAssertions
                 CrawlSkipReasons.RobotsDisallowed, null));
 
             // Zero pages fetched against one link recorded — the shape that reproduced the defect.
-            await sink.RecordRunOutcomeAsync(new(
+            await FinishRunAsync(sink, refusedRun, new(
                 refusedRun, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
                 0, 1, false, CrawlOverrideRefusals.NotRequested, []));
         }
@@ -625,7 +757,7 @@ internal static class CrawlSchemaAssertions
                 limitedRun, "https://partial.test/a", "https://partial.test/ok", true, 1,
                 CrawlLinkClassifications.Healthy, 200, 0, null, null, 8));
 
-            await sink.RecordRunOutcomeAsync(new(
+            await FinishRunAsync(sink, limitedRun, new(
                 limitedRun, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
                 4, 1, false, CrawlOverrideRefusals.NotRequested, [])
             {
@@ -749,8 +881,25 @@ internal static class CrawlSchemaAssertions
                 runId, source, target, true, 1, classification, null, 0, null, null, 8));
         }
 
-        await sink.RecordRunOutcomeAsync(new(
+        await FinishRunAsync(sink, runId, new(
             runId, CrawlRunStatuses.Completed, stopReason,
             links.Length, links.Length, false, CrawlOverrideRefusals.NotRequested, []));
+    }
+
+    /// <summary>
+    /// Claims the run and finishes it, the way an execution does. A test that wrote an outcome
+    /// without claiming would be exercising a path the application does not have: the finish is
+    /// conditional on ownership, so an unclaimed write is dropped.
+    /// </summary>
+    private static async Task FinishRunAsync(
+        ICrawlResultSink sink,
+        Guid runId,
+        CrawlRunOutcome outcome)
+    {
+        var executionClaimId = Guid.NewGuid();
+        (await sink.TryClaimRunAsync(runId, executionClaimId)).Should().BeTrue(
+            "the run was opened by this test and nothing else can have claimed it");
+        (await sink.RecordRunOutcomeAsync(outcome, executionClaimId)).Should().BeTrue(
+            "a run this execution claimed and nobody closed accepts its outcome");
     }
 }

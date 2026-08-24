@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Crawling.CrawlRun",
                 typeof(CrawlRun),
                 baseEntityType,
-                propertyCount: 19,
+                propertyCount: 20,
                 navigationCount: 2,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 2,
@@ -87,6 +87,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
             endpointId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             endpointId.AddAnnotation("Relational:ColumnName", "endpoint_id");
+
+            var executionClaimId = runtimeEntityType.AddProperty(
+                "ExecutionClaimId",
+                typeof(Guid?),
+                propertyInfo: typeof(CrawlRun).GetProperty("ExecutionClaimId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CrawlRun).GetField("<ExecutionClaimId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            executionClaimId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            executionClaimId.AddAnnotation("Relational:ColumnName", "execution_claim_id");
 
             var failureReason = runtimeEntityType.AddProperty(
                 "FailureReason",

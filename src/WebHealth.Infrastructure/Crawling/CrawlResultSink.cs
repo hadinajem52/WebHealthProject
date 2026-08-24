@@ -88,6 +88,29 @@ internal sealed class CrawlResultSink(
         }
     }
 
+    /// <summary>
+    /// One UPDATE, so two deliveries of the same job cannot both read "unclaimed" and both crawl.
+    /// The claim is never taken from a run that already carries one: this is a claim rather than a
+    /// lease because a crawl has no legitimate second attempt -- re-running it would repeat every
+    /// request against a site we do not own, which is exactly what this phase's limits prevent.
+    /// The reconciliation sweep is what releases the endpoint, by closing the row.
+    /// </summary>
+    public async Task<bool> TryClaimRunAsync(
+        Guid runId,
+        Guid executionClaimId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var claimed = await dbContext.CrawlRuns
+            .Where(run => run.Id == runId
+                && run.Status == CrawlRunStatuses.Running
+                && run.ExecutionClaimId == null)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(run => run.ExecutionClaimId, executionClaimId),
+                cancellationToken);
+        return claimed == 1;
+    }
+
     /// <summary>An empty scope list means "derived from the seeds", which is stored as null.</summary>
     private static string? Scope(IReadOnlyList<string> values) =>
         values.Count == 0
@@ -139,37 +162,51 @@ internal sealed class CrawlResultSink(
         }
     }
 
-    public async Task RecordRunOutcomeAsync(
+    /// <summary>
+    /// Written as one conditional UPDATE rather than read-modify-save. The condition is the whole
+    /// point: a run this execution no longer owns, or one the reconciliation sweep has already
+    /// closed, must not be reopened as Completed by a worker that took longer than the sweep was
+    /// willing to wait.
+    /// </summary>
+    public async Task<bool> RecordRunOutcomeAsync(
         CrawlRunOutcome outcome,
+        Guid executionClaimId,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(outcome);
         await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var run = await dbContext.CrawlRuns
-            .SingleOrDefaultAsync(item => item.Id == outcome.RunId, cancellationToken);
-        if (run is null) return;
 
-        run.Status = outcome.Status;
-        run.StopReason = outcome.StopReason;
-        run.PagesFetched = outcome.PagesFetched;
-        run.CoverageLimited = outcome.CoverageLimited;
-        run.LinksRecorded = outcome.LinksRecorded;
-        run.RobotsOverrideGranted = outcome.RobotsOverrideGranted;
-        run.RobotsOverrideRefusedBecause = outcome.RobotsOverrideGranted
+        var refusedBecause = outcome.RobotsOverrideGranted
             ? null
             : outcome.RobotsOverrideRefusedBecause ?? CrawlOverrideRefusals.NotRequested;
         // Configuration errors first: they are the reason the run never really started, and they
         // are written for a reader. The exception detail is the fallback, and the bare sentence is
         // the last resort -- a failure with no account of itself at all.
-        run.FailureReason = outcome.Status == CrawlRunStatuses.Failed
+        var failureReason = outcome.Status == CrawlRunStatuses.Failed
             ? Bounded(
                 outcome.ValidationErrors.Count > 0
                     ? string.Join(" ", outcome.ValidationErrors)
                     : outcome.FailureDetail ?? "The crawl stopped on an unexpected error.",
                 CrawlRunConfiguration.MaxFailureReasonLength)
             : null;
-        run.FinishedAt = timeProvider.GetUtcNow();
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var finishedAt = timeProvider.GetUtcNow();
+
+        var written = await dbContext.CrawlRuns
+            .Where(run => run.Id == outcome.RunId
+                && run.Status == CrawlRunStatuses.Running
+                && run.ExecutionClaimId == executionClaimId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(run => run.Status, outcome.Status)
+                .SetProperty(run => run.StopReason, outcome.StopReason)
+                .SetProperty(run => run.PagesFetched, outcome.PagesFetched)
+                .SetProperty(run => run.CoverageLimited, outcome.CoverageLimited)
+                .SetProperty(run => run.LinksRecorded, outcome.LinksRecorded)
+                .SetProperty(run => run.RobotsOverrideGranted, outcome.RobotsOverrideGranted)
+                .SetProperty(run => run.RobotsOverrideRefusedBecause, refusedBecause)
+                .SetProperty(run => run.FailureReason, failureReason)
+                .SetProperty(run => run.FinishedAt, finishedAt),
+                cancellationToken);
+        return written == 1;
     }
 
     /// <summary>SHA-256 of the canonical URL: identity, where the text beside it is evidence.</summary>

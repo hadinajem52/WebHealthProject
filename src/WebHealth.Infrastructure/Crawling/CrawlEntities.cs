@@ -63,6 +63,15 @@ public sealed class CrawlRun
     /// unfinished run rather than one that looks complete.</summary>
     public DateTimeOffset? FinishedAt { get; set; }
 
+    /// <summary>
+    /// Which execution owns this run. Set once, by the worker that took it, and never reset: a
+    /// job redelivered after its process died finds the run already owned and performs nothing,
+    /// which is how the phase's "a crawl is never retried automatically" survives a crash. The
+    /// finish is conditional on it too, so a worker that outlived the reconciliation sweep cannot
+    /// reopen a run the sweep already closed.
+    /// </summary>
+    public Guid? ExecutionClaimId { get; set; }
+
     public Endpoint Endpoint { get; set; } = null!;
     public ICollection<CrawlLinkResult> Links { get; set; } = [];
 }

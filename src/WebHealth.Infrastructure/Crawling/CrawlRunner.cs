@@ -18,9 +18,9 @@ namespace WebHealth.Infrastructure.Crawling;
 /// <para>
 /// The run row is committed before the job is enqueued, never the other way round. A job that
 /// arrived before its row existed would find nothing to do and vanish; a row with no job is
-/// visible. The failure that survives is the one that leaves evidence — and because there is no
-/// reconciliation sweep for crawls, a run that could not be enqueued is retired here rather than
-/// left to hold its endpoint's active slot forever.
+/// visible. The failure that survives is the one that leaves evidence — and a run that could not
+/// be enqueued is retired here rather than left for the reconciliation sweep, which by design
+/// waits until a run is well past its time limit before touching it.
 /// </para>
 /// <para>
 /// Scope is derived from the seed rather than configured: the seed is the endpoint's own
@@ -33,20 +33,13 @@ namespace WebHealth.Infrastructure.Crawling;
 public sealed class CrawlRunner(
     ApplicationDbContext dbContext,
     ICrawlResultSink sink,
+    ICrawlReconciler reconciler,
     ITargetAuthorizationService targetAuthorization,
     CrawlSchedulingOptions schedulingOptions,
     TimeProvider timeProvider,
     ILogger<CrawlRunner> logger,
     ICrawlRunQueue? queue = null) : ICrawlRunner
 {
-    /// <summary>
-    /// How long a run may sit in Running before it is treated as abandoned. A crawl stops itself
-    /// at MaxDuration, so anything still Running well past that belongs to a process that died --
-    /// and without this, one crash would block its endpoint from ever being crawled again, because
-    /// ux_crawl_run_active would refuse every later request.
-    /// </summary>
-    private TimeSpan StaleAfter => schedulingOptions.MaxDuration + TimeSpan.FromMinutes(15);
-
     public bool CanQueue => schedulingOptions.Enabled && queue is not null;
 
     public async Task<CrawlManualResult> QueueManualAsync(
@@ -92,7 +85,9 @@ public sealed class CrawlRunner(
                 "The endpoint is not active, or its target authorization has lapsed.");
         }
 
-        await RetireAbandonedRunsAsync(endpointId, now, cancellationToken);
+        // Before the active-run check, so a caller is never refused by a run whose process is
+        // already gone without waiting for the recurring sweep.
+        await reconciler.RetireAbandonedRunsAsync(endpointId, cancellationToken);
 
         var active = await FindActiveRunAsync(endpointId, cancellationToken);
         if (active is { } running)
@@ -162,40 +157,6 @@ public sealed class CrawlRunner(
             "Crawl run queued by request. CrawlRunId={CrawlRunId} EndpointId={EndpointId}",
             runId, endpointId);
         return CrawlManualResult.Queued(runId);
-    }
-
-    /// <summary>
-    /// Closes runs that have been in flight far longer than a crawl can legitimately take. There
-    /// is no reconciliation sweep for crawls, so without this a process that died mid-run would
-    /// block its endpoint permanently. Failed rather than deleted: the run happened, and whatever
-    /// links it recorded before dying stay attached to it.
-    /// </summary>
-    private async Task RetireAbandonedRunsAsync(
-        Guid endpointId,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        var cutoff = now - StaleAfter;
-        var retired = await dbContext.CrawlRuns
-            .Where(run => run.EndpointId == endpointId
-                && run.Status == CrawlRunStatuses.Running
-                && run.StartedAt < cutoff)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(run => run.Status, CrawlRunStatuses.Failed)
-                .SetProperty(run => run.StopReason, CrawlStopReasons.Failed)
-                .SetProperty(run => run.FailureReason,
-                    "Abandoned: the crawl was still running long after its time limit, so the "
-                    + "process performing it is gone.")
-                .SetProperty(run => run.FinishedAt, now),
-                cancellationToken);
-
-        if (retired > 0)
-        {
-            dbContext.ChangeTracker.Clear();
-            logger.LogWarning(
-                "Retired {Retired} abandoned crawl run(s). EndpointId={EndpointId}",
-                retired, endpointId);
-        }
     }
 
     private async Task<Guid?> FindActiveRunAsync(Guid endpointId, CancellationToken cancellationToken)

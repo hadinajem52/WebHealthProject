@@ -1,4 +1,4 @@
-using WebHealth.Domain.Normalization;
+﻿using WebHealth.Domain.Normalization;
 
 namespace WebHealth.Domain.Crawling;
 
@@ -145,7 +145,8 @@ public static class CrawlUrlNormalizer
             return CrawlUrlResult.Rejected(CrawlUrlRejections.UnsupportedScheme);
         }
 
-        if (uri.Host.Length == 0 || uri.Host.Contains('%', StringComparison.Ordinal))
+        if (uri.Host.Length == 0 || uri.Host.Contains('%', StringComparison.Ordinal)
+            || !UrlTextNormalization.HasReadableHost(uri))
         {
             return CrawlUrlResult.Rejected(CrawlUrlRejections.Malformed);
         }

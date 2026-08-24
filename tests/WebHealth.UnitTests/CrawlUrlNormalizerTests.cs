@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using WebHealth.Domain.Crawling;
 using Xunit;
 
@@ -68,6 +68,17 @@ public sealed class CrawlUrlNormalizerTests
     {
         CrawlUrlNormalizer.Normalize(input, CrawlUrlOptions.Default).Succeeded.Should().BeFalse();
         Rejection(input).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Resolve_RejectsAHostThatIsNotConvertibleToPunycode()
+    {
+        var resolved = CrawlUrlNormalizer.Resolve(
+            "https://ex�ample.com/a", Base("https://example.com/"), CrawlUrlOptions.Default);
+
+        resolved.Succeeded.Should().BeFalse();
+        resolved.Rejection.Should().Be(CrawlUrlRejections.Malformed,
+            "a page decoded under the wrong charset yields hrefs carrying U+FFFD, and one of them must not end the run");
     }
 
     [Fact]
