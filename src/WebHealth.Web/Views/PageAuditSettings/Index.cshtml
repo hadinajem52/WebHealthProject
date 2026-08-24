@@ -7,14 +7,15 @@
 }
 
 <form asp-action="Index" method="post" class="pagespeed-policy">
+    <input asp-for="EndpointId" type="hidden" />
     <input asp-for="Version" type="hidden" />
 
     <section class="card pagespeed-policy__hero">
         <div class="pagespeed-policy__hero-copy">
-            <span class="pagespeed-policy__eyebrow">Incident automation</span>
-            <h2 class="card__title">Turn Lighthouse results into actionable incidents</h2>
+            <span class="pagespeed-policy__eyebrow">Endpoint incident policy</span>
+            <h2 class="card__title">@Model.EndpointLabel</h2>
             <p class="card__subtitle">
-                Rules apply to completed scheduled mobile and desktop audits. Manual runs and provider failures never open incidents.
+                These rules apply only to this endpoint's completed scheduled mobile and desktop audits. Manual runs and provider failures never open incidents.
             </p>
         </div>
         <div class="pagespeed-policy__master">
@@ -118,6 +119,9 @@
 
     <div class="form-actions pagespeed-policy__actions">
         <button class="button button--primary" type="submit">@await Html.PartialAsync("_Icon", "success")<span>Save incident settings</span></button>
-        <a class="button button--secondary" asp-controller="PageAudits" asp-action="Index">Back to PageSpeed</a>
+        <a class="button button--secondary"
+           asp-controller="PageAudits"
+           asp-action="Index"
+           asp-route-endpointId="@Model.EndpointId">Back to PageSpeed</a>
     </div>
 </form>

@@ -11,17 +11,20 @@ internal sealed class PageAuditIncidentPolicyService(
     IAuditTrailWriter auditTrail,
     TimeProvider timeProvider) : IPageAuditIncidentPolicyService
 {
-    public async Task<PageAuditIncidentPolicy> GetAsync(CancellationToken cancellationToken = default) =>
+    public async Task<PageAuditIncidentPolicy> GetAsync(
+        Guid endpointId,
+        CancellationToken cancellationToken = default) =>
         ToPolicy(await dbContext.PageAuditIncidentPolicies.AsNoTracking()
-            .SingleAsync(policy => policy.Id == PageAuditIncidentPolicyDefaults.Id, cancellationToken));
+            .SingleAsync(policy => policy.EndpointId == endpointId, cancellationToken));
 
     public async Task<PageAuditIncidentPolicyUpdateResult> UpdateAsync(
+        Guid endpointId,
         UpdatePageAuditIncidentPolicy command,
         Guid actorUserId,
         CancellationToken cancellationToken = default)
     {
         var entity = await dbContext.PageAuditIncidentPolicies
-            .SingleAsync(policy => policy.Id == PageAuditIncidentPolicyDefaults.Id, cancellationToken);
+            .SingleAsync(policy => policy.EndpointId == endpointId, cancellationToken);
         var current = ToPolicy(entity);
         var errors = PageAuditIncidentEvaluator.Validate(command);
         if (errors.Count > 0)
@@ -49,7 +52,7 @@ internal sealed class PageAuditIncidentPolicyService(
         catch (DbUpdateConcurrencyException)
         {
             dbContext.ChangeTracker.Clear();
-            var latest = await GetAsync(cancellationToken);
+            var latest = await GetAsync(endpointId, cancellationToken);
             return new(false, true, latest, ["These settings changed while you were editing them. Review the current values and save again."]);
         }
     }
@@ -85,7 +88,7 @@ internal sealed class PageAuditIncidentPolicyService(
     }
 
     internal static PageAuditIncidentPolicy ToPolicy(PageAuditIncidentPolicyEntity entity) => new(
-        entity.Id,
+        entity.EndpointId,
         entity.IncidentsEnabled,
         entity.PerformanceScoreEnabled,
         entity.PerformanceMinimumScore,
@@ -108,7 +111,7 @@ internal sealed class PageAuditIncidentPolicyService(
         entity.Version);
 
     private static PageAuditIncidentPolicyAuditSnapshot ToAudit(PageAuditIncidentPolicy policy) => new(
-        policy.Id,
+        policy.EndpointId,
         policy.IncidentsEnabled,
         new Dictionary<string, decimal?>(StringComparer.Ordinal)
         {

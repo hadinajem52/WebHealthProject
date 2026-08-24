@@ -22,17 +22,17 @@ public sealed class ChecksController(
     public async Task<IActionResult> RunCheck(Guid id, CancellationToken cancellationToken)
     {
         var result = await manualCheckService.RunNowAsync(id, GetAccess(), cancellationToken);
-        return HandleManualCheckResult(id, result, "Availability check queued. It will appear in history shortly.");
+        return HandleManualCheckResult(id, result);
     }
 
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost]
     public async Task<IActionResult> RunCertificateCheck(Guid id, CancellationToken cancellationToken)
     {
         var result = await manualCheckService.RunCertificateNowAsync(id, GetAccess(), cancellationToken);
-        return HandleManualCheckResult(id, result, "Certificate check queued. It will appear in history shortly.");
+        return HandleManualCheckResult(id, result);
     }
 
-    private IActionResult HandleManualCheckResult(Guid endpointId, ManualCheckResult result, string successMessage)
+    private IActionResult HandleManualCheckResult(Guid endpointId, ManualCheckResult result)
     {
         var endpointUrl = Url.Action(nameof(TargetsController.Endpoint), "Targets", new { id = endpointId })!;
         switch (result.Status)
@@ -58,13 +58,10 @@ public sealed class ChecksController(
             return StatusCode(
                 StatusCodes.Status202Accepted,
                 new AjaxFragmentViewModel(
-                    successMessage,
-                    "success",
                     StatusUrl: Url.Action(nameof(Status), new { id = result.LogicalCheckId }),
                     RunId: result.LogicalCheckId));
         }
 
-        TempData.AddFlashMessage(FlashLevel.Success, successMessage);
         return LocalRedirect(endpointUrl);
     }
 
@@ -81,8 +78,6 @@ public sealed class ChecksController(
         return StatusCode(
             isComplete ? StatusCodes.Status200OK : StatusCodes.Status202Accepted,
             new AjaxFragmentViewModel(
-                isComplete ? "Check completed." : null,
-                "success",
                 RefreshUrl: isComplete
                     ? Url.Action(nameof(TargetsController.Endpoint), "Targets", new { id = check.EndpointId })
                     : null,

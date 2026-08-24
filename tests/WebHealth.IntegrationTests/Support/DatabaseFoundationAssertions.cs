@@ -89,7 +89,8 @@ internal static class DatabaseFoundationAssertions
         "20260823202630_IncidentArchive",
         "20260823202715_RobotsIncidentSeverityDemotion",
         "20260824065425_PageAuditAllCategories",
-        "20260824081054_PageAuditIncidentPoliciesAndBatches"
+        "20260824081054_PageAuditIncidentPoliciesAndBatches",
+        "20260824084650_PageAuditEndpointIncidentPolicies"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -4118,6 +4119,8 @@ internal static class DatabaseFoundationAssertions
             UpdatedAt = now,
             Version = 1
         });
+        database.PageAuditIncidentPolicies.Add(
+            PageAuditIncidentPolicyDefaults.Create(endpointId, now));
         database.PageAuditRuns.Add(new PageAuditRun
         {
             Id = pageAuditRunId,
@@ -4394,6 +4397,7 @@ internal static class DatabaseFoundationAssertions
             ["page_audit_target"] = await database.PageAuditTargets.CountAsync(item => item.EndpointId == endpointId),
             ["page_audit_run"] = await database.PageAuditRuns.CountAsync(item => item.EndpointId == endpointId),
             ["page_audit_item"] = await database.PageAuditItems.CountAsync(item => pageAuditRuns.Contains(item.RunId)),
+            ["page_audit_incident_policy"] = await database.PageAuditIncidentPolicies.CountAsync(item => item.EndpointId == endpointId),
             ["maintenance_window"] = await database.MaintenanceWindows.CountAsync(item => item.Id == maintenanceWindowId),
             ["maintenance_target"] = await database.MaintenanceTargets.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId),
             ["maintenance_occurrence"] = await database.MaintenanceOccurrences.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId)
@@ -4465,6 +4469,8 @@ internal static class DatabaseFoundationAssertions
         // sending one to Google would disclose an internal hostname for nothing.
         const string url = "https://page-audit-exec.example.com/status";
         var monitor = await CreateOwnedMonitorAsync(scope, database, url);
+        var otherMonitor = await CreateOwnedMonitorAsync(
+            scope, database, "https://page-audit-policy.example.com/status");
         var endpoint = await database.Endpoints.AsNoTracking()
             .SingleAsync(candidate => candidate.Id == monitor.EndpointId);
 
@@ -4473,9 +4479,11 @@ internal static class DatabaseFoundationAssertions
             database,
             scope.ServiceProvider.GetRequiredService<PageAuditSchedulingService>(),
             scope.ServiceProvider.GetRequiredService<PageAuditExecutionService>(),
+            scope.ServiceProvider.GetRequiredService<IPageAuditIncidentPolicyService>(),
             provider,
             queue,
             monitor.EndpointId,
+            otherMonitor.EndpointId,
             endpoint.NormalizedUrl);
     }
 

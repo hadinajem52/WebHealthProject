@@ -49,6 +49,20 @@ public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory f
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    [Fact]
+    public async Task AdministratorSeesEndpointSettingsAsAnIconOnlyAction()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+
+        var response = await client.GetAsync($"/PageAudits?endpointId={Endpoint}");
+        var html = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        html.Should().Contain($"/PageAuditSettings?endpointId={Endpoint}");
+        html.Should().Contain("button button--secondary button--icon");
+        html.Should().NotContain("<span>Incident settings</span>");
+    }
+
     [Theory]
     [InlineData("/PageAudits")]
     [InlineData("/PageAudits?endpointId=6f1c9a20-0000-0000-0000-000000000001")]

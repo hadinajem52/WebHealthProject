@@ -26,12 +26,16 @@ internal static class PageAuditExecutionAssertions
         ApplicationDbContext database,
         PageAuditSchedulingService scheduling,
         PageAuditExecutionService execution,
+        IPageAuditIncidentPolicyService policyService,
         ScriptedPageAuditProvider provider,
         RecordingPageAuditQueue queue,
         Guid endpointId,
+        Guid otherEndpointId,
         string endpointUrl)
     {
         var targetId = await SeedDueTargetAsync(database, endpointId);
+        await VerifyEndpointPoliciesAreIsolatedAsync(
+            database, policyService, endpointId, otherEndpointId);
 
         var runId = await VerifyDispatchOpensOneRunAsync(
             database, scheduling, queue, targetId, endpointUrl);
@@ -186,7 +190,9 @@ internal static class PageAuditExecutionAssertions
             UpdatedByUserId = endpoint.UpdatedByUserId,
             Version = 1
         });
-        await database.PageAuditIncidentPolicies.ExecuteUpdateAsync(setters => setters
+        await database.PageAuditIncidentPolicies
+            .Where(policy => policy.EndpointId == endpointId)
+            .ExecuteUpdateAsync(setters => setters
             .SetProperty(policy => policy.IncidentsEnabled, true)
             .SetProperty(policy => policy.SeoScoreEnabled, true)
             .SetProperty(policy => policy.SeoMinimumScore, 90)
@@ -246,9 +252,65 @@ internal static class PageAuditExecutionAssertions
             UpdatedAt = now,
             Version = 1
         });
+        if (!await database.PageAuditIncidentPolicies
+                .AnyAsync(policy => policy.EndpointId == endpointId))
+        {
+            database.PageAuditIncidentPolicies.Add(
+                PageAuditIncidentPolicyDefaults.Create(endpointId, now));
+        }
+
         await database.SaveChangesAsync();
         database.ChangeTracker.Clear();
         return targetId;
+    }
+
+    private static async Task VerifyEndpointPoliciesAreIsolatedAsync(
+        ApplicationDbContext database,
+        IPageAuditIncidentPolicyService policyService,
+        Guid endpointId,
+        Guid otherEndpointId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        database.PageAuditIncidentPolicies.Add(
+            PageAuditIncidentPolicyDefaults.Create(otherEndpointId, now));
+        await database.SaveChangesAsync();
+        database.ChangeTracker.Clear();
+
+        var current = await policyService.GetAsync(endpointId);
+        var command = new UpdatePageAuditIncidentPolicy(
+            true,
+            current.PerformanceScoreEnabled,
+            73,
+            current.AccessibilityScoreEnabled,
+            current.AccessibilityMinimumScore,
+            current.BestPracticesScoreEnabled,
+            current.BestPracticesMinimumScore,
+            current.SeoScoreEnabled,
+            current.SeoMinimumScore,
+            current.FirstContentfulPaintEnabled,
+            current.FirstContentfulPaintMaximum,
+            current.LargestContentfulPaintEnabled,
+            current.LargestContentfulPaintMaximum,
+            current.TotalBlockingTimeEnabled,
+            current.TotalBlockingTimeMaximum,
+            current.CumulativeLayoutShiftEnabled,
+            current.CumulativeLayoutShiftMaximum,
+            current.SpeedIndexEnabled,
+            current.SpeedIndexMaximum,
+            current.Version);
+        var actorId = await database.Endpoints.AsNoTracking()
+            .Where(endpoint => endpoint.Id == endpointId)
+            .Select(endpoint => endpoint.UpdatedByUserId)
+            .SingleAsync();
+
+        (await policyService.UpdateAsync(endpointId, command, actorId))
+            .Succeeded.Should().BeTrue();
+        var updated = await policyService.GetAsync(endpointId);
+        var untouched = await policyService.GetAsync(otherEndpointId);
+        updated.IncidentsEnabled.Should().BeTrue();
+        updated.PerformanceMinimumScore.Should().Be(73);
+        untouched.IncidentsEnabled.Should().BeFalse();
+        untouched.PerformanceMinimumScore.Should().Be(90);
     }
 
     private static async Task<Guid> VerifyDispatchOpensOneRunAsync(

@@ -2,13 +2,13 @@
 
 ## Work item
 
-**Rules:** PSI-INC-01 through PSI-INC-08  
-**Acceptance criteria:** PSI-INC-AC01 through PSI-INC-AC12  
+**Rules:** PSI-INC-01 through PSI-INC-09
+**Acceptance criteria:** PSI-INC-AC01 through PSI-INC-AC14
 **Status:** Implemented for local and demo use
 
 ## User-visible behavior and authorization
 
-- PSI-INC-01: Administrators can open **Administration → PageSpeed settings**.
+- PSI-INC-01: Administrators can open the selected endpoint's settings from the icon-only action beside **Run now**.
 - PSI-INC-02: A master switch enables or disables PageSpeed incident activity.
 - PSI-INC-03: Performance, Accessibility, Best Practices, and SEO each have an independent minimum score from 0 through 100.
 - PSI-INC-04: First Contentful Paint, Largest Contentful Paint, Total Blocking Time, Cumulative Layout Shift, and Speed Index each have an optional maximum value.
@@ -16,8 +16,9 @@
 - PSI-INC-06: A later completed scheduled audit within the rule resolves its incident.
 - PSI-INC-07: Manual audits and provider failures never open or resolve incidents.
 - PSI-INC-08: Disabling the master switch or one rule prevents new activity and leaves existing incidents unchanged.
+- PSI-INC-09: Every configured PageSpeed endpoint owns an independent incident policy. Saving one endpoint never changes another endpoint's switches or thresholds.
 
-The settings page is administrator-only. Operations, Developer/Support, Viewer, and anonymous direct requests are rejected by server-side authorization. The POST requires an anti-forgery token.
+The settings page names the selected endpoint and is administrator-only. Operations, Developer/Support, Viewer, and anonymous direct requests are rejected by server-side authorization. The POST requires an anti-forgery token, and the endpoint identifier is validated against the administrator's registry scope.
 
 ## Inputs, outputs, validation, and errors
 
@@ -37,7 +38,7 @@ Notification subjects and bodies describe a PageSpeed threshold breach or recove
 
 Migration `20260824081054_PageAuditIncidentPoliciesAndBatches` adds:
 
-- the singleton `page_audit_incident_policy` table;
+- the initial `page_audit_incident_policy` table;
 - `numeric_value` and `numeric_unit` on `page_audit_item`;
 - `batch_id` on `page_audit_run`;
 - `page_audit_run_id` on `incident_evidence`;
@@ -45,6 +46,8 @@ Migration `20260824081054_PageAuditIncidentPoliciesAndBatches` adds:
 - dedicated PageSpeed monitors for endpoints that already have PageAudit targets.
 
 The incident-evidence source constraint requires exactly one system evidence source for automatic opening, failure, recovery, and resolution evidence. The migration `Down` removes PageSpeed incident dependants before removing their monitor profile.
+
+Migration `20260824084650_PageAuditEndpointIncidentPolicies` replaces the singleton policy with a one-to-one endpoint policy. It copies the existing policy values to every endpoint that already has PageSpeed targets, then uses the endpoint identifier as the policy key. Newly enabled PageSpeed endpoints receive disabled incident settings with the standard threshold defaults in the same registry transaction.
 
 ## Security and privacy
 
@@ -54,6 +57,7 @@ Only normalized scores, numeric metrics, rule identifiers, thresholds, and bound
 
 - Evaluator unit tests cover category boundaries, metric breaches, missing metrics, disabled rules, severity, and validation.
 - Authorization integration tests cover every persona, anonymous access, and anti-forgery enforcement.
+- Endpoint-isolation integration coverage saves one endpoint's policy and proves another endpoint remains unchanged.
 - The PostgreSQL foundation suite proves a scheduled breached score opens one incident with PageAudit-run evidence and a later passing score resolves it.
 - The schema suite covers the migration, compiled model, upgrade path, evidence foreign keys, and endpoint purge behavior.
 - Release build, unit tests, focused authorization tests, JavaScript tests, and the database foundation suite are the local delivery evidence.
@@ -64,4 +68,4 @@ Existing PageAudit completion logs remain the source signal for audit status, it
 
 ## Compatibility and rollout
 
-Apply the migration explicitly before running the updated application. Existing PageAudit history remains readable; older items have null numeric values and cannot evaluate a metric rule until a new scheduled audit records that metric. The master incident switch defaults off, so applying the migration alone cannot create incidents.
+Apply both migrations explicitly before running the updated application. Existing PageAudit history remains readable; older items have null numeric values and cannot evaluate a metric rule until a new scheduled audit records that metric. Existing global values are preserved independently for every configured endpoint. New endpoint policies default to a disabled master switch, so enabling PageSpeed auditing alone cannot create incidents.

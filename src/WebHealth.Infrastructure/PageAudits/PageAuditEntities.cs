@@ -175,7 +175,7 @@ public sealed class PageAuditItem
 
 public sealed class PageAuditIncidentPolicyEntity
 {
-    public Guid Id { get; set; }
+    public Guid EndpointId { get; set; }
     public bool IncidentsEnabled { get; set; }
     public bool PerformanceScoreEnabled { get; set; }
     public int PerformanceMinimumScore { get; set; }
@@ -198,4 +198,5 @@ public sealed class PageAuditIncidentPolicyEntity
     public DateTimeOffset UpdatedAt { get; set; }
     public Guid? UpdatedByUserId { get; set; }
     public long Version { get; set; }
+    public Endpoint Endpoint { get; set; } = null!;
 }

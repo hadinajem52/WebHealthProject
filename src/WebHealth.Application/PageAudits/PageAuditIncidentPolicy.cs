@@ -5,7 +5,7 @@ using WebHealth.Domain.PageAudits;
 namespace WebHealth.Application.PageAudits;
 
 public sealed record PageAuditIncidentPolicy(
-    Guid Id,
+    Guid EndpointId,
     bool IncidentsEnabled,
     bool PerformanceScoreEnabled,
     int PerformanceMinimumScore,
@@ -57,9 +57,12 @@ public sealed record PageAuditIncidentPolicyUpdateResult(
 
 public interface IPageAuditIncidentPolicyService
 {
-    Task<PageAuditIncidentPolicy> GetAsync(CancellationToken cancellationToken = default);
+    Task<PageAuditIncidentPolicy> GetAsync(
+        Guid endpointId,
+        CancellationToken cancellationToken = default);
 
     Task<PageAuditIncidentPolicyUpdateResult> UpdateAsync(
+        Guid endpointId,
         UpdatePageAuditIncidentPolicy command,
         Guid actorUserId,
         CancellationToken cancellationToken = default);

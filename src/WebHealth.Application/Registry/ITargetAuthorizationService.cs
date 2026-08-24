@@ -15,4 +15,26 @@ public interface ITargetAuthorizationService
         IReadOnlyCollection<Guid> endpointIds,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Why <see cref="CanTestEndpointAsync" /> would refuse this endpoint, so a page can say what
+    /// is missing instead of silently hiding its run button.
+    /// </summary>
+    Task<EndpointTestBlock> DescribeTestBlockAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+}
+
+public enum EndpointTestBlock
+{
+    None,
+    NotVisible,
+    NotPermitted,
+    EndpointDisabled,
+    EnvironmentInactive,
+    WebsiteDisabled,
+    ClientInactive,
+    NoMonitor,
+    NoTargetAuthorization
 }

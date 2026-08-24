@@ -79,8 +79,8 @@ public sealed class PageAuditsController(
         var result = await pageAuditRunner.QueueManualAsync(
             endpointId, access, cancellationToken);
 
-        string message;
-        FlashLevel level;
+        string? message = null;
+        var level = FlashLevel.Information;
         if (!result.Succeeded)
         {
             message = result.Error!;
@@ -89,16 +89,10 @@ public sealed class PageAuditsController(
         else if (result.WasAlreadyRunning)
         {
             message = "A PageSpeed audit for this endpoint is already running. Showing that one.";
-            level = FlashLevel.Information;
         }
-        else
+        else if (result.AlreadyRunningCount > 0)
         {
-            var partial = result.AlreadyRunningCount > 0
-                ? " The rest was already running."
-                : null;
-            message = "PageSpeed audit queued for all categories on mobile and desktop. Google runs each profile, "
-                + $"so the scores appear once it answers.{partial}";
-            level = FlashLevel.Success;
+            message = "PageSpeed audit queued for the profiles that were not already running.";
         }
 
         if (Request.IsWebHealthAjax())
@@ -125,7 +119,11 @@ public sealed class PageAuditsController(
                 RunId: runId));
         }
 
-        TempData.AddFlashMessage(level, message);
+        if (message is not null)
+        {
+            TempData.AddFlashMessage(level, message);
+        }
+
         return RedirectToAction(nameof(Index), new { endpointId, category = selectedCategory, strategy = selectedStrategy });
     }
 
@@ -201,8 +199,8 @@ public sealed class PageAuditsController(
                 summary.LatestRun.RunId,
                 access,
                 cancellationToken);
-        var canRun = summary.IsEnabled
-            && await targetAuthorization.CanTestEndpointAsync(selected, access, cancellationToken);
+        var block = await targetAuthorization.DescribeTestBlockAsync(selected, access, cancellationToken);
+        var canRun = summary.IsEnabled && block == EndpointTestBlock.None;
         var categorySummaries = await pageAuditReader.GetLatestCategorySummariesAsync(
             selected,
             strategy,
@@ -213,7 +211,7 @@ public sealed class PageAuditsController(
             return null;
         }
 
-        return new(options, selected, category, strategy, summary, categorySummaries, runs, items, canRun);
+        return new(options, selected, category, strategy, summary, categorySummaries, runs, items, canRun, block);
     }
 
     private RegistryAccessContext GetAccess()

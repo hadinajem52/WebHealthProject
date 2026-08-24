@@ -30,6 +30,26 @@ internal static class MonitoringEligibility
                 && evidence.Port == endpoint.EffectivePort));
 
     /// <summary>
+    /// The same conditions <see cref="ApplyTestable" /> filters on, read one by one so a caller
+    /// can name the one that failed. Keep the two in step.
+    /// </summary>
+    public static IQueryable<EndpointTestReadiness> ProjectTestReadiness(
+        IQueryable<Endpoint> endpoints,
+        DateTimeOffset now) =>
+        endpoints.Select(endpoint => new EndpointTestReadiness(
+            endpoint.IsEnabled,
+            endpoint.Environment.DeletedAt == null && endpoint.Environment.IsActive,
+            endpoint.Environment.Website.DeletedAt == null && endpoint.Environment.Website.IsEnabled,
+            endpoint.Environment.Website.Client.DeletedAt == null && endpoint.Environment.Website.Client.IsActive,
+            endpoint.Monitors.Any(monitor => monitor.DeletedAt == null),
+            endpoint.TargetAuthorizations.Any(evidence =>
+                evidence.RevokedAt == null
+                && evidence.EffectiveFrom <= now
+                && (evidence.ExpiresAt == null || evidence.ExpiresAt > now)
+                && evidence.NormalizedHost == endpoint.NormalizedHost
+                && evidence.Port == endpoint.EffectivePort)));
+
+    /// <summary>
     /// Endpoints the scheduler may dispatch: testable, and with an active monitor
     /// cadence. Pausing a monitor removes an endpoint from this set only.
     /// </summary>
@@ -37,6 +57,26 @@ internal static class MonitoringEligibility
         ApplyTestable(endpoints, now)
             .Where(endpoint => endpoint.Monitors.Any(monitor =>
                 monitor.DeletedAt == null && monitor.SchedulingEnabled && monitor.IsEnabled));
+}
+
+internal sealed record EndpointTestReadiness(
+    bool EndpointEnabled,
+    bool EnvironmentActive,
+    bool WebsiteEnabled,
+    bool ClientActive,
+    bool HasMonitor,
+    bool HasTargetAuthorization)
+{
+    public EndpointTestBlock Block => this switch
+    {
+        { EndpointEnabled: false } => EndpointTestBlock.EndpointDisabled,
+        { EnvironmentActive: false } => EndpointTestBlock.EnvironmentInactive,
+        { WebsiteEnabled: false } => EndpointTestBlock.WebsiteDisabled,
+        { ClientActive: false } => EndpointTestBlock.ClientInactive,
+        { HasMonitor: false } => EndpointTestBlock.NoMonitor,
+        { HasTargetAuthorization: false } => EndpointTestBlock.NoTargetAuthorization,
+        _ => EndpointTestBlock.None
+    };
 }
 
 internal sealed class MonitoringEligibilityService(ApplicationDbContext dbContext) : IMonitoringEligibilityService

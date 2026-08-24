@@ -296,8 +296,31 @@ internal sealed class PageAuditItemConfiguration : IEntityTypeConfiguration<Page
 
 internal static class PageAuditIncidentPolicyDefaults
 {
-    public static readonly Guid Id = new("58af6bcc-d2e8-4e8c-9d16-51a2a35df9f0");
-    public static readonly DateTimeOffset SeedTimestamp = new(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+    public static PageAuditIncidentPolicyEntity Create(Guid endpointId, DateTimeOffset now) => new()
+    {
+        EndpointId = endpointId,
+        IncidentsEnabled = false,
+        PerformanceScoreEnabled = true,
+        PerformanceMinimumScore = 90,
+        AccessibilityScoreEnabled = true,
+        AccessibilityMinimumScore = 90,
+        BestPracticesScoreEnabled = true,
+        BestPracticesMinimumScore = 90,
+        SeoScoreEnabled = true,
+        SeoMinimumScore = 90,
+        FirstContentfulPaintEnabled = false,
+        FirstContentfulPaintMaximum = 1800,
+        LargestContentfulPaintEnabled = false,
+        LargestContentfulPaintMaximum = 2500,
+        TotalBlockingTimeEnabled = false,
+        TotalBlockingTimeMaximum = 200,
+        CumulativeLayoutShiftEnabled = false,
+        CumulativeLayoutShiftMaximum = 0.1m,
+        SpeedIndexEnabled = false,
+        SpeedIndexMaximum = 3400,
+        UpdatedAt = now,
+        Version = 1
+    };
 }
 
 internal sealed class PageAuditIncidentPolicyConfiguration
@@ -307,9 +330,6 @@ internal sealed class PageAuditIncidentPolicyConfiguration
     {
         builder.ToTable("page_audit_incident_policy", table =>
         {
-            table.HasCheckConstraint(
-                "ck_page_audit_incident_policy_singleton",
-                $"id = '{PageAuditIncidentPolicyDefaults.Id}'::uuid");
             table.HasCheckConstraint(
                 "ck_page_audit_incident_policy_scores",
                 "performance_minimum_score BETWEEN 0 AND 100 "
@@ -324,40 +344,18 @@ internal sealed class PageAuditIncidentPolicyConfiguration
                 + "AND cumulative_layout_shift_maximum BETWEEN 0 AND 10 "
                 + "AND speed_index_maximum BETWEEN 0 AND 600000");
         });
-        builder.HasKey(policy => policy.Id);
+        builder.HasKey(policy => policy.EndpointId);
         builder.Property(policy => policy.FirstContentfulPaintMaximum).HasPrecision(14, 4);
         builder.Property(policy => policy.LargestContentfulPaintMaximum).HasPrecision(14, 4);
         builder.Property(policy => policy.TotalBlockingTimeMaximum).HasPrecision(14, 4);
         builder.Property(policy => policy.CumulativeLayoutShiftMaximum).HasPrecision(14, 4);
         builder.Property(policy => policy.SpeedIndexMaximum).HasPrecision(14, 4);
         builder.Property(policy => policy.Version).IsConcurrencyToken();
+        builder.HasOne(policy => policy.Endpoint).WithOne()
+            .HasForeignKey<PageAuditIncidentPolicyEntity>(policy => policy.EndpointId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<ApplicationUser>().WithMany()
             .HasForeignKey(policy => policy.UpdatedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
-        builder.HasData(new PageAuditIncidentPolicyEntity
-        {
-            Id = PageAuditIncidentPolicyDefaults.Id,
-            IncidentsEnabled = false,
-            PerformanceScoreEnabled = true,
-            PerformanceMinimumScore = 90,
-            AccessibilityScoreEnabled = true,
-            AccessibilityMinimumScore = 90,
-            BestPracticesScoreEnabled = true,
-            BestPracticesMinimumScore = 90,
-            SeoScoreEnabled = true,
-            SeoMinimumScore = 90,
-            FirstContentfulPaintEnabled = false,
-            FirstContentfulPaintMaximum = 1800,
-            LargestContentfulPaintEnabled = false,
-            LargestContentfulPaintMaximum = 2500,
-            TotalBlockingTimeEnabled = false,
-            TotalBlockingTimeMaximum = 200,
-            CumulativeLayoutShiftEnabled = false,
-            CumulativeLayoutShiftMaximum = 0.1m,
-            SpeedIndexEnabled = false,
-            SpeedIndexMaximum = 3400,
-            UpdatedAt = PageAuditIncidentPolicyDefaults.SeedTimestamp,
-            Version = 1
-        });
     }
 }

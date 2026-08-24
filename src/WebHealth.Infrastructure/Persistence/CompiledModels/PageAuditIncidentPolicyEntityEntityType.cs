@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WebHealth.Infrastructure.PageAudits;
+using WebHealth.Infrastructure.Registry;
 
 #pragma warning disable 219, 612, 618
 #nullable disable
@@ -22,20 +23,20 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 typeof(PageAuditIncidentPolicyEntity),
                 baseEntityType,
                 propertyCount: 23,
-                foreignKeyCount: 1,
+                navigationCount: 1,
+                foreignKeyCount: 2,
                 unnamedIndexCount: 1,
                 keyCount: 1);
 
-            var id = runtimeEntityType.AddProperty(
-                "Id",
+            var endpointId = runtimeEntityType.AddProperty(
+                "EndpointId",
                 typeof(Guid),
-                propertyInfo: typeof(PageAuditIncidentPolicyEntity).GetProperty("Id", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                fieldInfo: typeof(PageAuditIncidentPolicyEntity).GetField("<Id>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                valueGenerated: ValueGenerated.OnAdd,
+                propertyInfo: typeof(PageAuditIncidentPolicyEntity).GetProperty("EndpointId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PageAuditIncidentPolicyEntity).GetField("<EndpointId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 afterSaveBehavior: PropertySaveBehavior.Throw,
                 sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
-            id.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
-            id.AddAnnotation("Relational:ColumnName", "id");
+            endpointId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            endpointId.AddAnnotation("Relational:ColumnName", "endpoint_id");
 
             var accessibilityMinimumScore = runtimeEntityType.AddProperty(
                 "AccessibilityMinimumScore",
@@ -248,7 +249,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             version.AddAnnotation("Relational:ColumnName", "version");
 
             var key = runtimeEntityType.AddKey(
-                new[] { id });
+                new[] { endpointId });
             runtimeEntityType.SetPrimaryKey(key);
             key.AddAnnotation("Relational:Name", "pk_page_audit_incident_policy");
 
@@ -260,6 +261,26 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
         }
 
         public static RuntimeForeignKey CreateForeignKey1(RuntimeEntityType declaringEntityType, RuntimeEntityType principalEntityType)
+        {
+            var runtimeForeignKey = declaringEntityType.AddForeignKey(new[] { declaringEntityType.FindProperty("EndpointId") },
+                principalEntityType.FindKey(new[] { principalEntityType.FindProperty("Id") }),
+                principalEntityType,
+                deleteBehavior: DeleteBehavior.Restrict,
+                unique: true,
+                required: true);
+
+            var endpoint = declaringEntityType.AddNavigation("Endpoint",
+                runtimeForeignKey,
+                onDependent: true,
+                typeof(Endpoint),
+                propertyInfo: typeof(PageAuditIncidentPolicyEntity).GetProperty("Endpoint", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PageAuditIncidentPolicyEntity).GetField("<Endpoint>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+
+            runtimeForeignKey.AddAnnotation("Relational:Name", "fk_page_audit_incident_policy_endpoint_endpoint_id");
+            return runtimeForeignKey;
+        }
+
+        public static RuntimeForeignKey CreateForeignKey2(RuntimeEntityType declaringEntityType, RuntimeEntityType principalEntityType)
         {
             var runtimeForeignKey = declaringEntityType.AddForeignKey(new[] { declaringEntityType.FindProperty("UpdatedByUserId") },
                 principalEntityType.FindKey(new[] { principalEntityType.FindProperty("Id") }),

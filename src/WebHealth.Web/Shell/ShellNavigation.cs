@@ -56,7 +56,6 @@ public static class ShellNavigation
         [
             new NavigationItem("Users", "users", "Administration", "Users", ["Administrator"]),
             new NavigationItem("Teams", "users", "Administration", "Teams", ["Administrator"]),
-            new NavigationItem("PageSpeed settings", "speed", "PageAuditSettings", "Index", ["Administrator"]),
             new NavigationItem("Audit", "audit", "Audit", "Index", ["Administrator", "Operations"])
         ])
     ];

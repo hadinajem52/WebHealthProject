@@ -163,6 +163,9 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
         await dbContext.PageAuditTargets
             .Where(target => target.EndpointId == endpointId)
             .ExecuteDeleteAsync(cancellationToken);
+        await dbContext.PageAuditIncidentPolicies
+            .Where(policy => policy.EndpointId == endpointId)
+            .ExecuteDeleteAsync(cancellationToken);
 
         var runs = dbContext.CrawlRuns
             .Where(run => run.EndpointId == endpointId).Select(run => run.Id);

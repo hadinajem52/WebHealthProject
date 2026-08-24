@@ -13,13 +13,23 @@ namespace WebHealth.Web.Models;
 /// The crawl already in flight for this endpoint, if any. One crawl per endpoint at a time is a
 /// database constraint, so offering the button while one runs would only produce a refusal.
 /// </param>
+/// <param name="RunBlock">
+/// Why the button is not offered. A missing button with no reason reads as a defect, so the page
+/// says what is missing instead.
+/// </param>
+/// <param name="CrawlingAvailable">
+/// Whether crawling is switched on at all. When it is off no endpoint can be crawled, which is a
+/// different sentence from anything wrong with this one.
+/// </param>
 public sealed record CrawlIndexViewModel(
     IReadOnlyList<EndpointOption> Endpoints,
     Guid? SelectedEndpointId,
     IReadOnlyList<CrawlRunSummary> Runs,
     CrawlComparison Comparison,
     bool CanRunNow = false,
-    Guid? ActiveRunId = null);
+    Guid? ActiveRunId = null,
+    EndpointTestBlock RunBlock = EndpointTestBlock.None,
+    bool CrawlingAvailable = true);
 
 public sealed record EndpointOption(Guid Id, string Label);
 

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 
 namespace WebHealth.Domain.Normalization;
@@ -24,6 +24,27 @@ public static class UrlTextNormalization
     {
         ArgumentNullException.ThrowIfNull(uri);
         return uri.IdnHost.TrimEnd('.').ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Whether <see cref="Host" /> and <see cref="BareHost" /> can read this host at all.
+    /// <para>
+    /// <see cref="Uri.IdnHost" /> throws for a host that parses but carries a character IDNA
+    /// forbids, and an authored href is where such a host arrives. Callers ask this first so a
+    /// single unusable link is rejected as malformed instead of ending the work that found it.
+    /// </para>
+    /// </summary>
+    public static bool HasReadableHost(Uri uri)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        try
+        {
+            return uri.IdnHost.Length > 0;
+        }
+        catch (UriFormatException)
+        {
+            return false;
+        }
     }
 
     public static string Port(Uri uri)

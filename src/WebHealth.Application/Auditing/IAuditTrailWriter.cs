@@ -266,7 +266,7 @@ public sealed record IncidentAuditSnapshot(
     long Version);
 
 public sealed record PageAuditIncidentPolicyAuditSnapshot(
-    Guid PolicyId,
+    Guid EndpointId,
     bool IncidentsEnabled,
     IReadOnlyDictionary<string, decimal?> Thresholds,
     long Version);

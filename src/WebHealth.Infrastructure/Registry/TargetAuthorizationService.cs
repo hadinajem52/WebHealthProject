@@ -20,6 +20,33 @@ internal sealed class TargetAuthorizationService(
             .AnyAsync(endpoint => endpoint.Id == endpointId && endpoint.DeletedAt == null, cancellationToken);
     }
 
+    public async Task<EndpointTestBlock> DescribeTestBlockAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var readiness = await MonitoringEligibility.ProjectTestReadiness(
+                visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
+                    .Where(endpoint => endpoint.Id == endpointId && endpoint.DeletedAt == null),
+                now)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (readiness is null)
+        {
+            return EndpointTestBlock.NotVisible;
+        }
+
+        if (readiness.Block != EndpointTestBlock.None)
+        {
+            return readiness.Block;
+        }
+
+        var permitted = await visibility
+            .ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
+            .AnyAsync(endpoint => endpoint.Id == endpointId, cancellationToken);
+        return permitted ? EndpointTestBlock.None : EndpointTestBlock.NotPermitted;
+    }
+
     public async Task<IReadOnlySet<Guid>> FilterTestableEndpointsAsync(
         IReadOnlyCollection<Guid> endpointIds,
         RegistryAccessContext access,

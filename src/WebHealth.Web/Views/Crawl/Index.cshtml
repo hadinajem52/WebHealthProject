@@ -75,6 +75,27 @@
                 }
             </div>
         </div>
+
+        @* A missing Run crawl button reads as a defect unless the page says what is missing. *@
+        @if (Model.SelectedEndpointId is { } blockedTarget && !Model.CanRunNow && Model.ActiveRunId is null)
+        {
+            var blockedReason = Model.CrawlingAvailable
+                ? EndpointTestBlockDisplay.Describe(Model.RunBlock, "a crawl")
+                : "Crawling is switched off in this deployment, so no endpoint can be crawled from here.";
+            if (blockedReason is not null)
+            {
+                <p class="card__status" data-status="warning">
+                    @await Html.PartialAsync("_Icon", "warning")
+                    <span>
+                        @blockedReason
+                        @if (Model.CrawlingAvailable && Model.Endpoints.Any(option => option.Id == blockedTarget))
+                        {
+                            <a asp-controller="Targets" asp-action="Endpoint" asp-route-id="@blockedTarget">Open endpoint</a>
+                        }
+                    </span>
+                </p>
+            }
+        }
     </section>
 
     @* Everything a running crawl changes lives in here, so the poller can replace it without

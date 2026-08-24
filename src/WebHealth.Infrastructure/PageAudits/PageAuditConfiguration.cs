@@ -76,6 +76,14 @@ internal static class PageAuditConfiguration
             .ToArrayAsync(cancellationToken);
 
         var changed = false;
+        if (enabled && !await dbContext.PageAuditIncidentPolicies
+                .AnyAsync(policy => policy.EndpointId == endpointId, cancellationToken))
+        {
+            dbContext.PageAuditIncidentPolicies.Add(
+                PageAuditIncidentPolicyDefaults.Create(endpointId, now));
+            changed = true;
+        }
+
         foreach (var category in PageAuditCategories.All)
         {
             foreach (var strategy in PageAuditStrategies.All)

@@ -155,7 +155,7 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             context,
             "page_audit_incident_policy.updated",
             "page_audit_incident_policy",
-            after.PolicyId,
+            after.EndpointId,
             before,
             after,
             cancellationToken);

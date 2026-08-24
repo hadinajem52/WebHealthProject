@@ -199,8 +199,71 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
 
 internal sealed class EmptyPageAuditIncidentPolicyService : IPageAuditIncidentPolicyService
 {
-    public PageAuditIncidentPolicy Current { get; private set; } = new(
-        Guid.Parse("58af6bcc-d2e8-4e8c-9d16-51a2a35df9f0"),
+    private readonly Dictionary<Guid, PageAuditIncidentPolicy> policies = [];
+
+    public Task<PageAuditIncidentPolicy> GetAsync(
+        Guid endpointId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!policies.TryGetValue(endpointId, out var policy))
+        {
+            policy = DefaultPolicy(endpointId);
+            policies.Add(endpointId, policy);
+        }
+
+        return Task.FromResult(policy);
+    }
+
+    public async Task<PageAuditIncidentPolicyUpdateResult> UpdateAsync(
+        Guid endpointId,
+        UpdatePageAuditIncidentPolicy command,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var current = await GetAsync(endpointId, cancellationToken);
+        var errors = PageAuditIncidentEvaluator.Validate(command);
+        if (errors.Count > 0)
+        {
+            return new(false, false, current, errors);
+        }
+
+        if (command.Version != current.Version)
+        {
+            return new(
+                false,
+                true,
+                current,
+                ["These settings changed while you were editing them."]);
+        }
+
+        var updated = new PageAuditIncidentPolicy(
+            endpointId,
+            command.IncidentsEnabled,
+            command.PerformanceScoreEnabled,
+            command.PerformanceMinimumScore,
+            command.AccessibilityScoreEnabled,
+            command.AccessibilityMinimumScore,
+            command.BestPracticesScoreEnabled,
+            command.BestPracticesMinimumScore,
+            command.SeoScoreEnabled,
+            command.SeoMinimumScore,
+            command.FirstContentfulPaintEnabled,
+            command.FirstContentfulPaintMaximum,
+            command.LargestContentfulPaintEnabled,
+            command.LargestContentfulPaintMaximum,
+            command.TotalBlockingTimeEnabled,
+            command.TotalBlockingTimeMaximum,
+            command.CumulativeLayoutShiftEnabled,
+            command.CumulativeLayoutShiftMaximum,
+            command.SpeedIndexEnabled,
+            command.SpeedIndexMaximum,
+            current.Version + 1);
+        policies[endpointId] = updated;
+        return new(true, false, updated, []);
+    }
+
+    private static PageAuditIncidentPolicy DefaultPolicy(Guid endpointId) => new(
+        endpointId,
         false,
         true,
         90,
@@ -221,54 +284,6 @@ internal sealed class EmptyPageAuditIncidentPolicyService : IPageAuditIncidentPo
         false,
         3400,
         1);
-
-    public Task<PageAuditIncidentPolicy> GetAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(Current);
-
-    public Task<PageAuditIncidentPolicyUpdateResult> UpdateAsync(
-        UpdatePageAuditIncidentPolicy command,
-        Guid actorUserId,
-        CancellationToken cancellationToken = default)
-    {
-        var errors = PageAuditIncidentEvaluator.Validate(command);
-        if (errors.Count > 0)
-        {
-            return Task.FromResult(new PageAuditIncidentPolicyUpdateResult(false, false, Current, errors));
-        }
-
-        if (command.Version != Current.Version)
-        {
-            return Task.FromResult(new PageAuditIncidentPolicyUpdateResult(
-                false,
-                true,
-                Current,
-                ["These settings changed while you were editing them."]));
-        }
-
-        Current = new(
-            Current.Id,
-            command.IncidentsEnabled,
-            command.PerformanceScoreEnabled,
-            command.PerformanceMinimumScore,
-            command.AccessibilityScoreEnabled,
-            command.AccessibilityMinimumScore,
-            command.BestPracticesScoreEnabled,
-            command.BestPracticesMinimumScore,
-            command.SeoScoreEnabled,
-            command.SeoMinimumScore,
-            command.FirstContentfulPaintEnabled,
-            command.FirstContentfulPaintMaximum,
-            command.LargestContentfulPaintEnabled,
-            command.LargestContentfulPaintMaximum,
-            command.TotalBlockingTimeEnabled,
-            command.TotalBlockingTimeMaximum,
-            command.CumulativeLayoutShiftEnabled,
-            command.CumulativeLayoutShiftMaximum,
-            command.SpeedIndexEnabled,
-            command.SpeedIndexMaximum,
-            Current.Version + 1);
-        return Task.FromResult(new PageAuditIncidentPolicyUpdateResult(true, false, Current, []));
-    }
 }
 
 /// <summary>Records what the controller asked for instead of opening a run.</summary>
@@ -323,4 +338,10 @@ internal sealed class PermissiveTargetAuthorizationService : ITargetAuthorizatio
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlySet<Guid>>(endpointIds.ToHashSet());
+
+    public Task<EndpointTestBlock> DescribeTestBlockAsync(
+        Guid endpointId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(EndpointTestBlock.None);
 }

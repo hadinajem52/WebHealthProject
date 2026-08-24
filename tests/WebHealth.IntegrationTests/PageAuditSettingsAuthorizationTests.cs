@@ -9,16 +9,20 @@ namespace WebHealth.IntegrationTests;
 public sealed class PageAuditSettingsAuthorizationTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
+    private static readonly Guid EndpointId = EmptyTargetRegistryReader.Endpoint.Id;
+
     [Fact]
     public async Task Settings_AreReadableByAdministrator()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
 
-        var response = await client.GetAsync("/PageAuditSettings");
+        var response = await client.GetAsync($"/PageAuditSettings?endpointId={EndpointId}");
         var html = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         html.Should().Contain("Performance metric thresholds");
+        html.Should().Contain("Example &#xB7; Production &#xB7; https://example.com/");
+        html.Should().Contain("These rules apply only to this endpoint's");
         html.Should().Contain("First Contentful Paint");
         html.Should().Contain("Largest Contentful Paint");
         html.Should().Contain("Total Blocking Time");
@@ -34,7 +38,7 @@ public sealed class PageAuditSettingsAuthorizationTests(WebHealthWebApplicationF
     {
         using var client = factory.CreateHttpsClient(role);
 
-        var response = await client.GetAsync("/PageAuditSettings");
+        var response = await client.GetAsync($"/PageAuditSettings?endpointId={EndpointId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -44,7 +48,7 @@ public sealed class PageAuditSettingsAuthorizationTests(WebHealthWebApplicationF
     {
         using var client = factory.CreateAnonymousHttpsClient(allowAutoRedirect: false);
 
-        var response = await client.GetAsync("/PageAuditSettings");
+        var response = await client.GetAsync($"/PageAuditSettings?endpointId={EndpointId}");
 
         response.StatusCode.Should().Be(HttpStatusCode.Redirect);
         response.Headers.Location!.OriginalString.Should().StartWith("/Account/Login");
@@ -57,7 +61,10 @@ public sealed class PageAuditSettingsAuthorizationTests(WebHealthWebApplicationF
 
         var response = await client.PostAsync(
             "/PageAuditSettings",
-            new FormUrlEncodedContent([new("IncidentsEnabled", "true")]));
+            new FormUrlEncodedContent([
+                new("EndpointId", EndpointId.ToString()),
+                new("IncidentsEnabled", "true")
+            ]));
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }

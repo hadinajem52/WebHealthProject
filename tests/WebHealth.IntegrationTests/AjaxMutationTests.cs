@@ -28,7 +28,6 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         Assert.Equal(EmptyManualCheckService.LogicalCheckId, json.RootElement.GetProperty("runId").GetGuid());
         var statusUrl = json.RootElement.GetProperty("statusUrl").GetString();
         Assert.Contains("/Checks/Status", statusUrl, StringComparison.Ordinal);
-        Assert.Contains("queued", json.RootElement.GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
 
         using var statusResponse = await client.GetAsync(statusUrl);
         using var statusJson = await ReadJsonAsync(statusResponse);

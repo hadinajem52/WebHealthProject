@@ -5,6 +5,8 @@ namespace WebHealth.Web.Models;
 
 public sealed class PageAuditIncidentSettingsViewModel
 {
+    public Guid EndpointId { get; set; }
+    public string EndpointLabel { get; set; } = string.Empty;
     public bool IncidentsEnabled { get; set; }
     public bool PerformanceScoreEnabled { get; set; }
 
@@ -75,27 +77,31 @@ public sealed class PageAuditIncidentSettingsViewModel
         SpeedIndexMaximum,
         Version);
 
-    public static PageAuditIncidentSettingsViewModel From(PageAuditIncidentPolicy policy) => new()
-    {
-        IncidentsEnabled = policy.IncidentsEnabled,
-        PerformanceScoreEnabled = policy.PerformanceScoreEnabled,
-        PerformanceMinimumScore = policy.PerformanceMinimumScore,
-        AccessibilityScoreEnabled = policy.AccessibilityScoreEnabled,
-        AccessibilityMinimumScore = policy.AccessibilityMinimumScore,
-        BestPracticesScoreEnabled = policy.BestPracticesScoreEnabled,
-        BestPracticesMinimumScore = policy.BestPracticesMinimumScore,
-        SeoScoreEnabled = policy.SeoScoreEnabled,
-        SeoMinimumScore = policy.SeoMinimumScore,
-        FirstContentfulPaintEnabled = policy.FirstContentfulPaintEnabled,
-        FirstContentfulPaintMaximum = policy.FirstContentfulPaintMaximum,
-        LargestContentfulPaintEnabled = policy.LargestContentfulPaintEnabled,
-        LargestContentfulPaintMaximum = policy.LargestContentfulPaintMaximum,
-        TotalBlockingTimeEnabled = policy.TotalBlockingTimeEnabled,
-        TotalBlockingTimeMaximum = policy.TotalBlockingTimeMaximum,
-        CumulativeLayoutShiftEnabled = policy.CumulativeLayoutShiftEnabled,
-        CumulativeLayoutShiftMaximum = policy.CumulativeLayoutShiftMaximum,
-        SpeedIndexEnabled = policy.SpeedIndexEnabled,
-        SpeedIndexMaximum = policy.SpeedIndexMaximum,
-        Version = policy.Version
-    };
+    public static PageAuditIncidentSettingsViewModel From(
+        PageAuditIncidentPolicy policy,
+        string endpointLabel) => new()
+        {
+            EndpointId = policy.EndpointId,
+            EndpointLabel = endpointLabel,
+            IncidentsEnabled = policy.IncidentsEnabled,
+            PerformanceScoreEnabled = policy.PerformanceScoreEnabled,
+            PerformanceMinimumScore = policy.PerformanceMinimumScore,
+            AccessibilityScoreEnabled = policy.AccessibilityScoreEnabled,
+            AccessibilityMinimumScore = policy.AccessibilityMinimumScore,
+            BestPracticesScoreEnabled = policy.BestPracticesScoreEnabled,
+            BestPracticesMinimumScore = policy.BestPracticesMinimumScore,
+            SeoScoreEnabled = policy.SeoScoreEnabled,
+            SeoMinimumScore = policy.SeoMinimumScore,
+            FirstContentfulPaintEnabled = policy.FirstContentfulPaintEnabled,
+            FirstContentfulPaintMaximum = policy.FirstContentfulPaintMaximum,
+            LargestContentfulPaintEnabled = policy.LargestContentfulPaintEnabled,
+            LargestContentfulPaintMaximum = policy.LargestContentfulPaintMaximum,
+            TotalBlockingTimeEnabled = policy.TotalBlockingTimeEnabled,
+            TotalBlockingTimeMaximum = policy.TotalBlockingTimeMaximum,
+            CumulativeLayoutShiftEnabled = policy.CumulativeLayoutShiftEnabled,
+            CumulativeLayoutShiftMaximum = policy.CumulativeLayoutShiftMaximum,
+            SpeedIndexEnabled = policy.SpeedIndexEnabled,
+            SpeedIndexMaximum = policy.SpeedIndexMaximum,
+            Version = policy.Version
+        };
 }

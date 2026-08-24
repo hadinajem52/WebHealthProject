@@ -50,7 +50,7 @@ internal static class PageAuditSchemaAssertions
             SELECT table_name, column_name
             FROM information_schema.columns
             WHERE table_schema = 'web_health'
-              AND table_name IN ('page_audit_run', 'page_audit_item')
+              AND table_name IN ('page_audit_run', 'page_audit_item', 'page_audit_incident_policy')
             ORDER BY table_name, column_name;
             """, connection);
         await using var reader = await command.ExecuteReaderAsync();
@@ -78,6 +78,18 @@ internal static class PageAuditSchemaAssertions
             "id", "run_id", "audit_id", "status", "score", "score_display_mode",
             "numeric_value", "numeric_unit", "weight", "group_name", "title", "description",
             "display_value", "explanation", "error_message");
+        columns["page_audit_incident_policy"].Should().BeEquivalentTo(
+            "endpoint_id", "incidents_enabled",
+            "performance_score_enabled", "performance_minimum_score",
+            "accessibility_score_enabled", "accessibility_minimum_score",
+            "best_practices_score_enabled", "best_practices_minimum_score",
+            "seo_score_enabled", "seo_minimum_score",
+            "first_contentful_paint_enabled", "first_contentful_paint_maximum",
+            "largest_contentful_paint_enabled", "largest_contentful_paint_maximum",
+            "total_blocking_time_enabled", "total_blocking_time_maximum",
+            "cumulative_layout_shift_enabled", "cumulative_layout_shift_maximum",
+            "speed_index_enabled", "speed_index_maximum",
+            "updated_at", "updated_by_user_id", "version");
     }
 
     /// <summary>

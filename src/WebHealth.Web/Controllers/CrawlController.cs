@@ -57,13 +57,22 @@ public sealed class CrawlController(
         var comparison = await crawlReader.CompareLatestAsync(selected, access, cancellationToken);
 
         // Offered only when this requester may test this endpoint, mirroring the authorization the
-        // action itself enforces - the button is a convenience, not the control.
-        var canRun = crawlRunner.CanQueue
-            && await targetAuthorization.CanTestEndpointAsync(selected, access, cancellationToken);
+        // action itself enforces - the button is a convenience, not the control. The block is kept
+        // so the page can say why the button is absent rather than leave the reader guessing.
+        var block = await targetAuthorization.DescribeTestBlockAsync(selected, access, cancellationToken);
+        var canRun = crawlRunner.CanQueue && block == EndpointTestBlock.None;
         var activeRun = runs
             .FirstOrDefault(run => run.Status == CrawlRunStatuses.Running)?.RunId;
 
-        return View(new CrawlIndexViewModel(options, selected, runs, comparison, canRun, activeRun));
+        return View(new CrawlIndexViewModel(
+            options,
+            selected,
+            runs,
+            comparison,
+            canRun,
+            activeRun,
+            block,
+            crawlRunner.CanQueue));
     }
 
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost, ValidateAntiForgeryToken]
@@ -85,12 +94,6 @@ public sealed class CrawlController(
             TempData.AddFlashMessage(
                 FlashLevel.Information,
                 "A crawl for this endpoint is already running. Showing that one.");
-        }
-        else
-        {
-            TempData.AddFlashMessage(
-                FlashLevel.Success,
-                "Crawl queued. It fetches the site page by page, so results appear as it goes.");
         }
 
         return RedirectToAction(nameof(Index), new { endpointId });

@@ -34,7 +34,7 @@ internal sealed class PageAuditIncidentAutomationService(
             return;
         }
 
-        var policy = await policyService.GetAsync(cancellationToken);
+        var policy = await policyService.GetAsync(claim.EndpointId, cancellationToken);
         if (!policy.IncidentsEnabled)
         {
             return;

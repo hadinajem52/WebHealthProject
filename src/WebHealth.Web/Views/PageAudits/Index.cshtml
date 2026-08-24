@@ -30,16 +30,6 @@
     };
 }
 
-@section PageActions {
-    @if (User.IsInRole("Administrator"))
-    {
-        <a class="button button--secondary" asp-controller="PageAuditSettings" asp-action="Index">
-            @await Html.PartialAsync("_Icon", "settings")
-            <span>Incident settings</span>
-        </a>
-    }
-}
-
 <div id="ajax-page"
      class="stack"
      data-ajax-region
@@ -96,7 +86,41 @@
                     </button>
                 </form>
             }
+
+            @if (User.IsInRole("Administrator")
+                && Model.SelectedEndpointId is { } settingsTarget
+                && summary?.IsConfigured == true
+                && Model.Endpoints.Any(option => option.Id == settingsTarget))
+            {
+                <a class="button button--secondary button--icon"
+                   asp-controller="PageAuditSettings"
+                   asp-action="Index"
+                   asp-route-endpointId="@settingsTarget"
+                   title="Incident settings for @selectedLabel"
+                   aria-label="Incident settings for @selectedLabel">
+                    @await Html.PartialAsync("_Icon", "settings")
+                </a>
+            }
         </div>
+
+        @* A missing Run now button reads as a defect unless the page says what is missing. The
+           auditing-off case already has its own empty state below, so it is not repeated here. *@
+        @if (Model.SelectedEndpointId is { } blockedTarget
+            && !Model.CanRunNow
+            && summary?.IsEnabled == true
+            && EndpointTestBlockDisplay.Describe(Model.RunBlock, "an audit") is { } blockedReason)
+        {
+            <p class="card__status" data-status="warning">
+                @await Html.PartialAsync("_Icon", "warning")
+                <span>
+                    @blockedReason
+                    @if (Model.Endpoints.Any(option => option.Id == blockedTarget))
+                    {
+                        <a asp-controller="Targets" asp-action="Endpoint" asp-route-id="@blockedTarget">Open endpoint</a>
+                    }
+                </span>
+            </p>
+        }
 
         @if (Model.SelectedEndpointId is not null)
         {

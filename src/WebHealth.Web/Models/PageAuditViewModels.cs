@@ -1,4 +1,5 @@
 ﻿using WebHealth.Application.PageAudits;
+using WebHealth.Application.Registry;
 using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.Web.Models;
@@ -16,7 +17,8 @@ public sealed record PageAuditIndexViewModel(
     IReadOnlyList<PageAuditCategorySummary> CategorySummaries,
     IReadOnlyList<PageAuditRunSummary> Runs,
     IReadOnlyList<PageAuditItemView> Items,
-    bool CanRunNow)
+    bool CanRunNow,
+    EndpointTestBlock RunBlock = EndpointTestBlock.None)
 {
     public bool AnyCategoryRunActive => CategorySummaries.Any(summary => summary.LatestRun?.IsActive == true);
 

@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("f93897b5-c5a0-45b0-aa2a-a778a467c4a5"), entityTypeCount: 50)
+            : base(skipDetectChanges: false, modelId: new Guid("3dc98cea-f296-4e46-bd3c-76c7dc252985"), entityTypeCount: 50)
         {
         }
 
@@ -128,7 +128,8 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             NotificationEventEntityType.CreateForeignKey1(notificationEvent, incidentEvent);
             NotificationEventEntityType.CreateForeignKey2(notificationEvent, incident);
             NotificationReadMarkerEntityType.CreateForeignKey1(notificationReadMarker, applicationUser);
-            PageAuditIncidentPolicyEntityEntityType.CreateForeignKey1(pageAuditIncidentPolicyEntity, applicationUser);
+            PageAuditIncidentPolicyEntityEntityType.CreateForeignKey1(pageAuditIncidentPolicyEntity, endpoint);
+            PageAuditIncidentPolicyEntityEntityType.CreateForeignKey2(pageAuditIncidentPolicyEntity, applicationUser);
             PageAuditItemEntityType.CreateForeignKey1(pageAuditItem, pageAuditRun);
             PageAuditRunEntityType.CreateForeignKey1(pageAuditRun, pageAuditTarget);
             PageAuditTargetEntityType.CreateForeignKey1(pageAuditTarget, endpoint);
