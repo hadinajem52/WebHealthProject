@@ -4,7 +4,10 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>BR-L02. Robots is respected by default, and an override needs all three conditions.</summary>
+/// <summary>
+/// BR-L02 as it now stands: a run that asks for an override gets it, on any target. The gate is
+/// still the only place that decides, so a run that does not ask still obeys robots.
+/// </summary>
 public sealed class CrawlRobotsGateTests
 {
     private const string Agent = "webhealthmonitor/1.0";
@@ -34,24 +37,12 @@ public sealed class CrawlRobotsGateTests
         CrawlRobotsGate.IsAllowed(Blocking(approved: true), Agent, "/private/x", true).Should().BeTrue();
 
     [Fact]
-    public void EvaluateOverride_GrantsOnlyForAnApprovedNonProductionOrigin() =>
-        CrawlRobotsGate.EvaluateOverride(true, false, Blocking(approved: true))
-            .Should().Be(new CrawlOverrideDecision(true, null));
-
-    [Theory]
-    [InlineData(false, false, true, CrawlOverrideRefusals.NotRequested)]
-    [InlineData(true, true, true, CrawlOverrideRefusals.ProductionTarget)]
-    [InlineData(true, false, false, CrawlOverrideRefusals.NoApprovedException)]
-    public void EvaluateOverride_RefusesAndSaysWhy(
-        bool requested,
-        bool isProduction,
-        bool approved,
-        string expected) =>
-        CrawlRobotsGate.EvaluateOverride(requested, isProduction, Blocking(approved))
-            .Should().Be(CrawlOverrideDecision.Refused(expected));
+    public void EvaluateOverride_GrantsWheneverTheRunAsks() =>
+        CrawlRobotsGate.EvaluateOverride(true).Should().Be(new CrawlOverrideDecision(true, null));
 
     [Fact]
-    public void EvaluateOverride_RefusesAProductionTargetEvenWithAnApprovedException() =>
-        CrawlRobotsGate.EvaluateOverride(true, true, Blocking(approved: true))
-            .Granted.Should().BeFalse("a production crawl never bypasses a published restriction");
+    public void EvaluateOverride_RefusesARunThatDidNotAsk() =>
+        CrawlRobotsGate.EvaluateOverride(false)
+            .Should().Be(CrawlOverrideDecision.Refused(CrawlOverrideRefusals.NotRequested),
+                "the override is applied because a run asked for it, never by default");
 }

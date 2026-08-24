@@ -144,17 +144,17 @@ public static class CrawlRunDisplay
     };
 
     /// <summary>
-    /// Why a run's robots override was not granted. BR-L02 permits one only for a non-production
-    /// target carrying an approved exception, so most of these are settled policy rather than
-    /// something a reader can act on -- which is exactly what the wording has to convey.
+    /// Why a run's robots override was not granted. Runs now ask for one every time and are always
+    /// granted it, so the two refusals below belong to runs recorded under the older policy — kept
+    /// because an old report still has to explain itself to whoever opens it.
     /// </summary>
     public static string DescribeOverrideRefusal(string? refusedBecause) => refusedBecause switch
     {
         CrawlOverrideRefusals.NotRequested => "Not requested",
         CrawlOverrideRefusals.ProductionTarget =>
-            "Refused — an override is never granted for a production target",
+            "Refused — this run predates the current policy, and was a production target",
         CrawlOverrideRefusals.NoApprovedException =>
-            "Refused — this origin carries no approved exception",
+            "Refused — this run predates the current policy, and the origin carried no exception",
         null => "Not requested",
         _ => refusedBecause
     };

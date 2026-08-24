@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -70,6 +71,22 @@ internal sealed class SafeHttpTransport(
                         BuildTiming(currentTiming, currentTtfbMs));
                 }
 
+                var hopDecision = request.HopPolicy is null
+                    ? null
+                    : await request.HopPolicy.EvaluateAsync(
+                        new(currentNormalization.NormalizedUrl!, redirects.Count), timeout.Token);
+                if (hopDecision is { Allowed: false })
+                {
+                    return Failure(
+                        SafeHttpFailureKind.RequestPolicyRejected,
+                        stopwatch,
+                        redirects,
+                        requestIdentity,
+                        finalDestination: Destination(currentNormalization),
+                        timing: BuildTiming(currentTiming, currentTtfbMs),
+                        policyRejectionReason: hopDecision.RejectionReason);
+                }
+
                 if (!await targetAuthorizer.IsAuthorizedAsync(
                     request.EndpointId,
                     currentNormalization.NormalizedHost!,
@@ -136,7 +153,8 @@ internal sealed class SafeHttpTransport(
                             : null,
                         // BR-E01 needs the media type to decide whether this body may be parsed,
                         // and the charset to decode it. Stored as declared, bounded, never trusted.
-                        BoundedContentType(response.Content.Headers.ContentType?.ToString()));
+                        BoundedContentType(response.Content.Headers.ContentType?.ToString()),
+                        RetryAfter(response.Headers.RetryAfter));
                 }
 
                 if (redirects.Count >= request.MaxRedirects)
@@ -287,6 +305,14 @@ internal sealed class SafeHttpTransport(
 
     private const int MaxContentTypeLength = 200;
 
+    private TimeSpan? RetryAfter(RetryConditionHeaderValue? retryAfter)
+    {
+        if (retryAfter?.Delta is { } delta) return delta < TimeSpan.Zero ? TimeSpan.Zero : delta;
+        if (retryAfter?.Date is not { } date) return null;
+        var delay = date - timeProvider.GetUtcNow();
+        return delay < TimeSpan.Zero ? TimeSpan.Zero : delay;
+    }
+
     private static string? BoundedContentType(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
@@ -301,7 +327,8 @@ internal sealed class SafeHttpTransport(
         string? requestIdentity,
         int? statusCode = null,
         SafeHttpDestination? finalDestination = null,
-        SafeHttpPhaseTiming? timing = null) =>
+        SafeHttpPhaseTiming? timing = null,
+        string? policyRejectionReason = null) =>
         new(
             failure,
             statusCode,
@@ -312,7 +339,8 @@ internal sealed class SafeHttpTransport(
             ReadOnlyMemory<byte>.Empty,
             redirects,
             requestIdentity,
-            timing);
+            timing,
+            PolicyRejectionReason: policyRejectionReason);
 
     private static bool TryClassify(Exception exception, out SafeHttpFailureKind failure)
     {

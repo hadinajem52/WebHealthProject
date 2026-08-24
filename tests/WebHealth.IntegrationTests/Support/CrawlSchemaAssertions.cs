@@ -34,11 +34,83 @@ internal static class CrawlSchemaAssertions
         await VerifyRunStatusContractAsync(connectionString, endpointId);
         await VerifyOverrideContractAsync(connectionString, endpointId);
         await VerifySourceTargetUniquenessAsync(connectionString, endpointId);
+        await VerifyBoundedBatchPersistenceAsync(connectionString, endpointId);
         await VerifyOneActiveRunPerEndpointAsync(connectionString, endpointId);
         await VerifyResultsCascadeWithTheirRunAsync(connectionString, endpointId);
         await VerifyReportingIndexServesTheFilterAsync(connectionString, endpointId);
         await VerifyAbandonedRunsAreRetiredAsync(connectionString, endpointId);
         await VerifyExecutionClaimFencesARetiredRunAsync(connectionString, endpointId);
+    }
+
+    private static async Task VerifyBoundedBatchPersistenceAsync(
+        string connectionString,
+        Guid endpointId)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var sink = scope.ServiceProvider.GetRequiredService<ICrawlResultSink>();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var runId = Guid.NewGuid();
+        await sink.BeginRunAsync(new(
+            runId,
+            endpointId,
+            ["https://batch.test/?access_token=seed-secret"],
+            new([], [], "Canonicalize", 1000, 5, false),
+            TimeProvider.System.GetUtcNow()));
+        var records = Enumerable.Range(0, 501)
+            .Select(index => new CrawlLinkRecord(
+                runId,
+                "https://batch.test/source",
+                index < 2
+                    ? "https://batch.test/target?token=REDACTED"
+                    : $"https://batch.test/target/{index}",
+                true,
+                1,
+                CrawlLinkClassifications.Broken,
+                404,
+                0,
+                null,
+                null,
+                8)
+            {
+                TargetUrlIdentity = index < 2
+                    ? $"https://batch.test/target?token=secret-{index}"
+                    : null
+            })
+            .ToArray();
+
+        (await sink.RecordLinksAsync(records)).Should().Be(501);
+
+        var additional = new CrawlLinkRecord(
+            runId,
+            "https://batch.test/source",
+            "https://batch.test/target/501",
+            true,
+            1,
+            CrawlLinkClassifications.Broken,
+            404,
+            0,
+            null,
+            null,
+            8);
+        (await sink.RecordLinksAsync([records[0], additional])).Should().Be(502);
+
+        var stored = await database.CrawlLinkResults.AsNoTracking()
+            .Where(result => result.RunId == runId)
+            .ToArrayAsync();
+        stored.Should().HaveCount(502);
+        stored.Should().OnlyContain(result => !result.TargetUrl.Contains("secret-", StringComparison.Ordinal));
+        stored.Count(result => result.TargetUrl.EndsWith("token=REDACTED", StringComparison.Ordinal))
+            .Should().Be(2);
+        (await database.CrawlRuns.AsNoTracking().SingleAsync(run => run.Id == runId))
+            .SeedUrls.Should().Be("https://batch.test/?access_token=REDACTED");
+
+        await DeleteRunsAsync(connectionString, runId);
     }
 
     /// <summary>
@@ -583,6 +655,7 @@ internal static class CrawlSchemaAssertions
         await VerifyRunThatFetchedNothingIsNeverABaselineAsync(services, endpointId);
         await VerifyCoverageLimitedRunIsNeverABaselineAsync(services, endpointId);
         await VerifyUncheckedLinkIsNotReportedResolvedAsync(services, endpointId);
+        await VerifyRedactedUrlsUseHashesForComparisonAsync(services, endpointId);
         await VerifyRunStartIsReplayableAsync(services, endpointId);
     }
 
@@ -809,6 +882,70 @@ internal static class CrawlSchemaAssertions
     }
 
     /// <summary>Replaying a run start is a no-op, matching how link writes tolerate replay.</summary>
+    private static async Task VerifyRedactedUrlsUseHashesForComparisonAsync(
+        IServiceProvider services,
+        Guid endpointId)
+    {
+        var previousRun = Guid.CreateVersion7();
+        var currentRun = Guid.CreateVersion7();
+        await using (var writing = services.CreateAsyncScope())
+        {
+            var sink = writing.ServiceProvider.GetRequiredService<ICrawlResultSink>();
+            await sink.BeginRunAsync(new(
+                previousRun, endpointId, ["https://identity.test/"],
+                new([], [], "Canonicalize", 1000, 5, false), DateTimeOffset.UtcNow));
+            await sink.RecordLinkAsync(new(
+                previousRun,
+                "https://identity.test/source",
+                "https://identity.test/reset?token=REDACTED",
+                true,
+                1,
+                CrawlLinkClassifications.Broken,
+                404,
+                0,
+                null,
+                null,
+                8)
+            {
+                TargetUrlIdentity = "https://identity.test/reset?token=old"
+            });
+            await FinishRunAsync(sink, previousRun, new(
+                previousRun, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+                1, 1, false, CrawlOverrideRefusals.NotRequested, []));
+
+            await sink.BeginRunAsync(new(
+                currentRun, endpointId, ["https://identity.test/"],
+                new([], [], "Canonicalize", 1000, 5, false), DateTimeOffset.UtcNow));
+            await sink.RecordLinkAsync(new(
+                currentRun,
+                "https://identity.test/source",
+                "https://identity.test/reset?token=REDACTED",
+                true,
+                1,
+                CrawlLinkClassifications.Broken,
+                404,
+                0,
+                null,
+                null,
+                8)
+            {
+                TargetUrlIdentity = "https://identity.test/reset?token=new"
+            });
+            await FinishRunAsync(sink, currentRun, new(
+                currentRun, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
+                1, 1, false, CrawlOverrideRefusals.NotRequested, []));
+        }
+
+        await using var reading = services.CreateAsyncScope();
+        var reader = reading.ServiceProvider.GetRequiredService<ICrawlReportReader>();
+        var comparison = await reader.CompareLatestAsync(
+            endpointId, await AdministratorAccessAsync(reading));
+        comparison.New.Sample.Should().Contain(link =>
+            link.TargetUrl == "https://identity.test/reset?token=REDACTED");
+        comparison.Continuing.Sample.Should().NotContain(link =>
+            link.TargetUrl == "https://identity.test/reset?token=REDACTED");
+    }
+
     private static async Task VerifyRunStartIsReplayableAsync(IServiceProvider services, Guid endpointId)
     {
         var runId = Guid.CreateVersion7();

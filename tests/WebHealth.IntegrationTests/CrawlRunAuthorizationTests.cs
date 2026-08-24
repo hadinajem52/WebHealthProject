@@ -78,6 +78,18 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
     }
 
     [Fact]
+    public async Task RunNow_PassesTheExternalLinkChoiceToTheRunner()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        var runner = factory.Services.GetRequiredService<RecordingCrawlRunner>();
+        runner.Requested.Clear();
+
+        await PostRunNowAsync(client, Endpoint, checkExternalLinks: true);
+
+        runner.CheckExternalLinks.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task RunNow_IsRefusedWithoutAnAntiForgeryToken()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
@@ -163,7 +175,10 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
     /// the page first is what a browser does, and it is the only way to obtain the pair of tokens
     /// the framework validates.
     /// </summary>
-    private static async Task<HttpResponseMessage> PostRunNowAsync(HttpClient client, Guid endpointId)
+    private static async Task<HttpResponseMessage> PostRunNowAsync(
+        HttpClient client,
+        Guid endpointId,
+        bool checkExternalLinks = false)
     {
         using var page = await client.GetAsync($"/Crawl?endpointId={endpointId}");
         var html = await page.Content.ReadAsStringAsync();
@@ -174,6 +189,7 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
             Content = new FormUrlEncodedContent(
             [
                 new("endpointId", endpointId.ToString()),
+                new("checkExternalLinks", checkExternalLinks.ToString()),
                 new("__RequestVerificationToken", token)
             ])
         };

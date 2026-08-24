@@ -33,8 +33,8 @@ public sealed record CrawlEdge(
 public sealed class CrawlLinkLedger
 {
     private readonly Dictionary<string, Resolution> _resolved = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, List<string?>> _sourcesByTarget = new(StringComparer.Ordinal);
-    private readonly HashSet<string> _emitted = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string?>> _sourcesByTarget = new(StringComparer.Ordinal);
+    private readonly HashSet<(string? Source, string Target)> _emitted = [];
 
     private sealed record Resolution(
         string Classification, int? StatusCode, int RedirectCount, string? FinalUrl,
@@ -49,13 +49,13 @@ public sealed class CrawlLinkLedger
         ArgumentNullException.ThrowIfNull(targetUrl);
         if (!_sourcesByTarget.TryGetValue(targetUrl, out var sources))
         {
-            sources = [];
+            sources = new(StringComparer.Ordinal);
             _sourcesByTarget.Add(targetUrl, sources);
         }
 
-        sources.Add(sourceUrl);
+        if (!sources.Add(sourceUrl)) return [];
         return _resolved.TryGetValue(targetUrl, out var resolution)
-            ? Emit(targetUrl, resolution, [sourceUrl])
+            ? Emit(targetUrl, resolution, new HashSet<string?>([sourceUrl], StringComparer.Ordinal))
             : [];
     }
 
@@ -109,18 +109,22 @@ public sealed class CrawlLinkLedger
         // already handed to the sink.
         if (!_resolved.TryAdd(targetUrl, resolution)) return [];
 
-        return Emit(targetUrl, resolution, _sourcesByTarget.GetValueOrDefault(targetUrl) ?? []);
+        return Emit(
+            targetUrl,
+            resolution,
+            _sourcesByTarget.GetValueOrDefault(targetUrl)
+                ?? new HashSet<string?>(StringComparer.Ordinal));
     }
 
     private IReadOnlyList<CrawlEdge> Emit(
         string targetUrl,
         Resolution resolution,
-        IReadOnlyList<string?> sources)
+        IReadOnlySet<string?> sources)
     {
         var edges = new List<CrawlEdge>();
         foreach (var source in sources)
         {
-            if (!_emitted.Add($"{source}\n{targetUrl}")) continue;
+            if (!_emitted.Add((source, targetUrl))) continue;
             edges.Add(new(source, targetUrl, resolution.Classification, resolution.StatusCode,
                 resolution.RedirectCount, resolution.FinalUrl, resolution.SkipReason,
                 resolution.DurationMs));

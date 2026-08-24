@@ -175,6 +175,30 @@ public sealed class SafeHttpTransportTests
     }
 
     [Fact]
+    public async Task SendAsync_AppliesTheRequestPolicyBeforeEveryRedirectDestination()
+    {
+        var redirectPort = 0;
+        await using var server = await HttpFixture.Start(
+            contact => contact == 1
+                ? $"HTTP/1.1 302 Found\r\nLocation: http://allowed.test:{redirectPort}/private\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            repeat: true);
+        redirectPort = server.Port;
+        await using var harness = CreateHarness(
+            new HostResolver(("allowed.test", [IPAddress.Loopback])), AuthorizeAll);
+        var request = new SafeHttpTransportRequest(
+            Guid.NewGuid(), $"http://allowed.test:{server.Port}/", false)
+        {
+            HopPolicy = new RejectRedirectPolicy()
+        };
+
+        var result = await harness.Transport.SendAsync(request);
+
+        result.Failure.Should().Be(SafeHttpFailureKind.RequestPolicyRejected);
+        server.ContactCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task SendAsync_DetectsRedirectLoops()
     {
         await using var loop = await HttpFixture.Start(
@@ -839,6 +863,14 @@ public sealed class SafeHttpTransportTests
             await _server;
             _stop.Dispose();
         }
+    }
+
+    private sealed class RejectRedirectPolicy : ISafeHttpRequestHopPolicy
+    {
+        public Task<SafeHttpRequestHopDecision> EvaluateAsync(
+            SafeHttpRequestHop hop,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SafeHttpRequestHopDecision(hop.RedirectCount == 0, "redirect denied"));
     }
 
     private sealed class TlsFixture : IAsyncDisposable

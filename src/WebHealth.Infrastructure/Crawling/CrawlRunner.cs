@@ -26,8 +26,6 @@ namespace WebHealth.Infrastructure.Crawling;
 /// Scope is derived from the seed rather than configured: the seed is the endpoint's own
 /// normalized URL, and <c>CrawlScope.FromSeeds</c> turns that into a same-host scope. Nothing here
 /// invents a wider reach than the endpoint this application was already authorized to test.
-/// External link checking and robots override both stay off — each is a separate permission with
-/// its own evidence requirement, and neither is something a button should be able to grant.
 /// </para>
 /// </remarks>
 public sealed class CrawlRunner(
@@ -45,6 +43,7 @@ public sealed class CrawlRunner(
     public async Task<CrawlManualResult> QueueManualAsync(
         Guid endpointId,
         RegistryAccessContext access,
+        bool checkExternalLinks,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(access);
@@ -99,8 +98,12 @@ public sealed class CrawlRunner(
         var request = new CrawlRunRequest(runId, endpointId, endpoint.IsProduction, [endpoint.NormalizedUrl])
         {
             Limits = CrawlLimits.Default,
-            CheckExternalLinks = false,
-            RequestRobotsOverride = false
+            CheckExternalLinks = checkExternalLinks,
+
+            // Asked for on every run, and granted, by the project owner's decision of 2026-08-24:
+            // a broken link behind a Disallow is still a broken link on a site we are authorized to
+            // test. The run records the bypass rather than reporting a clean sweep.
+            RequestRobotsOverride = true
         };
 
         try
@@ -130,13 +133,7 @@ public sealed class CrawlRunner(
         dbContext.ChangeTracker.Clear();
         try
         {
-            queue!.Enqueue(
-                runId,
-                endpointId,
-                endpoint.IsProduction,
-                request.SeedUrls,
-                request.CheckExternalLinks,
-                request.RequestRobotsOverride);
+            queue!.Enqueue(runId);
         }
         catch (Exception exception)
         {
@@ -188,27 +185,11 @@ public sealed class CrawlRunner(
     }
 }
 
-/// <summary>
-/// The Hangfire side of <see cref="ICrawlRunQueue" />. The job carries the request as arguments
-/// rather than re-reading it, so a crawl cannot be steered by editing the endpoint after it was
-/// asked for.
-/// </summary>
 internal sealed class HangfireCrawlRunQueue(IBackgroundJobClient backgroundJobs)
     : ICrawlRunQueue
 {
-    public void Enqueue(
-        Guid runId,
-        Guid endpointId,
-        bool isProduction,
-        IReadOnlyList<string> seedUrls,
-        bool checkExternalLinks,
-        bool requestRobotsOverride) =>
+    public void Enqueue(Guid runId) =>
         backgroundJobs.Enqueue<CrawlRunJob>(job => job.ExecuteAsync(
             runId,
-            endpointId,
-            isProduction,
-            seedUrls.ToArray(),
-            checkExternalLinks,
-            requestRobotsOverride,
             CancellationToken.None));
 }

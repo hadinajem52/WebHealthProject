@@ -2809,3 +2809,10 @@ code,
 .filter-inline__action {
     display: contents;
 }
+
+.crawl-run-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+}

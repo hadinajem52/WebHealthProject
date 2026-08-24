@@ -5,15 +5,6 @@ using WebHealth.Domain.Seo;
 
 namespace WebHealth.Infrastructure.Crawling;
 
-/// <summary>
-/// BR-E10 and BR-L01. Reads <c>href</c> values out of a document and returns nothing else.
-/// <para>
-/// The parser is used directly, exactly as <c>SeoValueExtractor</c> uses it: no browsing context
-/// and no requester, so the markup is inert input rather than a page being loaded and cannot cause
-/// a fetch of anything it references. The class takes no logger and returns no document, which is
-/// what keeps "never retain the HTML" structural rather than a convention.
-/// </para>
-/// </summary>
 internal sealed class HtmlLinkExtractor : IHtmlLinkExtractor
 {
     private static readonly HtmlParser Parser = new();
@@ -45,12 +36,13 @@ internal sealed class HtmlLinkExtractor : IHtmlLinkExtractor
                 .Where(href => !string.IsNullOrWhiteSpace(href))
                 .Take(MaxHrefsPerPage + 1)
                 .ToArray();
+            var baseHref = document.QuerySelector("base[href]")?.GetAttribute("href");
 
             // One over the cap: the extra element is how a document that has more links than this
             // reads is told apart from one that has exactly as many.
             return hrefs.Length > MaxHrefsPerPage
-                ? new(hrefs[..MaxHrefsPerPage]!, FullyInspected: false)
-                : new(hrefs!, FullyInspected: true);
+                ? new(hrefs[..MaxHrefsPerPage]!, FullyInspected: false, baseHref)
+                : new(hrefs!, FullyInspected: true, baseHref);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {

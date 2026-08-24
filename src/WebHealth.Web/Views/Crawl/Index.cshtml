@@ -63,10 +63,14 @@
                     }
                     else
                     {
-                        <form method="post" asp-action="RunNow">
+                        <form method="post" asp-action="RunNow" class="crawl-run-form">
                             <input type="hidden" name="endpointId" value="@runTarget" />
+                            <label class="switch-field" title="External destinations are checked only when their host is authorized. They are never crawled recursively.">
+                                <input type="checkbox" name="checkExternalLinks" value="true" />
+                                <span>Check authorized external links</span>
+                            </label>
                             <button class="button button--secondary" type="submit"
-                                    title="Fetches this site page by page and checks every link it finds. External links are not fetched.">
+                                    title="Fetches this site page by page and checks every authorized link it finds.">
                                 @await Html.PartialAsync("_Icon", "play")
                                 <span>Run crawl</span>
                             </button>

@@ -37,7 +37,21 @@ public sealed record SafeHttpTransportRequest(
     bool IsProduction,
     int MaxRedirects = SafeHttpTransportDefaults.MaxRedirects,
     int MaxResponseBodyBytes = SafeHttpTransportDefaults.MaxDecodedBodyBytes,
-    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds);
+    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds)
+{
+    public ISafeHttpRequestHopPolicy? HopPolicy { get; init; }
+}
+
+public sealed record SafeHttpRequestHop(string Url, int RedirectCount);
+
+public interface ISafeHttpRequestHopPolicy
+{
+    Task<SafeHttpRequestHopDecision> EvaluateAsync(
+        SafeHttpRequestHop hop,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record SafeHttpRequestHopDecision(bool Allowed, string? RejectionReason = null);
 
 /// <summary>
 /// <c>Certificate</c> carries the leaf certificate negotiated for a successful HTTPS response.
@@ -67,7 +81,9 @@ public sealed record SafeHttpTransportResult(
     SafeHttpPhaseTiming? Timing = null,
     TlsCertificateObservation? Certificate = null,
     long? TransferredLength = null,
-    string? ContentType = null)
+    string? ContentType = null,
+    TimeSpan? RetryAfter = null,
+    string? PolicyRejectionReason = null)
 {
     public bool Succeeded => Failure is null;
 }
@@ -107,6 +123,7 @@ public enum SafeHttpFailureKind
     RedirectLoop,
     RedirectLimit,
     HttpsDowngrade,
+    RequestPolicyRejected,
     Protocol
 }
 

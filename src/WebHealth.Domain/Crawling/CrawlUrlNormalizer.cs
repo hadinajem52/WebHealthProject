@@ -52,13 +52,56 @@ public sealed record CrawlUrlOptions
 
     public const string TrackingParameterPrefix = "utm_";
 
+    public static IReadOnlySet<string> DefaultSensitiveQueryParameters { get; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "access_token", "api_key", "apikey", "auth", "authorization", "client_secret", "code",
+            "jwt", "password", "passwd", "refresh_token", "secret", "session", "sessionid", "sig",
+            "signature", "token", "x-amz-signature", "x-goog-signature"
+        };
+
     public static CrawlUrlOptions Default { get; } = new();
 
     public CrawlQueryPolicy QueryPolicy { get; init; } = CrawlQueryPolicy.Canonicalize;
 
     public IReadOnlySet<string> TrackingParameters { get; init; } = DefaultTrackingParameters;
 
+    public IReadOnlySet<string> SensitiveQueryParameters { get; init; } =
+        DefaultSensitiveQueryParameters;
+
     public int MaxQueryParameters { get; init; } = DefaultMaxQueryParameters;
+}
+
+public static class CrawlUrlRedactor
+{
+    public static string? Redact(string? url, CrawlUrlOptions options)
+    {
+        if (url is null) return null;
+        var queryStart = url.IndexOf('?', StringComparison.Ordinal);
+        if (queryStart < 0 || queryStart == url.Length - 1) return url;
+
+        var prefix = url[..(queryStart + 1)];
+        var parameters = url[(queryStart + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries);
+        var redacted = parameters.Select(parameter => RedactParameter(parameter, options));
+        return prefix + string.Join('&', redacted);
+    }
+
+    private static string RedactParameter(string parameter, CrawlUrlOptions options)
+    {
+        var separator = parameter.IndexOf('=', StringComparison.Ordinal);
+        var name = separator < 0 ? parameter : parameter[..separator];
+        string decoded;
+        try
+        {
+            decoded = Uri.UnescapeDataString(name);
+        }
+        catch (UriFormatException)
+        {
+            decoded = name;
+        }
+
+        return options.SensitiveQueryParameters.Contains(decoded) ? $"{name}=REDACTED" : parameter;
+    }
 }
 
 /// <summary>

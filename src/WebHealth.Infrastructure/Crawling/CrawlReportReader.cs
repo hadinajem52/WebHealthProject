@@ -135,17 +135,21 @@ internal sealed class CrawlReportReader(
         // The set difference is done by the database, not in memory. Loading both runs' links to
         // subtract them here would be unbounded, and bounding *that* would silently drop links —
         // which, on the previous run's side, reads as a link that was fixed.
-        // Source-target identity is compared over the URLs rather than their hashes: the hash is
-        // derived from the URL, and a translated string comparison carries Entity Framework's null
-        // semantics — which matters, because a seed has no source page and would otherwise fail to
-        // match itself. The predicate is written out at each use because a helper method cannot be
-        // translated into SQL.
         var newlyBroken = currentBroken.Where(link => !previousBroken.Any(before =>
-            before.SourceUrl == link.SourceUrl && before.TargetUrl == link.TargetUrl));
+            ((before.SourceUrlHash == null && link.SourceUrlHash == null)
+                || (before.SourceUrlHash != null && link.SourceUrlHash != null
+                    && before.SourceUrlHash == link.SourceUrlHash))
+            && before.TargetUrlHash == link.TargetUrlHash));
         var continuing = currentBroken.Where(link => previousBroken.Any(before =>
-            before.SourceUrl == link.SourceUrl && before.TargetUrl == link.TargetUrl));
+            ((before.SourceUrlHash == null && link.SourceUrlHash == null)
+                || (before.SourceUrlHash != null && link.SourceUrlHash != null
+                    && before.SourceUrlHash == link.SourceUrlHash))
+            && before.TargetUrlHash == link.TargetUrlHash));
         var noLongerBroken = previousBroken.Where(link => !currentBroken.Any(now =>
-            now.SourceUrl == link.SourceUrl && now.TargetUrl == link.TargetUrl));
+            ((now.SourceUrlHash == null && link.SourceUrlHash == null)
+                || (now.SourceUrlHash != null && link.SourceUrlHash != null
+                    && now.SourceUrlHash == link.SourceUrlHash))
+            && now.TargetUrlHash == link.TargetUrlHash));
 
         // A previously broken link that is no longer broken is only resolved if the current run
         // actually established that. A timeout, a block, a skip or an unreached target says nothing
@@ -162,11 +166,17 @@ internal sealed class CrawlReportReader(
             await BucketAsync(continuing, cancellationToken),
             await BucketAsync(
                 noLongerBroken.Where(link => !unproven.Any(other =>
-                    other.SourceUrl == link.SourceUrl && other.TargetUrl == link.TargetUrl)),
+                    ((other.SourceUrlHash == null && link.SourceUrlHash == null)
+                        || (other.SourceUrlHash != null && link.SourceUrlHash != null
+                            && other.SourceUrlHash == link.SourceUrlHash))
+                    && other.TargetUrlHash == link.TargetUrlHash)),
                 cancellationToken),
             await BucketAsync(
                 noLongerBroken.Where(link => unproven.Any(other =>
-                    other.SourceUrl == link.SourceUrl && other.TargetUrl == link.TargetUrl)),
+                    ((other.SourceUrlHash == null && link.SourceUrlHash == null)
+                        || (other.SourceUrlHash != null && link.SourceUrlHash != null
+                            && other.SourceUrlHash == link.SourceUrlHash))
+                    && other.TargetUrlHash == link.TargetUrlHash)),
                 cancellationToken));
     }
 
@@ -219,7 +229,11 @@ internal sealed class CrawlReportReader(
     /// makes a bucket sample and a link page stable rather than planner-dependent.
     /// </summary>
     private static IOrderedQueryable<CrawlLinkResult> Ordered(IQueryable<CrawlLinkResult> links) =>
-        links.OrderBy(link => link.TargetUrl).ThenBy(link => link.SourceUrl);
+        links.OrderBy(link => link.TargetUrl)
+            .ThenBy(link => link.SourceUrl)
+            .ThenBy(link => link.TargetUrlHash)
+            .ThenBy(link => link.SourceUrlHash)
+            .ThenBy(link => link.Id);
 
     private static IQueryable<CrawlBrokenLink> Project(IQueryable<CrawlLinkResult> links) =>
         links.Select(link => new CrawlBrokenLink(

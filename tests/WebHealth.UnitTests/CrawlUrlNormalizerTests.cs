@@ -199,6 +199,30 @@ public sealed class CrawlUrlNormalizerTests
         CrawlUrlNormalizer.Resolve("javascript:void(0)", Base("https://example.com/"), CrawlUrlOptions.Default)
             .Rejection.Should().Be(CrawlUrlRejections.UnsupportedScheme);
 
+    [Fact]
+    public void Redact_ReplacesSensitiveQueryValuesAndPreservesOtherParameters()
+    {
+        var redacted = CrawlUrlRedactor.Redact(
+            "https://example.com/path?id=7&access_token=secret&name=Ada",
+            CrawlUrlOptions.Default);
+
+        redacted.Should().Be(
+            "https://example.com/path?id=7&access_token=REDACTED&name=Ada");
+    }
+
+    [Theory]
+    [InlineData("refresh_token")]
+    [InlineData("client_secret")]
+    [InlineData("x-amz-signature")]
+    [InlineData("x-goog-signature")]
+    public void Redact_ReplacesCommonSensitiveQueryValues(string parameter)
+    {
+        CrawlUrlRedactor.Redact(
+                $"https://example.com/path?{parameter}=secret",
+                CrawlUrlOptions.Default)
+            .Should().Be($"https://example.com/path?{parameter}=REDACTED");
+    }
+
     [Theory]
     [InlineData("https://example.com/docs/page", "/docs/")]
     [InlineData("https://example.com/docs/", "/docs/")]

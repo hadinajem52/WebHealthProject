@@ -6,6 +6,11 @@ namespace WebHealth.Domain.Crawling;
 public static class CrawlOverrideRefusals
 {
     public const string NotRequested = "NotRequested";
+
+    /// <summary>
+    /// Only on runs recorded before the owner chose to bypass robots on every crawl. The reader of
+    /// an old report is still owed the reason that run was refused, so the names stay.
+    /// </summary>
     public const string ProductionTarget = "ProductionTarget";
     public const string NoApprovedException = "NoApprovedException";
 }
@@ -27,28 +32,31 @@ public sealed record CrawlRobotsFacts(bool HasSnapshot, string? Content, bool Ha
 
 /// <summary>
 /// BR-L02. Whether a crawl may fetch a path, and whether an override of a published restriction is
-/// authorized. Both are pure functions of the stored snapshot and the run's own properties.
+/// applied. Both are pure functions of the stored snapshot and the run's own properties.
 /// </summary>
 public static class CrawlRobotsGate
 {
     /// <summary>
-    /// An override is granted only when the run asked for it, the target is non-production, and the
-    /// origin carries the approved exception 6.4 records with its reason and approver. All three,
-    /// every time: a production crawl never bypasses a published restriction, and an override
-    /// nobody approved is not an override.
+    /// An override is granted whenever the run asks for it.
+    /// <para>
+    /// This is a deliberate narrowing of BR-L02, decided by the project owner on 2026-08-24: a
+    /// broken-link crawl of one's own site should see the pages robots.txt hides from search
+    /// engines, because a disallowed path can still be linked and still be broken. The conditions
+    /// that used to gate it -- a non-production target and an approved per-origin exception --
+    /// are gone, so nothing here refuses a crawl the caller asked for.
+    /// </para>
+    /// <para>
+    /// What still bounds a crawl is unchanged and is where the real protection was: a host is only
+    /// ever fetched with recorded target-authorization evidence, the per-host rate limiter still
+    /// paces every request, and the run still records that it bypassed robots rather than
+    /// reporting a clean sweep. Robots is a request from a site's owner, and the owner of these
+    /// targets is the one asking.
+    /// </para>
     /// </summary>
-    public static CrawlOverrideDecision EvaluateOverride(
-        bool requested,
-        bool isProduction,
-        CrawlRobotsFacts facts)
-    {
-        ArgumentNullException.ThrowIfNull(facts);
-        if (!requested) return CrawlOverrideDecision.Refused(CrawlOverrideRefusals.NotRequested);
-        if (isProduction) return CrawlOverrideDecision.Refused(CrawlOverrideRefusals.ProductionTarget);
-        return facts.HasApprovedException
+    public static CrawlOverrideDecision EvaluateOverride(bool requested) =>
+        requested
             ? new(true, null)
-            : CrawlOverrideDecision.Refused(CrawlOverrideRefusals.NoApprovedException);
-    }
+            : CrawlOverrideDecision.Refused(CrawlOverrideRefusals.NotRequested);
 
     /// <summary>
     /// Whether the path may be fetched. An origin with no snapshot, or one whose robots.txt has no

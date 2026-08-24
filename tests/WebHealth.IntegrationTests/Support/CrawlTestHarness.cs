@@ -34,7 +34,8 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
         SafeHttpFailureKind? Failure = null,
         int RedirectCount = 0,
         string? FinalUrl = null,
-        bool Truncated = false);
+        bool Truncated = false,
+        TimeSpan? RetryAfter = null);
 
     public FakeSiteTransport Page(string url, string html) =>
         With(url, new(200, html));
@@ -70,6 +71,23 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
             // An unconfigured URL is a 404, which is what makes a link to a page the fixture never
             // defined a broken link rather than a silent success.
             var response = _pages.GetValueOrDefault(request.Url, new SiteResponse(404));
+            var finalUrl = response.FinalUrl ?? request.Url;
+            if (response.RedirectCount > 0
+                && request.HopPolicy is not null
+                && await request.HopPolicy.EvaluateAsync(
+                    new(finalUrl, response.RedirectCount), cancellationToken) is { Allowed: false } decision)
+            {
+                return new(
+                    SafeHttpFailureKind.RequestPolicyRejected,
+                    null,
+                    new SafeHttpDestination(finalUrl),
+                    TimeSpan.FromMilliseconds(5),
+                    0,
+                    false,
+                    ReadOnlyMemory<byte>.Empty,
+                    [new SafeHttpRedirectHop(302, request.Url, finalUrl, false)],
+                    PolicyRejectionReason: decision.RejectionReason);
+            }
             var body = response.Html is null
                 ? ReadOnlyMemory<byte>.Empty
                 : Encoding.UTF8.GetBytes(response.Html);
@@ -77,14 +95,15 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
             return new(
                 response.Failure,
                 response.StatusCode,
-                new SafeHttpDestination(response.FinalUrl ?? request.Url),
+                new SafeHttpDestination(finalUrl),
                 TimeSpan.FromMilliseconds(5),
                 body.Length,
                 response.Truncated,
                 body,
                 [.. Enumerable.Range(0, response.RedirectCount)
                     .Select(index => new SafeHttpRedirectHop(301, request.Url, request.Url, false))],
-                ContentType: response.Html is null ? null : "text/html; charset=utf-8");
+                ContentType: response.Html is null ? null : "text/html; charset=utf-8",
+                RetryAfter: response.RetryAfter);
         }
         finally
         {
@@ -130,6 +149,8 @@ internal static class CrawlTestHarness
         RequestsPerSecondPerHost = 0,
         MaxDuration = TimeSpan.FromMinutes(5),
         FetchTimeoutSeconds = 5,
+        RetryBaseDelay = TimeSpan.Zero,
+        MaxRetryDelay = TimeSpan.Zero,
         MaxPageBytes = 256 * 1024
     };
 

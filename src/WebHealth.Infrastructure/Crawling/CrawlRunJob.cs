@@ -1,8 +1,10 @@
 using Hangfire;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WebHealth.Application.Crawling;
 using WebHealth.Domain.Crawling;
+using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Crawling;
 
@@ -16,28 +18,75 @@ namespace WebHealth.Infrastructure.Crawling;
 /// what the limits in this phase exist to prevent. A new run is an explicit decision.
 /// </para>
 /// </summary>
-public sealed class CrawlRunJob(ICrawlExecutionService executionService)
+public sealed class CrawlRunJob(
+    ICrawlExecutionService executionService,
+    CrawlQueuedRunReader requestReader)
 {
     [Queue(CrawlQueueNames.Crawl)]
     [AutomaticRetry(Attempts = 0)]
     public async Task ExecuteAsync(
         Guid runId,
-        Guid endpointId,
-        bool isProduction,
-        string[] seedUrls,
-        bool checkExternalLinks,
-        bool requestRobotsOverride,
         CancellationToken cancellationToken)
     {
-        await executionService.ExecuteAsync(
-            new(runId, endpointId, isProduction, seedUrls ?? [])
-            {
-                Limits = CrawlLimits.Default,
-                CheckExternalLinks = checkExternalLinks,
-                RequestRobotsOverride = requestRobotsOverride
-            },
-            cancellationToken);
+        var request = await requestReader.ReadAsync(runId, cancellationToken);
+        if (request is not null)
+        {
+            await executionService.ExecuteAsync(request, cancellationToken);
+        }
     }
+}
+
+public sealed class CrawlQueuedRunReader(ApplicationDbContext dbContext)
+{
+    public async Task<CrawlRunRequest?> ReadAsync(
+        Guid runId,
+        CancellationToken cancellationToken)
+    {
+        var stored = await dbContext.CrawlRuns.AsNoTracking()
+            .Where(run => run.Id == runId)
+            .Select(run => new
+            {
+                run.Id,
+                run.EndpointId,
+                run.Endpoint.NormalizedUrl,
+                run.Endpoint.Environment.IsProduction,
+                run.AllowedHosts,
+                run.AllowedPathPrefixes,
+                run.QueryPolicy,
+                run.MaxPages,
+                run.MaxDepth,
+                run.CheckExternalLinks
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (stored is null)
+        {
+            return null;
+        }
+
+        Enum.TryParse<CrawlQueryPolicy>(stored.QueryPolicy, out var queryPolicy);
+        return new(stored.Id, stored.EndpointId, stored.IsProduction, [stored.NormalizedUrl])
+        {
+            AllowedHosts = stored.AllowedHosts is null
+                ? null
+                : Split(stored.AllowedHosts)
+                    .Select(value => value.StartsWith("*.", StringComparison.Ordinal)
+                        ? new CrawlHostRule(value[2..], true)
+                        : new CrawlHostRule(value, false))
+                    .ToArray(),
+            AllowedPathPrefixes = stored.AllowedPathPrefixes is null
+                ? null
+                : Split(stored.AllowedPathPrefixes),
+            Limits = new() { MaxPages = stored.MaxPages, MaxDepth = stored.MaxDepth },
+            UrlOptions = new() { QueryPolicy = queryPolicy },
+            CheckExternalLinks = stored.CheckExternalLinks,
+            RequestRobotsOverride = true
+        };
+    }
+
+    private static string[] Split(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 /// <summary>

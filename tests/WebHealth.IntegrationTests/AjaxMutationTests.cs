@@ -320,13 +320,31 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         HttpClient client,
         string path = "/Targets/Endpoints")
     {
-        var content = await client.GetStringAsync(path);
-        var match = Regex.Match(
-            content,
-            "name=\"__RequestVerificationToken\"[^>]*value=\"(?<token>[^\"]+)\"",
-            RegexOptions.CultureInvariant);
-        Assert.True(match.Success);
-        return WebUtility.HtmlDecode(match.Groups["token"].Value);
+        var ajaxValues = client.DefaultRequestHeaders
+            .TryGetValues(AjaxResponseHeaders.Request, out var values)
+            ? values.ToArray()
+            : null;
+        client.DefaultRequestHeaders.Remove(AjaxResponseHeaders.Request);
+
+        try
+        {
+            var content = await client.GetStringAsync(path);
+            var match = Regex.Match(
+                content,
+                "name=\"__RequestVerificationToken\"[^>]*value=\"(?<token>[^\"]+)\"",
+                RegexOptions.CultureInvariant);
+            Assert.True(match.Success, content);
+            return WebUtility.HtmlDecode(match.Groups["token"].Value);
+        }
+        finally
+        {
+            if (ajaxValues is not null)
+            {
+                client.DefaultRequestHeaders.TryAddWithoutValidation(
+                    AjaxResponseHeaders.Request,
+                    ajaxValues);
+            }
+        }
     }
 
     private static Task<HttpResponseMessage> PostAsync(

@@ -2,27 +2,19 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using NpgsqlTypes;
 using WebHealth.Application.Crawling;
 using WebHealth.Domain.Crawling;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Crawling;
 
-/// <summary>
-/// Writes a run and its results as they resolve. Per result rather than batched at the end, which
-/// is the whole of BR-L10's preservation guarantee: a cancelled run needs no special save path
-/// because everything it found is already committed.
-/// <para>
-/// Each write owns its context for exactly one operation. A crawl's workers run concurrently, and
-/// on one shared context a failed save also left its entity tracked, so the next save re-sent a
-/// row that had already landed and turned one fault into a run-ending cascade of duplicate-key
-/// violations. A context that is gone by the next call cannot carry a failure forward.
-/// </para>
-/// </summary>
 internal sealed class CrawlResultSink(
     IDbContextFactory<ApplicationDbContext> contextFactory,
     TimeProvider timeProvider) : ICrawlResultSink
 {
+    private const int LinkBatchSize = 250;
+
     /// <summary>
     /// Opens the run. Replaying the same run id is a controlled no-op rather than a primary-key
     /// failure: link writes already tolerate duplicate delivery, and a start that threw on replay
@@ -59,8 +51,11 @@ internal sealed class CrawlResultSink(
             EndpointId = start.EndpointId,
             Status = CrawlRunStatuses.Running,
             StopReason = CrawlStopReasons.FrontierExhausted,
-            SeedUrls = Bounded(
-                string.Join('\n', start.SeedUrls), CrawlRunConfiguration.MaxSeedUrlsLength)!,
+            SeedUrls = Bounded(string.Join('\n', start.SeedUrls.Select(seed =>
+                CrawlUrlRedactor.Redact(seed, new CrawlUrlOptions
+                {
+                    SensitiveQueryParameters = start.Settings.SensitiveQueryParameters
+                }))), CrawlRunConfiguration.MaxSeedUrlsLength)!,
             AllowedHosts = Scope(start.Settings.AllowedHosts),
             AllowedPathPrefixes = Scope(start.Settings.AllowedPathPrefixes),
             QueryPolicy = start.Settings.QueryPolicy,
@@ -119,47 +114,89 @@ internal sealed class CrawlResultSink(
 
     public async Task RecordLinkAsync(
         CrawlLinkRecord record,
+        CancellationToken cancellationToken = default) =>
+        await RecordLinksAsync([record], cancellationToken);
+
+    public async Task<int> RecordLinksAsync(
+        IReadOnlyList<CrawlLinkRecord> records,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(record);
+        ArgumentNullException.ThrowIfNull(records);
+        for (var offset = 0; offset < records.Count; offset += LinkBatchSize)
+        {
+            await WriteBatchAsync(
+                records.Skip(offset).Take(LinkBatchSize).ToArray(), cancellationToken);
+        }
+
+        if (records.Count == 0)
+        {
+            return 0;
+        }
+
         await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var runId = records[0].RunId;
+        return await dbContext.CrawlLinkResults.CountAsync(
+            result => result.RunId == runId,
+            cancellationToken);
+    }
 
-        // Bound first, then hash what was bound. Hashing the original while storing a shortened
-        // copy would make the identity describe a value the row does not contain — and that identity
-        // is exactly what the source-target uniqueness index is built on.
-        var sourceUrl = Bounded(record.SourceUrl, CrawlUrlOptions.MaxUrlLength);
-        var targetUrl = Bounded(record.TargetUrl, CrawlUrlOptions.MaxUrlLength)!;
-
-        dbContext.CrawlLinkResults.Add(new CrawlLinkResult
+    private async Task<int> WriteBatchAsync(
+        IReadOnlyList<CrawlLinkRecord> records,
+        CancellationToken cancellationToken)
+    {
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await dbContext.Database.OpenConnectionAsync(cancellationToken);
+        await using var batch = new NpgsqlBatch(
+            (NpgsqlConnection)dbContext.Database.GetDbConnection());
+        foreach (var record in records)
         {
-            Id = Guid.CreateVersion7(),
-            RunId = record.RunId,
-            SourceUrl = sourceUrl,
-            SourceUrlHash = sourceUrl is null ? null : Hash(sourceUrl),
-            TargetUrl = targetUrl,
-            TargetUrlHash = Hash(targetUrl),
-            Classification = record.Classification,
-            SkipReason = record.SkipReason,
-            StatusCode = record.StatusCode,
-            RedirectCount = record.RedirectCount,
-            FinalUrl = Bounded(record.FinalUrl, CrawlUrlOptions.MaxUrlLength),
-            IsInternal = record.IsInternal,
-            Depth = record.Depth,
-            DurationMs = record.DurationMs,
-            RecordedAt = timeProvider.GetUtcNow()
-        });
-
-        try
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
+            var sourceUrl = Bounded(
+                CrawlUrlRedactor.Redact(record.SourceUrl, CrawlUrlOptions.Default),
+                CrawlUrlOptions.MaxUrlLength);
+            var targetUrl = Bounded(
+                CrawlUrlRedactor.Redact(record.TargetUrl, CrawlUrlOptions.Default),
+                CrawlUrlOptions.MaxUrlLength)!;
+            var sourceIdentity = Bounded(
+                record.SourceUrlIdentity ?? record.SourceUrl, CrawlUrlOptions.MaxUrlLength);
+            var targetIdentity = Bounded(
+                record.TargetUrlIdentity ?? record.TargetUrl, CrawlUrlOptions.MaxUrlLength)!;
+            var command = new NpgsqlBatchCommand("""
+                INSERT INTO web_health.crawl_link_result
+                    (id, run_id, source_url, source_url_hash, target_url, target_url_hash,
+                     classification, skip_reason, status_code, redirect_count, final_url,
+                     is_internal, depth, duration_ms, recorded_at)
+                VALUES
+                    (@id, @run_id, @source_url, @source_url_hash, @target_url, @target_url_hash,
+                     @classification, @skip_reason, @status_code, @redirect_count, @final_url,
+                     @is_internal, @depth, @duration_ms, @recorded_at)
+                ON CONFLICT (run_id, source_url_hash, target_url_hash) DO NOTHING
+                """);
+            command.Parameters.AddWithValue("id", NpgsqlDbType.Uuid, Guid.CreateVersion7());
+            command.Parameters.AddWithValue("run_id", NpgsqlDbType.Uuid, record.RunId);
+            command.Parameters.AddWithValue("source_url", NpgsqlDbType.Varchar, (object?)sourceUrl ?? DBNull.Value);
+            command.Parameters.AddWithValue("source_url_hash", NpgsqlDbType.Bytea,
+                sourceIdentity is null ? DBNull.Value : Hash(sourceIdentity));
+            command.Parameters.AddWithValue("target_url", NpgsqlDbType.Varchar, targetUrl);
+            command.Parameters.AddWithValue("target_url_hash", NpgsqlDbType.Bytea, Hash(targetIdentity));
+            command.Parameters.AddWithValue("classification", NpgsqlDbType.Varchar, record.Classification);
+            command.Parameters.AddWithValue("skip_reason", NpgsqlDbType.Varchar,
+                (object?)record.SkipReason ?? DBNull.Value);
+            command.Parameters.AddWithValue("status_code", NpgsqlDbType.Integer,
+                (object?)record.StatusCode ?? DBNull.Value);
+            command.Parameters.AddWithValue("redirect_count", NpgsqlDbType.Integer, record.RedirectCount);
+            command.Parameters.AddWithValue("final_url", NpgsqlDbType.Varchar,
+                (object?)Bounded(
+                    CrawlUrlRedactor.Redact(record.FinalUrl, CrawlUrlOptions.Default),
+                    CrawlUrlOptions.MaxUrlLength) ?? DBNull.Value);
+            command.Parameters.AddWithValue("is_internal", NpgsqlDbType.Boolean, record.IsInternal);
+            command.Parameters.AddWithValue("depth", NpgsqlDbType.Integer, record.Depth);
+            command.Parameters.AddWithValue("duration_ms", NpgsqlDbType.Integer,
+                (object?)record.DurationMs ?? DBNull.Value);
+            command.Parameters.AddWithValue("recorded_at", NpgsqlDbType.TimestampTz, timeProvider.GetUtcNow());
+            batch.BatchCommands.Add(command);
         }
-        catch (DbUpdateException exception)
-            when (IsViolationOf(exception, "ux_crawl_link_result_pair"))
-        {
-            // BR-L07 is enforced by the index, and the ledger already deduplicates, so reaching
-            // here means a retry re-sent a pair rather than that a pair was counted twice. The row
-            // that is already stored is the same row, so the write is dropped rather than failed.
-        }
+
+        return await batch.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

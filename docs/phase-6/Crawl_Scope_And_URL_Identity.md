@@ -83,7 +83,15 @@ case-insensitively, and the `utm_` match is a prefix so a new member of the fami
 The set is a run-level input rather than a constant, so a site that genuinely uses `ref` as a route
 parameter can say so.
 
-### 2.2 The explosion caps
+### 2.2 Sensitive values in stored URLs
+
+The crawler uses the complete canonical URL for the outbound request and source-target identity.
+Before a URL reaches persistence or a report, values for configured sensitive query names are
+replaced with `REDACTED`. The default set covers access tokens, API keys, authorization values,
+passwords, secrets, sessions, signatures and common authentication codes. Hashes continue to use
+the complete canonical identity so two distinct resources do not collapse into one stored pair.
+
+### 2.3 The explosion caps
 
 Tracking-parameter removal is not enough on its own. A faceted catalogue generates unbounded query
 variants from parameters that are not tracking parameters at all, and each one is legitimately a

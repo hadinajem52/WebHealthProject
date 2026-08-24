@@ -90,8 +90,9 @@ result.
 
 ## 4. Cancellation preserves what was found (BR-L10)
 
-Results are written to the sink **as each target resolves**, never batched to the end. Cancellation
-then needs no special path to preserve findings: everything already resolved is already recorded.
+Results are flushed to the sink as targets resolve in bounded batches of 250 rows, never held until
+the end of the crawl. Each batch commits independently. Cancellation therefore preserves every
+committed batch and flushes the remaining records before recording the outcome.
 
 The run is marked `Cancelled` with stop reason `Cancelled`. It is never `Completed`. A partial crawl
 that reported "no broken links" as a completed run would be worse than no crawl at all.
@@ -152,6 +153,9 @@ emits one result per distinct source-target pair once that target's outcome is k
 deduplicated, so a page linking to the same broken URL five times contributes one result and one
 affected page, not five.
 
+The source collection is a set, so repeated anchor occurrences do not accumulate in memory before
+the target resolves. The sink persists at most 250 pairs per database context and commit.
+
 Order does not matter to the ledger. A source discovered after its target was already fetched emits
 immediately; a target fetched after several sources pointed at it emits one result for each.
 
@@ -161,29 +165,43 @@ Every internal fetch is checked against the origin's stored `robots.txt` snapsho
 crawl performs no robots fetch of its own. An origin with no snapshot is crawled, for the same
 reason 6.4's rules raise no finding without one: absence of evidence is not evidence.
 
-**Overriding robots is decided per origin, and granted only when all three hold:**
+**Overriding robots is granted whenever the run asks for it, and manual runs ask every time.**
 
-1. the run asked for it;
-2. the target is **non-production** — a production crawl never bypasses published restrictions;
-3. **that origin** carries an **approved exception** on its `robots_snapshot` row, with the reason
-   and approver 6.4 already records.
+That is a narrowing of BR-L02 decided by the project owner on 2026-08-24. The two conditions that
+used to gate it — a non-production target, and an approved exception on that origin's
+`robots_snapshot` row — are gone. The reason is the feature's purpose: a path a site keeps out of
+search engines can still be linked from a page and can still be broken, and a broken-links report of
+one's own site that silently omits those paths is a report of the wrong site. Before this, a
+robots-disallowed path was skipped as `RobotsDisallowed`, which also counts in `LimitsCoverage` — so
+a site with a broad `Disallow` produced a coverage-limited run that could not even serve as a
+comparison baseline.
 
-Per origin is the load-bearing word. A run's scope can reach a host the seeds never named — through
-`AllowedHosts`, through `IncludeSubdomains`, or simply through a second seed — and a decision taken
-once for the seeds and applied to everything afterwards would carry one origin's approval onto a
-host nobody approved. That is precisely what the approval exists to prevent, so the decision is
-re-evaluated against each origin's own facts at the moment that origin is first consulted.
+What still bounds a crawl is unchanged, and is where the protection actually lived:
 
-The run outcome records whether the run bypassed a restriction **anywhere**, and the reason when it
-did not. That is the security-relevant fact; where an origin's override was refused, its robots were
-enforced. An override that left no trace would be exactly the silent flag this project refuses to
-have.
+- **Target authorization.** A host is fetched only with recorded evidence for that host and port,
+  checked before robots is consulted and again inside the transport on every redirect hop. Robots
+  was never what kept this crawler off a stranger's site.
+- **Scope.** `AllowedHosts` and `AllowedPathPrefixes` still decide what the run may reach, and a
+  manual run's scope is derived from the endpoint's own URL.
+- **Pacing.** The per-host rate limiter and the process-wide request budget are untouched.
+- **The record.** The run still stores `robots_override_granted`, so a report says the crawl
+  bypassed published restrictions rather than presenting itself as a clean sweep. An override that
+  left no trace would be exactly the silent flag this project refuses to have.
+
+The decision is still evaluated per origin, and the run still counts how many origins it bypassed —
+the answer is simply the same for every origin now. A run that does **not** ask for an override still
+obeys robots in full: `CrawlRobotsGate` remains the only place that decides.
 
 ## 7. SSRF and authorization (BR-L01, and the Phase 0 network policy)
 
 Every request — internal page, external link, redirect hop — goes through `ISafeHttpTransport`, and
 therefore through the actual-connection destination policy and the per-endpoint target
 authorization evidence. There is no second HTTP client and no bypass.
+
+The crawler supplies a pre-request gate to the transport. Before a redirect destination is
+contacted, that gate applies crawl scope, the run's external-check choice, robots policy for
+internal pages, and per-host pacing. The transport independently retains destination safety and
+target authorization on the same hop.
 
 That has a consequence worth stating plainly: **an external link is only fetched when the project
 holds target-authorization evidence for its host and port.** Everything else is recorded as
@@ -192,14 +210,24 @@ holds target-authorization evidence for its host and port.** Everything else is 
 checked; it does
 not make the crawler a general-purpose fetcher for whatever host a remote page names, and following
 an arbitrary `href` through our own network position is exactly the SSRF the policy exists to
-prevent. External checking is also off by default per run.
+prevent. External checking is off by default per run. The manual crawl form offers an explicit
+opt-in; external targets are status-checked only, never parsed or recursively explored.
+
+### 7.1 Transient observations
+
+`408`, `425`, `429`, `5xx`, DNS, connection, TLS, timeout, oversized-header and protocol failures
+receive one bounded retry. A usable `Retry-After` is honored up to the configured maximum delay;
+otherwise the retry uses bounded deterministic jitter. A persistent transient response is
+`Unknown` or `Timeout`, never `Broken`. Deterministic client errors such as `404` and `410` remain
+`Broken`.
 
 ## 8. HTML is read and discarded (BR-E10)
 
 Link extraction uses the same AngleSharp parser 6.2 uses, in the same inert configuration — no
 browsing context, no requester, nothing that can fetch what the document references. It returns a
-list of `href` strings and nothing else. The document does not reach the sink, the run record, or a
-log.
+bounded list of `href` strings and the first authored `<base href>`. Relative links resolve against
+that base after it passes the normal URL policy. The document does not reach the sink, the run
+record, or a log.
 
 ## 9. What this increment does not do
 
@@ -218,7 +246,7 @@ payload, where nothing validates them.
 
 | Rule | Where it lives | Tests |
 |---|---|---|
-| BR-L02 robots and override authorization | `CrawlRobotsGate`, `CrawlRobotsReader` | `CrawlRobotsGateTests`, `CrawlExecutionTests` |
+| BR-L02 robots, overridden on request (section 6) | `CrawlRobotsGate`, `CrawlRobotsReader` | `CrawlRobotsGateTests`, `CrawlExecutionTests` |
 | BR-L05 duration, concurrency, per-host rate | `CrawlRun`, `HostRequestRateLimiter` | `CrawlExecutionTests`, `HostRequestRateLimiterTests` |
 | BR-L06 classification from transport facts | `CrawlRun.Observe` | `CrawlExecutionTests` |
 | BR-L07 source-target pairs, deduplicated | `CrawlLinkLedger` | `CrawlLinkLedgerTests`, `CrawlExecutionTests` |

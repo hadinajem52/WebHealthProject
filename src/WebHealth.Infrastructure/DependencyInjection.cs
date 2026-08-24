@@ -175,6 +175,7 @@ public static class DependencyInjection
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlReconciler, CrawlReconciler>();
         services.AddScoped<ICrawlExecutionService, CrawlExecutionService>();
+        services.AddScoped<CrawlQueuedRunReader>();
         services.AddScoped<CrawlRunJob>();
         services.AddScoped<CrawlReconciliationJob>();
         // Only when a crawl worker exists. HangfireCrawlRunQueue needs IBackgroundJobClient, which
@@ -431,6 +432,11 @@ public static class DependencyInjection
             || options.MaxDuration < TimeSpan.FromMinutes(1)
             || options.MaxDuration > TimeSpan.FromHours(4)
             || options.FetchTimeoutSeconds is < 1 or > 120
+            || options.TransientRetryCount is < 0 or > 3
+            || options.RetryBaseDelay < TimeSpan.Zero
+            || options.RetryBaseDelay > TimeSpan.FromSeconds(5)
+            || options.MaxRetryDelay < options.RetryBaseDelay
+            || options.MaxRetryDelay > TimeSpan.FromMinutes(2)
             || options.MaxPageBytes < 64 * 1024
             || options.MaxPageBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes)
         {

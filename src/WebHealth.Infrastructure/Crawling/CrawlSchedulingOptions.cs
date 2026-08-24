@@ -27,6 +27,12 @@ public sealed record CrawlSchedulingOptions
 
     public int FetchTimeoutSeconds { get; init; } = 15;
 
+    public int TransientRetryCount { get; init; } = 1;
+
+    public TimeSpan RetryBaseDelay { get; init; } = TimeSpan.FromMilliseconds(250);
+
+    public TimeSpan MaxRetryDelay { get; init; } = TimeSpan.FromSeconds(30);
+
     /// <summary>
     /// Enough to read the links out of a large page, and far below the transport's own cap. A
     /// crawl reads many more bodies than a check does, so its bound is tighter, not looser.

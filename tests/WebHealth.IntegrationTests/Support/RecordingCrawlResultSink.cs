@@ -37,6 +37,14 @@ internal sealed class RecordingCrawlResultSink : ICrawlResultSink
         return Task.CompletedTask;
     }
 
+    public Task<int> RecordLinksAsync(
+        IReadOnlyList<CrawlLinkRecord> records,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var record in records) _links.Enqueue(record);
+        return Task.FromResult(_links.Count);
+    }
+
     public Task<bool> TryClaimRunAsync(
         Guid runId,
         Guid executionClaimId,

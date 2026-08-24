@@ -76,14 +76,18 @@ public sealed class CrawlController(
     }
 
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> RunNow(Guid endpointId, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> RunNow(
+        Guid endpointId,
+        bool checkExternalLinks,
+        CancellationToken cancellationToken = default)
     {
         var access = GetAccess();
 
         // The policy above says this user may test targets at all; the runner says they may test
         // *this* one. Without the second check an endpoint id in a form post would be permission
         // enough to make this application crawl a site.
-        var result = await crawlRunner.QueueManualAsync(endpointId, access, cancellationToken);
+        var result = await crawlRunner.QueueManualAsync(
+            endpointId, access, checkExternalLinks, cancellationToken);
 
         if (!result.Succeeded)
         {

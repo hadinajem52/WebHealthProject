@@ -235,7 +235,7 @@ public sealed class CrawlExecutionTests
             .Page(Seed, CrawlTestHarness.LinkTo("/a", "/b"))
             .Page("https://site.test/a", CrawlTestHarness.LinkTo("/gone", "/gone", "/gone"))
             .Page("https://site.test/b", CrawlTestHarness.LinkTo("/gone"))
-            .Status("https://site.test/gone", 500);
+            .Status("https://site.test/gone", 404);
 
         var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
 
@@ -320,9 +320,51 @@ public sealed class CrawlExecutionTests
         var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
 
         Classification(sink, "https://site.test/moved").Should().Be(CrawlLinkClassifications.Redirected);
-        Classification(sink, "https://site.test/dns-dead").Should().Be(CrawlLinkClassifications.Broken);
+        Classification(sink, "https://site.test/dns-dead").Should().Be(CrawlLinkClassifications.Unknown);
         Classification(sink, "https://site.test/slow").Should().Be(CrawlLinkClassifications.Timeout);
         Classification(sink, "https://site.test/private").Should().Be(CrawlLinkClassifications.Blocked);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RetriesATransientResponseBeforeClassifyingIt()
+    {
+        const string flaky = "https://site.test/flaky";
+        var site = Site().Page(Seed, CrawlTestHarness.LinkTo("/flaky"));
+        site.BeforeRespondAsync = url =>
+        {
+            if (url == flaky)
+            {
+                if (site.Requested.Count(requested => requested == flaky) == 1)
+                {
+                    site.Status(flaky, 503);
+                }
+                else
+                {
+                    site.Page(flaky, CrawlTestHarness.LinkTo());
+                }
+            }
+
+            return Task.CompletedTask;
+        };
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        site.Requested.Count(url => url == flaky).Should().Be(2);
+        Classification(sink, flaky).Should().Be(CrawlLinkClassifications.Healthy);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_LeavesAPersistentTransientResponseUnknown()
+    {
+        const string unavailable = "https://site.test/unavailable";
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/unavailable"))
+            .With(unavailable, new(503, RetryAfter: TimeSpan.FromSeconds(30)));
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        site.Requested.Count(url => url == unavailable).Should().Be(2);
+        Classification(sink, unavailable).Should().Be(CrawlLinkClassifications.Unknown);
     }
 
     [Fact]
@@ -382,47 +424,36 @@ public sealed class CrawlExecutionTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_GrantsAnOverrideOnlyForAnApprovedNonProductionOrigin()
+    public async Task ExecuteAsync_GrantsAnOverrideWheneverTheRunAsksForOne()
     {
         var site = Site()
             .Page(Seed, CrawlTestHarness.LinkTo("/private/secret"))
             .Page("https://site.test/private/secret", CrawlTestHarness.LinkTo());
-        var robots = new FakeRobotsReader(new(true, "User-agent: *\nDisallow: /private", true));
-        var request = CrawlTestHarness.Request() with { RequestRobotsOverride = true };
-
-        var (outcome, _) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
-
-        outcome.RobotsOverrideGranted.Should().BeTrue();
-        outcome.RobotsOverrideRefusedBecause.Should().BeNull();
-        site.Requested.Should().Contain("https://site.test/private/secret");
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_RefusesAnOverrideOnAProductionTarget()
-    {
-        var site = Site().Page(Seed, CrawlTestHarness.LinkTo("/private/secret"));
-        var robots = new FakeRobotsReader(new(true, "User-agent: *\nDisallow: /private", true));
-        var request = CrawlTestHarness.Request() with { RequestRobotsOverride = true, IsProduction = true };
-
-        var (outcome, _) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
-
-        outcome.RobotsOverrideGranted.Should().BeFalse();
-        outcome.RobotsOverrideRefusedBecause.Should().Be(CrawlOverrideRefusals.ProductionTarget);
-        site.Requested.Should().NotContain("https://site.test/private/secret");
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_RefusesAnOverrideWithNoApprovedException()
-    {
-        var site = Site().Page(Seed, CrawlTestHarness.LinkTo("/private/secret"));
         var robots = new FakeRobotsReader(new(true, "User-agent: *\nDisallow: /private", false));
         var request = CrawlTestHarness.Request() with { RequestRobotsOverride = true };
 
         var (outcome, _) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
 
-        outcome.RobotsOverrideGranted.Should().BeFalse();
-        outcome.RobotsOverrideRefusedBecause.Should().Be(CrawlOverrideRefusals.NoApprovedException);
-        site.Requested.Should().NotContain("https://site.test/private/secret");
+        outcome.RobotsOverrideGranted.Should().BeTrue(
+            "an approved exception is no longer required");
+        outcome.RobotsOverrideRefusedBecause.Should().BeNull();
+        site.Requested.Should().Contain("https://site.test/private/secret");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GrantsAnOverrideOnAProductionTargetToo()
+    {
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo("/private/secret"))
+            .Page("https://site.test/private/secret", CrawlTestHarness.LinkTo());
+        var robots = new FakeRobotsReader(new(true, "User-agent: *\nDisallow: /private", false));
+        var request = CrawlTestHarness.Request() with { RequestRobotsOverride = true, IsProduction = true };
+
+        var (outcome, _) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
+
+        outcome.RobotsOverrideGranted.Should().BeTrue();
+        site.Requested.Should().Contain("https://site.test/private/secret",
+            "the production block was removed by the owner's decision of 2026-08-24");
     }
 
     [Fact]
@@ -488,7 +519,64 @@ public sealed class CrawlExecutionTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AppliesAnOverrideOnlyToTheSeedOriginThatApprovedIt()
+    public async Task ExecuteAsync_ResolvesRelativeLinksAgainstTheFirstBaseHref()
+    {
+        var html = "<!doctype html><html><head><base href=\"/assets/\"><base href=\"/ignored/\"></head>"
+            + "<body><a href=\"page\">x</a></body></html>";
+        var site = Site()
+            .Page(Seed, html)
+            .Page("https://site.test/assets/page", CrawlTestHarness.LinkTo());
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        site.Requested.Should().Contain("https://site.test/assets/page");
+        site.Requested.Should().NotContain("https://site.test/ignored/page");
+        sink.Links.Should().ContainSingle(link =>
+            link.SourceUrl == Seed && link.TargetUrl == "https://site.test/assets/page");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RedactsSensitiveQueryValuesFromRecordedUrls()
+    {
+        const string target = "https://site.test/account?access_token=secret&id=7";
+        var site = Site()
+            .Page(Seed, CrawlTestHarness.LinkTo(target))
+            .Status(target, 404);
+
+        var (_, sink) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
+
+        site.Requested.Should().Contain(target);
+        sink.Links.Should().ContainSingle(link =>
+            link.TargetUrl == "https://site.test/account?access_token=REDACTED&id=7"
+            && link.TargetUrlIdentity == target);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RejectsARobotsDisallowedRedirectBeforeFetchingItsDestination()
+    {
+        const string target = "https://site.test/private/landing";
+        var site = Site().With(
+            Seed,
+            new(200, CrawlTestHarness.LinkTo("/should-not-be-read"), RedirectCount: 1, FinalUrl: target));
+        var robots = new FakeRobotsReader(new(true, "User-agent: *\nDisallow: /private", false));
+
+        var (outcome, sink) = await CrawlTestHarness.RunAsync(
+            site, CrawlTestHarness.Request(), robotsReader: robots);
+
+        outcome.PagesFetched.Should().Be(0);
+        outcome.CoverageLimited.Should().BeTrue();
+        sink.Links.Should().ContainSingle(link => link.TargetUrl == Seed)
+            .Which.Classification.Should().Be(CrawlLinkClassifications.Blocked);
+        site.Requested.Should().NotContain("https://site.test/should-not-be-read");
+    }
+
+    /// <summary>
+    /// The override now reaches every origin a run is allowed to touch, not only one that carried
+    /// an approval. What still keeps a run off a host is scope and target authorization, and both
+    /// are checked before robots is ever consulted.
+    /// </summary>
+    [Fact]
+    public async Task ExecuteAsync_AppliesTheOverrideToEveryOriginInScope()
     {
         var site = new FakeSiteTransport()
             .Page("https://approved.test/", CrawlTestHarness.LinkTo("/private/x"))
@@ -507,16 +595,14 @@ public sealed class CrawlExecutionTests
 
         var (outcome, sink) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
 
-        // The security property: approval is per origin, so it authorizes bypassing that origin's
-        // restrictions and no other's.
         site.Requested.Should().Contain("https://approved.test/private/x");
-        site.Requested.Should().NotContain("https://unapproved.test/private/x",
-            "one origin's approval must never authorize bypassing another origin's robots");
-        sink.Links.Should().ContainSingle(link => link.TargetUrl == "https://unapproved.test/private/x")
-            .Which.SkipReason.Should().Be(CrawlSkipReasons.RobotsDisallowed);
+        site.Requested.Should().Contain("https://unapproved.test/private/x",
+            "no origin has to carry an approval any more");
+        sink.Links.Should().NotContain(link => link.SkipReason == CrawlSkipReasons.RobotsDisallowed,
+            "nothing is skipped for robots once the override is granted");
 
         outcome.RobotsOverrideGranted.Should().BeTrue(
-            "the run did bypass a published restriction somewhere, which is the fact worth recording");
+            "the run bypassed published restrictions, which is the fact worth recording");
     }
 
     [Fact]
@@ -561,7 +647,7 @@ public sealed class CrawlExecutionTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_DoesNotOverrideRobotsOnADiscoveredOriginThatWasNeverApproved()
+    public async Task ExecuteAsync_OverridesRobotsOnADiscoveredOriginToo()
     {
         var site = new FakeSiteTransport()
             .Page("https://approved.test/", CrawlTestHarness.LinkTo(
@@ -574,7 +660,7 @@ public sealed class CrawlExecutionTests
             ["https://other.test"] = new(true, Blocking, false)
         });
 
-        // The scope reaches both hosts, but only one of them carries an approved exception.
+        // The scope reaches both hosts, and neither needs an exception of its own.
         var request = CrawlTestHarness.Request("https://approved.test/") with
         {
             RequestRobotsOverride = true,
@@ -584,13 +670,10 @@ public sealed class CrawlExecutionTests
 
         var (_, sink) = await CrawlTestHarness.RunAsync(site, request, robotsReader: robots);
 
-        site.Requested.Should().Contain("https://approved.test/private/seed-side",
-            "the origin with an approved exception is the one the override applies to");
-        site.Requested.Should().NotContain("https://other.test/private/discovered",
-            "an approval for one origin must never authorize bypassing another origin's robots");
-        sink.Links.Should()
-            .ContainSingle(link => link.TargetUrl == "https://other.test/private/discovered")
-            .Which.SkipReason.Should().Be(CrawlSkipReasons.RobotsDisallowed);
+        site.Requested.Should().Contain("https://approved.test/private/seed-side");
+        site.Requested.Should().Contain("https://other.test/private/discovered",
+            "a host inside the run's scope is crawled whatever its robots.txt says");
+        sink.Links.Should().NotContain(link => link.SkipReason == CrawlSkipReasons.RobotsDisallowed);
     }
 
     [Fact]

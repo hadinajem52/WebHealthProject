@@ -20,7 +20,7 @@ namespace WebHealth.IntegrationTests;
 /// </summary>
 public sealed class PageSpeedInsightsProviderTests
 {
-    private const string ApiKey = "test-key-must-never-be-logged";
+    private const string TestCredential = "test-key-must-never-be-logged";
 
     private static readonly PageAuditRequest Request = new(
         new Uri("https://example.com/"),
@@ -312,7 +312,7 @@ public sealed class PageSpeedInsightsProviderTests
         var oversized = "{\"padding\":\"" + new string('x', 400_000) + "\"}";
         var (provider, _) = Create(
             new FakeHandler(HttpStatusCode.OK, oversized),
-            new PageSpeedInsightsOptions { ApiKey = ApiKey, MaximumResponseBytes = 300 * 1024 });
+            new PageSpeedInsightsOptions { ApiKey = TestCredential, MaximumResponseBytes = 300 * 1024 });
 
         var failure = await Assert.ThrowsAsync<PageAuditProviderException>(
             () => provider.RunAsync(Request));
@@ -325,7 +325,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(
             Fixture("success-seo-mobile.json"),
-            new PageSpeedInsightsOptions { ApiKey = ApiKey, MaximumAuditCount = 3 });
+            new PageSpeedInsightsOptions { ApiKey = TestCredential, MaximumAuditCount = 3 });
 
         var failure = await Assert.ThrowsAsync<PageAuditProviderException>(
             () => provider.RunAsync(Request));
@@ -351,7 +351,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(
             new BlockingHandler(),
-            new PageSpeedInsightsOptions { ApiKey = ApiKey, RequestTimeout = TimeSpan.FromMilliseconds(150) });
+            new PageSpeedInsightsOptions { ApiKey = TestCredential, RequestTimeout = TimeSpan.FromMilliseconds(150) });
 
         var failure = await Assert.ThrowsAsync<PageAuditProviderException>(
             () => provider.RunAsync(Request));
@@ -450,7 +450,7 @@ public sealed class PageSpeedInsightsProviderTests
         await provider.RunAsync(Request);
 
         recorder.Lines.Should().NotBeEmpty("the successful run is logged at all");
-        recorder.Lines.Should().NotContain(line => line.Contains(ApiKey, StringComparison.Ordinal));
+        recorder.Lines.Should().NotContain(line => line.Contains(TestCredential, StringComparison.Ordinal));
         recorder.Lines.Should().NotContain(line => line.Contains("key=", StringComparison.Ordinal));
         recorder.Lines.Should().NotContain(line =>
             line.Contains("pagespeedonline.googleapis.com", StringComparison.Ordinal));
@@ -459,13 +459,13 @@ public sealed class PageSpeedInsightsProviderTests
     [Fact]
     public async Task RunAsync_KeepsTheApiKeyOutOfEveryFailureItRaises()
     {
-        var (provider, _) = Create(new FakeHandler(HttpStatusCode.Forbidden, $"key {ApiKey} rejected"));
+        var (provider, _) = Create(new FakeHandler(HttpStatusCode.Forbidden, $"key {TestCredential} rejected"));
 
         var failure = await Assert.ThrowsAsync<PageAuditProviderException>(
             () => provider.RunAsync(Request));
 
-        failure.Message.Should().NotContain(ApiKey);
-        failure.ToString().Should().NotContain(ApiKey,
+        failure.Message.Should().NotContain(TestCredential);
+        failure.ToString().Should().NotContain(TestCredential,
             "the provider's own error body is never read back into a diagnostic");
     }
 
@@ -504,7 +504,7 @@ public sealed class PageSpeedInsightsProviderTests
 
         failure.FailureCategory.Should().Be(PageAuditFailureCategories.ProviderUnavailable);
         failure.InnerException.Should().BeNull();
-        failure.ToString().Should().NotContain(ApiKey);
+        failure.ToString().Should().NotContain(TestCredential);
         failure.ToString().Should().NotContain("pagespeedonline");
     }
 
@@ -536,7 +536,7 @@ public sealed class PageSpeedInsightsProviderTests
         PageSpeedInsightsOptions? options,
         ILogger<PageSpeedInsightsProvider>? logger)
     {
-        options ??= new PageSpeedInsightsOptions { ApiKey = ApiKey };
+        options ??= new PageSpeedInsightsOptions { ApiKey = TestCredential };
         var client = new HttpClient(handler)
         {
             BaseAddress = new Uri(PageSpeedInsightsProvider.ServiceOrigin),

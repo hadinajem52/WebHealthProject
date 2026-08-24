@@ -3,10 +3,6 @@ using WebHealth.Domain.Crawling;
 
 namespace WebHealth.Application.Crawling;
 
-/// <summary>
-/// One crawl to run. The endpoint carries the target-authorization evidence every request is
-/// checked against, and its environment decides whether a robots override can be granted at all.
-/// </summary>
 public sealed record CrawlRunRequest(
     Guid RunId,
     Guid EndpointId,
@@ -28,7 +24,6 @@ public sealed record CrawlRunRequest(
     /// </summary>
     public bool CheckExternalLinks { get; init; }
 
-    /// <summary>BR-L02. Granted only for a non-production target with an approved exception.</summary>
     public bool RequestRobotsOverride { get; init; }
 }
 
@@ -76,7 +71,12 @@ public sealed record CrawlLinkRecord(
     int RedirectCount,
     string? FinalUrl,
     string? SkipReason,
-    int? DurationMs);
+    int? DurationMs)
+{
+    public string? SourceUrlIdentity { get; init; }
+
+    public string? TargetUrlIdentity { get; init; }
+}
 
 /// <summary>
 /// What a run is, before it has produced anything. Opening the run first means results always have
@@ -109,6 +109,9 @@ public sealed record CrawlRunSettings(
     int MaxDepth,
     bool CheckExternalLinks)
 {
+    public IReadOnlySet<string> SensitiveQueryParameters { get; init; } =
+        CrawlUrlOptions.DefaultSensitiveQueryParameters;
+
     public static CrawlRunSettings From(CrawlRunRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -119,14 +122,13 @@ public sealed record CrawlRunSettings(
             request.UrlOptions.QueryPolicy.ToString(),
             request.Limits.MaxPages,
             request.Limits.MaxDepth,
-            request.CheckExternalLinks);
+            request.CheckExternalLinks)
+        {
+            SensitiveQueryParameters = request.UrlOptions.SensitiveQueryParameters
+        };
     }
 }
 
-/// <summary>
-/// Where results go as they resolve. Writing per result rather than batching at the end is what
-/// makes BR-L10 need no special cancellation path: whatever was found is already recorded.
-/// </summary>
 public interface ICrawlResultSink
 {
     Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default);
@@ -149,6 +151,10 @@ public interface ICrawlResultSink
         CancellationToken cancellationToken = default);
 
     Task RecordLinkAsync(CrawlLinkRecord record, CancellationToken cancellationToken = default);
+
+    Task<int> RecordLinksAsync(
+        IReadOnlyList<CrawlLinkRecord> records,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Finalises the run this execution owns, answering false when the row was closed by somebody
@@ -178,15 +184,10 @@ public interface ICrawlRobotsReader
     Task<CrawlRobotsFacts> GetAsync(string origin, CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// What one document yielded, and whether that is all of it.
-/// <para>
-/// "This page links to nothing" and "this page could not be read" produce the same empty list and
-/// mean opposite things. A comparison that cannot tell them apart reports every link the
-/// unreadable page used to carry as resolved, on the strength of nobody having looked.
-/// </para>
-/// </summary>
-public sealed record CrawlDocumentLinks(IReadOnlyList<string> Hrefs, bool FullyInspected)
+public sealed record CrawlDocumentLinks(
+    IReadOnlyList<string> Hrefs,
+    bool FullyInspected,
+    string? BaseHref = null)
 {
     /// <summary>A document whose links were never enumerated.</summary>
     public static CrawlDocumentLinks NotInspected { get; } = new([], false);
@@ -195,11 +196,6 @@ public sealed record CrawlDocumentLinks(IReadOnlyList<string> Hrefs, bool FullyI
     public static CrawlDocumentLinks Nothing { get; } = new([], true);
 }
 
-/// <summary>
-/// Extracts <c>href</c> values from a document and returns nothing else beyond whether it read the
-/// whole document. The narrow return type is the point: BR-E10 stays structural rather than a
-/// convention if the document has no way out.
-/// </summary>
 public interface IHtmlLinkExtractor
 {
     CrawlDocumentLinks ExtractHrefs(ReadOnlyMemory<byte> body, string? contentType);
@@ -384,6 +380,7 @@ public interface ICrawlRunner
     Task<CrawlManualResult> QueueManualAsync(
         Guid endpointId,
         RegistryAccessContext access,
+        bool checkExternalLinks,
         CancellationToken cancellationToken = default);
 }
 
@@ -425,11 +422,5 @@ public interface ICrawlReconciler
 /// </summary>
 public interface ICrawlRunQueue
 {
-    void Enqueue(
-        Guid runId,
-        Guid endpointId,
-        bool isProduction,
-        IReadOnlyList<string> seedUrls,
-        bool checkExternalLinks,
-        bool requestRobotsOverride);
+    void Enqueue(Guid runId);
 }

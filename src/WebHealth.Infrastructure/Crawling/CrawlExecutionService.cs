@@ -141,6 +141,7 @@ internal sealed class CrawlRunExecution
     private readonly HashSet<string> _overriddenOrigins = new(StringComparer.Ordinal);
     private readonly DateTimeOffset _deadline;
     private readonly string _userAgent;
+    private readonly CrawlRequestExecutor _requestExecutor;
 
     /// <summary>What this execution owns the run by. The finish is refused without it.</summary>
     private readonly Guid _executionClaimId;
@@ -192,6 +193,7 @@ internal sealed class CrawlRunExecution
         _frontier = new(scope, request.Limits);
         _deadline = timeProvider.GetUtcNow() + options.MaxDuration;
         _userAgent = userAgent;
+        _requestExecutor = new(request, options, dependencies, timeProvider);
 
         foreach (var seed in scope.Seeds)
         {
@@ -408,20 +410,7 @@ internal sealed class CrawlRunExecution
             return;
         }
 
-        await _dependencies.RateLimiter.WaitAsync(item.Url.Host, cancellationToken);
-
-        // The crawler's share of the shared transport budget, held for exactly as long as the
-        // request. Acquired here rather than around the whole visit so parsing and bookkeeping do
-        // not hold a slot that monitoring could be using.
-        SafeHttpTransportResult result;
-        using (await _dependencies.RequestBudget.AcquireAsync(cancellationToken))
-        {
-            result = await _dependencies.Transport.SendAsync(
-                new(_request.EndpointId, item.Url.Value, _request.IsProduction,
-                    MaxResponseBodyBytes: _options.MaxPageBytes,
-                    TimeoutSeconds: _options.FetchTimeoutSeconds),
-                cancellationToken);
-        }
+        var result = await FetchAsync(item, cancellationToken);
 
         lock (_lock)
         {
@@ -436,45 +425,39 @@ internal sealed class CrawlRunExecution
 
         if (!ShouldFollow(result))
         {
-            // A page whose body was cut short is fetched and never read. ShouldFollow refuses it
-            // because a truncated document's last href may be cut mid-URL, which is right, and it
-            // still means this page's links are missing rather than absent.
             if (result.BodyTruncated) _coverageLimited = true;
             return;
         }
 
         Interlocked.Increment(ref _pagesFetched);
 
-        // The transport follows redirects itself, so the document in hand is not necessarily the
-        // one this work item names. Where it came from decides everything below: whether its links
-        // are ours to inspect, and what every relative href resolves against.
-        var document = await DocumentToFollowAsync(item, result, cancellationToken);
+        var document = DocumentToFollow(item, result);
         if (document is null)
         {
             _coverageLimited = true;
             return;
         }
 
-        // The body is turned into a list of hrefs and then dropped. Nothing downstream of this line
-        // can see the document (BR-E10).
         var links = _dependencies.LinkExtractor.ExtractHrefs(result.Body, result.ContentType);
         if (!links.FullyInspected) _coverageLimited = true;
-        FollowLinks(document, item.Depth, links.Hrefs);
+        var resolutionBase = links.BaseHref is { } baseHref
+            ? CrawlUrlNormalizer.Resolve(baseHref, document, _request.UrlOptions).Url ?? document
+            : document;
+        FollowLinks(document, resolutionBase, item.Depth, links.Hrefs);
     }
 
-    /// <summary>
-    /// The document a response actually is, or null when its links must not be followed.
-    /// <para>
-    /// A redirect chain is resolved inside the transport, which re-checks target authorization at
-    /// every hop but knows nothing of this crawl's scope, robots policy or per-host pacing. Those
-    /// were decided for the URL that was asked for, and a response from somewhere else has not
-    /// been through them.
-    /// </para>
-    /// </summary>
-    private async Task<CrawlUrl?> DocumentToFollowAsync(
+    private async Task<SafeHttpTransportResult> FetchAsync(
         CrawlWorkItem item,
-        SafeHttpTransportResult result,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        await _requestExecutor.ExecuteAsync(
+            item.Url.Value,
+            item.Url.Host,
+            new CrawlRedirectHopPolicy(this),
+            cancellationToken);
+
+    private CrawlUrl? DocumentToFollow(
+        CrawlWorkItem item,
+        SafeHttpTransportResult result)
     {
         var finalUrl = result.FinalDestination?.Url;
         if (finalUrl is null || string.Equals(finalUrl, item.Url.Value, StringComparison.Ordinal))
@@ -492,19 +475,46 @@ internal sealed class CrawlRunExecution
         // the crawl into a site nobody put in its scope.
         if (_frontier.Scope.Decide(destination) != CrawlScopeDecision.Internal) return null;
 
-        // The chain spent a request on this host that the crawler's own limiter never counted, so
-        // it is charged here. Spacing the next request is the only correction still available once
-        // the response is in hand.
-        if (!string.Equals(destination.Host, item.Url.Host, StringComparison.OrdinalIgnoreCase))
+        return destination;
+    }
+
+    private async Task<SafeHttpRequestHopDecision> BeforeRequestAsync(
+        SafeHttpRequestHop hop,
+        CancellationToken cancellationToken)
+    {
+        if (hop.RedirectCount == 0) return new(true);
+        if (CrawlUrlNormalizer.Normalize(hop.Url, _request.UrlOptions).Url is not { } destination)
         {
-            await _dependencies.RateLimiter.WaitAsync(destination.Host, cancellationToken);
+            return new(false, CrawlUrlRejections.Malformed);
         }
 
-        var facts = await RobotsFactsAsync(destination.Origin, cancellationToken);
-        return CrawlRobotsGate.IsAllowed(
-            facts, _userAgent, destination.Path, OverrideFor(destination.Origin, facts))
-            ? destination
-            : null;
+        var isInternal = _frontier.Scope.Decide(destination) == CrawlScopeDecision.Internal;
+        if (!isInternal && !_request.CheckExternalLinks)
+        {
+            return new(false, CrawlSkipReasons.ExternalCheckDisabled);
+        }
+        if (isInternal)
+        {
+            var facts = await RobotsFactsAsync(destination.Origin, cancellationToken);
+            if (!CrawlRobotsGate.IsAllowed(
+                facts, _userAgent, destination.Path, OverrideFor(destination.Origin)))
+            {
+                _coverageLimited = true;
+                return new(false, CrawlSkipReasons.RobotsDisallowed);
+            }
+        }
+
+        await _dependencies.RateLimiter.WaitAsync(destination.Host, cancellationToken);
+        return new(true);
+    }
+
+    private sealed class CrawlRedirectHopPolicy(
+        CrawlRunExecution execution) : ISafeHttpRequestHopPolicy
+    {
+        public Task<SafeHttpRequestHopDecision> EvaluateAsync(
+            SafeHttpRequestHop hop,
+            CancellationToken cancellationToken = default) =>
+            execution.BeforeRequestAsync(hop, cancellationToken);
     }
 
     /// <summary>
@@ -550,22 +560,19 @@ internal sealed class CrawlRunExecution
         if (!isInternal) return null;
 
         var facts = await RobotsFactsAsync(item.Url.Origin, cancellationToken);
-        var granted = OverrideFor(item.Url.Origin, facts);
+        var granted = OverrideFor(item.Url.Origin);
         return CrawlRobotsGate.IsAllowed(facts, _userAgent, item.Url.Path, granted)
             ? null
             : CrawlSkipReasons.RobotsDisallowed;
     }
 
     /// <summary>
-    /// BR-L02, decided **per origin**. An approved exception authorizes bypassing that origin's
-    /// published restrictions and no other: a run whose scope reaches a second host would otherwise
-    /// carry the seed's approval onto a host nobody approved, which is the whole thing the approval
-    /// exists to prevent.
+    /// BR-L02, still counted **per origin** so the run can report how many origins it bypassed,
+    /// even though the decision itself is now the same for all of them.
     /// </summary>
-    private bool OverrideFor(string origin, CrawlRobotsFacts facts)
+    private bool OverrideFor(string origin)
     {
-        var decision = CrawlRobotsGate.EvaluateOverride(
-            _request.RequestRobotsOverride, _request.IsProduction, facts);
+        var decision = CrawlRobotsGate.EvaluateOverride(_request.RequestRobotsOverride);
 
         lock (_lock)
         {
@@ -603,16 +610,15 @@ internal sealed class CrawlRunExecution
         }
     }
 
-    /// <summary>
-    /// <paramref name="document" /> is where the response came from, which after a redirect is not
-    /// the URL that was requested. It is both the base every relative href resolves against and the
-    /// page the discovered links are recorded under, because it is the document that contains them.
-    /// </summary>
-    private void FollowLinks(CrawlUrl document, int depth, IReadOnlyList<string> hrefs)
+    private void FollowLinks(
+        CrawlUrl document,
+        CrawlUrl resolutionBase,
+        int depth,
+        IReadOnlyList<string> hrefs)
     {
         foreach (var href in hrefs)
         {
-            var resolved = CrawlUrlNormalizer.Resolve(href, document, _request.UrlOptions);
+            var resolved = CrawlUrlNormalizer.Resolve(href, resolutionBase, _request.UrlOptions);
             if (resolved.Url is null)
             {
                 RecordRejectedHref(document, href, resolved.Rejection);
@@ -689,7 +695,11 @@ internal sealed class CrawlRunExecution
             null => CrawlRequestOutcome.Responded,
             SafeHttpFailureKind.Timeout or SafeHttpFailureKind.Cancelled => CrawlRequestOutcome.Timeout,
             SafeHttpFailureKind.TargetNotAuthorized or SafeHttpFailureKind.DestinationRejected
+                or SafeHttpFailureKind.RequestPolicyRejected
                 => CrawlRequestOutcome.Blocked,
+            SafeHttpFailureKind.RedirectLoop or SafeHttpFailureKind.RedirectLimit
+                or SafeHttpFailureKind.RedirectInvalid or SafeHttpFailureKind.RedirectMissingLocation
+                => CrawlRequestOutcome.Broken,
             _ => CrawlRequestOutcome.Failed
         },
         result.StatusCode,
@@ -707,16 +717,20 @@ internal sealed class CrawlRunExecution
         {
             _readyRecords.Add(new(
                 _request.RunId,
-                edge.SourceUrl,
-                edge.TargetUrl,
+                CrawlUrlRedactor.Redact(edge.SourceUrl, _request.UrlOptions),
+                CrawlUrlRedactor.Redact(edge.TargetUrl, _request.UrlOptions)!,
                 _internalUrls.Contains(edge.TargetUrl),
                 _depthByUrl.GetValueOrDefault(edge.TargetUrl, -1),
                 edge.Classification,
                 edge.StatusCode,
                 edge.RedirectCount,
-                edge.FinalUrl,
+                CrawlUrlRedactor.Redact(edge.FinalUrl, _request.UrlOptions),
                 edge.SkipReason,
-                edge.DurationMs));
+                edge.DurationMs)
+            {
+                SourceUrlIdentity = edge.SourceUrl,
+                TargetUrlIdentity = edge.TargetUrl
+            });
         }
     }
 
@@ -739,24 +753,20 @@ internal sealed class CrawlRunExecution
             _readyRecords.Clear();
         }
 
-        var written = 0;
         await _dataAccess.WaitAsync(CancellationToken.None);
         try
         {
-            foreach (var record in pending)
-            {
-                await _dependencies.Sink.RecordLinkAsync(record, cancellationToken);
-                written++;
-                Interlocked.Increment(ref _linksRecorded);
-            }
+            var persisted = await _dependencies.Sink.RecordLinksAsync(pending, cancellationToken);
+            Interlocked.Exchange(ref _linksRecorded, persisted);
+        }
+        catch
+        {
+            lock (_lock) _readyRecords.InsertRange(0, pending);
+            throw;
         }
         finally
         {
             _dataAccess.Release();
-            if (written < pending.Length)
-            {
-                lock (_lock) _readyRecords.InsertRange(0, pending[written..]);
-            }
         }
     }
 }

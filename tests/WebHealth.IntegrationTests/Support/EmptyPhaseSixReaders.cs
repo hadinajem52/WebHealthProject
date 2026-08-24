@@ -309,15 +309,19 @@ internal sealed class RecordingCrawlRunner : ICrawlRunner
 {
     public List<Guid> Requested { get; } = [];
 
+    public bool CheckExternalLinks { get; private set; }
+
     /// <summary>Settable so a test can render the page as an instance with crawling switched off.</summary>
     public bool CanQueue { get; set; } = true;
 
     public Task<CrawlManualResult> QueueManualAsync(
         Guid endpointId,
         RegistryAccessContext access,
+        bool checkExternalLinks,
         CancellationToken cancellationToken = default)
     {
         Requested.Add(endpointId);
+        CheckExternalLinks = checkExternalLinks;
         return Task.FromResult(CrawlManualResult.Queued(Guid.NewGuid()));
     }
 }

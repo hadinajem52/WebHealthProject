@@ -110,7 +110,9 @@ public enum CrawlRequestOutcome
     Blocked = 2,
 
     /// <summary>DNS, connection, TLS or protocol failure.</summary>
-    Failed = 3
+    Failed = 3,
+
+    Broken = 4
 }
 
 public sealed record CrawlRequestObservation(
@@ -136,7 +138,8 @@ public static class CrawlLinkClassifier
         {
             CrawlRequestOutcome.Timeout => CrawlLinkClassifications.Timeout,
             CrawlRequestOutcome.Blocked => CrawlLinkClassifications.Blocked,
-            CrawlRequestOutcome.Failed => CrawlLinkClassifications.Broken,
+            CrawlRequestOutcome.Broken => CrawlLinkClassifications.Broken,
+            CrawlRequestOutcome.Failed => CrawlLinkClassifications.Unknown,
             _ => ClassifyStatus(observation)
         };
     }
@@ -145,6 +148,8 @@ public static class CrawlLinkClassifier
     {
         null => CrawlLinkClassifications.Unknown,
         401 or 403 or 407 or 451 => CrawlLinkClassifications.Blocked,
+        408 or 425 or 429 => CrawlLinkClassifications.Unknown,
+        >= 500 => CrawlLinkClassifications.Unknown,
         >= 400 => CrawlLinkClassifications.Broken,
 
         // A 3xx that is still a 3xx after the redirect budget was spent never reached a resource.

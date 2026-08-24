@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$pattern = '(password|secret|token|api[_-]?key)\s*[:=]\s*["''][^"'']+["'']'
+$pattern = '\b(password|secret|token|api[_-]?key)\b\s*[:=]\s*["''][^"'']+["'']'
 $repositoryFiles = git -C $root ls-files --cached --others --exclude-standard
 if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate repository files.' }
 

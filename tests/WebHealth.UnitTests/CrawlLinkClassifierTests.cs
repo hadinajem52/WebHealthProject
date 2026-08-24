@@ -27,10 +27,17 @@ public sealed class CrawlLinkClassifierTests
     [Theory]
     [InlineData(404)]
     [InlineData(410)]
-    [InlineData(500)]
-    [InlineData(503)]
     public void Classify_CallsAnErrorStatusBroken(int statusCode) =>
         Classify(statusCode: statusCode).Should().Be(CrawlLinkClassifications.Broken);
+
+    [Theory]
+    [InlineData(408)]
+    [InlineData(425)]
+    [InlineData(429)]
+    [InlineData(500)]
+    [InlineData(503)]
+    public void Classify_LeavesATransientStatusUnknown(int statusCode) =>
+        Classify(statusCode: statusCode).Should().Be(CrawlLinkClassifications.Unknown);
 
     [Theory]
     [InlineData(401)]
@@ -55,8 +62,12 @@ public sealed class CrawlLinkClassifierTests
         Classify(CrawlRequestOutcome.Blocked).Should().Be(CrawlLinkClassifications.Blocked);
 
     [Fact]
-    public void Classify_CallsATransportFailureBroken() =>
-        Classify(CrawlRequestOutcome.Failed).Should().Be(CrawlLinkClassifications.Broken);
+    public void Classify_LeavesATransportFailureUnknown() =>
+        Classify(CrawlRequestOutcome.Failed).Should().Be(CrawlLinkClassifications.Unknown);
+
+    [Fact]
+    public void Classify_CallsADeterministicRequestFailureBroken() =>
+        Classify(CrawlRequestOutcome.Broken).Should().Be(CrawlLinkClassifications.Broken);
 
     [Fact]
     public void Classify_CallsAResponseWithNoStatusUnknown() =>
