@@ -202,6 +202,8 @@ internal sealed class EmptyIncidentLifecycleService : IIncidentLifecycleService
     public Task<IncidentMutationResult> ReopenAsync(IncidentReasonCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
     public Task<IncidentMutationResult> ReassignAsync(ReassignIncident command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
     public Task<IncidentMutationResult> AddNoteAsync(IncidentNoteCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
+    public Task<IncidentArchiveResult> ArchiveResolvedAsync(RegistryAccessContext access, CancellationToken cancellationToken = default) => Task.FromResult(IncidentArchiveResult.Success(1));
+    public Task<IncidentMutationResult> RestoreAsync(IncidentVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.IncidentId);
 
     private static Task<IncidentMutationResult> Result(Guid id) =>
         Task.FromResult(IncidentMutationResult.Success(id));

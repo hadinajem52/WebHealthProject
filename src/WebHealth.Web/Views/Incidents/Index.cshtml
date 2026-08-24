@@ -91,6 +91,22 @@
                         <span>@listPage.TotalCount incident@(listPage.TotalCount == 1 ? null : "s")</span>
                     </p>
                 </div>
+                <div class="form-actions">
+                    @if (Model.CanArchive && Model.ResolvedCount > 0)
+                    {
+                        <form method="post" asp-action="ArchiveResolved" data-ajax-form data-ajax-target="#ajax-page">
+                            <button class="button button--secondary" type="submit"
+                                    title="Moves every resolved and closed incident out of this list into the archive. Nothing is deleted, and reopening one brings it back.">
+                                @await Html.PartialAsync("_Icon", "archive")
+                                <span>Archive resolved</span>
+                            </button>
+                        </form>
+                    }
+                    <a class="button button--secondary" asp-action="Archived" data-ajax-link data-ajax-target="#ajax-page">
+                        <span>View archive</span>
+                        @await Html.PartialAsync("_Icon", "arrow-right")
+                    </a>
+                </div>
             </div>
 
             <div class="table-scroll table-scroll--flush">

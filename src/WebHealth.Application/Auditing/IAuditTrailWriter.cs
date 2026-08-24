@@ -235,7 +235,9 @@ public enum IncidentAuditAction
     NoteAdded,
     Closed,
     ForceClosed,
-    Reopened
+    Reopened,
+    Archived,
+    Restored
 }
 
 public sealed record IncidentAuditSnapshot(

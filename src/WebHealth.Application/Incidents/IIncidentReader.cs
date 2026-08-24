@@ -2,7 +2,16 @@ using WebHealth.Application.Registry;
 
 namespace WebHealth.Application.Incidents;
 
-public sealed record IncidentListFilter(string? Status = null, string? Severity = null, bool UnacknowledgedOnly = false);
+/// <summary>
+/// What narrows an incident list. <see cref="ArchivedOnly" /> is a view, not a filter the reader
+/// combines with the others: the working list never shows archived incidents and the archive shows
+/// nothing else, so the two never have to be reconciled in one query.
+/// </summary>
+public sealed record IncidentListFilter(
+    string? Status = null,
+    string? Severity = null,
+    bool UnacknowledgedOnly = false,
+    bool ArchivedOnly = false);
 
 public sealed record IncidentListItem(
     Guid Id,
@@ -16,9 +25,22 @@ public sealed record IncidentListItem(
     DateTimeOffset OpenedAt,
     DateTimeOffset? AcknowledgedAt,
     string OwnerDisplayName,
-    int RecurrenceCount);
+    int RecurrenceCount,
+    long Version = 0,
+    DateTimeOffset? ArchivedAt = null);
 
-public sealed record IncidentListPage(IReadOnlyList<IncidentListItem> Items, int Page, int PageSize, int TotalCount);
+/// <summary>
+/// <paramref name="ArchivableCount" /> counts every resolved and closed incident the reader can
+/// see, ignoring the filters that produced <paramref name="Items" />. The archive sweep is not
+/// scoped to the current view, so a count taken through the view's filters would promise to file
+/// away fewer incidents than the button actually does.
+/// </summary>
+public sealed record IncidentListPage(
+    IReadOnlyList<IncidentListItem> Items,
+    int Page,
+    int PageSize,
+    int TotalCount,
+    int ArchivableCount = 0);
 
 public sealed record IncidentTimelineEntry(
     Guid Id,

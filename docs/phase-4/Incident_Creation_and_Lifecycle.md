@@ -34,6 +34,29 @@ Manual resolution requires a category of at most 50 characters and a note of at 
 
 Every successful acknowledgement, progress change, resolution, closure, forced closure, reopening, reassignment, and note append is protected by the original version token and writes both an ordered incident timeline event and a typed, allow-listed audit event.
 
+## Archiving
+
+An incident's lifecycle ends at `Resolved` or `Closed`, but the row stays on the incidents list
+forever, so a working list fills up with issues nobody needs to look at again. Archiving is a
+records action layered on top of the lifecycle rather than a status inside it: the incidents list
+shows only unarchived incidents, and the archive at `/Incidents/Archived` shows only archived ones.
+
+- `archived_at` is a nullable timestamp on `incident`. It is not a status, so no lifecycle
+  transition, deduplication rule, or active-incident unique index changes because of it.
+- `ck_incident_archived_status` allows a non-null `archived_at` only on `Resolved` and `Closed`.
+  An incident that is still being worked on cannot be filed away.
+- Archiving is a sweep, not a per-row action: it moves every resolved and closed incident the
+  caller can see, ignoring whatever filters the list is showing, and reports how many it moved.
+  It is restricted to Administrator and Operations, runs in one transaction, and writes an
+  `incident.archived` audit event per incident. It writes no timeline event: nothing about the
+  incident itself changed.
+- Reopening an archived incident clears `archived_at` in the same transaction, so an incident can
+  never be both reopened and filed away.
+- `Restore` puts a single incident back, under the same role restriction and the same version
+  token as every other incident mutation, and writes `incident.restored`.
+- Nothing is deleted. The incident row, its timeline, its evidence, and its notification history
+  are untouched, and the archive is a view over them rather than a different store.
+
 ## Recurrence and database impact
 
 - A new incident links to the most recent matching closed incident only when its close timestamp falls within the inclusive 30-day boundary before the new opening timestamp.

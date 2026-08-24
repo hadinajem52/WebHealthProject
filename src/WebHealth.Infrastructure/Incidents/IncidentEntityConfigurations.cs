@@ -48,6 +48,9 @@ internal sealed class IncidentConfiguration : IEntityTypeConfiguration<Incident>
                 "ck_incident_closed_fields",
                 "(status = 'Closed' AND closed_at IS NOT NULL) OR (status <> 'Closed' AND closed_at IS NULL)");
             table.HasCheckConstraint(
+                "ck_incident_archived_status",
+                "archived_at IS NULL OR status IN ('Resolved', 'Closed')");
+            table.HasCheckConstraint(
                 "ck_incident_lifecycle_order",
                 "(acknowledged_at IS NULL OR acknowledged_at >= opened_at) "
                 + "AND (recovery_started_at IS NULL OR recovery_started_at >= opened_at) "
@@ -66,6 +69,7 @@ internal sealed class IncidentConfiguration : IEntityTypeConfiguration<Incident>
             .IsUnique()
             .HasFilter(ActiveStatusFilter);
         builder.HasIndex(incident => new { incident.Status, incident.Severity, incident.OpenedAt });
+        builder.HasIndex(incident => incident.ArchivedAt);
         builder.HasIndex(incident => incident.OwnerSubjectId);
         builder.HasOne(incident => incident.EndpointMonitor).WithMany()
             .HasForeignKey(incident => incident.EndpointMonitorId).OnDelete(DeleteBehavior.Restrict);

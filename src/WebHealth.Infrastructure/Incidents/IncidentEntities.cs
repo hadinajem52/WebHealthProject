@@ -20,6 +20,7 @@ public sealed class Incident
     public DateTimeOffset? RecoveryStartedAt { get; set; }
     public DateTimeOffset? ResolvedAt { get; set; }
     public DateTimeOffset? ClosedAt { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
     public long? RecoveryDurationMs { get; set; }
     public long? OutageDurationMs { get; set; }
     public string? ResolutionCategory { get; set; }
