@@ -46,7 +46,7 @@ try {
         --namespace WebHealth.Infrastructure.Persistence.CompiledModels
     if ($LASTEXITCODE -ne 0) { throw 'Compiled model regeneration failed.' }
 
-    git -C $root diff --quiet -- 'src/WebHealth.Infrastructure/Persistence/CompiledModels'
+    git -C $root diff --quiet --ignore-matching-lines='modelId: new Guid' -- 'src/WebHealth.Infrastructure/Persistence/CompiledModels'
     if ($LASTEXITCODE -ne 0) {
         throw 'Compiled model is stale. Regenerate it with dotnet ef dbcontext optimize and commit the result.'
     }
