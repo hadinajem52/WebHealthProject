@@ -72,22 +72,26 @@ internal static class PageAuditConfiguration
     {
         var targets = await dbContext.PageAuditTargets
             .Where(candidate => candidate.EndpointId == endpointId
-                && candidate.Provider == PageAuditProviders.PageSpeedInsights
-                && candidate.Category == PageAuditCategories.Seo)
+                && candidate.Provider == PageAuditProviders.PageSpeedInsights)
             .ToArrayAsync(cancellationToken);
 
         var changed = false;
-        foreach (var strategy in PageAuditStrategies.All)
+        foreach (var category in PageAuditCategories.All)
         {
-            changed |= ApplyStrategy(
-                dbContext,
-                endpointId,
-                strategy,
-                targets.SingleOrDefault(candidate => candidate.Strategy == strategy),
-                enabled,
-                schedulingEnabled,
-                intervalHours * 3600,
-                now);
+            foreach (var strategy in PageAuditStrategies.All)
+            {
+                changed |= ApplyProfile(
+                    dbContext,
+                    endpointId,
+                    category,
+                    strategy,
+                    targets.SingleOrDefault(candidate => candidate.Category == category
+                        && candidate.Strategy == strategy),
+                    enabled,
+                    schedulingEnabled,
+                    intervalHours * 3600,
+                    now);
+            }
         }
 
         return changed;
@@ -98,9 +102,10 @@ internal static class PageAuditConfiguration
     /// above applies the same configuration to each rather than the page asking twice for a
     /// cadence that would only ever be answered the same way.
     /// </summary>
-    private static bool ApplyStrategy(
+    private static bool ApplyProfile(
         ApplicationDbContext dbContext,
         Guid endpointId,
+        string category,
         string strategy,
         PageAuditTarget? target,
         bool enabled,
@@ -122,7 +127,7 @@ internal static class PageAuditConfiguration
                 Id = Guid.NewGuid(),
                 EndpointId = endpointId,
                 Provider = PageAuditProviders.PageSpeedInsights,
-                Category = PageAuditCategories.Seo,
+                Category = category,
                 Strategy = strategy,
                 IsEnabled = true,
                 SchedulingEnabled = schedulingEnabled,
@@ -182,9 +187,9 @@ internal static class PageAuditConfiguration
         // desktop strategy existed still has the mobile row this finds.
         var target = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
-                && candidate.Provider == PageAuditProviders.PageSpeedInsights
-                && candidate.Category == PageAuditCategories.Seo)
-            .OrderBy(candidate => candidate.Strategy)
+                && candidate.Provider == PageAuditProviders.PageSpeedInsights)
+            .OrderBy(candidate => candidate.Category == PageAuditCategories.Performance ? 0 : 1)
+            .ThenBy(candidate => candidate.Strategy)
             .ThenBy(candidate => candidate.Id)
             .Select(candidate => new PageAuditConfigurationState(
                 candidate.IsEnabled,

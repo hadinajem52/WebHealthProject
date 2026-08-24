@@ -23,14 +23,11 @@ internal sealed class PageAuditReader(
     /// <summary>A run listing is a page of history, never the whole table.</summary>
     public const int MaxRunsListed = 50;
 
-    /// <summary>
-    /// The bound on one run's audits. The SEO category carries about a dozen, so this is headroom
-    /// rather than a limit anything reaches — and it is still the reader's bound, not the view's.
-    /// </summary>
     public const int MaxItemsListed = 250;
 
     public async Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
+        string category,
         string strategy,
         Guid? runId,
         RegistryAccessContext access,
@@ -58,28 +55,31 @@ internal sealed class PageAuditReader(
         // has not been migrated yet render "auditing is off" for a feature that is plainly on.
         var targets = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
-                && candidate.Provider == PageAuditProviders.PageSpeedInsights
-                && candidate.Category == PageAuditCategories.Seo)
-            .OrderBy(candidate => candidate.Strategy)
+                && candidate.Provider == PageAuditProviders.PageSpeedInsights)
+            .OrderBy(candidate => candidate.Category)
+            .ThenBy(candidate => candidate.Strategy)
             .ThenBy(candidate => candidate.Id)
             .ToArrayAsync(cancellationToken);
         if (targets.Length == 0)
         {
             return PageAuditEndpointSummary.NotConfigured(
                 endpoint.Id, endpoint.DisplayUrl, endpoint.WebsiteName, endpoint.EnvironmentName,
-                strategy);
+                category, strategy);
         }
 
         // The rows carry the same configuration by construction, so any of them answers the
         // endpoint-level questions. Only the due time is the selected form factor's own.
-        var configured = targets[0];
-        var selectedTarget = targets.SingleOrDefault(
+        var categoryTargets = targets
+            .Where(candidate => candidate.Category == category)
+            .ToArray();
+        var configured = categoryTargets.FirstOrDefault() ?? targets[0];
+        var selectedTarget = categoryTargets.SingleOrDefault(
             candidate => candidate.Strategy == strategy);
 
         // An explicit run id selects a historical run; without one the newest run is shown,
         // whatever its status, so a queued or failed run is visible rather than hidden behind the
         // last one that happened to succeed.
-        var runs = RunsOf(access, endpointId, strategy);
+        var runs = RunsOf(access, endpointId, category, strategy);
         var selected = runId is { } requested
             ? await Project(runs.Where(run => run.Id == requested))
                 .SingleOrDefaultAsync(cancellationToken)
@@ -101,6 +101,7 @@ internal sealed class PageAuditReader(
             IsConfigured: true,
             configured.IsEnabled,
             configured.SchedulingEnabled,
+            category,
             strategy,
             configured.IntervalSeconds / 3600,
             configured.SchedulingEnabled && configured.IsEnabled ? selectedTarget?.NextDueAt : null,
@@ -112,11 +113,12 @@ internal sealed class PageAuditReader(
 
     public async Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,
+        string category,
         string strategy,
         int limit,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        await Project(Ordered(RunsOf(access, endpointId, strategy))
+        await Project(Ordered(RunsOf(access, endpointId, category, strategy))
                 .Take(Math.Clamp(limit, 1, MaxRunsListed)))
             .ToArrayAsync(cancellationToken);
 
@@ -234,9 +236,12 @@ internal sealed class PageAuditReader(
     private IQueryable<PageAuditRun> RunsOf(
         RegistryAccessContext access,
         Guid endpointId,
+        string category,
         string strategy) =>
         VisibleRuns(access)
-            .Where(run => run.EndpointId == endpointId && run.Strategy == strategy);
+            .Where(run => run.EndpointId == endpointId
+                && run.Category == category
+                && run.Strategy == strategy);
 
     /// <summary>
     /// Newest first, with unfinished runs at the top: a queued or running audit is the most
@@ -262,6 +267,7 @@ internal sealed class PageAuditReader(
             run.RequestedUrl,
             run.FinalUrl,
             run.RawScore,
+            run.Category,
             run.Strategy,
             run.Locale,
             run.LighthouseVersion,

@@ -11,15 +11,39 @@ public static class PageAuditProviders
     public static bool IsSupported(string value) => value is PageSpeedInsights;
 }
 
-/// <summary>The Lighthouse category the run asked for. V1 asks for one and stores which one.</summary>
 public static class PageAuditCategories
 {
+    public const string Performance = "Performance";
+    public const string Accessibility = "Accessibility";
+    public const string BestPractices = "BestPractices";
     public const string Seo = "Seo";
 
-    /// <summary>The provider's own spelling, which is what goes on the wire.</summary>
+    public const string PerformanceParameter = "performance";
+    public const string AccessibilityParameter = "accessibility";
+    public const string BestPracticesParameter = "best-practices";
     public const string SeoParameter = "seo";
 
-    public static bool IsSupported(string value) => value is Seo;
+    public static readonly string[] All = [Performance, Accessibility, BestPractices, Seo];
+
+    public static bool IsSupported(string value) =>
+        value is Performance or Accessibility or BestPractices or Seo;
+
+    public static string Normalize(string? value) => value?.ToLowerInvariant() switch
+    {
+        "accessibility" => Accessibility,
+        "bestpractices" or "best-practices" => BestPractices,
+        "seo" => Seo,
+        _ => Performance
+    };
+
+    public static string ToParameter(string category) => category switch
+    {
+        Performance => PerformanceParameter,
+        Accessibility => AccessibilityParameter,
+        BestPractices => BestPracticesParameter,
+        Seo => SeoParameter,
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, "Unsupported category.")
+    };
 }
 
 public static class PageAuditStrategies
@@ -183,11 +207,6 @@ public static class PageAuditScoreDisplayModes
     public const string Error = "error";
 }
 
-/// <summary>
-/// How often an audit may run. The floor is a courtesy limit rather than a performance one: each
-/// run asks Google to load somebody's page, and a tighter cadence spends quota faster than a
-/// technical SEO score can meaningfully change.
-/// </summary>
 public static class PageAuditCadence
 {
     public const int DefaultIntervalHours = 24;

@@ -1,0 +1,95 @@
+{
+  "captchaResult": "CAPTCHA_NOT_NEEDED",
+  "analysisUTCTimestamp": "2026-08-24T06:00:00Z",
+  "lighthouseResult": {
+    "requestedUrl": "https://example.com/",
+    "finalUrl": "https://example.com/",
+    "lighthouseVersion": "13.0.0",
+    "runWarnings": [],
+    "audits": {
+      "first-contentful-paint": {
+        "title": "First Contentful Paint",
+        "description": "First Contentful Paint marks when the first text or image is painted.",
+        "score": 0.71,
+        "scoreDisplayMode": "numeric",
+        "displayValue": "2.1 s"
+      },
+      "largest-contentful-paint": {
+        "title": "Largest Contentful Paint",
+        "description": "Largest Contentful Paint marks when the largest text or image is painted.",
+        "score": 0.66,
+        "scoreDisplayMode": "numeric",
+        "displayValue": "3.4 s"
+      },
+      "total-blocking-time": {
+        "title": "Total Blocking Time",
+        "description": "Total Blocking Time measures the time blocked by long tasks.",
+        "score": 0.83,
+        "scoreDisplayMode": "numeric",
+        "displayValue": "240 ms"
+      },
+      "speed-index": {
+        "title": "Speed Index",
+        "description": "Speed Index shows how quickly page contents are visibly populated.",
+        "score": 0.75,
+        "scoreDisplayMode": "numeric",
+        "displayValue": "3.1 s"
+      },
+      "cumulative-layout-shift": {
+        "title": "Cumulative Layout Shift",
+        "description": "Cumulative Layout Shift measures unexpected layout movement.",
+        "score": 0.92,
+        "scoreDisplayMode": "numeric",
+        "displayValue": "0.04"
+      },
+      "color-contrast": {
+        "title": "Background and foreground colors have a sufficient contrast ratio",
+        "description": "Low-contrast text is difficult for many users to read.",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      },
+      "errors-in-console": {
+        "title": "Browser errors were logged to the console",
+        "description": "Console errors indicate unresolved problems.",
+        "score": 0,
+        "scoreDisplayMode": "binary"
+      },
+      "document-title": {
+        "title": "Document has a title element",
+        "description": "A title helps users and search engines understand the page.",
+        "score": 1,
+        "scoreDisplayMode": "binary"
+      }
+    },
+    "categories": {
+      "performance": {
+        "score": 0.71,
+        "auditRefs": [
+          { "id": "first-contentful-paint", "weight": 10, "group": "metrics" },
+          { "id": "largest-contentful-paint", "weight": 25, "group": "metrics" },
+          { "id": "total-blocking-time", "weight": 30, "group": "metrics" },
+          { "id": "speed-index", "weight": 10, "group": "metrics" },
+          { "id": "cumulative-layout-shift", "weight": 25, "group": "metrics" }
+        ]
+      },
+      "accessibility": {
+        "score": 0.96,
+        "auditRefs": [
+          { "id": "color-contrast", "weight": 7, "group": "a11y-color-contrast" }
+        ]
+      },
+      "best-practices": {
+        "score": 1,
+        "auditRefs": [
+          { "id": "errors-in-console", "weight": 1, "group": "best-practices-general" }
+        ]
+      },
+      "seo": {
+        "score": 0.92,
+        "auditRefs": [
+          { "id": "document-title", "weight": 10, "group": "seo-content" }
+        ]
+      }
+    }
+  }
+}

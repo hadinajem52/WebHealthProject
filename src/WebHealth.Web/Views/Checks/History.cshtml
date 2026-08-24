@@ -105,7 +105,8 @@
                                         itemTone,
                                         item.Outcome ?? item.State,
                                         item.FailureCategory,
-                                        itemInFlight))
+                                        itemInFlight,
+                                        $"check-history-{item.LogicalCheckId}"))
                                     @foreach (var incident in item.KnownIncidents)
                                     {
                                         <a class="known-issue" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.IncidentId"

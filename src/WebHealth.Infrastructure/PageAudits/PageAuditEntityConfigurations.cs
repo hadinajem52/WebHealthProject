@@ -49,7 +49,7 @@ internal sealed class PageAuditTargetConfiguration : IEntityTypeConfiguration<Pa
 
             table.HasCheckConstraint(
                 "ck_page_audit_target_category",
-                "category IN ('Seo')");
+                "category IN ('Performance', 'Accessibility', 'BestPractices', 'Seo')");
 
             table.HasCheckConstraint(
                 "ck_page_audit_target_strategy",
@@ -118,7 +118,9 @@ internal sealed class PageAuditRunConfiguration : IEntityTypeConfiguration<PageA
                 "ck_page_audit_run_provider",
                 "provider IN ('PageSpeedInsights')");
 
-            table.HasCheckConstraint("ck_page_audit_run_category", "category IN ('Seo')");
+            table.HasCheckConstraint(
+                "ck_page_audit_run_category",
+                "category IN ('Performance', 'Accessibility', 'BestPractices', 'Seo')");
 
             table.HasCheckConstraint(
                 "ck_page_audit_run_strategy",

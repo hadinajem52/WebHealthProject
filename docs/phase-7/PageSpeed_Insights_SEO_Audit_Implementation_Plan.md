@@ -1,5 +1,10 @@
 # PageSpeed Insights SEO Audit Integration - Implementation Plan
 
+> The SEO-only category scope in this original plan is expanded by
+> [`PageSpeed_All_Categories_Expansion.md`](PageSpeed_All_Categories_Expansion.md). The expansion
+> keeps the provider/category/strategy model and adds Performance, Accessibility, Best Practices,
+> and SEO as independent audit profiles.
+
 **Repository:** `hadinajem52/WebHealthProject`  
 **Reviewed baseline:** `main` at commit `c6f2dd0fb22705d499e03bd2165afc75aa193638`  
 **Suggested repository path:** `docs/phase-7/PageSpeed_Insights_SEO_Audit_Implementation_Plan.md`  

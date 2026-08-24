@@ -1,5 +1,8 @@
 # SEO Integration Explained — PageSpeed Insights in WebHealth
 
+> Historical SEO-only explanation. The current category scope is defined by
+> [`PageSpeed_All_Categories_Expansion.md`](PageSpeed_All_Categories_Expansion.md).
+
 > **Plain-English companion** to the full plan in
 > `PageSpeed_Insights_SEO_Audit_Implementation_Plan.md` (8-11 days).
 > This file answers **what it is, how it works, and what the architecture looks like** — no deep implementation detail.

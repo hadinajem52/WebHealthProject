@@ -23,7 +23,10 @@ namespace WebHealth.Infrastructure.PageAudits;
 /// </remarks>
 internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
 {
-    public PageAuditProviderResult Read(JsonDocument document, string requestedUrl)
+    public PageAuditProviderResult Read(
+        JsonDocument document,
+        string requestedUrl,
+        string requestedCategory)
     {
         ArgumentNullException.ThrowIfNull(document);
         var root = document.RootElement;
@@ -69,22 +72,23 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
                 + $"{Sanitize(TryGetString(runtimeError, "message"), 400)}");
         }
 
+        var categoryParameter = PageAuditCategories.ToParameter(requestedCategory);
         if (!lighthouse.TryGetProperty("categories", out var categories)
-            || !categories.TryGetProperty(PageAuditCategories.SeoParameter, out var seoCategory)
-            || seoCategory.ValueKind != JsonValueKind.Object)
+            || !categories.TryGetProperty(categoryParameter, out var category)
+            || category.ValueKind != JsonValueKind.Object)
         {
             throw new PageAuditProviderException(
                 PageAuditFailureCategories.ProviderContractInvalid,
-                "The provider response carried no SEO category. The request asks for one "
+                $"The provider response carried no {requestedCategory} category. The request asks for one "
                 + "explicitly, so a response without it is not a result we can store.");
         }
 
-        var rawScore = PageAuditNormalization.NormalizeCategoryScore(TryGetDecimal(seoCategory, "score"));
+        var rawScore = PageAuditNormalization.NormalizeCategoryScore(TryGetDecimal(category, "score"));
         if (rawScore is null)
         {
             throw new PageAuditProviderException(
                 PageAuditFailureCategories.ProviderContractInvalid,
-                "The SEO category carried no score inside the provider's own 0-1 range.");
+                $"The {requestedCategory} category carried no score inside the provider's own 0-1 range.");
         }
 
         var lighthouseVersion = TryGetString(lighthouse, "lighthouseVersion");
@@ -103,15 +107,12 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
             ReadAnalysisTimestamp(root, lighthouse),
             lighthouseVersion,
             rawScore,
-            ReadItems(lighthouse, seoCategory),
+            ReadItems(lighthouse, category, requestedCategory),
             ReadWarnings(lighthouse),
             null,
             null);
     }
 
-    /// <summary>
-    /// The audits the SEO category actually references, in the order it references them.
-    /// </summary>
     /// <remarks>
     /// Membership comes from <c>auditRefs</c>, never from iterating <c>audits</c>. The response
     /// carries audits belonging to other categories, and storing those would attribute them to a
@@ -120,21 +121,22 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
     /// </remarks>
     private IReadOnlyList<PageAuditProviderItem> ReadItems(
         JsonElement lighthouse,
-        JsonElement seoCategory)
+        JsonElement category,
+        string requestedCategory)
     {
-        if (!seoCategory.TryGetProperty("auditRefs", out var auditRefs)
+        if (!category.TryGetProperty("auditRefs", out var auditRefs)
             || auditRefs.ValueKind != JsonValueKind.Array)
         {
             throw new PageAuditProviderException(
                 PageAuditFailureCategories.ProviderContractInvalid,
-                "The SEO category listed no audits.");
+                $"The {requestedCategory} category listed no audits.");
         }
 
         if (auditRefs.GetArrayLength() > options.MaximumAuditCount)
         {
             throw new PageAuditProviderException(
                 PageAuditFailureCategories.ProviderResponseTooLarge,
-                $"The SEO category declared {auditRefs.GetArrayLength()} audits, above the "
+                $"The {requestedCategory} category declared {auditRefs.GetArrayLength()} audits, above the "
                 + $"configured ceiling of {options.MaximumAuditCount}.");
         }
 
@@ -149,7 +151,7 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
             {
                 throw new PageAuditProviderException(
                     PageAuditFailureCategories.ProviderContractInvalid,
-                    "The SEO category referenced an audit with no identifier.");
+                    $"The {requestedCategory} category referenced an audit with no identifier.");
             }
 
             // One row per audit per run is a database rule; a response that referenced the same
@@ -165,7 +167,7 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
             {
                 throw new PageAuditProviderException(
                     PageAuditFailureCategories.ProviderContractInvalid,
-                    $"The SEO category referenced the audit {Sanitize(auditId, 60)}, which the "
+                    $"The {requestedCategory} category referenced the audit {Sanitize(auditId, 60)}, which the "
                     + "response does not contain.");
             }
 

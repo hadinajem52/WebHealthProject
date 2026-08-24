@@ -106,6 +106,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
     /// </remarks>
     public Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
+        string category,
         string strategy,
         Guid? runId,
         RegistryAccessContext access,
@@ -118,14 +119,19 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
             IsConfigured: true,
             IsEnabled: true,
             SchedulingEnabled: true,
+            category,
             strategy,
             24,
             null,
-            ResolveRun(endpointId, strategy, runId),
+            ResolveRun(endpointId, category, strategy, runId),
             PageAuditItemCounts.Empty,
             PageAuditComparison.None));
 
-    private PageAuditRunSummary? ResolveRun(Guid endpointId, string strategy, Guid? runId)
+    private PageAuditRunSummary? ResolveRun(
+        Guid endpointId,
+        string category,
+        string strategy,
+        Guid? runId)
     {
         if (runId == Guid.Empty)
         {
@@ -133,12 +139,16 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
         }
         if (runId is { } requested)
         {
-            return RunOf(endpointId, strategy, requested);
+            return RunOf(endpointId, category, strategy, requested);
         }
-        return RunOf(endpointId, strategy, QueuedRunId);
+        return RunOf(endpointId, category, strategy, QueuedRunId);
     }
 
-    private static PageAuditRunSummary RunOf(Guid endpointId, string strategy, Guid runId) => new(
+    private static PageAuditRunSummary RunOf(
+        Guid endpointId,
+        string category,
+        string strategy,
+        Guid runId) => new(
         runId,
         endpointId,
         PageAuditSources.Manual,
@@ -146,6 +156,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
         "https://example.com/",
         null,
         runId == CompletedRunId ? 0.92m : null,
+        category,
         strategy,
         "en-US",
         null,
@@ -159,6 +170,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
 
     public Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,
+        string category,
         string strategy,
         int limit,
         RegistryAccessContext access,
@@ -184,7 +196,9 @@ internal sealed class RecordingPageAuditRunner : IPageAuditRunner
     {
         Requested.Add(endpointId);
         return Task.FromResult(
-            PageAuditManualResult.Opened(PageAuditStrategies.All.Length, 0));
+            PageAuditManualResult.Opened(
+                PageAuditCategories.All.Length * PageAuditStrategies.All.Length,
+                0));
     }
 }
 

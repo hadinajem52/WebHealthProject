@@ -2269,6 +2269,79 @@ code,
     list-style: none;
 }
 
+.pagespeed-score-grid {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pagespeed-score {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: var(--space-5);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    background: var(--surface-card);
+    color: var(--text-primary);
+    flex-direction: column;
+    gap: var(--space-3);
+    text-align: center;
+    text-decoration: none;
+}
+
+.pagespeed-score:hover,
+.pagespeed-score:focus-visible,
+.pagespeed-score[aria-current="page"] {
+    border-color: var(--color-primary-300);
+    box-shadow: var(--shadow-card);
+}
+
+.pagespeed-score__ring {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    border: 0.25rem solid var(--color-gray-300);
+    border-radius: 50%;
+    color: var(--text-primary);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+}
+
+.pagespeed-score[data-status="success"] .pagespeed-score__ring {
+    border-color: var(--status-success);
+    color: var(--status-success);
+}
+
+.pagespeed-score[data-status="warning"] .pagespeed-score__ring {
+    border-color: var(--status-warning);
+    color: var(--status-warning);
+}
+
+.pagespeed-score[data-status="danger"] .pagespeed-score__ring {
+    border-color: var(--status-danger);
+    color: var(--status-danger);
+}
+
+.pagespeed-score[data-status="info"] .pagespeed-score__ring {
+    border-color: var(--status-info);
+    color: var(--status-info);
+}
+
+.pagespeed-score__label {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    line-height: 20px;
+}
+
+@media (max-width: 48em) {
+    .pagespeed-score-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 .audit-list > li {
     position: relative;
 }

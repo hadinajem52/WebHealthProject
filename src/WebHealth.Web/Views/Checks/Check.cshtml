@@ -32,7 +32,7 @@
                 <p class="card__status" data-status="@outcomeStatus">
                     @if (inFlight)
                     {
-                        @await Html.PartialAsync("_Spinner")
+                        @await Html.PartialAsync("_Spinner", $"check-summary-{check.LogicalCheckId}")
                     }
                     else
                     {
@@ -115,7 +115,7 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
                             <span>Outcome</span>
                         </span>
-                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? check.State, check.FailureCategory, inFlight))</span>
+                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? check.State, check.FailureCategory, inFlight, $"check-detail-{check.LogicalCheckId}"))</span>
                     </div>
                 </li>
                 <li>

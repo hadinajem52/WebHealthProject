@@ -15,6 +15,7 @@ public sealed record PageAuditRunSummary(
     string RequestedUrl,
     string? FinalUrl,
     decimal? RawScore,
+    string Category,
     string Strategy,
     string Locale,
     string? LighthouseVersion,
@@ -118,6 +119,7 @@ public sealed record PageAuditEndpointSummary(
     bool IsConfigured,
     bool IsEnabled,
     bool SchedulingEnabled,
+    string Category,
     string Strategy,
     int IntervalHours,
     DateTimeOffset? NextDueAt,
@@ -130,9 +132,10 @@ public sealed record PageAuditEndpointSummary(
         string endpointUrl,
         string websiteName,
         string environmentName,
+        string category,
         string strategy) =>
         new(endpointId, endpointUrl, websiteName, environmentName, false, false, false,
-            strategy, 24, null, null, PageAuditItemCounts.Empty,
+            category, strategy, 24, null, null, PageAuditItemCounts.Empty,
             PageAuditComparison.None);
 }
 
@@ -151,6 +154,7 @@ public interface IPageAuditReader
     /// </summary>
     Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
+        string category,
         string strategy,
         Guid? runId,
         RegistryAccessContext access,
@@ -158,6 +162,7 @@ public interface IPageAuditReader
 
     Task<IReadOnlyList<PageAuditRunSummary>> ListRunsAsync(
         Guid endpointId,
+        string category,
         string strategy,
         int limit,
         RegistryAccessContext access,

@@ -38,7 +38,7 @@
                 <p class="card__status" data-status="@runTone" id="crawl-run-label">
                     @if (isRunning)
                     {
-                        @await Html.PartialAsync("_Spinner")
+                        @await Html.PartialAsync("_Spinner", $"crawl-run-summary-{run.RunId}")
                     }
                     else
                     {
@@ -128,7 +128,8 @@
                                     StatusBadges.Info,
                                     "Not yet",
                                     "The crawl is still running, so how much of the site it covers is not settled.",
-                                    true))
+                                    true,
+                                    $"crawl-run-coverage-{run.RunId}"))
                             }
                             else
                             {

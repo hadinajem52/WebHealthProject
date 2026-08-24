@@ -10,8 +10,10 @@ namespace WebHealth.Web.Models;
 public sealed record PageAuditIndexViewModel(
     IReadOnlyList<EndpointOption> Endpoints,
     Guid? SelectedEndpointId,
+    string SelectedCategory,
     string SelectedStrategy,
     PageAuditEndpointSummary? Summary,
+    IReadOnlyList<PageAuditEndpointSummary> CategorySummaries,
     IReadOnlyList<PageAuditRunSummary> Runs,
     IReadOnlyList<PageAuditItemView> Items,
     bool CanRunNow)
@@ -106,6 +108,14 @@ public static class PageAuditDisplay
     {
         PageAuditStrategies.Desktop => "Desktop",
         _ => "Mobile"
+    };
+
+    public static string DescribeCategory(string category) => category switch
+    {
+        PageAuditCategories.Accessibility => "Accessibility",
+        PageAuditCategories.BestPractices => "Best Practices",
+        PageAuditCategories.Seo => "SEO",
+        _ => "Performance"
     };
 
     public static string ItemTone(string status) => status switch

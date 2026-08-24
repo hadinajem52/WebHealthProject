@@ -105,14 +105,15 @@ internal sealed class PageSpeedInsightsProvider(
 
         using var document = await ReadBoundedJsonAsync(response, cancellationToken);
         var reader = new PageAuditResponseReader(options);
-        var result = reader.Read(document, request.TargetUrl.ToString());
+        var result = reader.Read(document, request.TargetUrl.ToString(), request.Category);
 
         // No URI, no key, no response body. Everything here is either ours or a bounded provider
         // fact, and there is a regression test over the recorded log to keep it that way.
         logger.LogInformation(
-            "PageSpeed audit completed. Provider={Provider} Strategy={Strategy} "
+            "PageSpeed audit completed. Provider={Provider} Category={Category} Strategy={Strategy} "
             + "LighthouseVersion={LighthouseVersion} AuditItemCount={AuditItemCount}",
             ProviderName,
+            request.Category,
             request.Strategy,
             result.LighthouseVersion,
             result.Items.Count);
@@ -130,7 +131,7 @@ internal sealed class PageSpeedInsightsProvider(
         var query = string.Join('&',
         [
             $"url={Uri.EscapeDataString(request.TargetUrl.ToString())}",
-            $"category={Uri.EscapeDataString(PageAuditCategories.SeoParameter)}",
+            $"category={Uri.EscapeDataString(PageAuditCategories.ToParameter(request.Category))}",
             $"strategy={Uri.EscapeDataString(PageAuditStrategies.ToParameter(request.Strategy))}",
             $"locale={Uri.EscapeDataString(request.Locale)}",
             $"key={Uri.EscapeDataString(options.ApiKey!)}"

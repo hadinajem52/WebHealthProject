@@ -165,7 +165,9 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
         client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
-        var token = await GetAntiforgeryTokenAsync(client);
+        var token = await GetAntiforgeryTokenAsync(
+            client,
+            $"/PageAudits?endpointId={EmptyTargetRegistryReader.Endpoint.Id}");
 
         using var response = await PostAsync(
             client,
@@ -315,9 +317,11 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         Assert.DoesNotContain("<!DOCTYPE html>", content, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task<string> GetAntiforgeryTokenAsync(HttpClient client)
+    private static async Task<string> GetAntiforgeryTokenAsync(
+        HttpClient client,
+        string path = "/Targets/Endpoints")
     {
-        var content = await client.GetStringAsync("/Targets/Endpoints");
+        var content = await client.GetStringAsync(path);
         var match = Regex.Match(
             content,
             "name=\"__RequestVerificationToken\"[^>]*value=\"(?<token>[^\"]+)\"",

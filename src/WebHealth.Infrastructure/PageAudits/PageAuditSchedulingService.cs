@@ -123,9 +123,9 @@ public sealed class PageAuditSchedulingService(
         var targets = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.Provider == PageAuditProviders.PageSpeedInsights
-                && candidate.Category == PageAuditCategories.Seo
                 && candidate.IsEnabled)
-            .OrderBy(candidate => candidate.Strategy)
+            .OrderBy(candidate => candidate.Category)
+            .ThenBy(candidate => candidate.Strategy)
             .ThenBy(candidate => candidate.Id)
             .ToArrayAsync(cancellationToken);
         if (targets.Length == 0)

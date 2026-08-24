@@ -45,6 +45,46 @@ public sealed class PageSpeedInsightsProviderTests
         handler.Requests.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task RunAsync_ReadsThePerformanceScoreAndItsCoreMetrics()
+    {
+        var (provider, handler) = Create(Fixture("success-all-categories-mobile.json"));
+
+        var result = await provider.RunAsync(Request with
+        {
+            Category = PageAuditCategories.Performance
+        });
+
+        result.CategoryScore.Should().Be(0.71m);
+        result.Items.Select(item => item.AuditId).Should().BeEquivalentTo(
+            "first-contentful-paint",
+            "largest-contentful-paint",
+            "total-blocking-time",
+            "speed-index",
+            "cumulative-layout-shift");
+        result.Items.Single(item => item.AuditId == "total-blocking-time").DisplayValue
+            .Should().Be("240 ms");
+        handler.Requests.Single().RequestUri!.Query.Should().Contain("category=performance");
+    }
+
+    [Theory]
+    [InlineData(PageAuditCategories.Performance, "performance", 0.71)]
+    [InlineData(PageAuditCategories.Accessibility, "accessibility", 0.96)]
+    [InlineData(PageAuditCategories.BestPractices, "best-practices", 1.0)]
+    [InlineData(PageAuditCategories.Seo, "seo", 0.92)]
+    public async Task RunAsync_RequestsAndReadsEachSupportedCategory(
+        string category,
+        string parameter,
+        decimal expectedScore)
+    {
+        var (provider, handler) = Create(Fixture("success-all-categories-mobile.json"));
+
+        var result = await provider.RunAsync(Request with { Category = category });
+
+        result.CategoryScore.Should().Be(expectedScore);
+        handler.Requests.Single().RequestUri!.Query.Should().Contain($"category={parameter}");
+    }
+
     /// <summary>
     /// Membership comes from the category's auditRefs. The fixture carries an audit belonging to
     /// another category, and counting it would attribute it to a score it took no part in.

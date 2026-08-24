@@ -137,11 +137,6 @@ public sealed class PageAuditRun
     public ICollection<PageAuditItem> Items { get; } = [];
 }
 
-/// <summary>
-/// One normalized Lighthouse audit inside one run. Only audits the SEO category actually
-/// references are stored: the response carries audits belonging to other categories too, and
-/// keeping those would attribute them to a score they took no part in.
-/// </summary>
 public sealed class PageAuditItem
 {
     public Guid Id { get; set; }

@@ -9,10 +9,12 @@
     var selectedLabel = Model.Endpoints
         .FirstOrDefault(candidate => candidate.Id == Model.SelectedEndpointId)?.Label;
     var strategyLabel = PageAuditDisplay.DescribeStrategy(Model.SelectedStrategy);
+    var categoryLabel = PageAuditDisplay.DescribeCategory(Model.SelectedCategory);
     var auditStatusUrl = run?.IsActive == true
         ? Url.Action("Status", "PageAudits", new
         {
             endpointId = Model.SelectedEndpointId,
+            category = Model.SelectedCategory,
             strategy = Model.SelectedStrategy,
             runId = run.RunId
         })
@@ -38,8 +40,8 @@
     <section class="card" aria-labelledby="pagespeed-scope-label">
         <p class="card__subtitle" id="pagespeed-scope-label">
             Google PageSpeed Insights runs Lighthouse against a public page and returns a
-            technical SEO score. It is an automated audit of the page's markup, not a
-            prediction of search ranking or traffic.
+            scores for performance, accessibility, best practices, and SEO, with the Lighthouse
+            metrics and audits behind each score.
         </p>
 
         <div class="filter-inline filter-inline--wide">
@@ -48,6 +50,7 @@
                    switch below already chooses it, and a select that could disagree with that
                    switch would make the same page reachable two ways. *@
                 <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
+                <input type="hidden" name="category" value="@Model.SelectedCategory" />
                 <div class="form-field">
                     <label for="endpointId">Endpoint</label>
                     <select id="endpointId" name="endpointId">
@@ -74,6 +77,7 @@
             {
                 <form method="post" asp-action="RunNow" data-ajax-form data-ajax-target="#ajax-page">
                     <input type="hidden" name="endpointId" value="@runTarget" />
+                    <input type="hidden" name="category" value="@Model.SelectedCategory" />
                     <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
                     <button class="button button--secondary" type="submit"
                             title="Asks Google to audit this page on mobile and desktop now. The scores appear once Google answers.">
@@ -99,6 +103,7 @@
                        data-ajax-link
                        data-ajax-target="#ajax-page"
                        asp-route-endpointId="@Model.SelectedEndpointId"
+                       asp-route-category="@Model.SelectedCategory"
                        asp-route-strategy="@strategy">
                         @PageAuditDisplay.DescribeStrategy(strategy)
                     </a>
@@ -135,6 +140,43 @@
     {
         var summaryTone = run is null ? "neutral" : PageAuditDisplay.StatusTone(run);
 
+        <nav class="pagespeed-score-grid" aria-label="Lighthouse categories">
+            @foreach (var categorySummary in Model.CategorySummaries)
+            {
+                var categoryRun = categorySummary.LatestRun;
+                var categoryName = PageAuditDisplay.DescribeCategory(categorySummary.Category);
+                var categoryTone = categoryRun?.HasScore == true
+                    ? PageAuditDisplay.ScoreTone(categoryRun.Score)
+                    : categoryRun?.IsActive == true ? "info" : "neutral";
+                var isSelected = categorySummary.Category == Model.SelectedCategory;
+                <a class="pagespeed-score"
+                   data-status="@categoryTone"
+                   aria-current="@(isSelected ? "page" : null)"
+                   asp-action="Index"
+                   data-ajax-link
+                   data-ajax-target="#ajax-page"
+                   asp-route-endpointId="@Model.SelectedEndpointId"
+                   asp-route-category="@categorySummary.Category"
+                   asp-route-strategy="@Model.SelectedStrategy">
+                    <span class="pagespeed-score__ring">
+                        @if (categoryRun?.HasScore == true)
+                        {
+                            <span>@categoryRun.Score</span>
+                        }
+                        else if (categoryRun?.IsActive == true)
+                        {
+                            @await Html.PartialAsync("_Spinner", $"page-audit-category-{categoryRun.RunId}")
+                        }
+                        else
+                        {
+                            <span>—</span>
+                        }
+                    </span>
+                    <span class="pagespeed-score__label">@categoryName</span>
+                </a>
+            }
+        </nav>
+
         <section class="card">
             <div class="page-intro">
                 <div>
@@ -142,13 +184,13 @@
                     <p class="card__status" data-status="@summaryTone">
                         @if (run?.IsActive == true)
                         {
-                            @await Html.PartialAsync("_Spinner")
+                            @await Html.PartialAsync("_Spinner", $"page-audit-summary-{run.RunId}")
                         }
                         else
                         {
                             @await Html.PartialAsync("_Icon", StatusIcon(summaryTone))
                         }
-                        <span>PageSpeed @strategyLabel &middot; @(run is null ? "No audit has run yet" : PageAuditDisplay.DescribeStatus(run))</span>
+                        <span>@categoryLabel &middot; @strategyLabel &middot; @(run is null ? "No audit has run yet" : PageAuditDisplay.DescribeStatus(run))</span>
                     </p>
                 </div>
             </div>
@@ -163,7 +205,7 @@
                         <div class="detail-list__row">
                             <span class="detail-list__subject">
                                 <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "speed")</span>
-                                <span>@strategyLabel score</span>
+                                <span>@categoryLabel score</span>
                             </span>
                             <span class="detail-list__value">
                                 @if (run is not null && run.HasScore)
@@ -194,7 +236,8 @@
                                         PageAuditDisplay.StatusTone(run),
                                         PageAuditDisplay.DescribeStatus(run),
                                         null,
-                                        run.IsActive))
+                                        run.IsActive,
+                                        $"page-audit-latest-{run.RunId}"))
                                 }
                             </span>
                         </div>
@@ -267,6 +310,7 @@
                         <a class="button button--secondary"
                            asp-action="Index"
                            asp-route-endpointId="@Model.SelectedEndpointId"
+                           asp-route-category="@Model.SelectedCategory"
                            asp-route-strategy="@Model.SelectedStrategy"
                            asp-route-runId="@run.RunId"
                            data-ajax-link
@@ -414,7 +458,7 @@
         <section class="card">
             <div class="page-intro">
                 <div>
-                    <h3 class="card__title">@strategyLabel audits</h3>
+                    <h3 class="card__title">@categoryLabel metrics and audits</h3>
                     <p class="card__status" data-status="@(summary.Counts.Failed > 0 ? "danger" : "success")">
                         @await Html.PartialAsync("_Icon", summary.Counts.Failed > 0 ? "error" : "success")
                         <span>@summary.Counts.Failed failed &middot; @summary.Counts.Passed passed</span>
@@ -540,7 +584,7 @@
             </div>
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table data-table--history">
-                    <caption class="visually-hidden">@strategyLabel PageSpeed runs for the selected endpoint</caption>
+                    <caption class="visually-hidden">@strategyLabel @categoryLabel PageSpeed runs for the selected endpoint</caption>
                     <thead>
                         <tr>
                             <th scope="col">Subject</th>
@@ -566,7 +610,8 @@
                                         PageAuditDisplay.StatusTone(historyRun),
                                         PageAuditDisplay.DescribeStatus(historyRun),
                                         null,
-                                        historyRun.IsActive))
+                                        historyRun.IsActive,
+                                        $"page-audit-history-{historyRun.RunId}"))
                                 </td>
                                 <td data-label="Score">
                                     @if (historyRun.HasScore)
@@ -584,6 +629,7 @@
                                        data-ajax-link
                                        data-ajax-target="#ajax-page"
                                        asp-route-endpointId="@Model.SelectedEndpointId"
+                                       asp-route-category="@Model.SelectedCategory"
                                        asp-route-strategy="@Model.SelectedStrategy"
                                        asp-route-runId="@historyRun.RunId">View</a>
                                 </td>

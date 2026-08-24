@@ -219,17 +219,38 @@
             : [];
     }
 
+    function animationsByKey(elements) {
+        var keyed = new Map();
+        elements.forEach(function (element) {
+            var key = element.getAttribute('data-preserve-animation');
+            if (!key) {
+                return;
+            }
+            var matches = keyed.get(key) || [];
+            matches.push(element);
+            keyed.set(key, matches);
+        });
+        return keyed;
+    }
+
     function replaceRegion(current, incoming) {
         var currentAnimations = animationElements(current);
         var incomingAnimations = animationElements(incoming);
-        if (currentAnimations.length === 0 || currentAnimations.length !== incomingAnimations.length) {
+        if (currentAnimations.length === 0 || incomingAnimations.length === 0) {
             current.replaceWith(incoming);
             return;
         }
+        var currentAnimationsByKey = animationsByKey(currentAnimations);
         current.before(incoming);
-        incomingAnimations.forEach(function (incomingAnimation, index) {
-            currentAnimations[index].className = incomingAnimation.className;
-            incomingAnimation.replaceWith(currentAnimations[index]);
+        incomingAnimations.forEach(function (incomingAnimation) {
+            var key = incomingAnimation.getAttribute('data-preserve-animation');
+            var matches = currentAnimationsByKey.get(key);
+            if (!matches || matches.length === 0) {
+                return;
+            }
+            var currentAnimation = matches.shift();
+            currentAnimation.className = incomingAnimation.className;
+            incomingAnimation.replaceWith(currentAnimation);
         });
         current.remove();
     }

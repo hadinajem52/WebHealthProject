@@ -12,9 +12,6 @@ using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
-/// <summary>
-/// One endpoint's Lighthouse technical SEO score, the audits behind it, and its run history.
-/// </summary>
 /// <remarks>
 /// <para>
 /// Reading is open to every persona that may read the registry. The endpoint and run ids in the
@@ -40,14 +37,17 @@ public sealed class PageAuditsController(
     [HttpGet]
     public async Task<IActionResult> Index(
         Guid? endpointId,
+        string? category,
         string? strategy,
         Guid? runId,
         CancellationToken cancellationToken = default)
     {
         var access = GetAccess();
+        var selectedCategory = PageAuditCategories.Normalize(category);
         var selectedStrategy = PageAuditStrategies.Normalize(strategy);
         var model = await BuildModelAsync(
             endpointId,
+            selectedCategory,
             selectedStrategy,
             runId,
             access,
@@ -58,10 +58,12 @@ public sealed class PageAuditsController(
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> RunNow(
         Guid endpointId,
+        string? category,
         string? strategy,
         CancellationToken cancellationToken = default)
     {
         var access = GetAccess();
+        var selectedCategory = PageAuditCategories.Normalize(category);
 
         // One request audits every form factor, so the strategy here only decides which of the
         // two results the reader lands on afterwards.
@@ -94,7 +96,7 @@ public sealed class PageAuditsController(
             var partial = result.AlreadyRunningCount > 0
                 ? " The rest was already running."
                 : null;
-            message = "PageSpeed audit queued for mobile and desktop. Google runs each form factor, "
+            message = "PageSpeed audit queued for all categories on mobile and desktop. Google runs each profile, "
                 + $"so the scores appear once it answers.{partial}";
             level = FlashLevel.Success;
         }
@@ -110,6 +112,7 @@ public sealed class PageAuditsController(
 
             var summary = await pageAuditReader.GetEndpointSummaryAsync(
                 endpointId,
+                selectedCategory,
                 selectedStrategy,
                 null,
                 access,
@@ -118,24 +121,27 @@ public sealed class PageAuditsController(
             return Accepted(new AjaxFragmentViewModel(
                 message,
                 level.ToString().ToLowerInvariant(),
-                StatusUrl: Url.Action(nameof(Status), new { endpointId, strategy = selectedStrategy, runId }),
+                StatusUrl: Url.Action(nameof(Status), new { endpointId, category = selectedCategory, strategy = selectedStrategy, runId }),
                 RunId: runId));
         }
 
         TempData.AddFlashMessage(level, message);
-        return RedirectToAction(nameof(Index), new { endpointId, strategy = selectedStrategy });
+        return RedirectToAction(nameof(Index), new { endpointId, category = selectedCategory, strategy = selectedStrategy });
     }
 
     [HttpGet]
     public async Task<IActionResult> Status(
         Guid endpointId,
+        string? category,
         string? strategy,
         Guid? runId,
         CancellationToken cancellationToken = default)
     {
+        var selectedCategory = PageAuditCategories.Normalize(category);
         var selectedStrategy = PageAuditStrategies.Normalize(strategy);
         var model = await BuildModelAsync(
             endpointId,
+            selectedCategory,
             selectedStrategy,
             runId,
             GetAccess(),
@@ -153,6 +159,7 @@ public sealed class PageAuditsController(
 
     private async Task<PageAuditIndexViewModel?> BuildModelAsync(
         Guid? endpointId,
+        string category,
         string strategy,
         Guid? runId,
         RegistryAccessContext access,
@@ -166,11 +173,12 @@ public sealed class PageAuditsController(
             .ToArray();
         if (endpointId is not { } selected)
         {
-            return new(options, null, strategy, null, [], [], false);
+            return new(options, null, category, strategy, null, [], [], [], false);
         }
 
         var summary = await pageAuditReader.GetEndpointSummaryAsync(
             selected,
+            category,
             strategy,
             runId,
             access,
@@ -182,6 +190,7 @@ public sealed class PageAuditsController(
 
         var runs = await pageAuditReader.ListRunsAsync(
             selected,
+            category,
             strategy,
             RunsListed,
             access,
@@ -194,7 +203,25 @@ public sealed class PageAuditsController(
                 cancellationToken);
         var canRun = summary.IsEnabled
             && await targetAuthorization.CanTestEndpointAsync(selected, access, cancellationToken);
-        return new(options, selected, strategy, summary, runs, items, canRun);
+        var categorySummaries = new List<PageAuditEndpointSummary>();
+        foreach (var availableCategory in PageAuditCategories.All)
+        {
+            var categorySummary = availableCategory == category
+                ? summary
+                : await pageAuditReader.GetEndpointSummaryAsync(
+                    selected,
+                    availableCategory,
+                    strategy,
+                    null,
+                    access,
+                    cancellationToken);
+            if (categorySummary is not null)
+            {
+                categorySummaries.Add(categorySummary);
+            }
+        }
+
+        return new(options, selected, category, strategy, summary, categorySummaries, runs, items, canRun);
     }
 
     private RegistryAccessContext GetAccess()

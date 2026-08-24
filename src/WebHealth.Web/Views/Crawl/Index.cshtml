@@ -57,7 +57,7 @@
                         @* One crawl per endpoint is a database constraint, so a second press could
                            only be refused. Offer the run that is already going instead. *@
                         <a class="button button--secondary" asp-action="Run" asp-route-id="@activeRunId">
-                            @await Html.PartialAsync("_Spinner")
+                            @await Html.PartialAsync("_Spinner", $"crawl-action-{activeRunId}")
                             <span>Crawl in progress</span>
                         </a>
                     }
@@ -114,7 +114,7 @@
                     <p class="card__status" data-status="@(isRunning ? "info" : "neutral")">
                         @if (isRunning)
                         {
-                            @await Html.PartialAsync("_Spinner")
+                            @await Html.PartialAsync("_Spinner", $"crawl-summary-{Model.ActiveRunId}")
                         }
                         else
                         {
@@ -159,7 +159,8 @@
                                         CrawlRunDisplay.StatusTone(run),
                                         CrawlRunDisplay.DescribeStatus(run),
                                         CrawlRunDisplay.DescribeStopReason(run),
-                                        run.Status == CrawlRunStatuses.Running))
+                                        run.Status == CrawlRunStatuses.Running,
+                                        $"crawl-history-{run.RunId}"))
                                 </td>
                                 <td data-label="Broken links">
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(

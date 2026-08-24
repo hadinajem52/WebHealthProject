@@ -106,7 +106,7 @@ public sealed class EndpointFormViewModel
 
     // Enabling this sends the endpoint URL to Google and asks Google to load it, which is why
     // the form states that beside the switch rather than only in documentation.
-    [Display(Name = "Enable Google PageSpeed SEO audits")]
+    [Display(Name = "Enable Google PageSpeed audits")]
     public bool PageAuditEnabled { get; set; }
 
     [Display(Name = "Run PageSpeed audits on a schedule")]

@@ -356,11 +356,20 @@ test('a successful GET form replaces its target, initializes it, and pushes hist
 });
 
 test('a fragment refresh preserves a continuing animation element', async () => {
-    const spinner = { className: 'spinner', marker: 'existing' };
+    const spinner = {
+        className: 'spinner',
+        marker: 'existing',
+        getAttribute(name) {
+            return name === 'data-preserve-animation' ? 'check-1' : null;
+        }
+    };
     let inserted;
     let removed = false;
     const placeholder = {
         className: 'spinner spinner--badge',
+        getAttribute(name) {
+            return name === 'data-preserve-animation' ? 'check-1' : null;
+        },
         replaceWith(value) {
             this.replacement = value;
         }
@@ -405,6 +414,68 @@ test('a fragment refresh preserves a continuing animation element', async () => 
     assert.equal(inserted, incoming);
     assert.equal(placeholder.replacement, spinner);
     assert.equal(spinner.className, 'spinner spinner--badge');
+    assert.equal(removed, true);
+});
+
+test('a fragment refresh preserves continuing animations when another animation finishes', async () => {
+    function animation(key) {
+        return {
+            className: 'spinner',
+            key,
+            getAttribute(name) {
+                return name === 'data-preserve-animation' ? key : null;
+            },
+            replaceWith(value) {
+                this.replacement = value;
+            }
+        };
+    }
+
+    const continuing = animation('check-2');
+    const finished = animation('check-1');
+    const placeholder = animation('check-2');
+    let inserted;
+    let removed = false;
+    const incoming = {
+        querySelector() { return null; },
+        querySelectorAll(selector) {
+            return selector === '[data-preserve-animation]' ? [placeholder] : [];
+        }
+    };
+    const current = {
+        setAttribute() {},
+        querySelectorAll(selector) {
+            return selector === '[data-preserve-animation]' ? [finished, continuing] : [];
+        },
+        before(value) {
+            inserted = value;
+        },
+        remove() {
+            removed = true;
+        }
+    };
+    const ajax = loadAjax({
+        document: {
+            querySelector(selector) {
+                return selector === '#target' ? current : null;
+            }
+        },
+        DOMParser: class DOMParser {
+            parseFromString() {
+                return { querySelector: () => incoming };
+            }
+        },
+        fetch() {
+            return Promise.resolve(textResponse(200, '<div id="target"></div>'));
+        }
+    });
+
+    const root = await ajax.load('/status', '#target');
+
+    assert.equal(root, incoming);
+    assert.equal(inserted, incoming);
+    assert.equal(placeholder.replacement, continuing);
+    assert.equal(finished.replacement, undefined);
     assert.equal(removed, true);
 });
 

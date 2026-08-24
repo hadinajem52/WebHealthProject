@@ -460,7 +460,7 @@
             <p class="card__status" data-status="@latestStatus">
                 @if (checkInFlight)
                 {
-                    @await Html.PartialAsync("_Spinner")
+                    @await Html.PartialAsync("_Spinner", $"endpoint-check-summary-{latest!.LogicalCheckId}")
                 }
                 else
                 {
@@ -519,7 +519,8 @@
                                 checkInFlight ? StatusBadges.Info : StatusBadges.ForOutcome(latest.Outcome),
                                 latest.Outcome ?? latest.State,
                                 latest.FailureCategory,
-                                checkInFlight))
+                                checkInFlight,
+                                $"endpoint-check-detail-{latest.LogicalCheckId}"))
                         </span>
                     </div>
                 </li>
