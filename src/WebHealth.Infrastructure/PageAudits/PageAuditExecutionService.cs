@@ -25,6 +25,7 @@ namespace WebHealth.Infrastructure.PageAudits;
 public sealed class PageAuditExecutionService(
     ApplicationDbContext dbContext,
     IPageAuditProvider provider,
+    IPageAuditIncidentAutomationService incidentAutomation,
     PageAuditSchedulingOptions options,
     TimeProvider timeProvider,
     ILogger<PageAuditExecutionService> logger)
@@ -55,10 +56,10 @@ public sealed class PageAuditExecutionService(
         {
             var result = await provider.RunAsync(
                 new PageAuditRequest(
-                    new Uri(claim.RequestedUrl),
-                    claim.Category,
-                    claim.Strategy,
-                    claim.Locale),
+                    new Uri(claim[0].RequestedUrl),
+                    claim.Select(run => run.Category).ToArray(),
+                    claim[0].Strategy,
+                    claim[0].Locale),
                 cancellationToken);
             return await CompleteAsync(claim, result, cancellationToken);
         }
@@ -77,7 +78,7 @@ public sealed class PageAuditExecutionService(
                 exception,
                 "PageAudit run faulted unexpectedly. PageAuditRunId={PageAuditRunId} "
                 + "EndpointId={EndpointId}",
-                claim.Id, claim.EndpointId);
+                claim[0].Id, claim[0].EndpointId);
             return await FailAsync(
                 claim,
                 PageAuditFailureCategories.UnknownProviderFailure,
@@ -91,10 +92,21 @@ public sealed class PageAuditExecutionService(
     /// is conditional in the database rather than checked in memory, so two workers racing here
     /// produce one winner and one no-op rather than two audits.
     /// </summary>
-    private async Task<PageAuditRun?> ClaimAsync(Guid runId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<PageAuditRun>?> ClaimAsync(
+        Guid runId,
+        CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
         var leaseToken = Guid.NewGuid();
+
+        var seed = await dbContext.PageAuditRuns.AsNoTracking()
+            .Where(run => run.Id == runId)
+            .Select(run => new { run.BatchId, run.Strategy })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (seed is null)
+        {
+            return null;
+        }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         // The attempt ceiling is part of the claim, not only of the retry decision. Without it a
@@ -102,7 +114,9 @@ public sealed class PageAuditExecutionService(
         // reclaimed by reconciliation forever, and every reclaim is another request against
         // somebody else's site.
         var claimed = await dbContext.PageAuditRuns
-            .Where(run => run.Id == runId
+            .Where(run => (seed.BatchId == Guid.Empty
+                    ? run.Id == runId
+                    : run.BatchId == seed.BatchId && run.Strategy == seed.Strategy)
                 && run.AttemptCount < options.MaximumAttempts
                 && (run.Status == PageAuditRunStatuses.Queued
                     || (run.Status == PageAuditRunStatuses.Running
@@ -122,10 +136,13 @@ public sealed class PageAuditExecutionService(
             return null;
         }
 
-        var run = await dbContext.PageAuditRuns.AsNoTracking()
-            .SingleAsync(candidate => candidate.Id == runId, cancellationToken);
+        var runs = await dbContext.PageAuditRuns.AsNoTracking()
+            .Where(candidate => candidate.LeaseToken == leaseToken)
+            .OrderBy(candidate => candidate.Category)
+            .ThenBy(candidate => candidate.Id)
+            .ToArrayAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return run;
+        return runs;
     }
 
     /// <summary>
@@ -133,21 +150,24 @@ public sealed class PageAuditExecutionService(
     /// because a worker can pick the run up long after the dispatcher queued it.
     /// </summary>
     private async Task<string?> FindIneligibilityAsync(
-        PageAuditRun run,
+        IReadOnlyList<PageAuditRun> runs,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
 
-        var targetEnabled = await dbContext.PageAuditTargets.AsNoTracking()
-            .AnyAsync(target => target.Id == run.PageAuditTargetId && target.IsEnabled, cancellationToken);
-        if (!targetEnabled)
+        var first = runs[0];
+        var targetIds = runs.Select(run => run.PageAuditTargetId).ToArray();
+
+        var enabledTargetCount = await dbContext.PageAuditTargets.AsNoTracking()
+            .CountAsync(target => targetIds.Contains(target.Id) && target.IsEnabled, cancellationToken);
+        if (enabledTargetCount != targetIds.Length)
         {
             return "PageSpeed auditing was switched off for this endpoint before the run started.";
         }
 
         var current = await MonitoringEligibility
             .ApplyTestable(dbContext.Endpoints.AsNoTracking(), now)
-            .Where(endpoint => endpoint.Id == run.EndpointId)
+            .Where(endpoint => endpoint.Id == first.EndpointId)
             .Select(endpoint => endpoint.NormalizedUrl)
             .SingleOrDefaultAsync(cancellationToken);
         if (current is null)
@@ -159,85 +179,113 @@ public sealed class PageAuditExecutionService(
         // edited from A to B between queueing and execution re-derives its authorization for B,
         // so the check above passes while the request still carries A - a host nobody authorized.
         // The snapshot is only trustworthy while it still is the endpoint's URL.
-        if (!string.Equals(current, run.RequestedUrl, StringComparison.Ordinal))
+        if (!runs.All(run => string.Equals(current, run.RequestedUrl, StringComparison.Ordinal)))
         {
             return "The endpoint URL changed after this run was queued, so the audit it was "
                 + "opened for no longer describes this endpoint.";
         }
 
-        var eligibility = PageAuditEligibility.Evaluate(run.RequestedUrl);
+        var eligibility = PageAuditEligibility.Evaluate(first.RequestedUrl);
         return eligibility.IsEligible
             ? null
             : $"The endpoint URL is not eligible for a public audit: {eligibility.Reason}.";
     }
 
     private async Task<PageAuditExecutionOutcome> CompleteAsync(
-        PageAuditRun claim,
-        PageAuditProviderResult result,
+        IReadOnlyList<PageAuditRun> claims,
+        PageAuditProviderBatchResult batchResult,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var warningSummary = PageAuditNormalization.SummarizeWarnings(
-            result.Warnings, PageAuditTextBounds.WarningSummary);
-        var status = warningSummary is null
-            ? PageAuditRunStatuses.Completed
-            : PageAuditRunStatuses.CompletedWithWarnings;
+        var primary = claims[0];
+        if (claims.Any(claim => !batchResult.Categories.ContainsKey(claim.Category)))
+        {
+            return await FailAsync(
+                claims,
+                PageAuditFailureCategories.ProviderContractInvalid,
+                "The provider response did not contain every requested category.",
+                cancellationToken);
+        }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        // The lease is verified as part of the update rather than read first. Between a read and a
-        // write the lease could expire and another worker could claim the run, and this worker
-        // would then overwrite that worker's result with its own.
-        var stillOurs = await dbContext.PageAuditRuns
-            .Where(run => run.Id == claim.Id && run.LeaseToken == claim.LeaseToken)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(run => run.Status, status)
-                .SetProperty(run => run.RawScore, result.CategoryScore)
-                .SetProperty(run => run.FinalUrl,
-                    PageAuditNormalization.BoundText(result.FinalUrl, PageAuditTextBounds.Url))
-                .SetProperty(run => run.LighthouseVersion,
-                    PageAuditNormalization.BoundText(
-                        result.LighthouseVersion, PageAuditTextBounds.LighthouseVersion))
-                .SetProperty(run => run.AnalysisAt, result.AnalysisAt)
-                .SetProperty(run => run.WarningSummary, warningSummary)
-                .SetProperty(run => run.FailureCategory, (string?)null)
-                .SetProperty(run => run.SafeDiagnostic, (string?)null)
-                .SetProperty(run => run.FinishedAt, now)
-                .SetProperty(run => run.LeaseToken, (Guid?)null)
-                .SetProperty(run => run.LeaseExpiresAt, (DateTimeOffset?)null)
-                .SetProperty(run => run.UpdatedAt, now),
-                cancellationToken);
-
-        if (stillOurs == 0)
+        foreach (var claim in claims)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            logger.LogWarning(
-                "PageAudit result discarded: the lease had moved on. PageAuditRunId={PageAuditRunId}",
-                claim.Id);
-            return PageAuditExecutionOutcome.NotClaimed(claim.Id);
+            var result = batchResult.Categories[claim.Category];
+            var warningSummary = PageAuditNormalization.SummarizeWarnings(
+                result.Warnings, PageAuditTextBounds.WarningSummary);
+            var status = warningSummary is null
+                ? PageAuditRunStatuses.Completed
+                : PageAuditRunStatuses.CompletedWithWarnings;
+            var stillOurs = await dbContext.PageAuditRuns
+                .Where(run => run.Id == claim.Id && run.LeaseToken == claim.LeaseToken)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(run => run.Status, status)
+                    .SetProperty(run => run.RawScore, result.CategoryScore)
+                    .SetProperty(run => run.FinalUrl,
+                        PageAuditNormalization.BoundText(result.FinalUrl, PageAuditTextBounds.Url))
+                    .SetProperty(run => run.LighthouseVersion,
+                        PageAuditNormalization.BoundText(
+                            result.LighthouseVersion, PageAuditTextBounds.LighthouseVersion))
+                    .SetProperty(run => run.AnalysisAt, result.AnalysisAt)
+                    .SetProperty(run => run.WarningSummary, warningSummary)
+                    .SetProperty(run => run.FailureCategory, (string?)null)
+                    .SetProperty(run => run.SafeDiagnostic, (string?)null)
+                    .SetProperty(run => run.FinishedAt, now)
+                    .SetProperty(run => run.LeaseToken, (Guid?)null)
+                    .SetProperty(run => run.LeaseExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(run => run.UpdatedAt, now),
+                    cancellationToken);
+
+            if (stillOurs == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                logger.LogWarning(
+                    "PageAudit result discarded: the lease had moved on. PageAuditRunId={PageAuditRunId}",
+                    claim.Id);
+                return PageAuditExecutionOutcome.NotClaimed(primary.Id);
+            }
         }
 
-        // A reclaimed run may already carry items from the attempt that lost its lease. Clearing
-        // first keeps the run's items describing exactly one provider response.
+        var runIds = claims.Select(claim => claim.Id).ToArray();
         await dbContext.PageAuditItems
-            .Where(item => item.RunId == claim.Id)
+            .Where(item => runIds.Contains(item.RunId))
             .ExecuteDeleteAsync(cancellationToken);
-        dbContext.PageAuditItems.AddRange(result.Items.Select(item => ToEntity(claim.Id, item)));
+        foreach (var claim in claims)
+        {
+            var result = batchResult.Categories[claim.Category];
+            dbContext.PageAuditItems.AddRange(result.Items.Select(item => ToEntity(claim.Id, item)));
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        foreach (var claim in claims)
+        {
+            await incidentAutomation.ApplyAsync(
+                new(claim.Id, claim.EndpointId, claim.Source, claim.Category, claim.Strategy),
+                batchResult.Categories[claim.Category],
+                now,
+                cancellationToken);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
 
-        var failedCount = result.Items.Count(item => PageAuditNormalization.CountsAsFailure(
-            PageAuditNormalization.ClassifyAuditStatus(
-                item.ScoreDisplayMode, item.Score, item.ErrorMessage)));
+        var failedCount = batchResult.Categories.Values.Sum(result => result.Items.Count(item =>
+            PageAuditNormalization.CountsAsFailure(PageAuditNormalization.ClassifyAuditStatus(
+                item.ScoreDisplayMode, item.Score, item.ErrorMessage))));
+        var itemCount = batchResult.Categories.Values.Sum(result => result.Items.Count);
         logger.LogInformation(
-            "PageAudit run completed. PageAuditRunId={PageAuditRunId} EndpointId={EndpointId} "
-            + "RunStatus={RunStatus} AuditItemCount={AuditItemCount} FailedAuditCount={FailedAuditCount} "
+            "PageAudit batch completed. PageAuditBatchId={PageAuditBatchId} EndpointId={EndpointId} "
+            + "AuditItemCount={AuditItemCount} FailedAuditCount={FailedAuditCount} "
             + "LighthouseVersion={LighthouseVersion} AttemptNumber={AttemptNumber}",
-            claim.Id, claim.EndpointId, status, result.Items.Count, failedCount,
-            result.LighthouseVersion, claim.AttemptCount);
+            primary.BatchId, primary.EndpointId, itemCount, failedCount,
+            batchResult.Categories.Values.First().LighthouseVersion, primary.AttemptCount);
 
-        return new PageAuditExecutionOutcome(claim.Id, status, null, null);
+        var outcomeStatus = batchResult.Categories.Values.Any(result => result.Warnings.Count > 0)
+            ? PageAuditRunStatuses.CompletedWithWarnings
+            : PageAuditRunStatuses.Completed;
+        return new PageAuditExecutionOutcome(primary.Id, outcomeStatus, null, null);
     }
 
     private PageAuditItem ToEntity(Guid runId, PageAuditProviderItem item) => new()
@@ -250,6 +298,8 @@ public sealed class PageAuditExecutionService(
         Score = PageAuditNormalization.NormalizeCategoryScore(item.Score),
         ScoreDisplayMode = PageAuditNormalization.BoundText(
             item.ScoreDisplayMode, PageAuditTextBounds.ScoreDisplayMode),
+        NumericValue = item.NumericValue,
+        NumericUnit = PageAuditNormalization.BoundText(item.NumericUnit, PageAuditTextBounds.NumericUnit),
         Weight = double.IsFinite(item.Weight) && item.Weight >= 0 ? item.Weight : 0,
         GroupName = PageAuditNormalization.BoundText(item.Group, PageAuditTextBounds.GroupName),
         Title = PageAuditNormalization.BoundText(item.Title, PageAuditTextBounds.Title),
@@ -265,17 +315,18 @@ public sealed class PageAuditExecutionService(
     /// about how many times we have already asked Google for this page.
     /// </summary>
     private async Task<PageAuditExecutionOutcome> HandleProviderFailureAsync(
-        PageAuditRun claim,
+        IReadOnlyList<PageAuditRun> claims,
         PageAuditProviderException exception,
         CancellationToken cancellationToken)
     {
+        var primary = claims[0];
         // Cancellation is not a failure of the audit, and it is the one case where the token this
         // method was handed is already cancelled. Writing the terminal row with it would cancel
         // the write too, leaving the run Running until its lease expired.
         if (exception.FailureCategory == PageAuditFailureCategories.Cancelled)
         {
             return await FinishAsync(
-                claim,
+                claims,
                 PageAuditRunStatuses.Cancelled,
                 PageAuditFailureCategories.Cancelled,
                 exception.Message,
@@ -283,17 +334,18 @@ public sealed class PageAuditExecutionService(
         }
 
         var retryable = PageAuditFailureCategories.IsTransient(exception.FailureCategory)
-            && claim.AttemptCount < options.MaximumAttempts;
+            && primary.AttemptCount < options.MaximumAttempts;
         if (!retryable)
         {
-            return await FailAsync(claim, exception.FailureCategory, exception.Message, cancellationToken);
+            return await FailAsync(claims, exception.FailureCategory, exception.Message, cancellationToken);
         }
 
         var now = timeProvider.GetUtcNow();
-        var delay = exception.RetryAfter ?? BackoffFor(claim.AttemptCount);
+        var delay = exception.RetryAfter ?? BackoffFor(primary.AttemptCount);
 
+        var claimIds = claims.Select(claim => claim.Id).ToArray();
         var stillOurs = await dbContext.PageAuditRuns
-            .Where(run => run.Id == claim.Id && run.LeaseToken == claim.LeaseToken)
+            .Where(run => claimIds.Contains(run.Id) && run.LeaseToken == primary.LeaseToken)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(run => run.Status, PageAuditRunStatuses.Queued)
                 .SetProperty(run => run.FailureCategory, exception.FailureCategory)
@@ -303,18 +355,18 @@ public sealed class PageAuditExecutionService(
                 .SetProperty(run => run.LeaseExpiresAt, (DateTimeOffset?)null)
                 .SetProperty(run => run.UpdatedAt, now),
                 cancellationToken);
-        if (stillOurs == 0)
+        if (stillOurs != claims.Count)
         {
-            return PageAuditExecutionOutcome.NotClaimed(claim.Id);
+            return PageAuditExecutionOutcome.NotClaimed(primary.Id);
         }
 
         logger.LogWarning(
             "PageAudit attempt failed and will be retried. PageAuditRunId={PageAuditRunId} "
             + "EndpointId={EndpointId} FailureCategory={FailureCategory} AttemptNumber={AttemptNumber}",
-            claim.Id, claim.EndpointId, exception.FailureCategory, claim.AttemptCount);
+            primary.Id, primary.EndpointId, exception.FailureCategory, primary.AttemptCount);
 
         return new PageAuditExecutionOutcome(
-            claim.Id, PageAuditRunStatuses.Queued, exception.FailureCategory, delay);
+            primary.Id, PageAuditRunStatuses.Queued, exception.FailureCategory, delay);
     }
 
     /// <summary>
@@ -328,22 +380,24 @@ public sealed class PageAuditExecutionService(
     };
 
     private Task<PageAuditExecutionOutcome> FailAsync(
-        PageAuditRun claim,
+        IReadOnlyList<PageAuditRun> claims,
         string failureCategory,
         string diagnostic,
         CancellationToken cancellationToken) =>
-        FinishAsync(claim, PageAuditRunStatuses.Failed, failureCategory, diagnostic, cancellationToken);
+        FinishAsync(claims, PageAuditRunStatuses.Failed, failureCategory, diagnostic, cancellationToken);
 
     private async Task<PageAuditExecutionOutcome> FinishAsync(
-        PageAuditRun claim,
+        IReadOnlyList<PageAuditRun> claims,
         string status,
         string failureCategory,
         string diagnostic,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
+        var primary = claims[0];
+        var claimIds = claims.Select(claim => claim.Id).ToArray();
         var stillOurs = await dbContext.PageAuditRuns
-            .Where(run => run.Id == claim.Id && run.LeaseToken == claim.LeaseToken)
+            .Where(run => claimIds.Contains(run.Id) && run.LeaseToken == primary.LeaseToken)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(run => run.Status, status)
                 .SetProperty(run => run.FailureCategory, failureCategory)
@@ -354,17 +408,17 @@ public sealed class PageAuditExecutionService(
                 .SetProperty(run => run.LeaseExpiresAt, (DateTimeOffset?)null)
                 .SetProperty(run => run.UpdatedAt, now),
                 cancellationToken);
-        if (stillOurs == 0)
+        if (stillOurs != claims.Count)
         {
-            return PageAuditExecutionOutcome.NotClaimed(claim.Id);
+            return PageAuditExecutionOutcome.NotClaimed(primary.Id);
         }
 
         logger.LogWarning(
             "PageAudit run failed. PageAuditRunId={PageAuditRunId} EndpointId={EndpointId} "
             + "FailureCategory={FailureCategory} AttemptNumber={AttemptNumber}",
-            claim.Id, claim.EndpointId, failureCategory, claim.AttemptCount);
+            primary.Id, primary.EndpointId, failureCategory, primary.AttemptCount);
 
         return new PageAuditExecutionOutcome(
-            claim.Id, PageAuditRunStatuses.Failed, failureCategory, null);
+            primary.Id, PageAuditRunStatuses.Failed, failureCategory, null);
     }
 }

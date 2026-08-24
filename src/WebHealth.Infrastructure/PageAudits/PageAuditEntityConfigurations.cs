@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.PageAudits;
@@ -20,6 +21,7 @@ public static class PageAuditTextBounds
 
     public const int AuditId = 200;
     public const int ScoreDisplayMode = 40;
+    public const int NumericUnit = 30;
     public const int GroupName = 100;
     public const int Title = 500;
     public const int Description = 2000;
@@ -182,6 +184,7 @@ internal sealed class PageAuditRunConfiguration : IEntityTypeConfiguration<PageA
         });
 
         builder.HasKey(run => run.Id);
+        builder.Property(run => run.BatchId).HasDefaultValueSql("gen_random_uuid()");
         builder.Property(run => run.Source).HasMaxLength(PageAuditTextBounds.Status).IsRequired();
         builder.Property(run => run.Status).HasMaxLength(PageAuditTextBounds.Status).IsRequired();
         builder.Property(run => run.RequestedUrl).HasMaxLength(PageAuditTextBounds.Url).IsRequired();
@@ -212,6 +215,9 @@ internal sealed class PageAuditRunConfiguration : IEntityTypeConfiguration<PageA
         // The reconciliation sweep's query: non-terminal runs, oldest first.
         builder.HasIndex(run => new { run.Status, run.UpdatedAt })
             .HasDatabaseName("ix_page_audit_run_status_updated");
+
+        builder.HasIndex(run => new { run.BatchId, run.Strategy })
+            .HasDatabaseName("ix_page_audit_run_batch_strategy");
 
         // At most one live run per target. This is what stops a dispatcher and a person pressing
         // Run now from spending two API calls on the same audit, and what makes a spurious
@@ -244,6 +250,10 @@ internal sealed class PageAuditItemConfiguration : IEntityTypeConfiguration<Page
 
             table.HasCheckConstraint("ck_page_audit_item_weight", "weight >= 0");
 
+            table.HasCheckConstraint(
+                "ck_page_audit_item_numeric_value",
+                "numeric_value IS NULL OR numeric_value >= 0");
+
             // A passed or failed audit is one Lighthouse scored. Without this an audit could be
             // stored as Passed with no score behind it, which is a claim nothing supports.
             table.HasCheckConstraint(
@@ -255,6 +265,8 @@ internal sealed class PageAuditItemConfiguration : IEntityTypeConfiguration<Page
         builder.Property(item => item.AuditId).HasMaxLength(PageAuditTextBounds.AuditId).IsRequired();
         builder.Property(item => item.Status).HasMaxLength(PageAuditTextBounds.Status).IsRequired();
         builder.Property(item => item.ScoreDisplayMode).HasMaxLength(PageAuditTextBounds.ScoreDisplayMode);
+        builder.Property(item => item.NumericValue).HasPrecision(14, 4);
+        builder.Property(item => item.NumericUnit).HasMaxLength(PageAuditTextBounds.NumericUnit);
         builder.Property(item => item.GroupName).HasMaxLength(PageAuditTextBounds.GroupName);
         builder.Property(item => item.Title).HasMaxLength(PageAuditTextBounds.Title);
         builder.Property(item => item.Description).HasMaxLength(PageAuditTextBounds.Description);
@@ -279,5 +291,73 @@ internal sealed class PageAuditItemConfiguration : IEntityTypeConfiguration<Page
         builder.HasOne(item => item.Run).WithMany(run => run.Items)
             .HasForeignKey(item => item.RunId)
             .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal static class PageAuditIncidentPolicyDefaults
+{
+    public static readonly Guid Id = new("58af6bcc-d2e8-4e8c-9d16-51a2a35df9f0");
+    public static readonly DateTimeOffset SeedTimestamp = new(2026, 8, 24, 0, 0, 0, TimeSpan.Zero);
+}
+
+internal sealed class PageAuditIncidentPolicyConfiguration
+    : IEntityTypeConfiguration<PageAuditIncidentPolicyEntity>
+{
+    public void Configure(EntityTypeBuilder<PageAuditIncidentPolicyEntity> builder)
+    {
+        builder.ToTable("page_audit_incident_policy", table =>
+        {
+            table.HasCheckConstraint(
+                "ck_page_audit_incident_policy_singleton",
+                $"id = '{PageAuditIncidentPolicyDefaults.Id}'::uuid");
+            table.HasCheckConstraint(
+                "ck_page_audit_incident_policy_scores",
+                "performance_minimum_score BETWEEN 0 AND 100 "
+                + "AND accessibility_minimum_score BETWEEN 0 AND 100 "
+                + "AND best_practices_minimum_score BETWEEN 0 AND 100 "
+                + "AND seo_minimum_score BETWEEN 0 AND 100");
+            table.HasCheckConstraint(
+                "ck_page_audit_incident_policy_metric_limits",
+                "first_contentful_paint_maximum BETWEEN 0 AND 600000 "
+                + "AND largest_contentful_paint_maximum BETWEEN 0 AND 600000 "
+                + "AND total_blocking_time_maximum BETWEEN 0 AND 600000 "
+                + "AND cumulative_layout_shift_maximum BETWEEN 0 AND 10 "
+                + "AND speed_index_maximum BETWEEN 0 AND 600000");
+        });
+        builder.HasKey(policy => policy.Id);
+        builder.Property(policy => policy.FirstContentfulPaintMaximum).HasPrecision(14, 4);
+        builder.Property(policy => policy.LargestContentfulPaintMaximum).HasPrecision(14, 4);
+        builder.Property(policy => policy.TotalBlockingTimeMaximum).HasPrecision(14, 4);
+        builder.Property(policy => policy.CumulativeLayoutShiftMaximum).HasPrecision(14, 4);
+        builder.Property(policy => policy.SpeedIndexMaximum).HasPrecision(14, 4);
+        builder.Property(policy => policy.Version).IsConcurrencyToken();
+        builder.HasOne<ApplicationUser>().WithMany()
+            .HasForeignKey(policy => policy.UpdatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasData(new PageAuditIncidentPolicyEntity
+        {
+            Id = PageAuditIncidentPolicyDefaults.Id,
+            IncidentsEnabled = false,
+            PerformanceScoreEnabled = true,
+            PerformanceMinimumScore = 90,
+            AccessibilityScoreEnabled = true,
+            AccessibilityMinimumScore = 90,
+            BestPracticesScoreEnabled = true,
+            BestPracticesMinimumScore = 90,
+            SeoScoreEnabled = true,
+            SeoMinimumScore = 90,
+            FirstContentfulPaintEnabled = false,
+            FirstContentfulPaintMaximum = 1800,
+            LargestContentfulPaintEnabled = false,
+            LargestContentfulPaintMaximum = 2500,
+            TotalBlockingTimeEnabled = false,
+            TotalBlockingTimeMaximum = 200,
+            CumulativeLayoutShiftEnabled = false,
+            CumulativeLayoutShiftMaximum = 0.1m,
+            SpeedIndexEnabled = false,
+            SpeedIndexMaximum = 3400,
+            UpdatedAt = PageAuditIncidentPolicyDefaults.SeedTimestamp,
+            Version = 1
+        });
     }
 }

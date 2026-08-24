@@ -55,20 +55,23 @@ public sealed class PageAuditSchedulingService(
             .OrderBy(run => run.UpdatedAt)
             .ThenBy(run => run.Id)
             .Take(options.ReconciliationBatchSize)
-            .Select(run => new { run.Id, run.AttemptCount })
+            .Select(run => new { run.Id, run.BatchId, run.AttemptCount })
             .ToArrayAsync(cancellationToken);
 
         // A run that has spent its attempts can never be claimed again, so re-enqueueing it would
         // queue work no worker will do while its target's active-run index refuses every new run.
         // Retiring it is what lets the next scheduled audit open at all.
-        var exhausted = recoverable
+        var exhaustedBatchIds = recoverable
             .Where(run => run.AttemptCount >= options.MaximumAttempts)
-            .Select(run => run.Id)
+            .Select(run => run.BatchId)
+            .Distinct()
             .ToArray();
-        if (exhausted.Length > 0)
+        if (exhaustedBatchIds.Length > 0)
         {
             await dbContext.PageAuditRuns
-                .Where(run => exhausted.Contains(run.Id))
+                .Where(run => exhaustedBatchIds.Contains(run.BatchId)
+                    && (run.Status == PageAuditRunStatuses.Queued
+                        || run.Status == PageAuditRunStatuses.Running))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(run => run.Status, PageAuditRunStatuses.Failed)
                     .SetProperty(run => run.FailureCategory,
@@ -81,12 +84,13 @@ public sealed class PageAuditSchedulingService(
                     .SetProperty(run => run.UpdatedAt, now),
                     cancellationToken);
             logger.LogWarning(
-                "Retired {Count} page audit runs that had no attempts left.", exhausted.Length);
+                "Retired {Count} page audit batches that had no attempts left.", exhaustedBatchIds.Length);
         }
 
         var runIds = recoverable
-            .Where(run => run.AttemptCount < options.MaximumAttempts)
-            .Select(run => run.Id)
+            .Where(run => !exhaustedBatchIds.Contains(run.BatchId))
+            .GroupBy(run => run.BatchId)
+            .Select(batch => batch.OrderBy(run => run.Id).First().Id)
             .ToArray();
 
         if (runIds.Length > 0)
@@ -157,19 +161,23 @@ public sealed class PageAuditSchedulingService(
             return PageAuditManualResult.Rejected(DescribeIneligibility(eligibility.Reason));
         }
 
-        var opened = new List<Guid>();
+        var opened = new List<(Guid RunId, Guid BatchId)>();
         var alreadyRunning = 0;
-        foreach (var target in targets)
+        foreach (var strategyTargets in targets.GroupBy(target => target.Strategy))
         {
-            var runId = await OpenManualRunAsync(
-                target, endpoint.NormalizedUrl, access.UserId, now, cancellationToken);
-            if (runId is { } identifier)
+            var batchId = Guid.NewGuid();
+            foreach (var target in strategyTargets)
             {
-                opened.Add(identifier);
-            }
-            else
-            {
-                alreadyRunning++;
+                var runId = await OpenManualRunAsync(
+                    target, batchId, endpoint.NormalizedUrl, access.UserId, now, cancellationToken);
+                if (runId is { } identifier)
+                {
+                    opened.Add((identifier, batchId));
+                }
+                else
+                {
+                    alreadyRunning++;
+                }
             }
         }
 
@@ -180,7 +188,9 @@ public sealed class PageAuditSchedulingService(
 
         try
         {
-            foreach (var runId in opened)
+            foreach (var runId in opened
+                .GroupBy(run => run.BatchId)
+                .Select(batch => batch.OrderBy(run => run.RunId).First().RunId))
             {
                 queue.Enqueue(runId);
             }
@@ -192,7 +202,7 @@ public sealed class PageAuditSchedulingService(
             // off there is no queue and no reconciliation sweep, so a committed run would sit
             // Queued forever and its target's active-run index would refuse every later request.
             // Retiring them here keeps the failure to the one request that caused it.
-            foreach (var runId in opened)
+            foreach (var runId in opened.Select(run => run.RunId))
             {
                 await RetireUnreachableRunAsync(runId, cancellationToken);
             }
@@ -222,6 +232,7 @@ public sealed class PageAuditSchedulingService(
     /// </remarks>
     private async Task<Guid?> OpenManualRunAsync(
         PageAuditTarget target,
+        Guid batchId,
         string requestedUrl,
         Guid requestedByUserId,
         DateTimeOffset now,
@@ -232,7 +243,8 @@ public sealed class PageAuditSchedulingService(
             return null;
         }
 
-        var runId = OpenRun(target, requestedUrl, PageAuditSources.Manual, requestedByUserId, now);
+        var runId = OpenRun(
+            target, batchId, requestedUrl, PageAuditSources.Manual, requestedByUserId, now);
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -293,28 +305,40 @@ public sealed class PageAuditSchedulingService(
             .ToArrayAsync(cancellationToken)).ToHashSet();
 
         var opened = new List<Guid>();
-        foreach (var target in targets)
+        foreach (var targetGroup in targets.GroupBy(target => new { target.EndpointId, target.Strategy }))
         {
-            // The cadence advances whether or not a run is opened. A target that is ineligible
-            // today must not accumulate a backlog of missed slots to fire the moment it is fixed.
-            target.NextDueAt = MonitorCadence.GetFirstSlotAfter(
-                target.ScheduleAnchor, target.IntervalSeconds, now);
-            target.UpdatedAt = now;
-
-            if (activeTargetIds.Contains(target.Id))
+            var batchId = Guid.NewGuid();
+            Guid? representative = null;
+            foreach (var target in targetGroup)
             {
-                // The previous run has not finished. Skipping the slot is the honest behaviour:
-                // the audit is already in flight, and a second one would spend quota to overtake it.
-                continue;
+                // The cadence advances whether or not a run is opened. A target that is ineligible
+                // today must not accumulate a backlog of missed slots to fire the moment it is fixed.
+                target.NextDueAt = MonitorCadence.GetFirstSlotAfter(
+                    target.ScheduleAnchor, target.IntervalSeconds, now);
+                target.UpdatedAt = now;
+
+                if (activeTargetIds.Contains(target.Id))
+                {
+                    // The previous run has not finished. Skipping the slot is the honest behaviour:
+                    // the audit is already in flight, and a second one would spend quota to overtake it.
+                    continue;
+                }
+
+                if (!eligible.TryGetValue(target.EndpointId, out var normalizedUrl)
+                    || !PageAuditEligibility.Evaluate(normalizedUrl).IsEligible)
+                {
+                    continue;
+                }
+
+                var openedRunId = OpenRun(
+                    target, batchId, normalizedUrl, PageAuditSources.Scheduled, null, now);
+                representative ??= openedRunId;
             }
 
-            if (!eligible.TryGetValue(target.EndpointId, out var normalizedUrl)
-                || !PageAuditEligibility.Evaluate(normalizedUrl).IsEligible)
+            if (representative is { } runId)
             {
-                continue;
+                opened.Add(runId);
             }
-
-            opened.Add(OpenRun(target, normalizedUrl, PageAuditSources.Scheduled, null, now));
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -325,6 +349,7 @@ public sealed class PageAuditSchedulingService(
 
     private Guid OpenRun(
         PageAuditTarget target,
+        Guid batchId,
         string requestedUrl,
         string source,
         Guid? requestedByUserId,
@@ -334,6 +359,7 @@ public sealed class PageAuditSchedulingService(
         dbContext.PageAuditRuns.Add(new PageAuditRun
         {
             Id = runId,
+            BatchId = batchId,
             PageAuditTargetId = target.Id,
             EndpointId = target.EndpointId,
             Source = source,
@@ -411,14 +437,26 @@ public sealed class PageAuditSchedulingService(
 
         await using var command = new NpgsqlCommand(
             """
+            WITH due_batch AS (
+                SELECT candidate.endpoint_id, candidate.strategy, min(candidate.next_due_at) AS next_due_at
+                FROM web_health.page_audit_target AS candidate
+                WHERE candidate.is_enabled
+                  AND candidate.scheduling_enabled
+                  AND candidate.next_due_at <= @now
+                GROUP BY candidate.endpoint_id, candidate.strategy
+                ORDER BY min(candidate.next_due_at), candidate.endpoint_id, candidate.strategy
+                LIMIT @limit
+            )
             SELECT target.id
             FROM web_health.page_audit_target AS target
+            JOIN due_batch
+              ON due_batch.endpoint_id = target.endpoint_id
+             AND due_batch.strategy = target.strategy
             WHERE target.is_enabled
               AND target.scheduling_enabled
               AND target.next_due_at <= @now
             ORDER BY target.next_due_at, target.id
             FOR UPDATE OF target SKIP LOCKED
-            LIMIT @limit
             """,
             connection,
             (NpgsqlTransaction)dbContext.Database.CurrentTransaction!.GetDbTransaction());

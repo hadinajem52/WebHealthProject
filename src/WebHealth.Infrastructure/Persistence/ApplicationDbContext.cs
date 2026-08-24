@@ -101,6 +101,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<PageAuditItem> PageAuditItems => Set<PageAuditItem>();
 
+    public DbSet<PageAuditIncidentPolicyEntity> PageAuditIncidentPolicies => Set<PageAuditIncidentPolicyEntity>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         DatabaseConventions.Configure(configurationBuilder);

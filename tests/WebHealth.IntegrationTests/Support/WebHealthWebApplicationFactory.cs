@@ -57,6 +57,10 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddScoped<ICrawlReportReader, EmptyCrawlReportReader>();
             services.RemoveAll<IPageAuditReader>();
             services.AddScoped<IPageAuditReader, EmptyPageAuditReader>();
+            services.RemoveAll<IPageAuditIncidentPolicyService>();
+            services.AddSingleton<EmptyPageAuditIncidentPolicyService>();
+            services.AddScoped<IPageAuditIncidentPolicyService>(provider =>
+                provider.GetRequiredService<EmptyPageAuditIncidentPolicyService>());
             services.RemoveAll<IAuditTrailReader>();
             services.AddScoped<IAuditTrailReader, EmptyAuditTrailReader>();
             services.RemoveAll<ICheckHistoryReader>();

@@ -71,6 +71,12 @@ public interface IAuditTrailWriter
         IncidentAuditSnapshot? before,
         IncidentAuditSnapshot after,
         CancellationToken cancellationToken = default);
+
+    Task RecordPageAuditIncidentPolicyMutationAsync(
+        AuditWriteContext context,
+        PageAuditIncidentPolicyAuditSnapshot before,
+        PageAuditIncidentPolicyAuditSnapshot after,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record AuditWriteContext(Guid ActorUserId, DateTimeOffset OccurredAt);
@@ -257,4 +263,10 @@ public sealed record IncidentAuditSnapshot(
     DateTimeOffset? ClosedAt,
     long? RecoveryDurationMs,
     long? OutageDurationMs,
+    long Version);
+
+public sealed record PageAuditIncidentPolicyAuditSnapshot(
+    Guid PolicyId,
+    bool IncidentsEnabled,
+    IReadOnlyDictionary<string, decimal?> Thresholds,
     long Version);

@@ -46,6 +46,53 @@ public static class PageAuditCategories
     };
 }
 
+public static class PageAuditMonitorIdentity
+{
+    public const string MonitorType = PageAuditProviders.PageSpeedInsights;
+}
+
+public static class PageAuditPerformanceMetrics
+{
+    public const string FirstContentfulPaint = "first-contentful-paint";
+    public const string LargestContentfulPaint = "largest-contentful-paint";
+    public const string TotalBlockingTime = "total-blocking-time";
+    public const string CumulativeLayoutShift = "cumulative-layout-shift";
+    public const string SpeedIndex = "speed-index";
+
+    public static readonly string[] All =
+    [
+        FirstContentfulPaint,
+        LargestContentfulPaint,
+        TotalBlockingTime,
+        CumulativeLayoutShift,
+        SpeedIndex
+    ];
+}
+
+public static class PageAuditIncidentIssueKeys
+{
+    public static IReadOnlyList<string> All { get; } = PageAuditStrategies.All
+        .SelectMany(strategy => PageAuditCategories.All.Select(category => CategoryScore(category, strategy))
+            .Concat(PageAuditPerformanceMetrics.All.Select(metric => PerformanceMetric(metric, strategy))))
+        .ToArray();
+
+    public static string CategoryScore(string category, string strategy) =>
+        $"v1|{PageAuditMonitorIdentity.MonitorType}|PageAudit.{category}.Score|{strategy}";
+
+    public static string PerformanceMetric(string metric, string strategy) =>
+        $"v1|{PageAuditMonitorIdentity.MonitorType}|PageAudit.Performance.{MetricName(metric)}|{strategy}";
+
+    private static string MetricName(string metric) => metric switch
+    {
+        PageAuditPerformanceMetrics.FirstContentfulPaint => "FirstContentfulPaint",
+        PageAuditPerformanceMetrics.LargestContentfulPaint => "LargestContentfulPaint",
+        PageAuditPerformanceMetrics.TotalBlockingTime => "TotalBlockingTime",
+        PageAuditPerformanceMetrics.CumulativeLayoutShift => "CumulativeLayoutShift",
+        PageAuditPerformanceMetrics.SpeedIndex => "SpeedIndex",
+        _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "Unsupported performance metric.")
+    };
+}
+
 public static class PageAuditStrategies
 {
     public const string Mobile = "Mobile";

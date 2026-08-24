@@ -411,7 +411,7 @@ Links to `/PageAudits?endpointId=...`. We **do not** merge Lighthouse audits int
 | **Who loads the page?** | WebHealth itself (`SafeHttpTransport`) | Google's infrastructure |
 | **What it checks** | Our policy: missing title, empty description, canonical host, `noindex` on prod, robots `Disallow: /`, sitemap | Lighthouse's ~20 generic SEO audits |
 | **Authoritative for** | `expected canonical host`, prod vs non-prod indexing policy, required sitemap | Nothing policy-specific — just the generic Lighthouse view |
-| **Health impact** | Feeds endpoint health / incidents | **Does not** create incidents in V1; shown in UI only |
+| **Health impact** | Feeds endpoint health / incidents | Completed scheduled audits can open incidents from configured category or performance metric thresholds |
 | **Speed** | Fast (part of health check) | Slow (60s+) |
 | **Example overlap** | Both flag a missing title — but **WebHealth decides** if it's critical for *your* prod policy | Lighthouse flags it generically |
 
@@ -423,12 +423,12 @@ Links to `/PageAudits?endpointId=...`. We **do not** merge Lighthouse audits int
 
 | Deferred | Why |
 |---|---|
-| **No incidents / notifications from PageSpeed** | Needs real run data to decide thresholds. Also avoids polluting availability history with synthetic `LogicalCheck` rows. |
+| **No incidents from individual Lighthouse audit items** | Category scores and core performance metrics are supported; every provider audit item is not treated as an incident rule. |
 | **No CrUX / field data** | Google is removing it from PageSpeed; use dedicated CrUX APIs later if needed. |
 | **No desktop strategy** | Schema supports it (`strategy` column), UI does not. Add later without migration. |
 | **No raw JSON / screenshots / traces** | Storage + privacy + version noise. Fixtures stay in tests, not the DB. |
 | **No self-hosted Lighthouse yet** | Planned swap via `IPageAuditProvider` — no redesign needed. |
-| **No score thresholds / regression alerts** | Decide after seeing real score distributions. V1 shows the delta, that's enough to learn. |
+| **No score-delta regression alerts** | Incidents use absolute configured thresholds; change-versus-previous remains display context. |
 
 ---
 

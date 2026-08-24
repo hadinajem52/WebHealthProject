@@ -74,7 +74,10 @@ function Start-PostgresTestCluster {
         -NoNewWindow -PassThru -RedirectStandardOutput $startOut -RedirectStandardError $startErr
     $start.WaitForExit()
     Get-Content -LiteralPath $startOut, $startErr -ErrorAction SilentlyContinue | Write-Host
-    if ($start.ExitCode -ne 0) { throw 'PostgreSQL test cluster failed to start.' }
+    if ($start.ExitCode -ne 0) {
+        & (Join-Path $postgresBin 'pg_isready.exe') -h 127.0.0.1 -p $Port -q
+        if ($LASTEXITCODE -ne 0) { throw 'PostgreSQL test cluster failed to start.' }
+    }
 
     $Cluster.Value = [PSCustomObject]@{
         Bin = $postgresBin

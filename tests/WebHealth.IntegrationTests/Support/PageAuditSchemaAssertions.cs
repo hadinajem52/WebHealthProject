@@ -21,6 +21,7 @@ internal static class PageAuditSchemaAssertions
         Guid endpointId)
     {
         await VerifyNoRawPayloadOrSecretColumnAsync(connectionString);
+        await VerifyColumnInventoryAsync(connectionString);
 
         var now = DateTimeOffset.UtcNow;
         var targetId = await SeedTargetAsync(database, endpointId, now);
@@ -38,6 +39,45 @@ internal static class PageAuditSchemaAssertions
 
         await VerifyItemUniquePerRunAsync(database, targetId, endpointId, now);
         await VerifyScoredItemNeedsAScoreAsync(connectionString, targetId, endpointId, now);
+    }
+
+    private static async Task VerifyColumnInventoryAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT table_name, column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'web_health'
+              AND table_name IN ('page_audit_run', 'page_audit_item')
+            ORDER BY table_name, column_name;
+            """, connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        var columns = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        while (await reader.ReadAsync())
+        {
+            var table = reader.GetString(0);
+            if (!columns.TryGetValue(table, out var tableColumns))
+            {
+                tableColumns = [];
+                columns.Add(table, tableColumns);
+            }
+
+            tableColumns.Add(reader.GetString(1));
+        }
+
+        columns["page_audit_run"].Should().BeEquivalentTo(
+            "id", "batch_id", "page_audit_target_id", "endpoint_id", "source",
+            "initiated_by_user_id", "status", "requested_url", "final_url", "raw_score",
+            "provider", "category", "strategy", "locale", "lighthouse_version",
+            "warning_summary", "attempt_count", "failure_category", "safe_diagnostic",
+            "queued_at", "analysis_at", "finished_at", "lease_token", "lease_expires_at",
+            "updated_at");
+        columns["page_audit_item"].Should().BeEquivalentTo(
+            "id", "run_id", "audit_id", "status", "score", "score_display_mode",
+            "numeric_value", "numeric_unit", "weight", "group_name", "title", "description",
+            "display_value", "explanation", "error_message");
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.PageAudits;
 using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Incidents;
@@ -56,6 +57,7 @@ public sealed class IncidentEvidence
     public Guid IncidentId { get; init; }
     public Guid EndpointMonitorId { get; init; }
     public Guid? LogicalCheckId { get; init; }
+    public Guid? PageAuditRunId { get; init; }
     public Guid? ActorUserId { get; init; }
     public required string EvidenceType { get; init; }
     public required string EvidenceRole { get; init; }
@@ -63,5 +65,6 @@ public sealed class IncidentEvidence
     public DateTimeOffset CapturedAt { get; init; }
     public Incident Incident { get; init; } = null!;
     public LogicalCheck? LogicalCheck { get; init; }
+    public PageAuditRun? PageAuditRun { get; init; }
     public ApplicationUser? ActorUser { get; init; }
 }

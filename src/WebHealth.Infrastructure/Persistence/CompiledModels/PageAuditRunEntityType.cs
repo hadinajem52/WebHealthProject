@@ -22,10 +22,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.PageAudits.PageAuditRun",
                 typeof(PageAuditRun),
                 baseEntityType,
-                propertyCount: 24,
+                propertyCount: 25,
                 navigationCount: 2,
                 foreignKeyCount: 1,
-                unnamedIndexCount: 4,
+                unnamedIndexCount: 5,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -57,6 +57,17 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: 0);
             attemptCount.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             attemptCount.AddAnnotation("Relational:ColumnName", "attempt_count");
+
+            var batchId = runtimeEntityType.AddProperty(
+                "BatchId",
+                typeof(Guid),
+                propertyInfo: typeof(PageAuditRun).GetProperty("BatchId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PageAuditRun).GetField("<BatchId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                valueGenerated: ValueGenerated.OnAdd,
+                sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
+            batchId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            batchId.AddAnnotation("Relational:ColumnName", "batch_id");
+            batchId.AddAnnotation("Relational:DefaultValueSql", "gen_random_uuid()");
 
             var category = runtimeEntityType.AddProperty(
                 "Category",
@@ -270,16 +281,20 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             index.AddAnnotation("Relational:Name", "ux_page_audit_run_active");
 
             var index0 = runtimeEntityType.AddIndex(
-                new[] { endpointId, finishedAt });
-            index0.AddAnnotation("Relational:Name", "ix_page_audit_run_endpoint_finished");
+                new[] { batchId, strategy });
+            index0.AddAnnotation("Relational:Name", "ix_page_audit_run_batch_strategy");
 
             var index1 = runtimeEntityType.AddIndex(
-                new[] { status, updatedAt });
-            index1.AddAnnotation("Relational:Name", "ix_page_audit_run_status_updated");
+                new[] { endpointId, finishedAt });
+            index1.AddAnnotation("Relational:Name", "ix_page_audit_run_endpoint_finished");
 
             var index2 = runtimeEntityType.AddIndex(
+                new[] { status, updatedAt });
+            index2.AddAnnotation("Relational:Name", "ix_page_audit_run_status_updated");
+
+            var index3 = runtimeEntityType.AddIndex(
                 new[] { pageAuditTargetId, finishedAt, id });
-            index2.AddAnnotation("Relational:Name", "ix_page_audit_run_target_finished");
+            index3.AddAnnotation("Relational:Name", "ix_page_audit_run_target_finished");
 
             return runtimeEntityType;
         }

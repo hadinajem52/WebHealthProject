@@ -142,10 +142,12 @@ internal sealed class IncidentEvidenceConfiguration : IEntityTypeConfiguration<I
         builder.ToTable("incident_evidence", table => table.HasCheckConstraint(
             "ck_incident_evidence_source",
             "(evidence_type IN ('Opening', 'Failure', 'Recovery') "
-            + "AND logical_check_id IS NOT NULL AND actor_user_id IS NULL) OR "
+            + "AND (logical_check_id IS NOT NULL)::int + (page_audit_run_id IS NOT NULL)::int = 1 "
+            + "AND actor_user_id IS NULL) OR "
             + "(evidence_type = 'Resolution' AND "
-            + "((logical_check_id IS NOT NULL AND actor_user_id IS NULL) OR "
-            + "(logical_check_id IS NULL AND actor_user_id IS NOT NULL)))"));
+            + "(((logical_check_id IS NOT NULL)::int + (page_audit_run_id IS NOT NULL)::int = 1 "
+            + "AND actor_user_id IS NULL) OR "
+            + "(logical_check_id IS NULL AND page_audit_run_id IS NULL AND actor_user_id IS NOT NULL)))"));
         builder.Property(evidence => evidence.EvidenceType).HasMaxLength(20).IsRequired();
         builder.Property(evidence => evidence.EvidenceRole).HasMaxLength(50).IsRequired();
         builder.Property(evidence => evidence.BoundedSnapshot).HasColumnType("jsonb").IsRequired();
@@ -159,6 +161,9 @@ internal sealed class IncidentEvidenceConfiguration : IEntityTypeConfiguration<I
             .HasPrincipalKey(check => new { check.Id, check.EndpointMonitorId })
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("fk_incident_evidence_logical_check_monitor");
+        builder.HasOne(evidence => evidence.PageAuditRun).WithMany()
+            .HasForeignKey(evidence => evidence.PageAuditRunId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(evidence => evidence.ActorUser).WithMany()
             .HasForeignKey(evidence => evidence.ActorUserId).OnDelete(DeleteBehavior.Restrict);
     }

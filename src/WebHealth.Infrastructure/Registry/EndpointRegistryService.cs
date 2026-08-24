@@ -103,6 +103,7 @@ internal sealed class EndpointRegistryService(
         await PageAuditConfiguration.ApplyAsync(
             dbContext, endpoint.Id, command.PageAuditEnabled, command.PageAuditSchedulingEnabled,
             command.PageAuditIntervalHours, now, cancellationToken);
+        ApplyPageAuditMonitor(endpoint, environment.IsProduction, command.PageAuditEnabled, access.UserId, now);
         var pageAudit = new PageAuditConfigurationState(
             command.PageAuditEnabled, command.PageAuditSchedulingEnabled, command.PageAuditIntervalHours);
 
@@ -233,6 +234,12 @@ internal sealed class EndpointRegistryService(
                 endpoint.Environment.IsProduction,
                 interval.Seconds,
                 thresholds.Thresholds,
+                access.UserId,
+                now);
+            ApplyPageAuditMonitor(
+                endpoint,
+                endpoint.Environment.IsProduction,
+                command.PageAuditEnabled,
                 access.UserId,
                 now);
             await auditTrail.RecordEndpointMutationAsync(
@@ -762,6 +769,66 @@ internal sealed class EndpointRegistryService(
             UpdatedByUserId = actorId,
             Version = 1
         };
+    }
+
+    private void ApplyPageAuditMonitor(
+        Endpoint endpoint,
+        bool isProduction,
+        bool enabled,
+        Guid actorId,
+        DateTimeOffset now)
+    {
+        var monitor = endpoint.Monitors.SingleOrDefault(candidate =>
+                candidate.DeletedAt == null
+                && candidate.MonitorType == RegistryDefaults.PageAuditMonitorType)
+            ?? dbContext.EndpointMonitors.Local.SingleOrDefault(candidate =>
+                candidate.EndpointId == endpoint.Id
+                && candidate.DeletedAt == null
+                && candidate.MonitorType == RegistryDefaults.PageAuditMonitorType);
+        if (monitor is null)
+        {
+            if (!enabled)
+            {
+                return;
+            }
+
+            dbContext.EndpointMonitors.Add(new EndpointMonitor
+            {
+                Id = Guid.NewGuid(),
+                EndpointId = endpoint.Id,
+                PolicyProfileId = RegistryDefaults.PageAuditPolicyProfileId,
+                MonitorType = RegistryDefaults.PageAuditMonitorType,
+                BoundedOverrides = "{}",
+                ScheduleAnchor = now,
+                NextDueAt = now.AddSeconds(RegistryDefaults.PageAuditIntervalSeconds),
+                ConfigurationFingerprint = RegistryDefaults.CreatePageAuditFingerprint(
+                    endpoint.NormalizedUrl, isProduction),
+                IntervalSeconds = RegistryDefaults.PageAuditIntervalSeconds,
+                TimeoutSeconds = RegistryDefaults.PageAuditTimeoutSeconds,
+                FailureConfirmationCount = RegistryDefaults.PageAuditFailureConfirmationCount,
+                RecoveryConfirmationCount = RegistryDefaults.PageAuditRecoveryConfirmationCount,
+                SchedulingEnabled = false,
+                IsEnabled = true,
+                CreatedAt = now,
+                CreatedByUserId = actorId,
+                UpdatedAt = now,
+                UpdatedByUserId = actorId,
+                Version = 1
+            });
+            return;
+        }
+
+        var fingerprint = RegistryDefaults.CreatePageAuditFingerprint(endpoint.NormalizedUrl, isProduction);
+        if (monitor.IsEnabled == enabled && monitor.ConfigurationFingerprint == fingerprint)
+        {
+            return;
+        }
+
+        monitor.IsEnabled = enabled;
+        monitor.ConfigurationFingerprint = fingerprint;
+        monitor.UpdatedAt = now;
+        monitor.UpdatedByUserId = actorId;
+        monitor.Version++;
     }
 
     private void ApplyEndpointUpdate(

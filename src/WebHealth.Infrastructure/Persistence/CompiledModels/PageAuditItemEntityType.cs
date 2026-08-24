@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.PageAudits.PageAuditItem",
                 typeof(PageAuditItem),
                 baseEntityType,
-                propertyCount: 13,
+                propertyCount: 15,
                 navigationCount: 1,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 2,
@@ -97,6 +97,27 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 maxLength: 100);
             groupName.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             groupName.AddAnnotation("Relational:ColumnName", "group_name");
+
+            var numericUnit = runtimeEntityType.AddProperty(
+                "NumericUnit",
+                typeof(string),
+                propertyInfo: typeof(PageAuditItem).GetProperty("NumericUnit", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PageAuditItem).GetField("<NumericUnit>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                maxLength: 30);
+            numericUnit.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            numericUnit.AddAnnotation("Relational:ColumnName", "numeric_unit");
+
+            var numericValue = runtimeEntityType.AddProperty(
+                "NumericValue",
+                typeof(decimal?),
+                propertyInfo: typeof(PageAuditItem).GetProperty("NumericValue", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PageAuditItem).GetField("<NumericValue>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                precision: 14,
+                scale: 4);
+            numericValue.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            numericValue.AddAnnotation("Relational:ColumnName", "numeric_value");
 
             var runId = runtimeEntityType.AddProperty(
                 "RunId",

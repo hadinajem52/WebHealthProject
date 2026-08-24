@@ -183,7 +183,7 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task PageSpeedStatusUsesAcceptedUntilTheRunIsTerminal()
+    public async Task PageSpeedStatusStaysAcceptedWhileAnotherCategoryIsActive()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
         client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
@@ -196,10 +196,10 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
         var completedContent = await completed.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.Accepted, active.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, completed.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, completed.StatusCode);
         Assert.Contains("id=\"ajax-page\"", completedContent, StringComparison.Ordinal);
         Assert.Contains("id=\"page-audit-results\"", completedContent, StringComparison.Ordinal);
-        Assert.Contains("data-run-active=\"false\"", completedContent, StringComparison.Ordinal);
+        Assert.Contains("data-run-active=\"true\"", completedContent, StringComparison.Ordinal);
         Assert.DoesNotContain("<!DOCTYPE html>", completedContent, StringComparison.OrdinalIgnoreCase);
     }
 

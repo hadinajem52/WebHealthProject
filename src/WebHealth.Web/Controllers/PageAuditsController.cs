@@ -151,7 +151,7 @@ public sealed class PageAuditsController(
             return NotFound();
         }
 
-        Response.StatusCode = model.Summary?.LatestRun?.IsActive == true
+        Response.StatusCode = model.AnyCategoryRunActive
             ? StatusCodes.Status202Accepted
             : StatusCodes.Status200OK;
         return View(nameof(Index), model);
@@ -203,22 +203,14 @@ public sealed class PageAuditsController(
                 cancellationToken);
         var canRun = summary.IsEnabled
             && await targetAuthorization.CanTestEndpointAsync(selected, access, cancellationToken);
-        var categorySummaries = new List<PageAuditEndpointSummary>();
-        foreach (var availableCategory in PageAuditCategories.All)
+        var categorySummaries = await pageAuditReader.GetLatestCategorySummariesAsync(
+            selected,
+            strategy,
+            access,
+            cancellationToken);
+        if (categorySummaries is null)
         {
-            var categorySummary = availableCategory == category
-                ? summary
-                : await pageAuditReader.GetEndpointSummaryAsync(
-                    selected,
-                    availableCategory,
-                    strategy,
-                    null,
-                    access,
-                    cancellationToken);
-            if (categorySummary is not null)
-            {
-                categorySummaries.Add(categorySummary);
-            }
+            return null;
         }
 
         return new(options, selected, category, strategy, summary, categorySummaries, runs, items, canRun);

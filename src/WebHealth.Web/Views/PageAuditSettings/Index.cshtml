@@ -1,0 +1,123 @@
+@model PageAuditIncidentSettingsViewModel
+@{
+    ViewData.SetTitle("PageSpeed incident settings");
+    ViewData.SetBreadcrumbs(
+        Breadcrumbs.Administration(Url),
+        new BreadcrumbItem("PageSpeed incident settings"));
+}
+
+<form asp-action="Index" method="post" class="pagespeed-policy">
+    <input asp-for="Version" type="hidden" />
+
+    <section class="card pagespeed-policy__hero">
+        <div class="pagespeed-policy__hero-copy">
+            <span class="pagespeed-policy__eyebrow">Incident automation</span>
+            <h2 class="card__title">Turn Lighthouse results into actionable incidents</h2>
+            <p class="card__subtitle">
+                Rules apply to completed scheduled mobile and desktop audits. Manual runs and provider failures never open incidents.
+            </p>
+        </div>
+        <div class="pagespeed-policy__master">
+            <label class="switch-field">
+                <input asp-for="IncidentsEnabled" type="checkbox" />
+                <span>Open PageSpeed incidents</span>
+            </label>
+            <span>Switching this off prevents new incident activity and keeps existing incidents unchanged.</span>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="category-thresholds-title">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="category-thresholds-title">Category score thresholds</h2>
+                <p class="card__subtitle">Open an incident when a Lighthouse score falls below its minimum.</p>
+            </div>
+            <span class="pagespeed-policy__scale">0–100 score</span>
+        </div>
+
+        <div class="pagespeed-policy__category-grid">
+            <article class="pagespeed-rule-card" data-tone="performance">
+                <div class="pagespeed-rule-card__top">
+                    <span class="pagespeed-rule-card__marker"></span>
+                    <label class="switch-field"><input asp-for="PerformanceScoreEnabled" type="checkbox" /><span>Performance</span></label>
+                </div>
+                <div class="form-field">
+                    <label asp-for="PerformanceMinimumScore">Minimum healthy score</label>
+                    <div class="pagespeed-policy__number"><input asp-for="PerformanceMinimumScore" type="number" min="0" max="100" /><span>/ 100</span></div>
+                    <span asp-validation-for="PerformanceMinimumScore"></span>
+                </div>
+            </article>
+            <article class="pagespeed-rule-card" data-tone="accessibility">
+                <div class="pagespeed-rule-card__top">
+                    <span class="pagespeed-rule-card__marker"></span>
+                    <label class="switch-field"><input asp-for="AccessibilityScoreEnabled" type="checkbox" /><span>Accessibility</span></label>
+                </div>
+                <div class="form-field">
+                    <label asp-for="AccessibilityMinimumScore">Minimum healthy score</label>
+                    <div class="pagespeed-policy__number"><input asp-for="AccessibilityMinimumScore" type="number" min="0" max="100" /><span>/ 100</span></div>
+                    <span asp-validation-for="AccessibilityMinimumScore"></span>
+                </div>
+            </article>
+            <article class="pagespeed-rule-card" data-tone="best-practices">
+                <div class="pagespeed-rule-card__top">
+                    <span class="pagespeed-rule-card__marker"></span>
+                    <label class="switch-field"><input asp-for="BestPracticesScoreEnabled" type="checkbox" /><span>Best Practices</span></label>
+                </div>
+                <div class="form-field">
+                    <label asp-for="BestPracticesMinimumScore">Minimum healthy score</label>
+                    <div class="pagespeed-policy__number"><input asp-for="BestPracticesMinimumScore" type="number" min="0" max="100" /><span>/ 100</span></div>
+                    <span asp-validation-for="BestPracticesMinimumScore"></span>
+                </div>
+            </article>
+            <article class="pagespeed-rule-card" data-tone="seo">
+                <div class="pagespeed-rule-card__top">
+                    <span class="pagespeed-rule-card__marker"></span>
+                    <label class="switch-field"><input asp-for="SeoScoreEnabled" type="checkbox" /><span>SEO</span></label>
+                </div>
+                <div class="form-field">
+                    <label asp-for="SeoMinimumScore">Minimum healthy score</label>
+                    <div class="pagespeed-policy__number"><input asp-for="SeoMinimumScore" type="number" min="0" max="100" /><span>/ 100</span></div>
+                    <span asp-validation-for="SeoMinimumScore"></span>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="metric-thresholds-title">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="metric-thresholds-title">Performance metric thresholds</h2>
+                <p class="card__subtitle">Enable only the metrics you care about. An incident opens when the measured value exceeds the maximum.</p>
+            </div>
+            <span class="pagespeed-policy__scale">Optional rules</span>
+        </div>
+
+        <div class="pagespeed-policy__metric-list">
+            <div class="pagespeed-metric-rule">
+                <div><label class="switch-field"><input asp-for="FirstContentfulPaintEnabled" type="checkbox" /><span>First Contentful Paint</span></label><span class="form-field__hint">How quickly the first text or image appears.</span></div>
+                <div class="form-field"><label asp-for="FirstContentfulPaintMaximum">Maximum</label><div class="pagespeed-policy__number"><input asp-for="FirstContentfulPaintMaximum" type="number" min="0" max="600000" step="1" /><span>ms</span></div><span asp-validation-for="FirstContentfulPaintMaximum"></span></div>
+            </div>
+            <div class="pagespeed-metric-rule">
+                <div><label class="switch-field"><input asp-for="LargestContentfulPaintEnabled" type="checkbox" /><span>Largest Contentful Paint</span></label><span class="form-field__hint">How quickly the main content becomes visible.</span></div>
+                <div class="form-field"><label asp-for="LargestContentfulPaintMaximum">Maximum</label><div class="pagespeed-policy__number"><input asp-for="LargestContentfulPaintMaximum" type="number" min="0" max="600000" step="1" /><span>ms</span></div><span asp-validation-for="LargestContentfulPaintMaximum"></span></div>
+            </div>
+            <div class="pagespeed-metric-rule">
+                <div><label class="switch-field"><input asp-for="TotalBlockingTimeEnabled" type="checkbox" /><span>Total Blocking Time</span></label><span class="form-field__hint">Time the main thread is blocked from responding.</span></div>
+                <div class="form-field"><label asp-for="TotalBlockingTimeMaximum">Maximum</label><div class="pagespeed-policy__number"><input asp-for="TotalBlockingTimeMaximum" type="number" min="0" max="600000" step="1" /><span>ms</span></div><span asp-validation-for="TotalBlockingTimeMaximum"></span></div>
+            </div>
+            <div class="pagespeed-metric-rule">
+                <div><label class="switch-field"><input asp-for="CumulativeLayoutShiftEnabled" type="checkbox" /><span>Cumulative Layout Shift</span></label><span class="form-field__hint">Visual stability while the page loads.</span></div>
+                <div class="form-field"><label asp-for="CumulativeLayoutShiftMaximum">Maximum</label><div class="pagespeed-policy__number"><input asp-for="CumulativeLayoutShiftMaximum" type="number" min="0" max="10" step="0.001" /><span>score</span></div><span asp-validation-for="CumulativeLayoutShiftMaximum"></span></div>
+            </div>
+            <div class="pagespeed-metric-rule">
+                <div><label class="switch-field"><input asp-for="SpeedIndexEnabled" type="checkbox" /><span>Speed Index</span></label><span class="form-field__hint">How quickly visible content fills the viewport.</span></div>
+                <div class="form-field"><label asp-for="SpeedIndexMaximum">Maximum</label><div class="pagespeed-policy__number"><input asp-for="SpeedIndexMaximum" type="number" min="0" max="600000" step="1" /><span>ms</span></div><span asp-validation-for="SpeedIndexMaximum"></span></div>
+            </div>
+        </div>
+    </section>
+
+    <div class="form-actions pagespeed-policy__actions">
+        <button class="button button--primary" type="submit">@await Html.PartialAsync("_Icon", "success")<span>Save incident settings</span></button>
+        <a class="button button--secondary" asp-controller="PageAudits" asp-action="Index">Back to PageSpeed</a>
+    </div>
+</form>

@@ -8,9 +8,12 @@ namespace WebHealth.Application.PageAudits;
 /// </summary>
 public sealed record PageAuditRequest(
     Uri TargetUrl,
-    string Category,
+    IReadOnlyList<string> Categories,
     string Strategy,
     string Locale);
+
+public sealed record PageAuditProviderBatchResult(
+    IReadOnlyDictionary<string, PageAuditProviderResult> Categories);
 
 /// <summary>
 /// What a provider returned, in this application's vocabulary. No Google type reaches this record,
@@ -43,7 +46,9 @@ public sealed record PageAuditProviderItem(
     string? Group,
     string? DisplayValue,
     string? Explanation,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    decimal? NumericValue = null,
+    string? NumericUnit = null);
 
 /// <summary>
 /// A provider failure this application already understands. Thrown rather than returned because
@@ -78,7 +83,7 @@ public interface IPageAuditProvider
     /// <exception cref="PageAuditProviderException">
     /// The audit did not produce a trustworthy result, with a normalized reason.
     /// </exception>
-    Task<PageAuditProviderResult> RunAsync(
+    Task<PageAuditProviderBatchResult> RunAsync(
         PageAuditRequest request,
         CancellationToken cancellationToken = default);
 }

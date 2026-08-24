@@ -22,7 +22,8 @@ public sealed class AuditContractTests
             nameof(IAuditTrailWriter.RecordEndpointMutationAsync),
             nameof(IAuditTrailWriter.RecordMaintenanceMutationAsync),
             nameof(IAuditTrailWriter.RecordRobotsPolicyMutationAsync),
-            nameof(IAuditTrailWriter.RecordIncidentMutationAsync));
+            nameof(IAuditTrailWriter.RecordIncidentMutationAsync),
+            nameof(IAuditTrailWriter.RecordPageAuditIncidentPolicyMutationAsync));
         methods.SelectMany(method => method.GetParameters())
             .Select(parameter => parameter.ParameterType)
             .Should().OnlyContain(type =>
@@ -43,6 +44,7 @@ public sealed class AuditContractTests
                 || type == typeof(IncidentAuditWriteContext)
                 || type == typeof(IncidentAuditAction)
                 || type == typeof(IncidentAuditSnapshot)
+                || type == typeof(PageAuditIncidentPolicyAuditSnapshot)
                 || type == typeof(CancellationToken));
         typeof(UserAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(

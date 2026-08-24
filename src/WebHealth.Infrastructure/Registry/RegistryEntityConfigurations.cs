@@ -304,6 +304,16 @@ internal sealed class PolicyProfileConfiguration : IEntityTypeConfiguration<Poli
                 IsSystem = true,
                 CreatedAt = RegistryDefaults.SeedTimestamp,
                 Version = 1
+            },
+            new PolicyProfile
+            {
+                Id = RegistryDefaults.PageAuditPolicyProfileId,
+                Name = "Default PageSpeed incidents",
+                MonitorType = RegistryDefaults.PageAuditMonitorType,
+                BoundedSettings = "{}",
+                IsSystem = true,
+                CreatedAt = RegistryDefaults.SeedTimestamp,
+                Version = 1
             });
     }
 }

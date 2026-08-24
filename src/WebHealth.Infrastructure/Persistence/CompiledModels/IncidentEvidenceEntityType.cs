@@ -9,6 +9,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.PageAudits;
 
 #pragma warning disable 219, 612, 618
 #nullable disable
@@ -24,10 +25,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Incidents.IncidentEvidence",
                 typeof(IncidentEvidence),
                 baseEntityType,
-                propertyCount: 9,
-                navigationCount: 3,
-                foreignKeyCount: 3,
-                unnamedIndexCount: 3,
+                propertyCount: 10,
+                navigationCount: 4,
+                foreignKeyCount: 4,
+                unnamedIndexCount: 4,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -114,6 +115,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             logicalCheckId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             logicalCheckId.AddAnnotation("Relational:ColumnName", "logical_check_id");
 
+            var pageAuditRunId = runtimeEntityType.AddProperty(
+                "PageAuditRunId",
+                typeof(Guid?),
+                propertyInfo: typeof(IncidentEvidence).GetProperty("PageAuditRunId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(IncidentEvidence).GetField("<PageAuditRunId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            pageAuditRunId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            pageAuditRunId.AddAnnotation("Relational:ColumnName", "page_audit_run_id");
+
             var key = runtimeEntityType.AddKey(
                 new[] { id });
             runtimeEntityType.SetPrimaryKey(key);
@@ -124,12 +134,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             index.AddAnnotation("Relational:Name", "ix_incident_evidence_actor_user_id");
 
             var index0 = runtimeEntityType.AddIndex(
-                new[] { incidentId, endpointMonitorId });
-            index0.AddAnnotation("Relational:Name", "ix_incident_evidence_incident_id_endpoint_monitor_id");
+                new[] { pageAuditRunId });
+            index0.AddAnnotation("Relational:Name", "ix_incident_evidence_page_audit_run_id");
 
             var index1 = runtimeEntityType.AddIndex(
+                new[] { incidentId, endpointMonitorId });
+            index1.AddAnnotation("Relational:Name", "ix_incident_evidence_incident_id_endpoint_monitor_id");
+
+            var index2 = runtimeEntityType.AddIndex(
                 new[] { logicalCheckId, endpointMonitorId });
-            index1.AddAnnotation("Relational:Name", "ix_incident_evidence_logical_check_id_endpoint_monitor_id");
+            index2.AddAnnotation("Relational:Name", "ix_incident_evidence_logical_check_id_endpoint_monitor_id");
 
             return runtimeEntityType;
         }
@@ -153,6 +167,24 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
         }
 
         public static RuntimeForeignKey CreateForeignKey2(RuntimeEntityType declaringEntityType, RuntimeEntityType principalEntityType)
+        {
+            var runtimeForeignKey = declaringEntityType.AddForeignKey(new[] { declaringEntityType.FindProperty("PageAuditRunId") },
+                principalEntityType.FindKey(new[] { principalEntityType.FindProperty("Id") }),
+                principalEntityType,
+                deleteBehavior: DeleteBehavior.Restrict);
+
+            var pageAuditRun = declaringEntityType.AddNavigation("PageAuditRun",
+                runtimeForeignKey,
+                onDependent: true,
+                typeof(PageAuditRun),
+                propertyInfo: typeof(IncidentEvidence).GetProperty("PageAuditRun", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(IncidentEvidence).GetField("<PageAuditRun>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+
+            runtimeForeignKey.AddAnnotation("Relational:Name", "fk_incident_evidence_page_audit_run_page_audit_run_id");
+            return runtimeForeignKey;
+        }
+
+        public static RuntimeForeignKey CreateForeignKey3(RuntimeEntityType declaringEntityType, RuntimeEntityType principalEntityType)
         {
             var runtimeForeignKey = declaringEntityType.AddForeignKey(new[] { declaringEntityType.FindProperty("IncidentId"), declaringEntityType.FindProperty("EndpointMonitorId") },
                 principalEntityType.FindKey(new[] { principalEntityType.FindProperty("Id"), principalEntityType.FindProperty("EndpointMonitorId") }),
@@ -178,7 +210,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             return runtimeForeignKey;
         }
 
-        public static RuntimeForeignKey CreateForeignKey3(RuntimeEntityType declaringEntityType, RuntimeEntityType principalEntityType)
+        public static RuntimeForeignKey CreateForeignKey4(RuntimeEntityType declaringEntityType, RuntimeEntityType principalEntityType)
         {
             var runtimeForeignKey = declaringEntityType.AddForeignKey(new[] { declaringEntityType.FindProperty("LogicalCheckId"), declaringEntityType.FindProperty("EndpointMonitorId") },
                 principalEntityType.FindKey(new[] { principalEntityType.FindProperty("Id"), principalEntityType.FindProperty("EndpointMonitorId") }),

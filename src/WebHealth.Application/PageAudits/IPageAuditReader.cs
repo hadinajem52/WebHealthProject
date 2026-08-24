@@ -9,6 +9,7 @@ namespace WebHealth.Application.PageAudits;
 /// </summary>
 public sealed record PageAuditRunSummary(
     Guid RunId,
+    Guid BatchId,
     Guid EndpointId,
     string Source,
     string Status,
@@ -68,6 +69,8 @@ public sealed record PageAuditItemView(
     string Status,
     decimal? Score,
     string? ScoreDisplayMode,
+    decimal? NumericValue,
+    string? NumericUnit,
     double Weight,
     string? GroupName,
     string? Title,
@@ -139,6 +142,10 @@ public sealed record PageAuditEndpointSummary(
             PageAuditComparison.None);
 }
 
+public sealed record PageAuditCategorySummary(
+    string Category,
+    PageAuditRunSummary? LatestRun);
+
 /// <summary>
 /// The page-audit read surface. Every method takes the requester's access context and scopes to
 /// endpoints they may see, in the database. A reader that trusted a caller-supplied endpoint id
@@ -157,6 +164,12 @@ public interface IPageAuditReader
         string category,
         string strategy,
         Guid? runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PageAuditCategorySummary>?> GetLatestCategorySummariesAsync(
+        Guid endpointId,
+        string strategy,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 

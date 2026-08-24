@@ -24,7 +24,7 @@ public sealed class PageSpeedInsightsProviderTests
 
     private static readonly PageAuditRequest Request = new(
         new Uri("https://example.com/"),
-        PageAuditCategories.Seo,
+        [PageAuditCategories.Seo],
         PageAuditStrategies.Mobile,
         "en-US");
 
@@ -33,7 +33,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, handler) = Create(Fixture("success-seo-mobile.json"));
 
-        var result = await provider.RunAsync(Request);
+        var result = await RunSingleAsync(provider, Request);
 
         result.Provider.Should().Be(PageAuditProviders.PageSpeedInsights);
         result.CategoryScore.Should().Be(0.8m);
@@ -50,9 +50,9 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, handler) = Create(Fixture("success-all-categories-mobile.json"));
 
-        var result = await provider.RunAsync(Request with
+        var result = await RunSingleAsync(provider, Request with
         {
-            Category = PageAuditCategories.Performance
+            Categories = [PageAuditCategories.Performance]
         });
 
         result.CategoryScore.Should().Be(0.71m);
@@ -79,10 +79,31 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, handler) = Create(Fixture("success-all-categories-mobile.json"));
 
-        var result = await provider.RunAsync(Request with { Category = category });
+        var result = await RunSingleAsync(provider, Request with { Categories = [category] });
 
         result.CategoryScore.Should().Be(expectedScore);
         handler.Requests.Single().RequestUri!.Query.Should().Contain($"category={parameter}");
+    }
+
+    [Fact]
+    public async Task RunAsync_RequestsAllCategoriesInOneLighthouseExecution()
+    {
+        var (provider, handler) = Create(Fixture("success-all-categories-mobile.json"));
+        var request = new PageAuditRequest(
+            Request.TargetUrl,
+            PageAuditCategories.All,
+            PageAuditStrategies.Mobile,
+            Request.Locale);
+
+        var result = await provider.RunAsync(request);
+
+        handler.Requests.Should().ContainSingle();
+        System.Web.HttpUtility.ParseQueryString(handler.Requests[0].RequestUri!.Query)
+            .GetValues("category")
+            .Should().BeEquivalentTo("performance", "accessibility", "best-practices", "seo");
+        result.Categories.Keys.Should().BeEquivalentTo(PageAuditCategories.All);
+        result.Categories.Values.Select(category => category.AnalysisAt).Distinct().Should().ContainSingle();
+        result.Categories.Values.Select(category => category.LighthouseVersion).Distinct().Should().ContainSingle();
     }
 
     /// <summary>
@@ -94,7 +115,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(Fixture("success-seo-mobile.json"));
 
-        var result = await provider.RunAsync(Request);
+        var result = await RunSingleAsync(provider, Request);
 
         result.Items.Should().HaveCount(12);
         result.Items.Select(item => item.AuditId).Should().NotContain("first-contentful-paint",
@@ -107,7 +128,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(Fixture("success-seo-mobile.json"));
 
-        var result = await provider.RunAsync(Request);
+        var result = await RunSingleAsync(provider, Request);
 
         var structuredData = result.Items.Single(item => item.AuditId == "structured-data");
         structuredData.Weight.Should().Be(0, "a manual audit contributes nothing to the score");
@@ -124,7 +145,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(Fixture("success-seo-mobile.json"));
 
-        var result = await provider.RunAsync(Request);
+        var result = await RunSingleAsync(provider, Request);
 
         var linkText = result.Items.Single(item => item.AuditId == "link-text");
         linkText.DisplayValue.Should().Be("3 links found");
@@ -137,7 +158,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(Fixture("manual-and-na.json"));
 
-        var result = await provider.RunAsync(Request);
+        var result = await RunSingleAsync(provider, Request);
 
         Mode(result, "structured-data").Should().Be("manual");
         Mode(result, "robots-txt").Should().Be("notApplicable");
@@ -151,7 +172,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(Fixture("manual-and-na.json"));
 
-        var result = await provider.RunAsync(Request);
+        var result = await RunSingleAsync(provider, Request);
 
         result.Warnings.Should().HaveCount(2);
         result.Warnings[0].Should().StartWith("The page loaded too slowly");
@@ -162,7 +183,7 @@ public sealed class PageSpeedInsightsProviderTests
     {
         var (provider, _) = Create(Fixture("manual-and-na.json"));
 
-        var result = await provider.RunAsync(Request);
+        var result = await RunSingleAsync(provider, Request);
 
         result.RequestedUrl.Should().Be("https://example.com/quiet");
         result.FinalUrl.Should().Be("https://www.example.com/quiet");
@@ -493,6 +514,11 @@ public sealed class PageSpeedInsightsProviderTests
     private static FakeHandler Fixture(string name) => new(
         HttpStatusCode.OK,
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "PageSpeed", name)));
+
+    private static async Task<PageAuditProviderResult> RunSingleAsync(
+        PageSpeedInsightsProvider provider,
+        PageAuditRequest request) =>
+        (await provider.RunAsync(request)).Categories[request.Categories.Single()];
 
     private static (PageSpeedInsightsProvider Provider, FakeHandler Handler) Create(
         HttpMessageHandler handler,

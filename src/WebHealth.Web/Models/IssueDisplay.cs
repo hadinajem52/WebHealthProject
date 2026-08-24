@@ -70,6 +70,15 @@ public static class IssueDisplay
 
         // Certificates
         [SslMonitorIdentity.ExpiryRuleKey] = "Certificate is expiring",
+        ["PageAudit.Performance.Score"] = "Performance score fell below its threshold",
+        ["PageAudit.Accessibility.Score"] = "Accessibility score fell below its threshold",
+        ["PageAudit.BestPractices.Score"] = "Best Practices score fell below its threshold",
+        ["PageAudit.Seo.Score"] = "SEO score fell below its threshold",
+        ["PageAudit.Performance.FirstContentfulPaint"] = "First Contentful Paint exceeded its threshold",
+        ["PageAudit.Performance.LargestContentfulPaint"] = "Largest Contentful Paint exceeded its threshold",
+        ["PageAudit.Performance.TotalBlockingTime"] = "Total Blocking Time exceeded its threshold",
+        ["PageAudit.Performance.CumulativeLayoutShift"] = "Cumulative Layout Shift exceeded its threshold",
+        ["PageAudit.Performance.SpeedIndex"] = "Speed Index exceeded its threshold"
     };
 
     /// <summary>The issue in words. Falls back to the whole key if it is not in the known shape.</summary>

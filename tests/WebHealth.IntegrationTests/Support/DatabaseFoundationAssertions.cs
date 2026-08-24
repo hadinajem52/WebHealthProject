@@ -88,7 +88,8 @@ internal static class DatabaseFoundationAssertions
         "20260823114917_PageAuditDesktopStrategy",
         "20260823202630_IncidentArchive",
         "20260823202715_RobotsIncidentSeverityDemotion",
-        "20260824065425_PageAuditAllCategories"
+        "20260824065425_PageAuditAllCategories",
+        "20260824081054_PageAuditIncidentPoliciesAndBatches"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -142,6 +143,7 @@ internal static class DatabaseFoundationAssertions
         ,"page_audit_target"
         ,"page_audit_run"
         ,"page_audit_item"
+        ,"page_audit_incident_policy"
     ];
 
     // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
@@ -159,7 +161,7 @@ internal static class DatabaseFoundationAssertions
         "notification_event", "notification_delivery", "notification_attempt",
         "notification_read_marker", "certificate_observation", "seo_observation", "robots_snapshot",
         "crawl_run", "crawl_link_result",
-        "page_audit_target", "page_audit_run", "page_audit_item"
+        "page_audit_target", "page_audit_run", "page_audit_item", "page_audit_incident_policy"
     ];
 
     private static readonly string[] ExpectedEntityTypeNames =
@@ -221,6 +223,7 @@ internal static class DatabaseFoundationAssertions
         "PageAuditTarget",
         "PageAuditRun",
         "PageAuditItem",
+        "PageAuditIncidentPolicyEntity",
         "CrawlLinkResult"
     ];
 

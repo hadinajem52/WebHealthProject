@@ -122,6 +122,42 @@ internal sealed class PageAuditReader(
                 .Take(Math.Clamp(limit, 1, MaxRunsListed)))
             .ToArrayAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<PageAuditCategorySummary>?> GetLatestCategorySummariesAsync(
+        Guid endpointId,
+        string strategy,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var visible = await VisibleEndpoints(access)
+            .AnyAsync(endpoint => endpoint.Id == endpointId, cancellationToken);
+        if (!visible)
+        {
+            return null;
+        }
+
+        var runs = VisibleRuns(access)
+            .Where(run => run.EndpointId == endpointId
+                && run.Strategy == strategy
+                && PageAuditCategories.All.Contains(run.Category));
+        var latestRunIds = runs
+                .GroupBy(run => run.Category)
+                .Select(group => group
+                    .OrderByDescending(run => run.FinishedAt == null)
+                    .ThenByDescending(run => run.FinishedAt)
+                    .ThenByDescending(run => run.QueuedAt)
+                    .ThenByDescending(run => run.Id)
+                    .Select(run => run.Id)
+                    .First());
+        var latestRuns = await Project(runs.Where(run => latestRunIds.Contains(run.Id)))
+            .ToDictionaryAsync(run => run.Category, cancellationToken);
+
+        return PageAuditCategories.All
+            .Select(category => new PageAuditCategorySummary(
+                category,
+                latestRuns.GetValueOrDefault(category)))
+            .ToArray();
+    }
+
     public async Task<IReadOnlyList<PageAuditItemView>> ListAuditItemsAsync(
         Guid runId,
         RegistryAccessContext access,
@@ -141,6 +177,8 @@ internal sealed class PageAuditReader(
                 item.Status,
                 item.Score,
                 item.ScoreDisplayMode,
+                item.NumericValue,
+                item.NumericUnit,
                 item.Weight,
                 item.GroupName,
                 item.Title,
@@ -261,6 +299,7 @@ internal sealed class PageAuditReader(
     private static IQueryable<PageAuditRunSummary> Project(IQueryable<PageAuditRun> runs) =>
         runs.Select(run => new PageAuditRunSummary(
             run.Id,
+            run.BatchId,
             run.EndpointId,
             run.Source,
             run.Status,

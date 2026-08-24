@@ -23,10 +23,10 @@ namespace WebHealth.Infrastructure.PageAudits;
 /// </remarks>
 internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
 {
-    public PageAuditProviderResult Read(
+    public PageAuditProviderBatchResult Read(
         JsonDocument document,
         string requestedUrl,
-        string requestedCategory)
+        IReadOnlyList<string> requestedCategories)
     {
         ArgumentNullException.ThrowIfNull(document);
         var root = document.RootElement;
@@ -72,23 +72,12 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
                 + $"{Sanitize(TryGetString(runtimeError, "message"), 400)}");
         }
 
-        var categoryParameter = PageAuditCategories.ToParameter(requestedCategory);
         if (!lighthouse.TryGetProperty("categories", out var categories)
-            || !categories.TryGetProperty(categoryParameter, out var category)
-            || category.ValueKind != JsonValueKind.Object)
+            || categories.ValueKind != JsonValueKind.Object)
         {
             throw new PageAuditProviderException(
                 PageAuditFailureCategories.ProviderContractInvalid,
-                $"The provider response carried no {requestedCategory} category. The request asks for one "
-                + "explicitly, so a response without it is not a result we can store.");
-        }
-
-        var rawScore = PageAuditNormalization.NormalizeCategoryScore(TryGetDecimal(category, "score"));
-        if (rawScore is null)
-        {
-            throw new PageAuditProviderException(
-                PageAuditFailureCategories.ProviderContractInvalid,
-                $"The {requestedCategory} category carried no score inside the provider's own 0-1 range.");
+                "The provider response carried no Lighthouse categories.");
         }
 
         var lighthouseVersion = TryGetString(lighthouse, "lighthouseVersion");
@@ -100,17 +89,45 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
                 + "cannot be compared against a later one.");
         }
 
-        return new PageAuditProviderResult(
-            PageAuditProviders.PageSpeedInsights,
-            TryGetString(lighthouse, "requestedUrl") ?? requestedUrl,
-            TryGetString(lighthouse, "finalUrl") ?? TryGetString(lighthouse, "requestedUrl") ?? requestedUrl,
-            ReadAnalysisTimestamp(root, lighthouse),
-            lighthouseVersion,
-            rawScore,
-            ReadItems(lighthouse, category, requestedCategory),
-            ReadWarnings(lighthouse),
-            null,
-            null);
+        var providerRequestedUrl = TryGetString(lighthouse, "requestedUrl") ?? requestedUrl;
+        var finalUrl = TryGetString(lighthouse, "finalUrl") ?? providerRequestedUrl;
+        var analysisAt = ReadAnalysisTimestamp(root, lighthouse);
+        var warnings = ReadWarnings(lighthouse);
+        var results = new Dictionary<string, PageAuditProviderResult>(StringComparer.Ordinal);
+        foreach (var requestedCategory in requestedCategories)
+        {
+            var categoryParameter = PageAuditCategories.ToParameter(requestedCategory);
+            if (!categories.TryGetProperty(categoryParameter, out var category)
+                || category.ValueKind != JsonValueKind.Object)
+            {
+                throw new PageAuditProviderException(
+                    PageAuditFailureCategories.ProviderContractInvalid,
+                    $"The provider response carried no {requestedCategory} category. The request asks for one "
+                    + "explicitly, so a response without it is not a result we can store.");
+            }
+
+            var rawScore = PageAuditNormalization.NormalizeCategoryScore(TryGetDecimal(category, "score"));
+            if (rawScore is null)
+            {
+                throw new PageAuditProviderException(
+                    PageAuditFailureCategories.ProviderContractInvalid,
+                    $"The {requestedCategory} category carried no score inside the provider's own 0-1 range.");
+            }
+
+            results.Add(requestedCategory, new PageAuditProviderResult(
+                PageAuditProviders.PageSpeedInsights,
+                providerRequestedUrl,
+                finalUrl,
+                analysisAt,
+                lighthouseVersion,
+                rawScore,
+                ReadItems(lighthouse, category, requestedCategory),
+                warnings,
+                null,
+                null));
+        }
+
+        return new PageAuditProviderBatchResult(results);
     }
 
     /// <remarks>
@@ -181,7 +198,9 @@ internal sealed class PageAuditResponseReader(PageSpeedInsightsOptions options)
                 TryGetString(reference, "group"),
                 TryGetString(audit, "displayValue"),
                 TryGetString(audit, "explanation"),
-                TryGetString(audit, "errorMessage")));
+                TryGetString(audit, "errorMessage"),
+                TryGetDecimal(audit, "numericValue"),
+                TryGetString(audit, "numericUnit")));
         }
 
         return items;

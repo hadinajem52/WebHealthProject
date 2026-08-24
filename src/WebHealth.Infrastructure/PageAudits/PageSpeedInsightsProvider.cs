@@ -38,7 +38,7 @@ internal sealed class PageSpeedInsightsProvider(
 
     public string ProviderName => PageAuditProviders.PageSpeedInsights;
 
-    public async Task<PageAuditProviderResult> RunAsync(
+    public async Task<PageAuditProviderBatchResult> RunAsync(
         PageAuditRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -88,7 +88,7 @@ internal sealed class PageSpeedInsightsProvider(
         }
     }
 
-    private async Task<PageAuditProviderResult> SendAsync(
+    private async Task<PageAuditProviderBatchResult> SendAsync(
         PageAuditRequest request,
         CancellationToken cancellationToken)
     {
@@ -105,7 +105,7 @@ internal sealed class PageSpeedInsightsProvider(
 
         using var document = await ReadBoundedJsonAsync(response, cancellationToken);
         var reader = new PageAuditResponseReader(options);
-        var result = reader.Read(document, request.TargetUrl.ToString(), request.Category);
+        var result = reader.Read(document, request.TargetUrl.ToString(), request.Categories);
 
         // No URI, no key, no response body. Everything here is either ours or a bounded provider
         // fact, and there is a regression test over the recorded log to keep it that way.
@@ -113,10 +113,10 @@ internal sealed class PageSpeedInsightsProvider(
             "PageSpeed audit completed. Provider={Provider} Category={Category} Strategy={Strategy} "
             + "LighthouseVersion={LighthouseVersion} AuditItemCount={AuditItemCount}",
             ProviderName,
-            request.Category,
+            string.Join(',', request.Categories),
             request.Strategy,
-            result.LighthouseVersion,
-            result.Items.Count);
+            result.Categories.Values.First().LighthouseVersion,
+            result.Categories.Values.Sum(category => category.Items.Count));
 
         return result;
     }
@@ -128,14 +128,16 @@ internal sealed class PageSpeedInsightsProvider(
     /// </summary>
     private Uri BuildRequestUri(PageAuditRequest request)
     {
-        var query = string.Join('&',
-        [
+        var parameters = new List<string>
+        {
             $"url={Uri.EscapeDataString(request.TargetUrl.ToString())}",
-            $"category={Uri.EscapeDataString(PageAuditCategories.ToParameter(request.Category))}",
             $"strategy={Uri.EscapeDataString(PageAuditStrategies.ToParameter(request.Strategy))}",
             $"locale={Uri.EscapeDataString(request.Locale)}",
             $"key={Uri.EscapeDataString(options.ApiKey!)}"
-        ]);
+        };
+        parameters.InsertRange(1, request.Categories.Select(category =>
+            $"category={Uri.EscapeDataString(PageAuditCategories.ToParameter(category))}"));
+        var query = string.Join('&', parameters);
 
         return new UriBuilder(new Uri(new Uri(ServiceOrigin), RunPagespeedPath))
         {

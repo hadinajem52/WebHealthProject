@@ -5,6 +5,8 @@ using WebHealth.Application.PageAudits;
 using WebHealth.Domain.PageAudits;
 using WebHealth.Infrastructure.PageAudits;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Infrastructure.Registry;
+using WebHealth.Domain.Incidents;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -52,6 +54,176 @@ internal static class PageAuditExecutionAssertions
         await VerifyASpentAttemptBudgetStopsReclaimAsync(
             connectionString, database, execution, provider, scheduling, queue, targetId,
             endpointId, endpointUrl);
+        await VerifyScheduledThresholdsOpenAndRecoverIncidentsAsync(
+            database, execution, provider, targetId, endpointId, endpointUrl);
+        await VerifyManualAuditUsesTwoStrategyBatchesAsync(
+            database, scheduling, execution, provider, queue, endpointId, endpointUrl);
+    }
+
+    private static async Task VerifyManualAuditUsesTwoStrategyBatchesAsync(
+        ApplicationDbContext database,
+        PageAuditSchedulingService scheduling,
+        PageAuditExecutionService execution,
+        ScriptedPageAuditProvider provider,
+        RecordingPageAuditQueue queue,
+        Guid endpointId,
+        string endpointUrl)
+    {
+        var existingProfiles = await database.PageAuditTargets.AsNoTracking()
+            .Where(target => target.EndpointId == endpointId)
+            .Select(target => new { target.Category, target.Strategy })
+            .ToArrayAsync();
+        var existing = existingProfiles
+            .Select(profile => $"{profile.Category}|{profile.Strategy}")
+            .ToHashSet(StringComparer.Ordinal);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var category in PageAuditCategories.All)
+        {
+            foreach (var strategy in PageAuditStrategies.All)
+            {
+                if (existing.Contains($"{category}|{strategy}"))
+                {
+                    continue;
+                }
+
+                database.PageAuditTargets.Add(new PageAuditTarget
+                {
+                    Id = Guid.NewGuid(),
+                    EndpointId = endpointId,
+                    Provider = PageAuditProviders.PageSpeedInsights,
+                    Category = category,
+                    Strategy = strategy,
+                    IsEnabled = true,
+                    SchedulingEnabled = false,
+                    IntervalSeconds = 86400,
+                    ScheduleAnchor = now,
+                    NextDueAt = now.AddDays(1),
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    Version = 1
+                });
+            }
+        }
+
+        await database.SaveChangesAsync();
+        database.ChangeTracker.Clear();
+        var actorId = await database.Endpoints.AsNoTracking()
+            .Where(endpoint => endpoint.Id == endpointId)
+            .Select(endpoint => endpoint.UpdatedByUserId)
+            .SingleAsync();
+        queue.Enqueued.Clear();
+        var callsBefore = provider.CallCount;
+
+        var queued = await scheduling.QueueManualAsync(
+            endpointId,
+            new(actorId, ["Administrator"]));
+
+        queued.Succeeded.Should().BeTrue(queued.Error);
+        queued.QueuedCount.Should().Be(8);
+        queue.Enqueued.Should().HaveCount(2);
+        var manualRuns = await database.PageAuditRuns.AsNoTracking()
+            .Where(run => run.EndpointId == endpointId
+                && run.Source == PageAuditSources.Manual
+                && run.Status == PageAuditRunStatuses.Queued)
+            .ToArrayAsync();
+        manualRuns.Should().HaveCount(8);
+        manualRuns.GroupBy(run => run.BatchId).Should().HaveCount(2)
+            .And.OnlyContain(batch => batch.Count() == 4);
+
+        provider.Respond(ScriptedPageAuditProvider.MixedResult() with
+        {
+            RequestedUrl = endpointUrl,
+            FinalUrl = endpointUrl,
+            AnalysisAt = now
+        });
+        foreach (var runId in queue.Enqueued)
+        {
+            (await execution.ExecuteAsync(runId)).Status.Should().Be(PageAuditRunStatuses.Completed);
+        }
+
+        provider.CallCount.Should().Be(callsBefore + 2);
+        var completed = await database.PageAuditRuns.AsNoTracking()
+            .Where(run => manualRuns.Select(candidate => candidate.Id).Contains(run.Id))
+            .ToArrayAsync();
+        completed.Should().OnlyContain(run => run.Status == PageAuditRunStatuses.Completed);
+        completed.GroupBy(run => run.BatchId).Should().OnlyContain(batch =>
+            batch.Select(run => run.AnalysisAt).Distinct().Count() == 1
+            && batch.Select(run => run.LighthouseVersion).Distinct().Count() == 1);
+    }
+
+    private static async Task VerifyScheduledThresholdsOpenAndRecoverIncidentsAsync(
+        ApplicationDbContext database,
+        PageAuditExecutionService execution,
+        ScriptedPageAuditProvider provider,
+        Guid targetId,
+        Guid endpointId,
+        string endpointUrl)
+    {
+        var endpoint = await database.Endpoints
+            .Include(candidate => candidate.Environment)
+            .SingleAsync(candidate => candidate.Id == endpointId);
+        var monitorId = Guid.NewGuid();
+        database.EndpointMonitors.Add(new EndpointMonitor
+        {
+            Id = monitorId,
+            EndpointId = endpointId,
+            PolicyProfileId = RegistryDefaults.PageAuditPolicyProfileId,
+            MonitorType = RegistryDefaults.PageAuditMonitorType,
+            BoundedOverrides = "{}",
+            ScheduleAnchor = endpoint.UpdatedAt,
+            NextDueAt = endpoint.UpdatedAt.AddDays(1),
+            ConfigurationFingerprint = RegistryDefaults.CreatePageAuditFingerprint(
+                endpoint.NormalizedUrl, endpoint.Environment.IsProduction),
+            IntervalSeconds = RegistryDefaults.PageAuditIntervalSeconds,
+            TimeoutSeconds = RegistryDefaults.PageAuditTimeoutSeconds,
+            FailureConfirmationCount = 1,
+            RecoveryConfirmationCount = 1,
+            SchedulingEnabled = false,
+            IsEnabled = true,
+            CreatedAt = endpoint.UpdatedAt,
+            CreatedByUserId = endpoint.UpdatedByUserId,
+            UpdatedAt = endpoint.UpdatedAt,
+            UpdatedByUserId = endpoint.UpdatedByUserId,
+            Version = 1
+        });
+        await database.PageAuditIncidentPolicies.ExecuteUpdateAsync(setters => setters
+            .SetProperty(policy => policy.IncidentsEnabled, true)
+            .SetProperty(policy => policy.SeoScoreEnabled, true)
+            .SetProperty(policy => policy.SeoMinimumScore, 90)
+            .SetProperty(policy => policy.Version, policy => policy.Version + 1));
+        await database.SaveChangesAsync();
+        database.ChangeTracker.Clear();
+
+        var breachedRunId = await OpenQueuedRunAsync(
+            database, targetId, endpointId, endpointUrl);
+        provider.Respond(ScriptedPageAuditProvider.MixedResult() with { CategoryScore = 0.80m });
+        (await execution.ExecuteAsync(breachedRunId)).Status.Should().Be(PageAuditRunStatuses.Completed);
+
+        var issueKey = PageAuditIncidentIssueKeys.CategoryScore(
+            PageAuditCategories.Seo, PageAuditStrategies.Mobile);
+        var opened = await database.Incidents.AsNoTracking()
+            .SingleAsync(incident => incident.EndpointMonitorId == monitorId
+                && incident.IssueKey == issueKey);
+        opened.Status.Should().Be(IncidentStatuses.Open);
+        var openingEvidence = await database.IncidentEvidence.AsNoTracking()
+            .SingleAsync(evidence => evidence.IncidentId == opened.Id
+                && evidence.EvidenceType == IncidentEvidenceTypes.Opening);
+        openingEvidence.PageAuditRunId.Should().Be(breachedRunId);
+        openingEvidence.LogicalCheckId.Should().BeNull();
+
+        var recoveredRunId = await OpenQueuedRunAsync(
+            database, targetId, endpointId, endpointUrl);
+        provider.Respond(ScriptedPageAuditProvider.MixedResult() with { CategoryScore = 0.95m });
+        (await execution.ExecuteAsync(recoveredRunId)).Status.Should().Be(PageAuditRunStatuses.Completed);
+
+        database.ChangeTracker.Clear();
+        var recovered = await database.Incidents.AsNoTracking()
+            .SingleAsync(incident => incident.Id == opened.Id);
+        recovered.Status.Should().Be(IncidentStatuses.Resolved);
+        (await database.IncidentEvidence.AsNoTracking()
+            .CountAsync(evidence => evidence.IncidentId == opened.Id
+                && evidence.PageAuditRunId == recoveredRunId))
+            .Should().Be(2);
     }
 
     private static async Task<Guid> SeedDueTargetAsync(ApplicationDbContext database, Guid endpointId)
@@ -487,7 +659,7 @@ internal sealed class ScriptedPageAuditProvider : IPageAuditProvider
         _result = null;
     }
 
-    public Task<PageAuditProviderResult> RunAsync(
+    public Task<PageAuditProviderBatchResult> RunAsync(
         PageAuditRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -497,8 +669,10 @@ internal sealed class ScriptedPageAuditProvider : IPageAuditProvider
             throw _failure;
         }
 
-        return Task.FromResult(_result
-            ?? throw new InvalidOperationException("The scripted provider was not given an answer."));
+        var result = _result
+            ?? throw new InvalidOperationException("The scripted provider was not given an answer.");
+        return Task.FromResult(new PageAuditProviderBatchResult(
+            request.Categories.ToDictionary(category => category, _ => result)));
     }
 
     /// <summary>

@@ -92,6 +92,18 @@ internal sealed class EmptyCrawlReportReader : ICrawlReportReader
 /// </summary>
 internal sealed class EmptyPageAuditReader : IPageAuditReader
 {
+    public Task<IReadOnlyList<PageAuditCategorySummary>?> GetLatestCategorySummariesAsync(
+        Guid endpointId,
+        string strategy,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PageAuditCategorySummary>?>(
+            [.. PageAuditCategories.All.Select(category => new PageAuditCategorySummary(
+                category,
+                category == PageAuditCategories.Seo
+                    ? RunOf(endpointId, category, strategy, QueuedRunId)
+                    : null))]);
+
     public static Guid QueuedRunId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000020");
     public static Guid CompletedRunId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000021");
     /// <summary>
@@ -150,6 +162,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
         string strategy,
         Guid runId) => new(
         runId,
+        runId,
         endpointId,
         PageAuditSources.Manual,
         runId == CompletedRunId ? PageAuditRunStatuses.Completed : PageAuditRunStatuses.Queued,
@@ -182,6 +195,80 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PageAuditItemView>>([]);
+}
+
+internal sealed class EmptyPageAuditIncidentPolicyService : IPageAuditIncidentPolicyService
+{
+    public PageAuditIncidentPolicy Current { get; private set; } = new(
+        Guid.Parse("58af6bcc-d2e8-4e8c-9d16-51a2a35df9f0"),
+        false,
+        true,
+        90,
+        true,
+        90,
+        true,
+        90,
+        true,
+        90,
+        false,
+        1800,
+        false,
+        2500,
+        false,
+        200,
+        false,
+        0.1m,
+        false,
+        3400,
+        1);
+
+    public Task<PageAuditIncidentPolicy> GetAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(Current);
+
+    public Task<PageAuditIncidentPolicyUpdateResult> UpdateAsync(
+        UpdatePageAuditIncidentPolicy command,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var errors = PageAuditIncidentEvaluator.Validate(command);
+        if (errors.Count > 0)
+        {
+            return Task.FromResult(new PageAuditIncidentPolicyUpdateResult(false, false, Current, errors));
+        }
+
+        if (command.Version != Current.Version)
+        {
+            return Task.FromResult(new PageAuditIncidentPolicyUpdateResult(
+                false,
+                true,
+                Current,
+                ["These settings changed while you were editing them."]));
+        }
+
+        Current = new(
+            Current.Id,
+            command.IncidentsEnabled,
+            command.PerformanceScoreEnabled,
+            command.PerformanceMinimumScore,
+            command.AccessibilityScoreEnabled,
+            command.AccessibilityMinimumScore,
+            command.BestPracticesScoreEnabled,
+            command.BestPracticesMinimumScore,
+            command.SeoScoreEnabled,
+            command.SeoMinimumScore,
+            command.FirstContentfulPaintEnabled,
+            command.FirstContentfulPaintMaximum,
+            command.LargestContentfulPaintEnabled,
+            command.LargestContentfulPaintMaximum,
+            command.TotalBlockingTimeEnabled,
+            command.TotalBlockingTimeMaximum,
+            command.CumulativeLayoutShiftEnabled,
+            command.CumulativeLayoutShiftMaximum,
+            command.SpeedIndexEnabled,
+            command.SpeedIndexMaximum,
+            Current.Version + 1);
+        return Task.FromResult(new PageAuditIncidentPolicyUpdateResult(true, false, Current, []));
+    }
 }
 
 /// <summary>Records what the controller asked for instead of opening a run.</summary>

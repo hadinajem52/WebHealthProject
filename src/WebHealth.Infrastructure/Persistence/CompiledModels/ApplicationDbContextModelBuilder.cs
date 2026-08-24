@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("5641507b-121b-4ea1-955b-fb4c2bd02965"), entityTypeCount: 49)
+            : base(skipDetectChanges: false, modelId: new Guid("f93897b5-c5a0-45b0-aa2a-a778a467c4a5"), entityTypeCount: 50)
         {
         }
 
@@ -52,6 +52,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var notificationDelivery = NotificationDeliveryEntityType.Create(this);
             var notificationEvent = NotificationEventEntityType.Create(this);
             var notificationReadMarker = NotificationReadMarkerEntityType.Create(this);
+            var pageAuditIncidentPolicyEntity = PageAuditIncidentPolicyEntityEntityType.Create(this);
             var pageAuditItem = PageAuditItemEntityType.Create(this);
             var pageAuditRun = PageAuditRunEntityType.Create(this);
             var pageAuditTarget = PageAuditTargetEntityType.Create(this);
@@ -96,8 +97,9 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             IncidentEventEntityType.CreateForeignKey3(incidentEvent, incident);
             IncidentEventEntityType.CreateForeignKey4(incidentEvent, ownerSubject);
             IncidentEvidenceEntityType.CreateForeignKey1(incidentEvidence, applicationUser);
-            IncidentEvidenceEntityType.CreateForeignKey2(incidentEvidence, incident);
-            IncidentEvidenceEntityType.CreateForeignKey3(incidentEvidence, logicalCheck);
+            IncidentEvidenceEntityType.CreateForeignKey2(incidentEvidence, pageAuditRun);
+            IncidentEvidenceEntityType.CreateForeignKey3(incidentEvidence, incident);
+            IncidentEvidenceEntityType.CreateForeignKey4(incidentEvidence, logicalCheck);
             MaintenanceOccurrenceEntityType.CreateForeignKey1(maintenanceOccurrence, maintenanceWindow);
             MaintenanceTargetEntityType.CreateForeignKey1(maintenanceTarget, client);
             MaintenanceTargetEntityType.CreateForeignKey2(maintenanceTarget, endpoint);
@@ -126,6 +128,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             NotificationEventEntityType.CreateForeignKey1(notificationEvent, incidentEvent);
             NotificationEventEntityType.CreateForeignKey2(notificationEvent, incident);
             NotificationReadMarkerEntityType.CreateForeignKey1(notificationReadMarker, applicationUser);
+            PageAuditIncidentPolicyEntityEntityType.CreateForeignKey1(pageAuditIncidentPolicyEntity, applicationUser);
             PageAuditItemEntityType.CreateForeignKey1(pageAuditItem, pageAuditRun);
             PageAuditRunEntityType.CreateForeignKey1(pageAuditRun, pageAuditTarget);
             PageAuditTargetEntityType.CreateForeignKey1(pageAuditTarget, endpoint);
@@ -205,6 +208,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             NotificationDeliveryEntityType.CreateAnnotations(notificationDelivery);
             NotificationEventEntityType.CreateAnnotations(notificationEvent);
             NotificationReadMarkerEntityType.CreateAnnotations(notificationReadMarker);
+            PageAuditIncidentPolicyEntityEntityType.CreateAnnotations(pageAuditIncidentPolicyEntity);
             PageAuditItemEntityType.CreateAnnotations(pageAuditItem);
             PageAuditRunEntityType.CreateAnnotations(pageAuditRun);
             PageAuditTargetEntityType.CreateAnnotations(pageAuditTarget);

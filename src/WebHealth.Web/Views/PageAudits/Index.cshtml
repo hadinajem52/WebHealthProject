@@ -30,6 +30,16 @@
     };
 }
 
+@section PageActions {
+    @if (User.IsInRole("Administrator"))
+    {
+        <a class="button button--secondary" asp-controller="PageAuditSettings" asp-action="Index">
+            @await Html.PartialAsync("_Icon", "settings")
+            <span>Incident settings</span>
+        </a>
+    }
+}
+
 <div id="ajax-page"
      class="stack"
      data-ajax-region
@@ -115,7 +125,7 @@
     <div id="page-audit-results"
          class="stack"
          data-run-status
-         data-run-active="@(run?.IsActive == true ? "true" : "false")"
+         data-run-active="@(Model.AnyCategoryRunActive ? "true" : "false")"
          data-run-url="@auditStatusUrl">
     @if (summary is null)
     {
@@ -470,6 +480,20 @@
                 Manual and not-applicable audits are listed apart from passed ones: neither is
                 a check this page passed, and neither counts against the score.
             </p>
+
+            @if (Model.PerformanceMetrics.Count > 0)
+            {
+                <div class="pagespeed-metrics" aria-label="Performance metrics">
+                    @foreach (var metric in Model.PerformanceMetrics)
+                    {
+                        <article class="pagespeed-metric" data-status="@PageAuditDisplay.MetricTone(metric)">
+                            <span class="pagespeed-metric__indicator" aria-hidden="true"></span>
+                            <span class="pagespeed-metric__label">@PageAuditDisplay.MetricLabel(metric.AuditId)</span>
+                            <strong class="pagespeed-metric__value">@PageAuditDisplay.FormatMetric(metric)</strong>
+                        </article>
+                    }
+                </div>
+            }
 
             <div class="detail-list">
                 <div class="detail-list__head" aria-hidden="true">

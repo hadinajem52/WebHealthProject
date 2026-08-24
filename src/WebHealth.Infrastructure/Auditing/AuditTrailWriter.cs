@@ -146,6 +146,20 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             after,
             cancellationToken);
 
+    public Task RecordPageAuditIncidentPolicyMutationAsync(
+        AuditWriteContext context,
+        PageAuditIncidentPolicyAuditSnapshot before,
+        PageAuditIncidentPolicyAuditSnapshot after,
+        CancellationToken cancellationToken = default) =>
+        RecordAsync(
+            context,
+            "page_audit_incident_policy.updated",
+            "page_audit_incident_policy",
+            after.PolicyId,
+            before,
+            after,
+            cancellationToken);
+
     private static string ToAction(string entityType, string action) =>
         $"{entityType}.{action.ToLowerInvariant()}";
 

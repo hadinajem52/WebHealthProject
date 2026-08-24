@@ -12,7 +12,7 @@
 **Status:** Implemented on `feature/pagespeed-seo-audit`  
 **Estimated implementation:** 8-11 working days for the V1 described here.
 
-> **Scope note.** This is a solo portfolio/internship feature. The plan deliberately stops at working, tested software demonstrable on a local or demo instance. Metrics backends, staged rollouts, quota alerting, and incident integration are explicitly out of scope and are recorded as deferred in section 14, not designed here.
+> **Scope note.** This is a solo portfolio/internship feature. The plan deliberately stops at working, tested software demonstrable on a local or demo instance. Metrics backends, staged rollouts, and quota alerting remain out of scope. Incident integration was added as a follow-on increment documented in `PageSpeed_Incident_Policy.md`.
 
 ---
 
@@ -73,7 +73,7 @@ Endpoint
 - Provider details: include the Lighthouse version on every run.
 - CrUX fields: deliberately not modelled in this feature.
 - Existing WebHealth SEO rules remain authoritative for expected canonical host, production/non-production indexing policy, descriptions, robots, and sitemap behavior.
-- Incident/notification bridge: deferred, see section 14.
+- Incident/notification bridge: implemented as a follow-on increment, see section 14.
 
 ### 2.3 Why this should not be added directly to `SeoObservation`
 
@@ -1062,18 +1062,20 @@ The PageSpeed score should link to the PageAudits page. Do not merge Lighthouse 
 
 ---
 
-## 14. Deferred: incident and notification integration
+## 14. Implemented follow-on: incident and notification integration
 
-The existing incident pipeline is based on findings attached to `LogicalCheck` results and issue state attached to an `EndpointMonitor`. PageAudit runs are deliberately independent, and V1 shows score changes in the UI without creating incidents.
+The original V1 kept PageAudit runs independent and displayed score changes without creating incidents. The follow-on increment now connects completed scheduled runs to the existing incident lifecycle through a dedicated, non-scheduled PageSpeed monitor identity.
 
-If this is picked up later, the preferred direction is to generalize issue evidence so an issue can be observed by either a logical check result or a page audit run, with provider-neutral observations such as `PageAudit.ScoreBelowThreshold` or `PageAudit.AuditFailed.<audit-id>`. That preserves PageAudit's independent execution while reusing issue confirmation, recovery, incidents, and notifications.
+Incident evidence can now originate from either a logical check or a PageAudit run. Category-score rules and the five core performance metric rules use stable issue keys while retaining the PageAudit run as their evidence source.
 
-Two things are settled now so a later increment does not have to unpick them:
+The integration preserves these boundaries:
 
 - **Do not** create synthetic HTTP `LogicalCheck`/`CheckResult` rows merely to reach the `Finding` table. A PageSpeed provider outage is not an endpoint availability failure, and synthetic checks would pollute health history and reporting.
-- Alert thresholds, audit ownership where Lighthouse overlaps existing WebHealth rules, and confirmation/recovery counts are decided from real run data, not designed up front.
+- Provider failures and manual audits do not affect incidents.
+- Administrator-configured thresholds apply globally to scheduled mobile and desktop runs.
+- Category and metric rules open and recover independently through stable issue keys.
 
-Everything else about this integration is out of scope for this plan.
+The complete policy, validation, persistence, and test behavior is recorded in [`PageSpeed_Incident_Policy.md`](PageSpeed_Incident_Policy.md).
 
 ---
 

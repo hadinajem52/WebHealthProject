@@ -13,11 +13,18 @@ public sealed record PageAuditIndexViewModel(
     string SelectedCategory,
     string SelectedStrategy,
     PageAuditEndpointSummary? Summary,
-    IReadOnlyList<PageAuditEndpointSummary> CategorySummaries,
+    IReadOnlyList<PageAuditCategorySummary> CategorySummaries,
     IReadOnlyList<PageAuditRunSummary> Runs,
     IReadOnlyList<PageAuditItemView> Items,
     bool CanRunNow)
 {
+    public bool AnyCategoryRunActive => CategorySummaries.Any(summary => summary.LatestRun?.IsActive == true);
+
+    public IReadOnlyList<PageAuditItemView> PerformanceMetrics => SelectedCategory == PageAuditCategories.Performance
+        ? [.. Items.Where(item => PageAuditPerformanceMetrics.All.Contains(item.AuditId)
+            && item.NumericValue is not null)]
+        : [];
+
     /// <summary>
     /// The audits grouped for display, in the order a reader needs them: what is wrong first,
     /// then what a person still has to check, then everything that is fine.
@@ -48,7 +55,9 @@ public sealed record PageAuditIndexViewModel(
     ];
 
     private IReadOnlyList<PageAuditItemView> Of(string status) =>
-        [.. Items.Where(item => item.Status == status)];
+        [.. Items.Where(item => item.Status == status
+            && (status != PageAuditItemStatuses.Scored
+                || !PageAuditPerformanceMetrics.All.Contains(item.AuditId)))];
 }
 
 public sealed record PageAuditSection(
@@ -125,6 +134,32 @@ public static class PageAuditDisplay
         PageAuditItemStatuses.Error => "warning",
         _ => "neutral"
     };
+
+    public static string MetricLabel(string auditId) =>
+        PageAuditMetricDefinitions.Get(auditId).Label;
+
+    public static string MetricTone(PageAuditItemView item) =>
+        ScoreTone(item.Score is null ? null : PageAuditNormalization.ToDisplayScore(item.Score.Value));
+
+    public static string FormatMetric(PageAuditItemView item)
+    {
+        if (item.NumericValue is null)
+        {
+            return "Not measured";
+        }
+
+        if (item.AuditId == PageAuditPerformanceMetrics.CumulativeLayoutShift)
+        {
+            return item.NumericValue.Value.ToString("0.###");
+        }
+
+        if (item.AuditId == PageAuditPerformanceMetrics.TotalBlockingTime)
+        {
+            return $"{item.NumericValue.Value:0} ms";
+        }
+
+        return $"{item.NumericValue.Value / 1000:0.0} s";
+    }
 
     /// <summary>
     /// Why a run produced no score, in words an operator can act on. The stored diagnostic is

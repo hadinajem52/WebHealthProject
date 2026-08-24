@@ -364,6 +364,15 @@ internal static class PageAuditReaderAssertions
             PageAuditStrategies.Mobile,
             0.71m,
             "12.0.1",
+            DateTimeOffset.UtcNow.AddMinutes(-10),
+            PageAuditCategories.Performance);
+        var latestRunId = await AddCompletedRunAsync(
+            database,
+            targetId,
+            endpointId,
+            PageAuditStrategies.Mobile,
+            0.91m,
+            "12.0.1",
             DateTimeOffset.UtcNow,
             PageAuditCategories.Performance);
 
@@ -385,10 +394,23 @@ internal static class PageAuditReaderAssertions
             PageAuditStrategies.Mobile,
             null,
             access);
+        var historical = await reader.GetEndpointSummaryAsync(
+            endpointId,
+            PageAuditCategories.Performance,
+            PageAuditStrategies.Mobile,
+            runId,
+            access);
+        var categoryCards = await reader.GetLatestCategorySummariesAsync(
+            endpointId,
+            PageAuditStrategies.Mobile,
+            access);
 
         performance!.Category.Should().Be(PageAuditCategories.Performance);
-        performance.LatestRun!.RunId.Should().Be(runId);
-        performance.LatestRun.Score.Should().Be(71);
+        performance.LatestRun!.RunId.Should().Be(latestRunId);
+        performance.LatestRun.Score.Should().Be(91);
+        historical!.LatestRun!.RunId.Should().Be(runId);
+        categoryCards!.Single(card => card.Category == PageAuditCategories.Performance)
+            .LatestRun!.RunId.Should().Be(latestRunId);
         seo!.LatestRun!.RunId.Should().NotBe(runId);
         accessibility!.IsConfigured.Should().BeTrue();
         accessibility.IsEnabled.Should().BeTrue();
@@ -415,6 +437,9 @@ internal static class PageAuditReaderAssertions
         (await reader.GetEndpointSummaryAsync(
                 endpointId, PageAuditCategories.Seo, PageAuditStrategies.Mobile, null, viewerWithNoGrants))
             .Should().BeNull("a Viewer with no grant over this endpoint may not read its audits");
+        (await reader.GetLatestCategorySummariesAsync(
+                endpointId, PageAuditStrategies.Mobile, viewerWithNoGrants))
+            .Should().BeNull("category cards must enforce the same endpoint visibility scope");
         (await reader.ListRunsAsync(endpointId, PageAuditCategories.Seo, PageAuditStrategies.Mobile, 20, viewerWithNoGrants))
             .Should().BeEmpty();
     }

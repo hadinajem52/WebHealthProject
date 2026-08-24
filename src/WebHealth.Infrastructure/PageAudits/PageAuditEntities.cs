@@ -64,6 +64,7 @@ public sealed class PageAuditTarget
 public sealed class PageAuditRun
 {
     public Guid Id { get; set; }
+    public Guid BatchId { get; set; }
     public Guid PageAuditTargetId { get; set; }
 
     /// <summary>
@@ -156,6 +157,9 @@ public sealed class PageAuditItem
     /// <summary>The provider's mode, kept so a status can be traced back to what produced it.</summary>
     public string? ScoreDisplayMode { get; set; }
 
+    public decimal? NumericValue { get; set; }
+    public string? NumericUnit { get; set; }
+
     /// <summary>The audit's contribution to the category score, for explanation only.</summary>
     public double Weight { get; set; }
 
@@ -167,4 +171,31 @@ public sealed class PageAuditItem
     public string? ErrorMessage { get; set; }
 
     public PageAuditRun Run { get; set; } = null!;
+}
+
+public sealed class PageAuditIncidentPolicyEntity
+{
+    public Guid Id { get; set; }
+    public bool IncidentsEnabled { get; set; }
+    public bool PerformanceScoreEnabled { get; set; }
+    public int PerformanceMinimumScore { get; set; }
+    public bool AccessibilityScoreEnabled { get; set; }
+    public int AccessibilityMinimumScore { get; set; }
+    public bool BestPracticesScoreEnabled { get; set; }
+    public int BestPracticesMinimumScore { get; set; }
+    public bool SeoScoreEnabled { get; set; }
+    public int SeoMinimumScore { get; set; }
+    public bool FirstContentfulPaintEnabled { get; set; }
+    public decimal FirstContentfulPaintMaximum { get; set; }
+    public bool LargestContentfulPaintEnabled { get; set; }
+    public decimal LargestContentfulPaintMaximum { get; set; }
+    public bool TotalBlockingTimeEnabled { get; set; }
+    public decimal TotalBlockingTimeMaximum { get; set; }
+    public bool CumulativeLayoutShiftEnabled { get; set; }
+    public decimal CumulativeLayoutShiftMaximum { get; set; }
+    public bool SpeedIndexEnabled { get; set; }
+    public decimal SpeedIndexMaximum { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public Guid? UpdatedByUserId { get; set; }
+    public long Version { get; set; }
 }

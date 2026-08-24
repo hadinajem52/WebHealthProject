@@ -9,7 +9,7 @@ Expand the existing PageSpeed Insights integration from Lighthouse SEO-only audi
 - Best Practices
 - SEO
 
-Each category keeps an independent mobile and desktop target, run history, score comparison, and normalized audit-item list. Existing SEO history remains valid.
+Each category keeps an independent mobile and desktop target, run history, score comparison, and normalized audit-item list. Runs from the same strategy execution share a batch identity so all four scores describe one Lighthouse snapshot. Existing SEO history remains valid.
 
 ## Rules and acceptance criteria
 
@@ -46,4 +46,6 @@ Unit and integration coverage must prove category normalization, category-specif
 
 ## Operations and compatibility
 
-One full endpoint audit now consists of eight independently queued PageSpeed requests. Existing dedicated PageSpeed workers, retry bounds, and scheduling cadence remain unchanged. Logs retain run, endpoint, provider status, and failure category without API keys or full request URIs.
+One full endpoint audit creates eight category run records but sends two PageSpeed requests: one mobile and one desktop request, each carrying all four repeated category parameters. A strategy batch shares its analysis timestamp and Lighthouse version while retaining category-specific scores, items, history, and incident evidence. Existing dedicated PageSpeed workers, retry bounds, and scheduling cadence remain unchanged. Logs retain batch, endpoint, provider status, and failure category without API keys or full request URIs.
+
+The category score strip always reads the latest run for every category independently of the historical run selected in the detail view. Its batched reader query loads all four cards together. Polling remains active and the status endpoint returns HTTP 202 while any category for the selected strategy is queued or running.
