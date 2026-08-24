@@ -1,0 +1,129 @@
+@model IncidentArchiveViewModel
+@{
+    ViewData.SetTitle("Incident archive");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Incidents", Url.Action("Index", "Incidents")), new BreadcrumbItem("Archive"));
+    var listPage = Model.Page;
+    var firstVisible = listPage.TotalCount == 0 ? 0 : ((listPage.Page - 1) * listPage.PageSize) + 1;
+    var lastVisible = Math.Min(listPage.Page * listPage.PageSize, listPage.TotalCount);
+    var hasPrevious = listPage.Page > 1;
+    var hasNext = lastVisible < listPage.TotalCount;
+}
+
+<div id="ajax-page" class="stack" data-ajax-region>
+    <section class="card" aria-labelledby="incident-archive-label">
+        <p class="card__subtitle" id="incident-archive-label">
+            Incidents filed away from the working list. Nothing here is deleted: each one keeps its
+            timeline, evidence and notification history, and restoring one puts it back on the
+            incidents list unchanged.
+        </p>
+        <div class="form-actions">
+            <a class="button button--secondary" asp-action="Index" data-ajax-link data-ajax-target="#ajax-page">
+                @await Html.PartialAsync("_Icon", "arrow-left")
+                <span>Back to incidents</span>
+            </a>
+        </div>
+    </section>
+
+    @if (listPage.Items.Count == 0)
+    {
+        <section class="card">
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "The archive is empty",
+                "Archiving resolved incidents from the incidents list moves them here.",
+                "archive"))
+        </section>
+    }
+    else
+    {
+        <section class="card" aria-labelledby="incident-archive-heading">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title" id="incident-archive-heading">Archived incidents</h3>
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "archive")
+                        <span>@listPage.TotalCount archived incident@(listPage.TotalCount == 1 ? null : "s")</span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Archived incidents visible to your account</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Endpoint</th>
+                            <th scope="col">Issue</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Archived</th>
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in listPage.Items)
+                        {
+                            <tr>
+                                <td data-label="Endpoint">
+                                    <span class="data-table__primary target-url">@item.EndpointDisplayUrl</span>
+                                    <span class="data-table__secondary">@item.ClientName / @item.WebsiteName / @item.EnvironmentName</span>
+                                </td>
+                                <td data-label="Issue">
+                                    <span class="data-table__primary">@IssueDisplay.Describe(item.IssueKey)</span>
+                                    <span class="data-table__secondary">@item.IssueKey</span>
+                                </td>
+                                <td data-label="Severity">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        StatusBadges.ForSeverity(item.Severity),
+                                        item.Severity))
+                                </td>
+                                <td data-label="Status">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        StatusBadges.ForIncidentStatus(item.Status),
+                                        IncidentStatusDisplay.Name(item.Status)))
+                                </td>
+                                <td data-label="Archived">@Html.Timestamp(item.ArchivedAt)</td>
+                                <td class="data-table__action" data-label="Actions">
+                                    <span class="data-table__action-group">
+                                        <a asp-action="Details" asp-route-id="@item.Id">View<span class="visually-hidden"> incident for @item.EndpointDisplayUrl</span></a>
+                                        @if (Model.CanRestore)
+                                        {
+                                            <form method="post" asp-action="Restore" data-ajax-form data-ajax-target="#ajax-page">
+                                                <input type="hidden" name="id" value="@item.Id" />
+                                                <input type="hidden" name="version" value="@item.Version" />
+                                                <button class="button button--secondary button--icon" type="submit"
+                                                        title="Put this incident back on the incidents list"
+                                                        aria-label="Restore the incident for @item.EndpointDisplayUrl">
+                                                    @await Html.PartialAsync("_Icon", "restore")
+                                                </button>
+                                            </form>
+                                        }
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="pagination" aria-label="Archived incident pages">
+                <span>Showing @firstVisible–@lastVisible of @listPage.TotalCount</span>
+                <span class="pagination__actions">
+                    @if (hasPrevious)
+                    {
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page - 1)" data-ajax-link data-ajax-target="#ajax-page">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (hasNext)
+                    {
+                        <a class="button button--secondary" asp-route-page="@(listPage.Page + 1)" data-ajax-link data-ajax-target="#ajax-page">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
+        </section>
+    }
+</div>

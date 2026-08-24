@@ -93,6 +93,40 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task ArchiveResolvedAjaxRequestRefreshesTheIncidentList()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var response = await PostAsync(client, "/Incidents/ArchiveResolved", token);
+        using var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("/Incidents", json.RootElement.GetProperty("refreshUrl").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("archive", json.RootElement.GetProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RestoreAjaxRequestRefreshesTheIncidentArchive()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+        var token = await GetAntiforgeryTokenAsync(client);
+
+        using var response = await PostAsync(
+            client,
+            "/Incidents/Restore",
+            token,
+            ("id", Guid.NewGuid().ToString()),
+            ("version", "1"));
+        using var json = await ReadJsonAsync(response);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("/Incidents/Archived", json.RootElement.GetProperty("refreshUrl").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task MarkNotificationsReadAjaxRequestRefreshesOnlyTheMenu()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);

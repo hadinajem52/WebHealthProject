@@ -132,6 +132,80 @@ internal sealed class IncidentLifecycleService(
         return IncidentMutationResult.Success(incident.Id);
     }
 
+    public async Task<IncidentArchiveResult> ArchiveResolvedAsync(
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        if (!HasGlobalAccess(access))
+        {
+            return IncidentArchiveResult.Failure(
+                IncidentMutationStatus.Forbidden, "You cannot archive incidents.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var incidents = await dbContext.Incidents
+            .Where(incident => incident.ArchivedAt == null
+                && (incident.Status == IncidentStatuses.Resolved || incident.Status == IncidentStatuses.Closed))
+            .ToListAsync(cancellationToken);
+
+        // The sweep takes no version from the caller, so a row someone else changed between the
+        // read and the write is caught here rather than by a version check. Nothing commits.
+        try
+        {
+            foreach (var incident in incidents)
+            {
+                var before = Snapshot(incident);
+                incident.ArchivedAt = now;
+                incident.Version++;
+                await WriteAuditAsync(
+                    access.UserId, now, IncidentAuditAction.Archived, before, incident, cancellationToken);
+            }
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return IncidentArchiveResult.Failure(
+                IncidentMutationStatus.ConcurrencyConflict,
+                "An incident changed while it was being archived. Nothing was archived; try again.");
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return IncidentArchiveResult.Success(incidents.Count);
+    }
+
+    public async Task<IncidentMutationResult> RestoreAsync(
+        IncidentVersionCommand command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        if (!HasGlobalAccess(access))
+        {
+            return Fail(IncidentMutationStatus.Forbidden, "You cannot restore incidents.");
+        }
+
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var incident = await LockAndLoadAsync(command.IncidentId, cancellationToken);
+        var validation = await ValidateMutationAsync(incident, command.Version, access, cancellationToken);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        if (incident!.ArchivedAt is null)
+        {
+            return Fail(IncidentMutationStatus.ValidationFailed, "The incident is not archived.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var before = Snapshot(incident);
+        incident.ArchivedAt = null;
+        incident.Version++;
+        await WriteAuditAsync(
+            access.UserId, now, IncidentAuditAction.Restored, before, incident, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return IncidentMutationResult.Success(incident.Id);
+    }
+
     public async Task<IncidentMutationResult> AddNoteAsync(
         IncidentNoteCommand command,
         RegistryAccessContext access,
@@ -361,6 +435,7 @@ internal sealed class IncidentLifecycleService(
         }
         else if (action == IncidentLifecycleAction.Reopen)
         {
+            incident.ArchivedAt = null;
             incident.AcknowledgedAt = null;
             incident.RecoveryStartedAt = null;
             incident.ResolvedAt = null;

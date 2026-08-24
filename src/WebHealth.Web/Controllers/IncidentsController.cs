@@ -34,7 +34,66 @@ public sealed class IncidentsController(
             severity,
             unacknowledgedOnly,
             IncidentListViewModel.Describe(
-                timeProvider.GetUtcNow(), status, severity, unacknowledgedOnly)));
+                timeProvider.GetUtcNow(), status, severity, unacknowledgedOnly),
+            User.IsInRole(ApplicationRoles.Administrator) || User.IsInRole(ApplicationRoles.Operations)));
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Archived(int page = 1, CancellationToken cancellationToken = default)
+    {
+        var result = await incidentReader.ListAsync(
+            new(ArchivedOnly: true), GetAccess(), page, cancellationToken);
+        return View(new IncidentArchiveViewModel(result, User.IsInRole(ApplicationRoles.Administrator)
+            || User.IsInRole(ApplicationRoles.Operations)));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ArchiveResolved(CancellationToken cancellationToken)
+    {
+        var result = await incidentLifecycle.ArchiveResolvedAsync(GetAccess(), cancellationToken);
+        var indexUrl = Url.Action(nameof(Index))!;
+        return result.Status switch
+        {
+            IncidentMutationStatus.Forbidden => Forbid(),
+            IncidentMutationStatus.Succeeded => this.RedirectOrAjaxRefresh(
+                indexUrl,
+                indexUrl,
+                result.ArchivedCount == 0
+                    ? "There was nothing resolved to archive."
+                    : $"{result.ArchivedCount} incident{(result.ArchivedCount == 1 ? null : "s")} moved to the archive.",
+                result.ArchivedCount == 0 ? FlashLevel.Information : FlashLevel.Success),
+            _ => this.RedirectOrAjaxRefresh(
+                indexUrl,
+                indexUrl,
+                string.Join(" ", result.Errors),
+                FlashLevel.Error,
+                StatusCodes.Status409Conflict)
+        };
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Restore(Guid id, long version, CancellationToken cancellationToken)
+    {
+        var result = await incidentLifecycle.RestoreAsync(new(id, version), GetAccess(), cancellationToken);
+        var archivedUrl = Url.Action(nameof(Archived))!;
+        return result.Status switch
+        {
+            IncidentMutationStatus.Forbidden => Forbid(),
+            IncidentMutationStatus.NotFound => NotFound(),
+            IncidentMutationStatus.Succeeded => this.RedirectOrAjaxRefresh(
+                archivedUrl, archivedUrl, "Incident restored from the archive.", FlashLevel.Success),
+            IncidentMutationStatus.ConcurrencyConflict => this.RedirectOrAjaxRefresh(
+                archivedUrl,
+                archivedUrl,
+                string.Join(" ", result.Errors),
+                FlashLevel.Error,
+                StatusCodes.Status409Conflict),
+            _ => this.AjaxMessage(
+                archivedUrl,
+                string.Join(" ", result.Errors),
+                FlashLevel.Error,
+                StatusCodes.Status422UnprocessableEntity)
+        };
     }
 
     [HttpGet]

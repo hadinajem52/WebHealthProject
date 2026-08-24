@@ -24,7 +24,16 @@ internal sealed class IncidentReader(
         CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
-        var query = incidentVisibility.Apply(dbContext.Incidents.AsNoTracking(), access, now);
+        var scoped = incidentVisibility.Apply(dbContext.Incidents.AsNoTracking(), access, now);
+        var query = filter.ArchivedOnly
+            ? scoped.Where(incident => incident.ArchivedAt != null)
+            : scoped.Where(incident => incident.ArchivedAt == null);
+        var archivableCount = filter.ArchivedOnly
+            ? 0
+            : await query.CountAsync(
+                incident => incident.Status == IncidentStatuses.Resolved
+                    || incident.Status == IncidentStatuses.Closed,
+                cancellationToken);
         if (!string.IsNullOrWhiteSpace(filter.Status))
         {
             query = query.Where(incident => incident.Status == filter.Status);
@@ -62,7 +71,9 @@ internal sealed class IncidentReader(
                 incident.OpenedAt,
                 incident.AcknowledgedAt,
                 incident.OwnerSubjectId,
-                incident.RecurrenceCount
+                incident.RecurrenceCount,
+                incident.Version,
+                incident.ArchivedAt
             })
             .ToArrayAsync(cancellationToken);
 
@@ -70,8 +81,9 @@ internal sealed class IncidentReader(
         var items = rows.Select(row => new IncidentListItem(
             row.Id, row.EndpointDisplayUrl, row.ClientName, row.WebsiteName, row.EnvironmentName,
             row.IssueKey, row.Severity, row.Status, row.OpenedAt, row.AcknowledgedAt,
-            ownerNames.GetValueOrDefault(row.OwnerSubjectId, "Unassigned"), row.RecurrenceCount)).ToArray();
-        return new(items, boundedPage, PageSize, totalCount);
+            ownerNames.GetValueOrDefault(row.OwnerSubjectId, "Unassigned"), row.RecurrenceCount,
+            row.Version, row.ArchivedAt)).ToArray();
+        return new(items, boundedPage, PageSize, totalCount, archivableCount);
     }
 
     public async Task<IncidentDetails?> FindAsync(

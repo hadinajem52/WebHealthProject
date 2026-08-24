@@ -23,10 +23,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Incidents.Incident",
                 typeof(Incident),
                 baseEntityType,
-                propertyCount: 18,
+                propertyCount: 19,
                 navigationCount: 5,
                 foreignKeyCount: 3,
-                unnamedIndexCount: 4,
+                unnamedIndexCount: 5,
                 keyCount: 2);
 
             var id = runtimeEntityType.AddProperty(
@@ -49,6 +49,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             acknowledgedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             acknowledgedAt.AddAnnotation("Relational:ColumnName", "acknowledged_at");
             acknowledgedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
+
+            var archivedAt = runtimeEntityType.AddProperty(
+                "ArchivedAt",
+                typeof(DateTimeOffset?),
+                propertyInfo: typeof(Incident).GetProperty("ArchivedAt", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(Incident).GetField("<ArchivedAt>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            archivedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            archivedAt.AddAnnotation("Relational:ColumnName", "archived_at");
+            archivedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
 
             var closedAt = runtimeEntityType.AddProperty(
                 "ClosedAt",
@@ -212,22 +222,26 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             key0.AddAnnotation("Relational:Name", "ak_incident_id_endpoint_monitor_id");
 
             var index = runtimeEntityType.AddIndex(
-                new[] { ownerSubjectId });
-            index.AddAnnotation("Relational:Name", "ix_incident_owner_subject_id");
+                new[] { archivedAt });
+            index.AddAnnotation("Relational:Name", "ix_incident_archived_at");
 
             var index0 = runtimeEntityType.AddIndex(
-                new[] { previousIncidentId });
-            index0.AddAnnotation("Relational:Name", "ix_incident_previous_incident_id");
+                new[] { ownerSubjectId });
+            index0.AddAnnotation("Relational:Name", "ix_incident_owner_subject_id");
 
             var index1 = runtimeEntityType.AddIndex(
-                new[] { endpointMonitorId, issueKey },
-                unique: true);
-            index1.AddAnnotation("Relational:Filter", "status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery')");
-            index1.AddAnnotation("Relational:Name", "ix_incident_endpoint_monitor_id_issue_key");
+                new[] { previousIncidentId });
+            index1.AddAnnotation("Relational:Name", "ix_incident_previous_incident_id");
 
             var index2 = runtimeEntityType.AddIndex(
+                new[] { endpointMonitorId, issueKey },
+                unique: true);
+            index2.AddAnnotation("Relational:Filter", "status IN ('Open', 'Acknowledged', 'InProgress', 'MonitoringRecovery')");
+            index2.AddAnnotation("Relational:Name", "ix_incident_endpoint_monitor_id_issue_key");
+
+            var index3 = runtimeEntityType.AddIndex(
                 new[] { status, severity, openedAt });
-            index2.AddAnnotation("Relational:Name", "ix_incident_status_severity_opened_at");
+            index3.AddAnnotation("Relational:Name", "ix_incident_status_severity_opened_at");
 
             return runtimeEntityType;
         }

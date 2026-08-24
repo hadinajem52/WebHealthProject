@@ -85,7 +85,9 @@ internal static class DatabaseFoundationAssertions
         "20260821071613_PageAuditItemRestrictDelete",
         "20260822122047_CrawlRunActiveUniqueIndex",
         "20260822215850_CrawlRunCoverageLimited",
-        "20260823114917_PageAuditDesktopStrategy"
+        "20260823114917_PageAuditDesktopStrategy",
+        "20260823202630_IncidentArchive",
+        "20260823202715_RobotsIncidentSeverityDemotion"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -3305,6 +3307,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyIncidentResolutionFieldsRejectedAsync(connectionString, monitor.Id, ownerSubjectId);
         await VerifyIncidentAcknowledgedFieldExactnessRejectedAsync(connectionString, monitor.Id, ownerSubjectId);
         await VerifyIncidentClosedFieldExactnessRejectedAsync(connectionString, monitor.Id, ownerSubjectId);
+        await VerifyIncidentArchivedWhileActiveRejectedAsync(connectionString, monitor.Id, ownerSubjectId);
 
         var trackedIncident = await database.Incidents.SingleAsync(incident => incident.Id == incidentId);
         trackedIncident.Status = IncidentStatuses.Acknowledged;
@@ -5050,6 +5053,27 @@ internal static class DatabaseFoundationAssertions
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
         exception.ConstraintName.Should().Be("ck_incident_closed_fields");
+    }
+
+    private static async Task VerifyIncidentArchivedWhileActiveRejectedAsync(
+        string connectionString, Guid monitorId, Guid ownerSubjectId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        const string sql = """
+            INSERT INTO web_health.incident
+                (id, endpoint_monitor_id, owner_subject_id, issue_key, severity, status,
+                 recurrence_count, opened_at, archived_at, version)
+            VALUES (@id, @monitor_id, @owner_subject_id, @issue_key, 'Warning', 'Open', 0, now(), now(), 1);
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("id", Guid.NewGuid());
+        command.Parameters.AddWithValue("monitor_id", monitorId);
+        command.Parameters.AddWithValue("owner_subject_id", ownerSubjectId);
+        command.Parameters.AddWithValue("issue_key", $"v1|HttpAvailability|archived-while-open|{Guid.NewGuid():N}");
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+        exception.ConstraintName.Should().Be("ck_incident_archived_status");
     }
 
     private static async Task VerifyIncidentEventFieldsRejectedAsync(string connectionString, Guid incidentId)
