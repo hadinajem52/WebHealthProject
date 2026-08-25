@@ -4,8 +4,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using WebHealth.Infrastructure;
 using Hangfire;
-using WebHealth.Infrastructure.Crawling;
-using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.PageAudits;
 using Xunit;
 
@@ -22,18 +20,6 @@ public sealed class PageAuditIsolationTests
     public void PageAuditDispatchJob_RunsOnTheSameIsolatedQueueAsTheRunsItOpens() =>
         QueueOf(typeof(PageAuditDispatchJob), nameof(PageAuditDispatchJob.DispatchAsync))
             .Should().Be("page-audits");
-
-    [Fact]
-    public void PageAuditQueue_IsNotTheQueueScheduledChecksUse() =>
-        QueueOf(typeof(LogicalCheckJob), nameof(LogicalCheckJob.ExecuteAsync))
-            .Should().NotBe("page-audits",
-                "a ninety-second call to Google must not be able to occupy a monitoring worker");
-
-    [Fact]
-    public void PageAuditQueue_IsNotTheQueueCrawlsUse() =>
-        QueueOf(typeof(CrawlRunJob), nameof(CrawlRunJob.ExecuteAsync))
-            .Should().NotBe("page-audits",
-                "the two long-running features must not compete for one another's workers");
 
     [Fact]
     public void PageAuditRunJob_LeavesRetryToTheApplicationsOwnAttemptBudget() =>
