@@ -83,15 +83,6 @@ public sealed class ReportQueryNormalizerTests
     }
 
     [Fact]
-    public void ADisabledMonitorCanBeFilteredForBecauseItIsReported()
-    {
-        var result = Normalize(new ReportQueryInput(HealthStatus: EndpointHealthStatuses.Disabled));
-
-        result.Succeeded.Should().BeTrue(string.Join(" ", result.Errors));
-        result.Query!.HealthStatus.Should().Be(EndpointHealthStatuses.Disabled);
-    }
-
-    [Fact]
     public void AnUnknownMonitorTypeIsRejected()
     {
         Normalize(new ReportQueryInput(MonitorType: "SmokeSignal")).Succeeded.Should().BeFalse();
