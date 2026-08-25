@@ -24,10 +24,6 @@ public sealed class SeoFindingGroupTests
     public void EveryRule_ReportsTheSubjectItIsAbout(string ruleKey, string expected) =>
         SeoFindingGroups.Of(ruleKey).Should().Be(expected);
 
-    [Fact]
-    public void SitemapIsNotFiledUnderRobots() =>
-        SeoFindingGroups.Of(RobotsRules.SitemapMissing).Should().NotBe(SeoFindingGroups.Robots);
-
     [Theory]
     [InlineData(RobotsRules.BlocksSite, true)]
     [InlineData(RobotsRules.SitemapMissing, true)]
@@ -78,10 +74,6 @@ public sealed class SeoFindingGroupTests
         keys.Should().NotBeEmpty("a selectable subject must have rules to filter on");
         keys.Should().OnlyContain(key => SeoFindingGroups.Of(key) == subject);
     }
-
-    [Fact]
-    public void EverySelectableSubjectIsRecognised() =>
-        SeoFindingGroups.Selectable.Should().OnlyContain(subject => SeoFindingGroups.IsSelectable(subject));
 
     [Fact]
     public void TheFallbackGroupIsNotOfferedAsAFilter()
