@@ -29,7 +29,8 @@ secrets.json
 # OS-generated files
 .DS_Store
 Thumbs.db
-/.vscode
+/.vscode/*
+!/.vscode/tasks.json
 # Frontend dependencies and generated assets
 node_modules/
 dist/

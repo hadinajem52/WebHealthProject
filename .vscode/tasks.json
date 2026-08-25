@@ -1,0 +1,85 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/WebHealthProject.sln"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "run",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "${workspaceFolder}/src/WebHealth.Web/WebHealth.Web.csproj",
+        "--launch-profile",
+        "https",
+        "--no-build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": "build",
+      "dependsOrder": "sequence",
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "kill running project",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$projectRoot = [IO.Path]::GetFullPath('${workspaceFolder}'); $processes = Get-CimInstance Win32_Process | Where-Object { $executablePath = if ($_.ExecutablePath) { [IO.Path]::GetFullPath($_.ExecutablePath) } else { '' }; $commandLine = if ($_.CommandLine) { $_.CommandLine.Replace('\\', '/') } else { '' }; ($_.Name -eq 'WebHealth.Web.exe' -and $executablePath.StartsWith($projectRoot, [StringComparison]::OrdinalIgnoreCase)) -or ($_.Name -eq 'dotnet.exe' -and $commandLine -like \"*$($projectRoot.Replace('\\', '/'))/src/WebHealth.Web/*\") }; if ($processes) { $processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; Write-Host \"Stopped $($_.Name) (PID $($_.ProcessId))\" } } else { Write-Host 'No running WebHealth project process found.' }"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "update seed snapshot",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/scripts/capture-seed-snapshot.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}
