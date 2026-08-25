@@ -21,23 +21,45 @@ internal sealed class EnvironmentRegistryService(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        if (!RegistryVisibility.CanManage(access))
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
         {
-            return Forbidden();
-        }
-
-        var input = NormalizeInput(command.Name, command.EnvironmentType, command.BaseUrl);
-        if (input.Errors.Count > 0)
-        {
-            return Validation(input.Errors);
+            return preparation.Failure;
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var coreResult = await CreateEnvironmentCoreAsync(command, access, cancellationToken);
+        if (coreResult is RegistryCreateDuplicateResult { Duplicate: EnvironmentNameDuplicate })
+        {
+            return await RollBackDuplicateAsync(transaction, cancellationToken);
+        }
+
+        var result = ((RegistryCreateCompleted)coreResult).Result;
+        if (result.Succeeded)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return result;
+    }
+
+    internal async Task<RegistryCreateCoreResult> CreateEnvironmentCoreAsync(
+        CreateEnvironment command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
+        {
+            return new RegistryCreateCompleted(preparation.Failure);
+        }
+
+        var input = preparation.Input!;
         if (!await LockWebsiteAsync(command.WebsiteId, cancellationToken))
         {
-            return Validation(ValidationError.For(
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(CreateEnvironment.WebsiteId),
-                "Select an active website. An archived website cannot take new environments."));
+                "Select an active website. An archived website cannot take new environments.")));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -68,12 +90,11 @@ internal sealed class EnvironmentRegistryService(
                 null,
                 ToAudit(environment, environment.BaseUrl is not null),
                 cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return RegistryMutationResult.Success(environment.Id);
+            return new RegistryCreateCompleted(RegistryMutationResult.Success(environment.Id));
         }
         catch (DbUpdateException exception) when (IsDuplicate(exception))
         {
-            return await RollBackDuplicateAsync(transaction, cancellationToken);
+            return new RegistryCreateDuplicateResult(new EnvironmentNameDuplicate());
         }
     }
 
@@ -254,6 +275,21 @@ internal sealed class EnvironmentRegistryService(
                         role.Id == userRole.RoleId && role.Name == ApplicationRoles.Administrator))),
             cancellationToken);
 
+    private static EnvironmentCreatePreparation PrepareCreate(
+        CreateEnvironment command,
+        RegistryAccessContext access)
+    {
+        if (!RegistryVisibility.CanManage(access))
+        {
+            return new(null, Forbidden());
+        }
+
+        var input = NormalizeInput(command.Name, command.EnvironmentType, command.BaseUrl);
+        return input.Errors.Count > 0
+            ? new(null, Validation(input.Errors))
+            : new(input, null);
+    }
+
     private static EnvironmentInput NormalizeInput(string name, string environmentType, string? baseUrl)
     {
         var displayName = NameNormalizer.TrimDisplayName(name);
@@ -413,4 +449,8 @@ internal sealed class EnvironmentRegistryService(
 
     private sealed record EnvironmentInput(
         string Name, string EnvironmentType, bool IsProduction, string? BaseUrl, IReadOnlyList<ValidationError> Errors);
+
+    private sealed record EnvironmentCreatePreparation(
+        EnvironmentInput? Input,
+        RegistryMutationResult? Failure);
 }

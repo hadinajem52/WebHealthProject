@@ -22,40 +22,51 @@ internal sealed class WebsiteRegistryService(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        if (!RegistryVisibility.CanManage(access))
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
         {
-            return Forbidden();
-        }
-
-        var name = RegistryMutationSupport.TrimName(command.Name);
-        var tags = TagNormalizer.Normalize(command.Tags);
-        var errors = ValidateFields(name, command.TechnologyCms, tags);
-        if (command.IsEnabled)
-        {
-            errors.Add(ValidationError.For(
-                nameof(UpdateWebsite.IsEnabled),
-                "A website cannot be enabled until it has an active environment. Save it disabled, "
-                + "add an environment, then enable it."));
-        }
-
-        if (errors.Count > 0)
-        {
-            return Validation(errors);
+            return preparation.Failure;
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var coreResult = await CreateWebsiteCoreAsync(command, access, cancellationToken);
+        if (coreResult is RegistryCreateDuplicateResult { Duplicate: WebsiteNameDuplicate })
+        {
+            return await RollBackDuplicateAsync(transaction, cancellationToken);
+        }
+
+        var result = ((RegistryCreateCompleted)coreResult).Result;
+        if (result.Succeeded)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return result;
+    }
+
+    internal async Task<RegistryCreateCoreResult> CreateWebsiteCoreAsync(
+        CreateWebsite command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
+        {
+            return new RegistryCreateCompleted(preparation.Failure);
+        }
+
         if (!await ClientAcceptsWebsiteAsync(command.ClientId, cancellationToken))
         {
-            return Validation(ValidationError.For(
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(CreateWebsite.ClientId),
-                "Select an active client. An archived or inactive client cannot take new websites."));
+                "Select an active client. An archived or inactive client cannot take new websites.")));
         }
 
         if (!await support.LockValidOwnerAsync(command.OwnerSubjectId, null, cancellationToken))
         {
-            return Validation(ValidationError.For(
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(UpdateWebsite.OwnerSubjectId),
-                "Select an enabled user or team as the owner. A disabled one cannot own records."));
+                "Select an enabled user or team as the owner. A disabled one cannot own records.")));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -64,10 +75,10 @@ internal sealed class WebsiteRegistryService(
             Id = Guid.NewGuid(),
             ClientId = command.ClientId,
             OwnerSubjectId = command.OwnerSubjectId,
-            Name = name,
-            NormalizedName = RegistryMutationSupport.NormalizeName(name),
+            Name = preparation.Name,
+            NormalizedName = RegistryMutationSupport.NormalizeName(preparation.Name),
             NormalizationVersion = NameNormalizer.Version,
-            TechnologyCms = NormalizeTechnology(command.TechnologyCms),
+            TechnologyCms = preparation.TechnologyCms,
             IsEnabled = false,
             CreatedAt = now,
             CreatedByUserId = access.UserId,
@@ -76,7 +87,7 @@ internal sealed class WebsiteRegistryService(
             Version = 1
         };
         dbContext.Websites.Add(website);
-        await ReplaceTagsAsync(website, tags, access.UserId, now, cancellationToken);
+        await ReplaceTagsAsync(website, preparation.Tags, access.UserId, now, cancellationToken);
 
         try
         {
@@ -86,13 +97,12 @@ internal sealed class WebsiteRegistryService(
                 null,
                 ToAuditSnapshot(website),
                 cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return RegistryMutationResult.Success(website.Id);
+            return new RegistryCreateCompleted(RegistryMutationResult.Success(website.Id));
         }
         catch (DbUpdateException exception) when (
             RegistryMutationSupport.IsConstraintViolation(exception, WebsiteNameIndex))
         {
-            return await RollBackDuplicateAsync(transaction, cancellationToken);
+            return new RegistryCreateDuplicateResult(new WebsiteNameDuplicate());
         }
     }
 
@@ -504,6 +514,31 @@ internal sealed class WebsiteRegistryService(
             ON CONFLICT (normalized_name, normalization_version) DO NOTHING
             """, cancellationToken);
 
+    private static WebsiteCreatePreparation PrepareCreate(
+        CreateWebsite command,
+        RegistryAccessContext access)
+    {
+        if (!RegistryVisibility.CanManage(access))
+        {
+            return new(string.Empty, [], null, Forbidden());
+        }
+
+        var name = RegistryMutationSupport.TrimName(command.Name);
+        var tags = TagNormalizer.Normalize(command.Tags);
+        var errors = ValidateFields(name, command.TechnologyCms, tags);
+        if (command.IsEnabled)
+        {
+            errors.Add(ValidationError.For(
+                nameof(UpdateWebsite.IsEnabled),
+                "A website cannot be enabled until it has an active environment. Save it disabled, "
+                + "add an environment, then enable it."));
+        }
+
+        return errors.Count > 0
+            ? new(name, tags, null, Validation(errors))
+            : new(name, tags, NormalizeTechnology(command.TechnologyCms), null);
+    }
+
     private static string? NormalizeTechnology(string? technologyCms)
     {
         var normalized = RegistryMutationSupport.NormalizeOptionalText(technologyCms);
@@ -540,4 +575,10 @@ internal sealed class WebsiteRegistryService(
 
     private static RegistryMutationResult Validation(params IEnumerable<ValidationError> errors) =>
         RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
+
+    private sealed record WebsiteCreatePreparation(
+        string Name,
+        IReadOnlyList<NormalizedTag> Tags,
+        string? TechnologyCms,
+        RegistryMutationResult? Failure);
 }

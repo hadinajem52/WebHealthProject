@@ -19,30 +19,44 @@ internal sealed class ClientRegistryService(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        if (!RegistryVisibility.CanManage(access))
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
         {
-            return Forbidden();
-        }
-
-        var name = RegistryMutationSupport.TrimName(command.Name);
-        var errors = RegistryMutationSupport.ValidateName(name);
-        if (command.Notes?.Trim().Length > 2000)
-        {
-            errors.Add(ValidationError.For(
-                nameof(UpdateClient.Notes),
-                $"These notes are {command.Notes!.Trim().Length} characters. Shorten them to 2000 or fewer."));
-        }
-        if (errors.Count > 0)
-        {
-            return Validation(errors);
+            return preparation.Failure;
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var coreResult = await CreateClientCoreAsync(command, access, cancellationToken);
+        if (coreResult is RegistryCreateDuplicateResult { Duplicate: ClientNameDuplicate })
+        {
+            return await RollBackDuplicateAsync(transaction, cancellationToken);
+        }
+
+        var result = ((RegistryCreateCompleted)coreResult).Result;
+        if (result.Succeeded)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return result;
+    }
+
+    internal async Task<RegistryCreateCoreResult> CreateClientCoreAsync(
+        CreateClient command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
+        {
+            return new RegistryCreateCompleted(preparation.Failure);
+        }
+
         if (!await support.LockValidOwnerAsync(command.OwnerSubjectId, null, cancellationToken))
         {
-            return Validation(ValidationError.For(
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(UpdateClient.OwnerSubjectId),
-                "Select an enabled user or team as the owner. A disabled one cannot own records."));
+                "Select an enabled user or team as the owner. A disabled one cannot own records.")));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -50,10 +64,10 @@ internal sealed class ClientRegistryService(
         {
             Id = Guid.NewGuid(),
             OwnerSubjectId = command.OwnerSubjectId,
-            Name = name,
-            NormalizedName = RegistryMutationSupport.NormalizeName(name),
+            Name = preparation.Name,
+            NormalizedName = RegistryMutationSupport.NormalizeName(preparation.Name),
             NormalizationVersion = NameNormalizer.Version,
-            Notes = NormalizeNotes(command.Notes),
+            Notes = preparation.Notes,
             IsActive = true,
             CreatedAt = now,
             CreatedByUserId = access.UserId,
@@ -71,13 +85,12 @@ internal sealed class ClientRegistryService(
                 null,
                 ToAuditSnapshot(client, client.Notes is not null),
                 cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return RegistryMutationResult.Success(client.Id);
+            return new RegistryCreateCompleted(RegistryMutationResult.Success(client.Id));
         }
         catch (DbUpdateException exception) when (
             RegistryMutationSupport.IsConstraintViolation(exception, ClientNameIndex))
         {
-            return await RollBackDuplicateAsync(transaction, cancellationToken);
+            return new RegistryCreateDuplicateResult(new ClientNameDuplicate());
         }
     }
 
@@ -283,6 +296,29 @@ internal sealed class ClientRegistryService(
         notesChanged,
         client.Version);
 
+    private static ClientCreatePreparation PrepareCreate(
+        CreateClient command,
+        RegistryAccessContext access)
+    {
+        if (!RegistryVisibility.CanManage(access))
+        {
+            return new(string.Empty, null, Forbidden());
+        }
+
+        var name = RegistryMutationSupport.TrimName(command.Name);
+        var errors = RegistryMutationSupport.ValidateName(name);
+        if (command.Notes?.Trim().Length > 2000)
+        {
+            errors.Add(ValidationError.For(
+                nameof(UpdateClient.Notes),
+                $"These notes are {command.Notes!.Trim().Length} characters. Shorten them to 2000 or fewer."));
+        }
+
+        return errors.Count > 0
+            ? new(name, null, Validation(errors))
+            : new(name, NormalizeNotes(command.Notes), null);
+    }
+
     private static string? NormalizeNotes(string? notes)
     {
         var normalized = RegistryMutationSupport.NormalizeOptionalText(notes);
@@ -319,4 +355,9 @@ internal sealed class ClientRegistryService(
 
     private static RegistryMutationResult Validation(params IEnumerable<ValidationError> errors) =>
         RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
+
+    private sealed record ClientCreatePreparation(
+        string Name,
+        string? Notes,
+        RegistryMutationResult? Failure);
 }

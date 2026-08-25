@@ -233,6 +233,7 @@ internal static class DatabaseFoundationAssertions
 
         await VerifyIdentityBootstrapAsync(connectionString);
         await VerifyClientWebsiteRegistryAsync(connectionString);
+        await VerifyRegistryCreateComposabilityAsync(connectionString);
         await VerifyEnvironmentEndpointRegistryAsync(connectionString);
         await VerifyMonitoringExecutionFoundationAsync(connectionString);
         await VerifyHttpMonitoringHistoryAsync(connectionString);
@@ -259,6 +260,110 @@ internal static class DatabaseFoundationAssertions
         await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
 
         await VerifyUpgradePathsAsync(connectionString);
+    }
+
+    private static async Task VerifyRegistryCreateComposabilityAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var mutationSupport = new RegistryMutationSupport(database);
+        var auditTrail = new AuditTrailWriter(database);
+        var endpointPurge = new EndpointPurgeCascade(database);
+        var clients = new ClientRegistryService(database, mutationSupport, auditTrail);
+        var websites = new WebsiteRegistryService(
+            database,
+            mutationSupport,
+            new WebsitePurgeCascade(database, endpointPurge),
+            auditTrail);
+        var environments = new EnvironmentRegistryService(database, auditTrail);
+        var endpoints = new EndpointRegistryService(database, mutationSupport, endpointPurge, auditTrail);
+
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var ownerSubjectId = await database.OwnerSubjects
+            .Where(owner => owner.UserId == administrator.Id)
+            .Select(owner => owner.Id)
+            .SingleAsync();
+        var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
+
+        var committedLabel = Guid.NewGuid().ToString("N");
+        Guid committedClientId;
+        Guid committedWebsiteId;
+        Guid committedEnvironmentId;
+        Guid committedEndpointId;
+        await using (var transaction = await database.Database.BeginTransactionAsync())
+        {
+            committedClientId = CreatedId(await clients.CreateClientCoreAsync(
+                new($"Composable client {committedLabel}", ownerSubjectId, null), access));
+            committedWebsiteId = CreatedId(await websites.CreateWebsiteCoreAsync(
+                new(committedClientId, $"Composable website {committedLabel}", ownerSubjectId, null, false, []),
+                access));
+            committedEnvironmentId = CreatedId(await environments.CreateEnvironmentCoreAsync(
+                new(committedWebsiteId, "Production", EnvironmentTypes.Production,
+                    $"https://{committedLabel}.example.test/", true),
+                access));
+            committedEndpointId = CreatedId(await endpoints.CreateEndpointCoreAsync(
+                new(committedEnvironmentId, $"https://{committedLabel}.example.test/health", null, true, null,
+                    TargetAuthorizationKinds.Owned, "Phase 2 composability fixture.", null),
+                access));
+            await transaction.CommitAsync();
+        }
+
+        database.ChangeTracker.Clear();
+        (await database.Clients.AnyAsync(client => client.Id == committedClientId)).Should().BeTrue();
+        (await database.Websites.AnyAsync(website => website.Id == committedWebsiteId)).Should().BeTrue();
+        (await database.Environments.AnyAsync(environment => environment.Id == committedEnvironmentId)).Should().BeTrue();
+        (await database.Endpoints.AnyAsync(endpoint => endpoint.Id == committedEndpointId)).Should().BeTrue();
+        (await database.EndpointMonitors.CountAsync(monitor => monitor.EndpointId == committedEndpointId))
+            .Should().Be(2);
+        (await database.AuditEvents.CountAsync(audit =>
+            audit.EntityIdentifier == committedClientId.ToString()
+            || audit.EntityIdentifier == committedWebsiteId.ToString()
+            || audit.EntityIdentifier == committedEnvironmentId.ToString()
+            || audit.EntityIdentifier == committedEndpointId.ToString())).Should().Be(4);
+
+        var rolledBackLabel = Guid.NewGuid().ToString("N");
+        Guid rolledBackClientId;
+        Guid rolledBackWebsiteId;
+        Guid rolledBackEnvironmentId;
+        Guid rolledBackEndpointId;
+        await using (var transaction = await database.Database.BeginTransactionAsync())
+        {
+            rolledBackClientId = CreatedId(await clients.CreateClientCoreAsync(
+                new($"Rolled back client {rolledBackLabel}", ownerSubjectId, null), access));
+            rolledBackWebsiteId = CreatedId(await websites.CreateWebsiteCoreAsync(
+                new(rolledBackClientId, $"Rolled back website {rolledBackLabel}", ownerSubjectId, null, false, []),
+                access));
+            rolledBackEnvironmentId = CreatedId(await environments.CreateEnvironmentCoreAsync(
+                new(rolledBackWebsiteId, "Production", EnvironmentTypes.Production,
+                    $"https://{rolledBackLabel}.example.test/", true),
+                access));
+            rolledBackEndpointId = CreatedId(await endpoints.CreateEndpointCoreAsync(
+                new(rolledBackEnvironmentId, $"https://{rolledBackLabel}.example.test/health", null, true, null,
+                    TargetAuthorizationKinds.Owned, "Phase 2 rollback fixture.", null),
+                access));
+            await transaction.RollbackAsync();
+        }
+
+        database.ChangeTracker.Clear();
+        (await database.Clients.AnyAsync(client => client.Id == rolledBackClientId)).Should().BeFalse();
+        (await database.Websites.AnyAsync(website => website.Id == rolledBackWebsiteId)).Should().BeFalse();
+        (await database.Environments.AnyAsync(environment => environment.Id == rolledBackEnvironmentId)).Should().BeFalse();
+        (await database.Endpoints.AnyAsync(endpoint => endpoint.Id == rolledBackEndpointId)).Should().BeFalse();
+        (await database.EndpointMonitors.AnyAsync(monitor => monitor.EndpointId == rolledBackEndpointId))
+            .Should().BeFalse();
+        (await database.AuditEvents.AnyAsync(audit =>
+            audit.EntityIdentifier == rolledBackClientId.ToString()
+            || audit.EntityIdentifier == rolledBackWebsiteId.ToString()
+            || audit.EntityIdentifier == rolledBackEnvironmentId.ToString()
+            || audit.EntityIdentifier == rolledBackEndpointId.ToString())).Should().BeFalse();
+    }
+
+    private static Guid CreatedId(RegistryCreateCoreResult coreResult)
+    {
+        var completed = coreResult.Should().BeOfType<RegistryCreateCompleted>().Subject;
+        completed.Result.Succeeded.Should().BeTrue(string.Join(" ", completed.Result.Errors));
+        return completed.Result.EntityId!.Value;
     }
 
     private static async Task VerifySslCertificateMonitoringAsync(string connectionString)

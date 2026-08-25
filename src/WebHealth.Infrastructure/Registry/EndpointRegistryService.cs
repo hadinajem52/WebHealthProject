@@ -25,72 +25,69 @@ internal sealed class EndpointRegistryService(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        if (!RegistryVisibility.CanManage(access))
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
         {
-            return Forbidden();
-        }
-
-        var url = EndpointUrlNormalizer.Normalize(command.Url);
-        if (!url.Succeeded)
-        {
-            return Validation(url.Errors.Select(error =>
-                ValidationError.For(nameof(CreateEndpoint.Url), error)));
-        }
-
-        if (DestinationHostPolicy.IsDefinitelyUnreachable(url.NormalizedHost, out var unreachable))
-        {
-            return Validation(ValidationError.For(nameof(CreateEndpoint.Url), unreachable!));
-        }
-
-        var interval = DecideIntervalOverride(command.IntervalMinutesOverride, access, null);
-        if (interval.Error is not null)
-        {
-            return Validation(ValidationError.For(nameof(UpdateEndpoint.IntervalMinutesOverride), interval.Error));
-        }
-
-        var thresholds = ResponseThresholdOverride.Decide(
-            command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
-        if (thresholds.Error is not null)
-        {
-            return Validation(ValidationError.For(nameof(UpdateEndpoint.WarningThresholdMsOverride), thresholds.Error));
-        }
-
-        if (ValidateSeoPolicy(command.SeoIndexingExpectation, command.SeoExpectedCanonicalHost) is { } seoError)
-        {
-            return Validation(ValidationError.For(nameof(UpdateEndpoint.SeoIndexingExpectation), seoError));
-        }
-
-        if (PageAuditConfiguration.Validate(
-            command.PageAuditEnabled,
-            command.PageAuditSchedulingEnabled,
-            command.PageAuditIntervalHours,
-            url.NormalizedUrl!) is { } pageAuditError)
-        {
-            return Validation(ValidationError.For(nameof(UpdateEndpoint.PageAuditIntervalHours), pageAuditError));
+            return preparation.Failure;
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var coreResult = await CreateEndpointCoreAsync(command, access, cancellationToken);
+        if (coreResult is RegistryCreateDuplicateResult { Duplicate: EndpointUrlDuplicate duplicate })
+        {
+            return await RollBackDuplicateAsync(
+                transaction,
+                duplicate.EnvironmentId,
+                duplicate.NormalizedUrl,
+                duplicate.NormalizedUrlHash,
+                cancellationToken);
+        }
+
+        var result = ((RegistryCreateCompleted)coreResult).Result;
+        if (result.Succeeded)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        return result;
+    }
+
+    internal async Task<RegistryCreateCoreResult> CreateEndpointCoreAsync(
+        CreateEndpoint command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var preparation = PrepareCreate(command, access);
+        if (preparation.Failure is not null)
+        {
+            return new RegistryCreateCompleted(preparation.Failure);
+        }
+
+        var url = preparation.Url!;
+        var interval = preparation.Interval!;
+        var thresholds = preparation.Thresholds!;
         var environment = await LockEnvironmentAsync(command.EnvironmentId, cancellationToken);
         if (environment is null)
         {
-            return Validation(ValidationError.For(
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(CreateEndpoint.EnvironmentId),
                 "Select an active environment whose website is not archived. An inactive environment "
-                + "cannot take new endpoints."));
+                + "cannot take new endpoints.")));
         }
 
         if (!await IsValidOwnerAsync(command.OwnerSubjectId, null, cancellationToken))
         {
-            return Validation(ValidationError.For(
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(UpdateEndpoint.OwnerSubjectId),
                 "Select an enabled user or team as the owner, or leave it blank to inherit the "
-                + "website owner. A disabled owner cannot own records."));
+                + "website owner. A disabled owner cannot own records.")));
         }
 
         var exception = DecideHttpException(url.NormalizedUrl!, command.HttpExceptionReason, environment.IsProduction, access, null);
         if (exception.Error is not null)
         {
-            return Validation(ValidationError.For(nameof(UpdateEndpoint.HttpExceptionReason), exception.Error));
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
+                nameof(UpdateEndpoint.HttpExceptionReason), exception.Error)));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -99,7 +96,8 @@ internal sealed class EndpointRegistryService(
             command.TargetAuthorizationExpiresAt, command.IsEnabled, url, null, now);
         if (authorization.Error is not null)
         {
-            return Validation(ValidationError.For(nameof(UpdateEndpoint.TargetAuthorizationEvidence), authorization.Error));
+            return new RegistryCreateCompleted(Validation(ValidationError.For(
+                nameof(UpdateEndpoint.TargetAuthorizationEvidence), authorization.Error)));
         }
 
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
@@ -127,13 +125,14 @@ internal sealed class EndpointRegistryService(
                 ToAudit(endpoint, urlChanged: true, httpExceptionChanged: exception.Reason is not null,
                     targetAuthorizationChanged: authorization.Changed, now, pageAudit),
                 cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            return RegistryMutationResult.Success(endpoint.Id);
+            return new RegistryCreateCompleted(RegistryMutationResult.Success(endpoint.Id));
         }
         catch (DbUpdateException exceptionError) when (IsDuplicate(exceptionError))
         {
-            return await RollBackDuplicateAsync(
-                transaction, command.EnvironmentId, url.NormalizedUrl!, url.NormalizedUrlHash!, cancellationToken);
+            return new RegistryCreateDuplicateResult(new EndpointUrlDuplicate(
+                command.EnvironmentId,
+                url.NormalizedUrl!,
+                url.NormalizedUrlHash!));
         }
     }
 
@@ -572,6 +571,62 @@ internal sealed class EndpointRegistryService(
 
     private static string? NormalizeExpectedHost(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
+
+    private static EndpointCreatePreparation PrepareCreate(
+        CreateEndpoint command,
+        RegistryAccessContext access)
+    {
+        if (!RegistryVisibility.CanManage(access))
+        {
+            return new(null, null, null, Forbidden());
+        }
+
+        var url = EndpointUrlNormalizer.Normalize(command.Url);
+        if (!url.Succeeded)
+        {
+            return new(null, null, null, Validation(url.Errors.Select(error =>
+                ValidationError.For(nameof(CreateEndpoint.Url), error))));
+        }
+
+        if (DestinationHostPolicy.IsDefinitelyUnreachable(url.NormalizedHost, out var unreachable))
+        {
+            return new(null, null, null,
+                Validation(ValidationError.For(nameof(CreateEndpoint.Url), unreachable!)));
+        }
+
+        var interval = DecideIntervalOverride(command.IntervalMinutesOverride, access, null);
+        if (interval.Error is not null)
+        {
+            return new(null, null, null, Validation(ValidationError.For(
+                nameof(UpdateEndpoint.IntervalMinutesOverride), interval.Error)));
+        }
+
+        var thresholds = ResponseThresholdOverride.Decide(
+            command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
+        if (thresholds.Error is not null)
+        {
+            return new(null, null, null, Validation(ValidationError.For(
+                nameof(UpdateEndpoint.WarningThresholdMsOverride), thresholds.Error)));
+        }
+
+        if (ValidateSeoPolicy(command.SeoIndexingExpectation, command.SeoExpectedCanonicalHost) is { } seoError)
+        {
+            return new(null, null, null, Validation(ValidationError.For(
+                nameof(UpdateEndpoint.SeoIndexingExpectation), seoError)));
+        }
+
+        if (PageAuditConfiguration.Validate(
+            command.PageAuditEnabled,
+            command.PageAuditSchedulingEnabled,
+            command.PageAuditIntervalHours,
+            url.NormalizedUrl!) is { } pageAuditError)
+        {
+            return new(null, null, null, Validation(ValidationError.For(
+                nameof(UpdateEndpoint.PageAuditIntervalHours), pageAuditError)));
+        }
+
+        return new(url, interval, thresholds, null);
+    }
 
     private static string? ValidateSeoPolicy(string expectation, string? expectedHost)
     {
@@ -1158,4 +1213,10 @@ internal sealed class EndpointRegistryService(
         TargetAuthorizationEvidence? ToRevoke,
         bool Changed,
         string? Error);
+
+    private sealed record EndpointCreatePreparation(
+        EndpointUrlNormalizationResult? Url,
+        IntervalOverrideDecision? Interval,
+        ResponseThresholdDecision? Thresholds,
+        RegistryMutationResult? Failure);
 }
