@@ -18,46 +18,19 @@ public sealed class IncidentListViewModelTests
             unacknowledgedOnly,
             IncidentListViewModel.Describe(DateTimeOffset.UtcNow, status, severity, unacknowledgedOnly));
 
-    [Fact]
-    public void HasFilters_IsFalse_WhenNothingApplied()
-    {
-        Create().HasFilters.Should().BeFalse();
-    }
-
-    [Fact]
-    public void HasFilters_IsFalse_WhenStatusAndSeverityAreWhitespace()
-    {
-        Create(status: "   ", severity: " ").HasFilters.Should().BeFalse();
-        Create(status: "\t", severity: "\n").HasFilters.Should().BeFalse();
-    }
-
     [Theory]
-    [InlineData("Open")]
-    [InlineData("Closed")]
-    [InlineData("InProgress")]
-    public void HasFilters_IsTrue_WhenStatusSet(string status)
+    [InlineData(null, null, false, false)]
+    [InlineData("   ", "\t", false, false)]
+    [InlineData("Open", null, false, true)]
+    [InlineData(null, "Critical", false, true)]
+    [InlineData(null, null, true, true)]
+    public void HasFilters_ReportsWhetherAnyEffectiveFilterIsApplied(
+        string? status,
+        string? severity,
+        bool unacknowledgedOnly,
+        bool expected)
     {
-        Create(status: status).HasFilters.Should().BeTrue();
-    }
-
-    [Theory]
-    [InlineData("Critical")]
-    [InlineData("Warning")]
-    public void HasFilters_IsTrue_WhenSeveritySet(string severity)
-    {
-        Create(severity: severity).HasFilters.Should().BeTrue();
-    }
-
-    [Fact]
-    public void HasFilters_IsTrue_WhenUnacknowledgedOnly()
-    {
-        Create(unacknowledgedOnly: true).HasFilters.Should().BeTrue();
-    }
-
-    [Fact]
-    public void HasFilters_IsTrue_WhenAnyFilterSet()
-    {
-        Create(status: "Open", severity: "Critical", unacknowledgedOnly: true).HasFilters.Should().BeTrue();
+        Create(status, severity, unacknowledgedOnly).HasFilters.Should().Be(expected);
     }
 
     [Fact]
