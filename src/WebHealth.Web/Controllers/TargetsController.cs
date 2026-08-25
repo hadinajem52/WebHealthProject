@@ -18,7 +18,8 @@ public sealed class TargetsController(
     ITargetRegistryReader targetReader,
     IEnvironmentRegistryService environmentService,
     IEndpointRegistryService endpointService,
-    ICheckHistoryReader checkHistoryReader) : Controller
+    ICheckHistoryReader checkHistoryReader,
+    ITargetAuthorizationService targetAuthorization) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Endpoints(string? search, CancellationToken cancellationToken)
@@ -66,12 +67,14 @@ public sealed class TargetsController(
 
         var latestCheck = await checkHistoryReader.FindLatestForEndpointAsync(id, access, cancellationToken);
         var certificate = await targetReader.FindCertificateStatusAsync(id, access, cancellationToken);
+        var testBlock = await targetAuthorization.DescribeTestBlockAsync(id, access, cancellationToken);
         return View(new EndpointDetailsViewModel(
             endpoint,
             CanManage(access),
             User.IsInRole(ApplicationRoles.Administrator),
             latestCheck,
-            certificate ?? CertificateStatus.NotApplicable));
+            certificate ?? CertificateStatus.NotApplicable,
+            testBlock));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]

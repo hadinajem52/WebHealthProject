@@ -280,6 +280,34 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     }
 
     [Fact]
+    public async Task EndpointDetail_ExplainsWhyMonitoringIsNotEligible()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var content = await client.GetStringAsync(
+            $"/Targets/Endpoint/{EmptyTargetRegistryReader.BlockedEndpoint.Id}");
+
+        Assert.Contains("Not eligible", content, StringComparison.Ordinal);
+        Assert.Contains(
+            "The website this endpoint belongs to is disabled, which stops monitoring for every endpoint under it.",
+            content,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateEndpoint_CopyNamesTheTestingEvidenceRequirement()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+
+        var content = await client.GetStringAsync(
+            $"/Targets/CreateEndpoint?environmentId={EmptyTargetRegistryReader.Environment.Id}");
+
+        Assert.Contains("To create it enabled, enter the URL and record", content, StringComparison.Ordinal);
+        Assert.Contains("permission to test the target", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("Only the URL is required", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ErrorPage_UsesTheSharedShellAndTheErrorStateComponent()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);

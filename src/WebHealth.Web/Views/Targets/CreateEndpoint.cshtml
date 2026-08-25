@@ -15,8 +15,8 @@
     
     <p class="card__subtitle" id="create-endpoint-label">
         Adds an endpoint to <strong>@Model.WebsiteName / @Model.EnvironmentName</strong> and
-        creates its HTTP availability policy. Only the URL is required &mdash; everything else has
-        a working default you can change later.
+        creates its HTTP availability policy. To create it enabled, enter the URL and record
+        permission to test the target. The remaining settings have working defaults you can change later.
     </p>
 
     <form asp-action="CreateEndpoint" method="post" class="form-stack" id="ajax-form-region" data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region">

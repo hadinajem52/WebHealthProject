@@ -69,6 +69,20 @@ internal sealed class EmptyReportingReader : IReportingReader
 
 internal sealed class EmptyRegistryReader : IRegistryReader
 {
+    public static WebsiteDetails Website { get; } = new(
+        Guid.Parse("6f1c9a20-0000-0000-0000-000000000003"),
+        Guid.Parse("6f1c9a20-0000-0000-0000-000000000002"),
+        "Example client",
+        "Example",
+        Guid.Parse("6f1c9a20-0000-0000-0000-000000000006"),
+        "Example owner",
+        "ASP.NET Core",
+        IsEnabled: false,
+        IsDeleted: false,
+        Version: 1,
+        ActiveEnvironmentCount: 1,
+        Tags: []);
+
     public Task<IReadOnlyList<ClientListItem>> ListClientsAsync(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
@@ -105,7 +119,7 @@ internal sealed class EmptyRegistryReader : IRegistryReader
         Guid websiteId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<WebsiteDetails?>(null);
+        Task.FromResult<WebsiteDetails?>(websiteId == Website.Id ? Website : null);
 
     public Task<IReadOnlyList<RegistryOwnerOption>> ListOwnersAsync(
         Guid? includeOwnerSubjectId = null,
@@ -131,6 +145,53 @@ internal sealed class EmptyIncidentReader : IIncidentReader
 
 internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
 {
+    public static EnvironmentDetails Environment { get; } = new(
+        Guid.Parse("6f1c9a20-0000-0000-0000-000000000004"),
+        EmptyRegistryReader.Website.Id,
+        EmptyRegistryReader.Website.Name,
+        "Production",
+        EnvironmentTypes.Production,
+        IsProduction: true,
+        "https://example.com/",
+        IsActive: true,
+        IsDeleted: false,
+        Version: 1,
+        Endpoints: []);
+
+    public static EndpointDetails BlockedEndpoint { get; } = new(
+        Id: Guid.Parse("6f1c9a20-0000-0000-0000-000000000005"),
+        EnvironmentId: Environment.Id,
+        EnvironmentName: Environment.Name,
+        IsProduction: Environment.IsProduction,
+        WebsiteId: EmptyRegistryReader.Website.Id,
+        WebsiteName: EmptyRegistryReader.Website.Name,
+        DisplayUrl: "https://example.com/health",
+        NormalizedUrl: "https://example.com/health",
+        NormalizationVersion: 1,
+        OwnerSubjectId: EmptyRegistryReader.Website.OwnerSubjectId,
+        OwnerName: EmptyRegistryReader.Website.OwnerName,
+        InheritsWebsiteOwner: true,
+        IsEnabled: true,
+        IsDeleted: false,
+        HasHttpException: false,
+        HttpExceptionReason: null,
+        HasTargetAuthorization: true,
+        TargetAuthorizationKind: TargetAuthorizationKinds.Owned,
+        TargetAuthorizationEvidence: "Owned test target",
+        TargetAuthorizationExpiresAt: null,
+        Version: 1,
+        MonitorType: "Http",
+        IntervalSeconds: 300,
+        IntervalMinutesOverride: null,
+        WarningThresholdMs: 1500,
+        CriticalThresholdMs: 3000,
+        HasThresholdOverride: false,
+        TimeoutSeconds: 15,
+        MonitorEnabled: true,
+        SchedulingEnabled: true,
+        IsMonitoringEligible: false,
+        CanTest: false);
+
     public Task<IReadOnlyList<EnvironmentListItem>> ListEnvironmentsAsync(
         Guid websiteId,
         RegistryAccessContext access,
@@ -146,7 +207,7 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
         Guid environmentId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<EnvironmentDetails?>(null);
+        Task.FromResult<EnvironmentDetails?>(environmentId == Environment.Id ? Environment : null);
 
     public Task<IReadOnlyList<EndpointListItem>> ListEndpointsAsync(
         Guid environmentId,
@@ -178,7 +239,7 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
         Guid endpointId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<EndpointDetails?>(null);
+        Task.FromResult<EndpointDetails?>(endpointId == BlockedEndpoint.Id ? BlockedEndpoint : null);
 
     public Task<CertificateStatus?> FindCertificateStatusAsync(
         Guid endpointId,

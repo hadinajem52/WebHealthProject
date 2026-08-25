@@ -37,6 +37,14 @@
 
                 @if (Model.CanManage && !website.IsDeleted)
                 {
+                    <a class="button button--secondary"
+                       asp-controller="Targets"
+                       asp-action="CreateEnvironment"
+                       asp-route-websiteId="@website.Id">
+                        @await Html.PartialAsync("_Icon", "plus")
+                        <span>Add environment</span>
+                    </a>
+
                     <a class="button button--primary" asp-action="EditWebsite" asp-route-id="@website.Id">
                         @await Html.PartialAsync("_Icon", "pencil")
                         <span>Edit website</span>

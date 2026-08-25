@@ -13,6 +13,9 @@
         : Model.Endpoint.IsDeleted ? "endpoint is archived"
         : !Model.Endpoint.IsEnabled ? "endpoint is disabled"
         : "you are not authorized to test this target";
+    var monitoringBlockReason = Model.Endpoint.IsMonitoringEligible
+        ? null
+        : EndpointTestBlockDisplay.Describe(Model.TestBlock, "monitoring");
 
     var endpointStatus = Model.Endpoint.IsDeleted ? "danger"
         : Model.Endpoint.IsEnabled ? "success"
@@ -252,9 +255,15 @@
                         <span>Effective monitoring</span>
                     </span>
                     <span class="detail-list__value">
-                        @(!Model.Endpoint.SchedulingEnabled ? "Manual runs only"
-                            : !Model.Endpoint.MonitorEnabled ? "Paused — manual runs only"
-                            : Model.Endpoint.IsMonitoringEligible ? "Eligible" : "Not eligible")
+                        <span>
+                            @(!Model.Endpoint.SchedulingEnabled ? "Manual runs only"
+                                : !Model.Endpoint.MonitorEnabled ? "Paused — manual runs only"
+                                : Model.Endpoint.IsMonitoringEligible ? "Eligible" : "Not eligible")
+                        </span>
+                        @if (monitoringBlockReason is not null)
+                        {
+                            <span class="detail-list__note">@monitoringBlockReason</span>
+                        }
                     </span>
                 </div>
             </li>

@@ -18,7 +18,8 @@ public sealed record EndpointDetailsViewModel(
     bool CanManage,
     bool CanPurge,
     CheckHistoryItem? LatestCheck,
-    CertificateStatus Certificate);
+    CertificateStatus Certificate,
+    EndpointTestBlock TestBlock);
 public sealed record RegistryEndpointListViewModel(IReadOnlyList<RegistryEndpointItem> Endpoints, string? Search);
 public sealed record TargetArchiveViewModel(
     IReadOnlyList<EnvironmentListItem> Environments,

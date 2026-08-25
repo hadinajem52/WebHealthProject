@@ -311,5 +311,7 @@ internal sealed class PermissiveTargetAuthorizationService : ITargetAuthorizatio
         Guid endpointId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult(EndpointTestBlock.None);
+        Task.FromResult(endpointId == EmptyTargetRegistryReader.BlockedEndpoint.Id
+            ? EndpointTestBlock.WebsiteDisabled
+            : EndpointTestBlock.None);
 }

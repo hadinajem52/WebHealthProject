@@ -117,6 +117,31 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
     }
 
     [Theory]
+    [InlineData(ApplicationRoles.Administrator, true)]
+    [InlineData(ApplicationRoles.Operations, true)]
+    [InlineData(ApplicationRoles.DeveloperSupport, false)]
+    [InlineData(ApplicationRoles.Viewer, false)]
+    public async Task WebsiteDetail_OffersTheDirectEnvironmentActionOnlyToManagers(
+        string role,
+        bool shouldOfferAction)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var html = await client.GetStringAsync($"/Registry/Website/{EmptyRegistryReader.Website.Id}");
+        var action = $"/Targets/CreateEnvironment?websiteId={EmptyRegistryReader.Website.Id}";
+
+        if (shouldOfferAction)
+        {
+            html.Should().Contain(action);
+            html.Should().Contain("Add environment");
+        }
+        else
+        {
+            html.Should().NotContain(action);
+        }
+    }
+
+    [Theory]
     [InlineData(ApplicationRoles.Administrator, HttpStatusCode.OK)]
     [InlineData(ApplicationRoles.Operations, HttpStatusCode.OK)]
     [InlineData(ApplicationRoles.DeveloperSupport, HttpStatusCode.OK)]
