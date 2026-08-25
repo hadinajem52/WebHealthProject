@@ -1,6 +1,6 @@
 # Detail Page UI Pattern
 
-**Status:** Implemented on `Views/Targets/Endpoint.cshtml`. Not yet applied to the other detail pages listed in §8.
+**Status:** Implemented across the registry and operational detail pages tracked in §8. The final legacy `registry-facts` page, `Views/Targets/Environment.cshtml`, migrated during the endpoint-first Phase 6 polish pass.
 **Figma reference:** [Purity UI — Endpoint, node `1665:345`](https://www.figma.com/design/cjTsi6qaX3bH0l3a4vF7Jm/Purity-UI-Dashboard---Chakra-UI-Dashboard--Community-?node-id=1665-345)
 **Extends:** [`../phase-0/UI_Direction.md`](../phase-0/UI_Direction.md). Nothing here supersedes semantic HTML, server-side authorization, anti-forgery, or accessibility requirements.
 
@@ -219,13 +219,10 @@ Already migrated: `Views/Targets/Endpoint.cshtml`, `Views/Checks/Check.cshtml`,
 (header and eyebrow only; the table stays a `.data-table`) on `Views/Checks/History.cshtml`,
 `Views/Maintenance/Index.cshtml` and `Views/Maintenance/Archived.cshtml`.
 
-| Page | Uses |
-|---|---|
-| `Views/Registry/Website.cshtml` | `registry-facts`, `registry-lifecycle` |
-| `Views/Registry/Client.cshtml` | `registry-facts`, `registry-lifecycle` |
-| `Views/Targets/Environment.cshtml` | `registry-facts`, `registry-lifecycle` |
-| `Views/Crawl/Run.cshtml`, `Views/Crawl/Index.cshtml` | `registry-facts` |
-| `Views/PageAudits/Index.cshtml` | `registry-facts` |
+Also migrated: `Views/Registry/Website.cshtml`, `Views/Registry/Client.cshtml`, and
+`Views/Targets/Environment.cshtml`. The Crawl and PageSpeed views no longer use either legacy
+class; their current run and list layouts remain appropriate to their records. No page under
+`Views` now uses `registry-facts` or `registry-lifecycle`.
 
 Checklist per page:
 

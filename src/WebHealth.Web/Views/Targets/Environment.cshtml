@@ -1,32 +1,238 @@
 @model EnvironmentDetailsViewModel
-@{ViewData.SetTitle(Model.Environment.Name); ViewData.SetBreadcrumbs(
-    Breadcrumbs.Registry(Url),
-    Breadcrumbs.Websites(Url),
-    Breadcrumbs.Website(Url, Model.Environment.WebsiteId, Model.Environment.WebsiteName),
-    Breadcrumbs.Environments(Url, Model.Environment.WebsiteId),
-    new BreadcrumbItem(Model.Environment.Name));}
-<div id="ajax-page" data-ajax-region>
-<section class="card">
-    <div class="page-intro"><div><h2 class="card__title">@Model.Environment.Name</h2><p class="card__subtitle">@Model.Environment.WebsiteName · @Model.Environment.EnvironmentType · Version @Model.Environment.Version</p></div><div class="form-actions">@if (Model.CanManage && !Model.Environment.IsDeleted)
-    {
-        @if (Model.Environment.IsActive)
+@{
+    ViewData.SetTitle(Model.Environment.Name);
+    ViewData.SetBreadcrumbs(
+        Breadcrumbs.Registry(Url),
+        Breadcrumbs.Websites(Url),
+        Breadcrumbs.Website(Url, Model.Environment.WebsiteId, Model.Environment.WebsiteName),
+        Breadcrumbs.Environments(Url, Model.Environment.WebsiteId),
+        new BreadcrumbItem(Model.Environment.Name));
+
+    var environment = Model.Environment;
+    var environmentTone = environment.IsDeleted ? StatusBadges.Danger
+        : environment.IsActive ? StatusBadges.Success
+        : StatusBadges.Warning;
+    var environmentState = environment.IsDeleted ? "Archived"
+        : environment.IsActive ? "Active"
+        : "Disabled";
+}
+
+<div id="ajax-page" class="stack" data-ajax-region>
+    <section class="card" aria-labelledby="environment-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="environment-heading">@environment.Name</h2>
+                <p class="card__status" data-status="@environmentTone">
+                    @await Html.PartialAsync("_Icon", StatusBadges.Icon(environmentTone))
+                    <span>Environment &middot; @environmentState</span>
+                </p>
+            </div>
+
+            <div class="form-actions">
+                @if (Model.CanManage && environment.IsActive && !environment.IsDeleted)
+                {
+                    <a class="button button--primary"
+                       asp-action="RegisterEndpoint"
+                       asp-route-clientId="@environment.ClientId"
+                       asp-route-websiteId="@environment.WebsiteId"
+                       asp-route-environmentId="@environment.Id">
+                        @await Html.PartialAsync("_Icon", "plus")
+                        <span>Register endpoint</span>
+                    </a>
+                }
+
+                @if (Model.CanManage && !environment.IsDeleted)
+                {
+                    <a class="button button--secondary" asp-action="EditEnvironment" asp-route-id="@environment.Id">
+                        @await Html.PartialAsync("_Icon", "pencil")
+                        <span>Edit environment</span>
+                    </a>
+                }
+
+                @if (Model.CanManage)
+                {
+                    <div class="action-menu" data-shell-menu data-open="false">
+                        <button type="button"
+                                class="button button--secondary"
+                                data-shell-menu-toggle
+                                aria-controls="environment-actions-menu"
+                                aria-expanded="false"
+                                aria-haspopup="true">
+                            @await Html.PartialAsync("_Icon", "settings")
+                            <span>Actions</span>
+                            <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        </button>
+
+                        <div class="action-menu__panel" id="environment-actions-menu" data-shell-menu-panel>
+                            @if (environment.IsDeleted)
+                            {
+                                <form asp-action="RestoreEnvironment" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                    <input type="hidden" name="id" value="@environment.Id" />
+                                    <input type="hidden" name="version" value="@environment.Version" />
+                                    <button class="action-menu__item" type="submit"
+                                            title="Restore returns this environment in a disabled state.">
+                                        @await Html.PartialAsync("_Icon", "restore")
+                                        <span>Restore environment</span>
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                @if (environment.IsActive)
+                                {
+                                    <form asp-action="DisableEnvironment" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                        <input type="hidden" name="id" value="@environment.Id" />
+                                        <input type="hidden" name="version" value="@environment.Version" />
+                                        <button class="action-menu__item" type="submit">
+                                            @await Html.PartialAsync("_Icon", "power")
+                                            <span>Disable environment</span>
+                                        </button>
+                                    </form>
+                                    <hr class="action-menu__separator" />
+                                }
+                                <form asp-action="DeleteEnvironment" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                    <input type="hidden" name="id" value="@environment.Id" />
+                                    <input type="hidden" name="version" value="@environment.Version" />
+                                    <button class="action-menu__item action-menu__item--danger" type="submit"
+                                            title="Archiving retains endpoint history and audit evidence.">
+                                        @await Html.PartialAsync("_Icon", "archive")
+                                        <span>Archive environment</span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
+            </div>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "building")</span>
+                            <span>Website</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <a asp-controller="Registry" asp-action="Website" asp-route-id="@environment.WebsiteId">@environment.WebsiteName</a>
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "settings")</span>
+                            <span>Environment type</span>
+                        </span>
+                        <span class="detail-list__value">@environment.EnvironmentType</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                            <span>Production</span>
+                        </span>
+                        <span class="detail-list__value">@(environment.IsProduction ? "Yes" : "No")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "link")</span>
+                            <span>Base URL</span>
+                        </span>
+                        <span class="detail-list__value target-url">@(environment.BaseUrl ?? "Not set")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "key")</span>
+                            <span>Version</span>
+                        </span>
+                        <span class="detail-list__value">@environment.Version</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="environment-endpoints-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="environment-endpoints-heading">Endpoints</h2>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "activity")
+                    <span>@environment.Endpoints.Count endpoint@(environment.Endpoints.Count == 1 ? null : "s") in this environment</span>
+                </p>
+            </div>
+        </div>
+
+        @if (environment.Endpoints.Count == 0)
         {
-            <a class="button button--primary"
-               asp-action="RegisterEndpoint"
-               asp-route-clientId="@Model.Environment.ClientId"
-               asp-route-websiteId="@Model.Environment.WebsiteId"
-               asp-route-environmentId="@Model.Environment.Id">
-                @await Html.PartialAsync("_Icon", "plus")
-                <span>Register endpoint</span>
-            </a>
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No active endpoints",
+                "Register an endpoint here when this environment is ready to be monitored.",
+                "registry",
+                Model.CanManage && environment.IsActive && !environment.IsDeleted ? "Register endpoint" : null,
+                Model.CanManage && environment.IsActive && !environment.IsDeleted
+                    ? Url.Action("RegisterEndpoint", new
+                    {
+                        clientId = environment.ClientId,
+                        websiteId = environment.WebsiteId,
+                        environmentId = environment.Id
+                    })
+                    : null))
         }
-        <a class="button button--secondary" asp-action="EditEnvironment" asp-route-id="@Model.Environment.Id">
-            @await Html.PartialAsync("_Icon", "pencil")
-            <span>Edit environment</span>
-        </a>
-    }</div></div>
-    <dl class="registry-facts"><div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Environment.IsDeleted ? "danger" : Model.Environment.IsActive ? "success" : "warning")">@(Model.Environment.IsDeleted ? "Deleted" : Model.Environment.IsActive ? "Active" : "Disabled")</span></dd></div><div><dt>Production</dt><dd>@(Model.Environment.IsProduction ? "Yes" : "No")</dd></div><div><dt>Base URL</dt><dd class="target-url">@(Model.Environment.BaseUrl ?? "Not set")</dd></div></dl>
-    @if (Model.CanManage){<div class="registry-lifecycle">@if(Model.Environment.IsDeleted){<form asp-action="RestoreEnvironment" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Environment.Id"/><input type="hidden" name="version" value="@Model.Environment.Version"/><button class="button button--primary">Restore environment</button></form>}else{@if(Model.Environment.IsActive){<form asp-action="DisableEnvironment" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Environment.Id"/><input type="hidden" name="version" value="@Model.Environment.Version"/><button class="button button--secondary">Disable</button></form>}<form asp-action="DeleteEnvironment" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Environment.Id"/><input type="hidden" name="version" value="@Model.Environment.Version"/><button class="button button--danger">Archive environment</button></form>}</div>}
-</section>
-<section class="card"><div class="page-intro"><div><h2 class="card__title">Endpoints</h2><p class="card__subtitle">Configuration only—no requests or scheduled work are produced in Phase 2.</p></div></div>@if(Model.Environment.Endpoints.Count==0){<p class="card__subtitle">No active endpoints.</p>}else{<div class="table-scroll"><table class="data-table"><thead><tr><th>URL</th><th>Owner</th><th>Monitor</th><th>Status</th><th>Actions</th></tr></thead><tbody>@foreach(var endpoint in Model.Environment.Endpoints){<tr><td class="target-url" data-label="URL"><span class="data-table__primary">@endpoint.DisplayUrl</span></td><td data-label="Owner">@endpoint.OwnerName @(endpoint.InheritsWebsiteOwner ? "(inherited)" : "")</td><td data-label="Monitor">@endpoint.MonitorType</td><td data-label="Status"><span class="badge" data-status="@(endpoint.IsEnabled ? "success" : "warning")">@(endpoint.IsEnabled ? "Enabled" : "Disabled")</span></td><td class="data-table__action" data-label="Actions"><a asp-action="Endpoint" asp-route-id="@endpoint.Id">Details</a></td></tr>}</tbody></table></div>}</section>
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Endpoints belonging to this environment</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">URL</th>
+                            <th scope="col">Owner</th>
+                            <th scope="col">Monitor</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var endpoint in environment.Endpoints)
+                    {
+                        var endpointTone = endpoint.IsEnabled ? StatusBadges.Success : StatusBadges.Warning;
+                        <tr>
+                            <td class="target-url" data-label="URL">
+                                <span class="data-table__primary">@endpoint.DisplayUrl</span>
+                            </td>
+                            <td data-label="Owner">
+                                <span>@endpoint.OwnerName</span>
+                                @if (endpoint.InheritsWebsiteOwner)
+                                {
+                                    <span class="data-table__secondary">Website inherited</span>
+                                }
+                            </td>
+                            <td data-label="Monitor">@endpoint.MonitorType</td>
+                            <td data-label="Status">
+                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                    endpointTone,
+                                    endpoint.IsEnabled ? "Enabled" : "Disabled"))
+                            </td>
+                            <td class="data-table__action" data-label="Details">
+                                <a asp-action="Endpoint" asp-route-id="@endpoint.Id">View</a>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 </div>

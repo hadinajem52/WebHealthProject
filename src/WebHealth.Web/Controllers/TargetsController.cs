@@ -26,15 +26,21 @@ public sealed class TargetsController(
     [HttpGet]
     public async Task<IActionResult> Endpoints(
         [FromQuery] EndpointRegistryFilter filter,
+        string? groupBy,
         CancellationToken cancellationToken)
     {
         var access = GetAccess();
+        var grouping = groupBy is not null
+            && EndpointRegistryGroupings.All.Contains(groupBy, StringComparer.Ordinal)
+            ? groupBy
+            : EndpointRegistryGroupings.None;
         return View(new RegistryEndpointListViewModel(
             await targetReader.ListAllEndpointsAsync(access, filter, cancellationToken),
             filter,
             await registryReader.ListClientsAsync(access, cancellationToken),
             await registryReader.ListWebsitesAsync(access, cancellationToken: cancellationToken),
             await targetReader.ListAllEnvironmentsAsync(access, cancellationToken),
+            grouping,
             CanManage(access)));
     }
 

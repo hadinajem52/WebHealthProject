@@ -2860,6 +2860,104 @@ code,
     margin-left: auto;
     gap: var(--space-2);
 }
+
+.inventory-view-tools {
+    display: none;
+}
+
+.js .inventory-view-tools {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border-subtle);
+    margin-top: var(--space-4);
+    gap: var(--space-4);
+}
+
+.inventory-view-tools__copy {
+    display: flex;
+    min-width: 11rem;
+    flex-direction: column;
+    color: var(--text-secondary);
+    font-size: var(--font-size-xs);
+    gap: var(--space-1);
+}
+
+.inventory-view-tools__copy strong {
+    color: var(--text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.inventory-view-tools__controls {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: var(--space-2);
+}
+
+.inventory-view-tools__controls .form-field {
+    min-width: 12rem;
+    max-width: 18rem;
+    flex: 1 1 12rem;
+}
+
+.inventory-view-tools__controls input,
+.inventory-view-tools__controls select,
+.inventory-view-tools__controls .button {
+    height: 2.75rem;
+}
+
+.data-table__group th {
+    padding-top: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom-color: var(--border-strong);
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.data-table__group th span {
+    margin-left: var(--space-2);
+    color: var(--text-secondary);
+    font-weight: 400;
+    text-transform: none;
+}
+
+@media (max-width: 42em) {
+    .js .inventory-view-tools {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .inventory-view-tools__controls {
+        justify-content: stretch;
+    }
+
+    .inventory-view-tools__controls .form-field,
+    .inventory-view-tools__controls .button {
+        max-width: none;
+        flex: 1 1 100%;
+    }
+
+    .data-table .data-table__group {
+        padding: 0;
+        border-bottom: 0;
+        margin-top: var(--space-4);
+    }
+
+    .data-table .data-table__group th {
+        padding: var(--space-2) var(--space-3);
+    }
+
+    .data-table .data-table__group th::before {
+        display: none;
+    }
+}
 .ajax-messages:empty {
     display: none;
 }

@@ -2,6 +2,16 @@
 @{
     ViewData.SetTitle("Endpoints");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Endpoints"));
+    var endpointGroups = Model.Grouping switch
+    {
+        EndpointRegistryGroupings.Client => Model.Endpoints.GroupBy(endpoint => endpoint.ClientName),
+        EndpointRegistryGroupings.Website => Model.Endpoints.GroupBy(
+            endpoint => $"{endpoint.ClientName} / {endpoint.WebsiteName}"),
+        EndpointRegistryGroupings.Environment => Model.Endpoints.GroupBy(
+            endpoint => $"{endpoint.ClientName} / {endpoint.WebsiteName} / {endpoint.EnvironmentName}"),
+        _ => Model.Endpoints.GroupBy(_ => string.Empty)
+    };
+    var hasViewOptions = Model.Filter.HasValues || Model.Grouping != EndpointRegistryGroupings.None;
 }
 
 <div id="ajax-page" data-ajax-region>
@@ -24,7 +34,8 @@
         </div>
     </div>
 
-    <form method="get" class="filter-bar" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
+    <form method="get" class="filter-bar" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push"
+          data-endpoint-filter-form>
         <div class="form-field">
             <label for="search">Search</label>
             <input id="search" name="search" type="search" value="@Model.Filter.Search" placeholder="URL, website or client" />
@@ -77,12 +88,21 @@
                 <option value="@EndpointMonitoringMode.Disabled" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.Disabled)">Disabled</option>
             </select>
         </div>
+        <div class="form-field">
+            <label for="groupBy">Group results</label>
+            <select id="groupBy" name="groupBy">
+                <option value="@EndpointRegistryGroupings.None" selected="@(Model.Grouping == EndpointRegistryGroupings.None)">No grouping</option>
+                <option value="@EndpointRegistryGroupings.Client" selected="@(Model.Grouping == EndpointRegistryGroupings.Client)">Client</option>
+                <option value="@EndpointRegistryGroupings.Website" selected="@(Model.Grouping == EndpointRegistryGroupings.Website)">Website</option>
+                <option value="@EndpointRegistryGroupings.Environment" selected="@(Model.Grouping == EndpointRegistryGroupings.Environment)">Environment</option>
+            </select>
+        </div>
         <div class="filter-bar__actions">
             <button class="button button--primary" type="submit">
                 @await Html.PartialAsync("_Icon", "filter")
                 <span>Apply filters</span>
             </button>
-            @if (Model.Filter.HasValues)
+            @if (hasViewOptions)
             {
                 <a class="button button--secondary" asp-action="Endpoints" data-ajax-link data-ajax-target="#ajax-page">
                     @await Html.PartialAsync("_Icon", "close")
@@ -91,6 +111,39 @@
             }
         </div>
     </form>
+
+    <div class="inventory-view-tools" data-endpoint-saved-views>
+        <div class="inventory-view-tools__copy">
+            <strong>Saved views</strong>
+            <span>Keep named filter and grouping combinations on this browser.</span>
+        </div>
+        <div class="inventory-view-tools__controls">
+            <div class="form-field">
+                <label for="endpoint-view-name">View name</label>
+                <input id="endpoint-view-name" type="text" maxlength="40"
+                       placeholder="For example, paused production" data-endpoint-view-name />
+            </div>
+            <button class="button button--secondary" type="button" data-endpoint-view-save>
+                @await Html.PartialAsync("_Icon", "check")
+                <span>Save current</span>
+            </button>
+            <div class="form-field">
+                <label for="endpoint-saved-view">Open saved view</label>
+                <select id="endpoint-saved-view" data-endpoint-view-select>
+                    <option value="">Choose a saved view</option>
+                </select>
+            </div>
+            <button class="button button--secondary" type="button" data-endpoint-view-open disabled>
+                @await Html.PartialAsync("_Icon", "arrow-right")
+                <span>Open</span>
+            </button>
+            <button class="button button--secondary" type="button" data-endpoint-view-remove disabled>
+                @await Html.PartialAsync("_Icon", "trash")
+                <span>Remove</span>
+            </button>
+        </div>
+        <p class="visually-hidden" aria-live="polite" data-endpoint-view-status></p>
+    </div>
 
     @if (Model.Endpoints.Count == 0)
     {
@@ -117,24 +170,34 @@
                         <th><span class="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
-                <tbody>
-                @foreach (var endpoint in Model.Endpoints)
+                @foreach (var group in endpointGroups)
                 {
-                    <tr>
-                        <td data-label="Endpoint" class="target-url">@endpoint.DisplayUrl</td>
-                        <td data-label="Client">@endpoint.ClientName</td>
-                        <td data-label="Website">@endpoint.WebsiteName</td>
-                        <td data-label="Environment">@endpoint.EnvironmentName</td>
-                        <td data-label="Status"><span class="badge" data-status="@(endpoint.IsEnabled ? "success" : "warning")">@(endpoint.IsEnabled ? "Enabled" : "Disabled")</span></td>
-                        <td data-label="Monitoring"><span class="badge" data-status="@(endpoint.MonitoringMode == EndpointMonitoringMode.Scheduled ? StatusBadges.Success : endpoint.MonitoringMode == EndpointMonitoringMode.Disabled ? StatusBadges.Info : StatusBadges.Warning)">@(endpoint.MonitoringMode switch { EndpointMonitoringMode.Scheduled => "Monitored", EndpointMonitoringMode.Paused => "Paused", EndpointMonitoringMode.Disabled => "Disabled", _ => "Manual only" })</span></td>
-                        <td class="data-table__action" data-label="Actions">
-                            <div class="data-table__action-group">
-                                <a asp-action="Endpoint" asp-route-id="@endpoint.Id">Open<span class="visually-hidden"> @endpoint.DisplayUrl</span></a>
-                            </div>
-                        </td>
-                    </tr>
+                    var groupCount = group.Count();
+                    <tbody>
+                    @if (Model.Grouping != EndpointRegistryGroupings.None)
+                    {
+                        <tr class="data-table__group">
+                            <th colspan="7" scope="rowgroup">@group.Key <span>@groupCount endpoint@(groupCount == 1 ? null : "s")</span></th>
+                        </tr>
+                    }
+                    @foreach (var endpoint in group)
+                    {
+                        <tr>
+                            <td data-label="Endpoint" class="target-url">@endpoint.DisplayUrl</td>
+                            <td data-label="Client">@endpoint.ClientName</td>
+                            <td data-label="Website">@endpoint.WebsiteName</td>
+                            <td data-label="Environment">@endpoint.EnvironmentName</td>
+                            <td data-label="Status"><span class="badge" data-status="@(endpoint.IsEnabled ? "success" : "warning")">@(endpoint.IsEnabled ? "Enabled" : "Disabled")</span></td>
+                            <td data-label="Monitoring"><span class="badge" data-status="@(endpoint.MonitoringMode == EndpointMonitoringMode.Scheduled ? StatusBadges.Success : endpoint.MonitoringMode == EndpointMonitoringMode.Disabled ? StatusBadges.Info : StatusBadges.Warning)">@(endpoint.MonitoringMode switch { EndpointMonitoringMode.Scheduled => "Monitored", EndpointMonitoringMode.Paused => "Paused", EndpointMonitoringMode.Disabled => "Disabled", _ => "Manual only" })</span></td>
+                            <td class="data-table__action" data-label="Actions">
+                                <div class="data-table__action-group">
+                                    <a asp-action="Endpoint" asp-route-id="@endpoint.Id">Open<span class="visually-hidden"> @endpoint.DisplayUrl</span></a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
                 }
-                </tbody>
             </table>
         </div>
     }

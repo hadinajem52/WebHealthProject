@@ -150,6 +150,74 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
         Assert.DoesNotContain(EmptyTargetRegistryReader.Endpoint.DisplayUrl, content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task InventoryGroupingSurvivesAjaxAndRendersAnAccessibleGroup()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+
+        using var response = await client.GetAsync(
+            $"/Targets/Endpoints?groupBy={EndpointRegistryGroupings.Environment}");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        AssertSelected(content, EndpointRegistryGroupings.Environment);
+        Assert.Contains("class=\"data-table__group\"", content, StringComparison.Ordinal);
+        Assert.Contains("scope=\"rowgroup\"", content, StringComparison.Ordinal);
+        Assert.Contains("Example client / Example / Production", content, StringComparison.Ordinal);
+        Assert.Contains("1 endpoint", content, StringComparison.Ordinal);
+        Assert.Contains("Clear", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EndpointInventoryOffersBrowserLocalSavedViews()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var content = await client.GetStringAsync("/Targets/Endpoints");
+
+        Assert.Contains("data-endpoint-saved-views", content, StringComparison.Ordinal);
+        Assert.Contains("data-endpoint-view-save", content, StringComparison.Ordinal);
+        Assert.Contains("data-endpoint-view-open", content, StringComparison.Ordinal);
+        Assert.Contains("data-endpoint-view-remove", content, StringComparison.Ordinal);
+        Assert.Contains("on this browser", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StandaloneHierarchyCreationActionsAreSecondary()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+
+        var clients = await client.GetStringAsync("/Registry/Clients");
+        var websites = await client.GetStringAsync("/Registry/Websites");
+
+        Assert.Matches(
+            "<a(?=[^>]*class=\"button button--secondary\")(?=[^>]*href=\"/Registry/CreateClient\")[^>]*>",
+            clients);
+        Assert.Matches(
+            "<a(?=[^>]*class=\"button button--secondary\")(?=[^>]*href=\"/Registry/CreateWebsite\")[^>]*>",
+            websites);
+    }
+
+    [Fact]
+    public async Task EnvironmentUsesTheSharedDetailAndActionMenuPattern()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
+
+        var content = await client.GetStringAsync(
+            $"/Targets/Environment/{EmptyTargetRegistryReader.Environment.Id}");
+
+        Assert.Contains("class=\"card__status\"", content, StringComparison.Ordinal);
+        Assert.Contains("class=\"detail-list\"", content, StringComparison.Ordinal);
+        Assert.Contains("data-shell-menu", content, StringComparison.Ordinal);
+        Assert.Contains("action-menu__item--danger", content, StringComparison.Ordinal);
+        Assert.Contains("Environment type", content, StringComparison.Ordinal);
+        Assert.Contains("Base URL", content, StringComparison.Ordinal);
+        Assert.Contains("Version", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("registry-facts", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("registry-lifecycle", content, StringComparison.Ordinal);
+    }
+
     private static void AssertSelected(string content, string value) =>
         Assert.Matches(
             $"<option(?=[^>]*value=\"{Regex.Escape(value)}\")(?=[^>]*selected=\"selected\")[^>]*>",

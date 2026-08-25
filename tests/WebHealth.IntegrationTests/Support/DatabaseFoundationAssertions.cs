@@ -743,7 +743,7 @@ internal static class DatabaseFoundationAssertions
             .Should().Contain(item => item.Id == stagingHttpId);
         (await targetReader.ListAllEndpointsAsync(
                 administratorAccess,
-                new EndpointRegistryFilter { Search = "Health?q=A" }))
+                new EndpointRegistryFilter { Search = endpoint.DisplayUrl }))
             .Should().ContainSingle(item => item.Id == endpointId);
         database.ChangeTracker.Clear();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);

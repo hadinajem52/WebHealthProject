@@ -183,3 +183,161 @@ test('replacing a table region closes its active badge popup', () => {
     assert.equal(runtime.tooltip.hidden, true);
     assert.equal(runtime.tooltip.textContent, 'Removed detail');
 });
+
+function createInteractiveElement() {
+    const attributes = createAttributes();
+    const listeners = {};
+    return {
+        ...attributes,
+        disabled: false,
+        listeners,
+        textContent: '',
+        value: '',
+        addEventListener(name, handler) {
+            listeners[name] = handler;
+        },
+        focus() {}
+    };
+}
+
+function loadEndpointSavedViews() {
+    const storage = new Map();
+    const nameInput = createInteractiveElement();
+    const saveButton = createInteractiveElement();
+    const select = createInteractiveElement();
+    const openButton = createInteractiveElement();
+    const removeButton = createInteractiveElement();
+    const status = createInteractiveElement();
+    const options = [];
+    select.replaceChildren = function () {
+        options.length = 0;
+        select.value = '';
+    };
+    select.appendChild = function (option) {
+        options.push(option);
+    };
+
+    const filterForm = {
+        action: '/Targets/Endpoints',
+        values: [
+            ['search', 'health'],
+            ['enabled', 'true'],
+            ['groupBy', 'Environment']
+        ]
+    };
+    const region = {
+        querySelector(selector) {
+            return selector === '[data-endpoint-filter-form]' ? filterForm : null;
+        }
+    };
+    const controls = new Map([
+        ['[data-endpoint-view-name]', nameInput],
+        ['[data-endpoint-view-save]', saveButton],
+        ['[data-endpoint-view-select]', select],
+        ['[data-endpoint-view-open]', openButton],
+        ['[data-endpoint-view-remove]', removeButton],
+        ['[data-endpoint-view-status]', status]
+    ]);
+    const container = {
+        ...createAttributes(),
+        closest() {
+            return region;
+        },
+        querySelector(selector) {
+            return controls.get(selector) || null;
+        }
+    };
+    const documentElement = {
+        ...createAttributes(),
+        classList: { add() {} }
+    };
+    global.document = {
+        body: { appendChild() {} },
+        documentElement,
+        readyState: 'complete',
+        addEventListener() {},
+        createElement() {
+            return { textContent: '', value: '' };
+        },
+        querySelector() {
+            return null;
+        },
+        querySelectorAll(selector) {
+            return selector === '[data-endpoint-saved-views]' ? [container] : [];
+        }
+    };
+    let navigatedTo;
+    global.window = {
+        WebHealth: {},
+        innerWidth: 1200,
+        localStorage: {
+            getItem(key) {
+                return storage.get(key) || null;
+            },
+            setItem(key, value) {
+                storage.set(key, value);
+            }
+        },
+        location: {
+            href: 'https://localhost/Targets/Endpoints',
+            assign(value) {
+                navigatedTo = value;
+            }
+        },
+        addEventListener() {}
+    };
+    global.FormData = class {
+        constructor(form) {
+            this.values = form.values;
+        }
+
+        entries() {
+            return this.values[Symbol.iterator]();
+        }
+    };
+    const script = fs.readFileSync(
+        path.join(__dirname, '../../src/WebHealth.Web/wwwroot/js/shell.js'),
+        'utf8');
+    vm.runInThisContext(script);
+    return {
+        nameInput,
+        navigatedTo: () => navigatedTo,
+        openButton,
+        options,
+        removeButton,
+        saveButton,
+        select,
+        status,
+        storage
+    };
+}
+
+test('endpoint inventory views save, reopen, and remove the current query', () => {
+    const runtime = loadEndpointSavedViews();
+    runtime.nameInput.value = 'Production health';
+
+    runtime.saveButton.listeners.click();
+
+    const saved = JSON.parse(runtime.storage.get('webhealth.endpoint-inventory.views.v1'));
+    assert.deepEqual(saved, [{
+        name: 'Production health',
+        query: 'search=health&enabled=true&groupBy=Environment'
+    }]);
+    assert.equal(runtime.select.value, 'Production health');
+    assert.equal(runtime.openButton.disabled, false);
+    assert.match(runtime.status.textContent, /saved view/i);
+
+    runtime.openButton.listeners.click();
+
+    assert.equal(
+        runtime.navigatedTo(),
+        'https://localhost/Targets/Endpoints?search=health&enabled=true&groupBy=Environment');
+
+    runtime.removeButton.listeners.click();
+
+    assert.deepEqual(
+        JSON.parse(runtime.storage.get('webhealth.endpoint-inventory.views.v1')),
+        []);
+    assert.equal(runtime.select.value, '');
+    assert.equal(runtime.removeButton.disabled, true);
+});

@@ -26,7 +26,18 @@ public sealed record RegistryEndpointListViewModel(
     IReadOnlyList<ClientListItem> Clients,
     IReadOnlyList<WebsiteListItem> Websites,
     IReadOnlyList<EnvironmentListItem> Environments,
+    string Grouping,
     bool CanManage);
+
+public static class EndpointRegistryGroupings
+{
+    public const string None = nameof(None);
+    public const string Client = nameof(Client);
+    public const string Website = nameof(Website);
+    public const string Environment = nameof(Environment);
+
+    public static IReadOnlyList<string> All { get; } = [None, Client, Website, Environment];
+}
 public sealed record TargetArchiveViewModel(
     IReadOnlyList<EnvironmentListItem> Environments,
     IReadOnlyList<EndpointListItem> Endpoints,
