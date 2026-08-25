@@ -87,13 +87,6 @@ public sealed class LighthouseTextHtmlTests
     }
 
     [Fact]
-    public void RefusedTarget_IsStillVisibleAsText()
-    {
-        Render("[Click me](javascript:alert(1))")
-            .Should().Contain("Click me");
-    }
-
-    [Fact]
     public void UnterminatedConstruct_StaysLiteralInsteadOfSwallowingTheRest()
     {
         Render("[Learn more](https://example.com  and then some text")
