@@ -44,7 +44,7 @@ internal sealed class RobotsSnapshotConfiguration : IEntityTypeConfiguration<Rob
         builder.Property(snapshot => snapshot.Content).HasMaxLength(MaxContentLength);
         builder.Property(snapshot => snapshot.ConfiguredSitemapUrl).HasMaxLength(2048);
         builder.Property(snapshot => snapshot.CheckedSitemapUrl).HasMaxLength(2048);
-        builder.Property(snapshot => snapshot.ExceptionReason).HasMaxLength(500);
+        builder.Property(snapshot => snapshot.ExceptionReason).HasMaxLength(500);
         builder.Property(snapshot => snapshot.Version).IsConcurrencyToken();
 
         // The refresh job selects origins whose snapshot has expired, so that is the index.
