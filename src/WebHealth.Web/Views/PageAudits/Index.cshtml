@@ -607,7 +607,14 @@
                                                 <p class="audit-list__description">@Html.LighthouseText(item.Description)</p>
                                             }
                                         </div>
-                                        <div class="audit-list__value">@Html.LighthouseText(item.DisplayValue ?? item.Explanation ?? item.ErrorMessage)</div>
+                                        <div class="audit-list__value">
+                                            @if (item.DisplayValue is null && item.Explanation is null
+                                                 && !string.IsNullOrWhiteSpace(item.ErrorMessage))
+                                            {
+                                                <span class="audit-list__source">Google reported:</span>
+                                            }
+                                            @Html.LighthouseText(item.DisplayValue ?? item.Explanation ?? item.ErrorMessage, "—")
+                                        </div>
                                     </div>
                                 </li>
                             }

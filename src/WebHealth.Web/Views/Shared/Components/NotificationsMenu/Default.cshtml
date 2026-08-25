@@ -26,7 +26,7 @@
             <div>
                 <p class="app-notifications__title">Notifications</p>
                 <p class="app-notifications__subtitle">
-                    @(unread > 0 ? $"{unread} unread" : "You are all caught up")
+                    @(Model.IsUnavailable ? "Temporarily unavailable" : unread > 0 ? $"{unread} unread" : "You are all caught up")
                 </p>
             </div>
             @if (unread > 0)
@@ -43,7 +43,11 @@
             }
         </div>
 
-        @if (Model.Items.Count == 0)
+        @if (Model.IsUnavailable)
+        {
+            <p class="app-notifications__empty" role="alert">Notifications are temporarily unavailable. Refresh the page and try again.</p>
+        }
+        else if (Model.Items.Count == 0)
         {
             <p class="app-notifications__empty">Incident alerts addressed to you appear here.</p>
         }

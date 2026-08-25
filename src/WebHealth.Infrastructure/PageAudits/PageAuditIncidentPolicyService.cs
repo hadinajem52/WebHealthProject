@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.PageAudits;
@@ -17,6 +18,10 @@ internal sealed class PageAuditIncidentPolicyService(
         ToPolicy(await dbContext.PageAuditIncidentPolicies.AsNoTracking()
             .SingleAsync(policy => policy.EndpointId == endpointId, cancellationToken));
 
+    private const string ConcurrencyMessage =
+        "Someone else changed these settings after you opened them, so your change was not "
+        + "applied. The current values are shown below — reapply your change and save again.";
+
     public async Task<PageAuditIncidentPolicyUpdateResult> UpdateAsync(
         Guid endpointId,
         UpdatePageAuditIncidentPolicy command,
@@ -34,7 +39,7 @@ internal sealed class PageAuditIncidentPolicyService(
 
         if (entity.Version != command.Version)
         {
-            return new(false, true, current, ["These settings changed while you were editing them. Review the current values and save again."]);
+            return new(false, true, current, [ConcurrencyMessage]);
         }
 
         var before = ToAudit(current);
@@ -53,7 +58,7 @@ internal sealed class PageAuditIncidentPolicyService(
         {
             dbContext.ChangeTracker.Clear();
             var latest = await GetAsync(endpointId, cancellationToken);
-            return new(false, true, latest, ["These settings changed while you were editing them. Review the current values and save again."]);
+            return new(false, true, latest, [ConcurrencyMessage]);
         }
     }
 

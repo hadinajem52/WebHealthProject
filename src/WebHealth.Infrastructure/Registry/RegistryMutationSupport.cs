@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using WebHealth.Application;
 using WebHealth.Application.Registry;
 using WebHealth.Domain.Normalization;
 using WebHealth.Infrastructure.Persistence;
@@ -8,14 +9,20 @@ namespace WebHealth.Infrastructure.Registry;
 
 internal sealed class RegistryMutationSupport(ApplicationDbContext dbContext)
 {
-    public static List<string> ValidateName(string name)
+    public static List<ValidationError> ValidateName(string name) => ValidateName(name, "Name");
+
+    public static List<ValidationError> ValidateName(string name, string field)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            return ["Enter a name."];
+            return [ValidationError.For(field, "Enter a name.")];
         }
 
-        return name.Length > 200 ? ["The name cannot exceed 200 characters."] : [];
+        return name.Length > 200
+            ? [ValidationError.For(
+                field,
+                $"This name is {name.Length} characters. Shorten it to 200 or fewer.")]
+            : [];
     }
 
     public static string NormalizeOptionalText(string? value) => value?.Trim() ?? string.Empty;

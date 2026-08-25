@@ -65,8 +65,8 @@ public sealed class CrawlRunner(
         // testing of that target, and this method is the only door to it.
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
-            return CrawlManualResult.Rejected(
-                "You are not authorized to run a crawl against this endpoint.");
+            return CrawlManualResult.NotTestable(
+                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var endpoint = await MonitoringEligibility
@@ -177,8 +177,7 @@ public sealed class CrawlRunner(
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(run => run.Status, CrawlRunStatuses.Failed)
                 .SetProperty(run => run.StopReason, CrawlStopReasons.Failed)
-                .SetProperty(run => run.FailureReason,
-                    "No crawl worker is running on this instance, so the crawl was never started.")
+                .SetProperty(run => run.FailureReason, CrawlFailureCodes.WorkerUnavailable)
                 .SetProperty(run => run.FinishedAt, now),
                 cancellationToken);
         dbContext.ChangeTracker.Clear();

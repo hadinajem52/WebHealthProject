@@ -16,8 +16,6 @@ internal sealed class NotificationFeedReader(
 {
     private const int MaximumLimit = 50;
 
-    private static readonly NotificationFeed Empty = new([], 0);
-
     public async Task<NotificationFeed> GetForRecipientAsync(
         Guid userId,
         string? emailAddress,
@@ -27,7 +25,7 @@ internal sealed class NotificationFeedReader(
         var recipient = RecipientNormalizer.Normalize(emailAddress);
         if (recipient is null)
         {
-            return Empty;
+            return NotificationFeed.Empty;
         }
 
         // The panel renders on every authenticated page, so the page size is bounded here

@@ -10,47 +10,52 @@ public sealed class PageAuditIncidentSettingsViewModel
     public bool IncidentsEnabled { get; set; }
     public bool PerformanceScoreEnabled { get; set; }
 
-    [Range(0, 100)]
+    [Range(0, 100, ErrorMessage = "Enter a score between 0 and 100.")]
     public int PerformanceMinimumScore { get; set; }
 
     public bool AccessibilityScoreEnabled { get; set; }
 
-    [Range(0, 100)]
+    [Range(0, 100, ErrorMessage = "Enter a score between 0 and 100.")]
     public int AccessibilityMinimumScore { get; set; }
 
     public bool BestPracticesScoreEnabled { get; set; }
 
-    [Range(0, 100)]
+    [Range(0, 100, ErrorMessage = "Enter a score between 0 and 100.")]
     public int BestPracticesMinimumScore { get; set; }
 
     public bool SeoScoreEnabled { get; set; }
 
-    [Range(0, 100)]
+    [Range(0, 100, ErrorMessage = "Enter a score between 0 and 100.")]
     public int SeoMinimumScore { get; set; }
 
     public bool FirstContentfulPaintEnabled { get; set; }
 
-    [Range(typeof(decimal), "0", "600000")]
+    [Range(typeof(decimal), "0", "600000",
+        ErrorMessage = "Enter a value between 0 and 600000 milliseconds.")]
     public decimal FirstContentfulPaintMaximum { get; set; }
 
     public bool LargestContentfulPaintEnabled { get; set; }
 
-    [Range(typeof(decimal), "0", "600000")]
+    [Range(typeof(decimal), "0", "600000",
+        ErrorMessage = "Enter a value between 0 and 600000 milliseconds.")]
     public decimal LargestContentfulPaintMaximum { get; set; }
 
     public bool TotalBlockingTimeEnabled { get; set; }
 
-    [Range(typeof(decimal), "0", "600000")]
+    [Range(typeof(decimal), "0", "600000",
+        ErrorMessage = "Enter a value between 0 and 600000 milliseconds.")]
     public decimal TotalBlockingTimeMaximum { get; set; }
 
     public bool CumulativeLayoutShiftEnabled { get; set; }
 
-    [Range(typeof(decimal), "0", "10")]
+    [Range(typeof(decimal), "0", "10",
+        ErrorMessage = "Enter a layout-shift score between 0 and 10. Around 0.1 is typical.")]
     public decimal CumulativeLayoutShiftMaximum { get; set; }
 
     public bool SpeedIndexEnabled { get; set; }
 
-    [Range(typeof(decimal), "0", "600000")]
+    [Range(typeof(decimal), "0", "600000",
+        ErrorMessage = "Enter a value between 0 and 600000 milliseconds.")]
     public decimal SpeedIndexMaximum { get; set; }
 
     public long Version { get; set; }

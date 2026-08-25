@@ -10,14 +10,20 @@ public sealed class UserListViewModel
 
 public sealed class CreateUserViewModel
 {
-    [Required, StringLength(200)]
+    [Required(ErrorMessage = "Enter a display name. It is how this person appears throughout the app.")]
+    [StringLength(200, ErrorMessage = "This name is too long. Use 200 characters or fewer.")]
     [Display(Name = "Display name")]
     public string DisplayName { get; set; } = string.Empty;
 
-    [Required, EmailAddress, StringLength(256)]
+    [Required(ErrorMessage = "Enter an email address. It is also the sign-in name.")]
+    [EmailAddress(ErrorMessage = "Enter a valid email address, such as name@example.com.")]
+    [StringLength(256, ErrorMessage = "This email address is too long. Use 256 characters or fewer.")]
     public string Email { get; set; } = string.Empty;
 
-    [Required, DataType(DataType.Password), StringLength(128, MinimumLength = 12)]
+    [Required(ErrorMessage = "Enter an initial password. Use at least 12 characters, with an uppercase letter, a lowercase letter, a digit, a symbol, and at least 4 different characters.")]
+    [DataType(DataType.Password)]
+    [StringLength(128, MinimumLength = 12,
+        ErrorMessage = "The password must be between 12 and 128 characters. Use at least 12 characters, with an uppercase letter, a lowercase letter, a digit, a symbol, and at least 4 different characters.")]
     [Display(Name = "Initial password")]
     public string Password { get; set; } = string.Empty;
 
@@ -30,7 +36,8 @@ public sealed class EditUserViewModel
 {
     public Guid UserId { get; set; }
 
-    [Required, StringLength(200)]
+    [Required(ErrorMessage = "Enter a display name. It is how this person appears throughout the app.")]
+    [StringLength(200, ErrorMessage = "This name is too long. Use 200 characters or fewer.")]
     [Display(Name = "Display name")]
     public string DisplayName { get; set; } = string.Empty;
 
@@ -42,7 +49,9 @@ public sealed class EditUserViewModel
     [Display(Name = "Roles")]
     public List<string> Roles { get; set; } = [];
 
-    [DataType(DataType.Password), StringLength(128, MinimumLength = 12)]
+    [DataType(DataType.Password)]
+    [StringLength(128, MinimumLength = 12,
+        ErrorMessage = "The new password must be between 12 and 128 characters. Use at least 12 characters, with an uppercase letter, a lowercase letter, a digit, a symbol, and at least 4 different characters.")]
     [Display(Name = "New password")]
     public string? NewPassword { get; set; }
 }

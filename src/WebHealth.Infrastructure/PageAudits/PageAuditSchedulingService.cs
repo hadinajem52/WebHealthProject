@@ -120,8 +120,8 @@ public sealed class PageAuditSchedulingService(
         // active testing of that target, and this method is the only door to it.
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
-            return PageAuditManualResult.Rejected(
-                "You are not authorized to run an audit against this endpoint.");
+            return PageAuditManualResult.NotTestable(
+                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var targets = await dbContext.PageAuditTargets.AsNoTracking()

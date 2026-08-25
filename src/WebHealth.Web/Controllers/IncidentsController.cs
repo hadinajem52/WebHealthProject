@@ -79,7 +79,7 @@ public sealed class IncidentsController(
         return result.Status switch
         {
             IncidentMutationStatus.Forbidden => Forbid(),
-            IncidentMutationStatus.NotFound => NotFound(),
+            IncidentMutationStatus.NotFound => this.NotFoundRecord("incident"),
             IncidentMutationStatus.Succeeded => this.RedirectOrAjaxRefresh(
                 archivedUrl, archivedUrl, "Incident restored from the archive.", FlashLevel.Success),
             IncidentMutationStatus.ConcurrencyConflict => this.RedirectOrAjaxRefresh(
@@ -92,7 +92,8 @@ public sealed class IncidentsController(
                 archivedUrl,
                 string.Join(" ", result.Errors),
                 FlashLevel.Error,
-                StatusCodes.Status422UnprocessableEntity)
+                StatusCodes.Status422UnprocessableEntity,
+                archivedUrl)
         };
     }
 
@@ -102,7 +103,7 @@ public sealed class IncidentsController(
         var incident = await incidentReader.FindAsync(id, GetAccess(), cancellationToken);
         if (incident is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("incident");
         }
 
         var owners = incident.CanManage
@@ -182,7 +183,7 @@ public sealed class IncidentsController(
             case IncidentMutationStatus.Forbidden:
                 return Forbid();
             case IncidentMutationStatus.NotFound:
-                return NotFound();
+                return this.NotFoundRecord("incident");
             case IncidentMutationStatus.ConcurrencyConflict:
                 return this.RedirectOrAjaxRefresh(
                     detailsUrl,
@@ -195,7 +196,8 @@ public sealed class IncidentsController(
                     detailsUrl,
                     string.Join(" ", result.Errors),
                     FlashLevel.Error,
-                    StatusCodes.Status422UnprocessableEntity);
+                    StatusCodes.Status422UnprocessableEntity,
+                    detailsUrl);
         }
     }
 

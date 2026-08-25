@@ -91,7 +91,11 @@ public sealed class CrawlController(
 
         if (!result.Succeeded)
         {
-            TempData.AddFlashMessage(FlashLevel.Warning, result.Error!);
+            TempData.AddFlashMessage(
+                FlashLevel.Warning,
+                result.Error
+                    ?? EndpointTestBlockDisplay.Describe(result.Block, "a crawl")
+                    ?? "This endpoint cannot be crawled right now.");
         }
         else if (result.WasAlreadyRunning)
         {
@@ -112,7 +116,7 @@ public sealed class CrawlController(
         {
             // Not found rather than forbidden: telling an unauthorized caller that the run exists
             // is itself a disclosure.
-            return NotFound();
+            return this.NotFoundRecord("crawl run");
         }
 
         var brokenLinks = await crawlReader.ListBrokenLinksAsync(

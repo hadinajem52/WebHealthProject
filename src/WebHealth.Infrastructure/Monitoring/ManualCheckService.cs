@@ -43,7 +43,8 @@ internal sealed class ManualCheckService(
 
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
-            return ManualCheckResult.Forbidden();
+            return ManualCheckResult.Forbidden(
+                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var now = timeProvider.GetUtcNow();
@@ -67,7 +68,8 @@ internal sealed class ManualCheckService(
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             await transaction.RollbackAsync(cancellationToken);
-            return ManualCheckResult.Forbidden();
+            return ManualCheckResult.Forbidden(
+                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var logicalCheckId = Guid.NewGuid();

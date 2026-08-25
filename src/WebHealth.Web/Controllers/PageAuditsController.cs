@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.Application.Authorization;
@@ -52,7 +52,7 @@ public sealed class PageAuditsController(
             runId,
             access,
             cancellationToken);
-        return model is null ? NotFound() : View(model);
+        return model is null ? this.NotFoundRecord("endpoint") : View(model);
     }
 
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost, ValidateAntiForgeryToken]
@@ -73,7 +73,16 @@ public sealed class PageAuditsController(
         // one. Without the second check an endpoint id in a form post would be permission enough.
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
-            return NotFound();
+            var block = await targetAuthorization.DescribeTestBlockAsync(
+                endpointId, access, cancellationToken);
+            return this.AjaxMessage(
+                Url.Action(nameof(Index), new { endpointId })!,
+                EndpointTestBlockDisplay.Describe(block, "a PageSpeed audit")
+                    ?? "This endpoint cannot be audited right now.",
+                FlashLevel.Error,
+                block is EndpointTestBlock.NotVisible or EndpointTestBlock.NotPermitted
+                    ? StatusCodes.Status403Forbidden
+                    : StatusCodes.Status422UnprocessableEntity);
         }
 
         var result = await pageAuditRunner.QueueManualAsync(
@@ -83,7 +92,9 @@ public sealed class PageAuditsController(
         var level = FlashLevel.Information;
         if (!result.Succeeded)
         {
-            message = result.Error!;
+            message = result.Error
+                ?? EndpointTestBlockDisplay.Describe(result.Block, "a PageSpeed audit")
+                ?? "This endpoint cannot be audited right now.";
             level = FlashLevel.Warning;
         }
         else if (result.WasAlreadyRunning)
@@ -146,7 +157,7 @@ public sealed class PageAuditsController(
             cancellationToken);
         if (model is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("endpoint");
         }
 
         Response.StatusCode = model.AnyCategoryRunActive

@@ -23,10 +23,14 @@ public enum ManualCheckStatus
     SchedulingUnavailable
 }
 
-public sealed record ManualCheckResult(ManualCheckStatus Status, Guid? LogicalCheckId = null)
+public sealed record ManualCheckResult(
+    ManualCheckStatus Status,
+    Guid? LogicalCheckId = null,
+    EndpointTestBlock Block = EndpointTestBlock.None)
 {
     public static ManualCheckResult Queued(Guid logicalCheckId) => new(ManualCheckStatus.Queued, logicalCheckId);
-    public static ManualCheckResult Forbidden() => new(ManualCheckStatus.Forbidden);
+    public static ManualCheckResult Forbidden(EndpointTestBlock block) =>
+        new(ManualCheckStatus.Forbidden, null, block);
     public static ManualCheckResult MonitorNotAvailable() => new(ManualCheckStatus.MonitorNotAvailable);
     public static ManualCheckResult SchedulingUnavailable() => new(ManualCheckStatus.SchedulingUnavailable);
 }

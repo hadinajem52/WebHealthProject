@@ -46,17 +46,17 @@ public enum TeamAdministrationStatus
 public sealed record TeamAdministrationResult(
     bool Succeeded,
     Guid? TeamId,
-    IReadOnlyList<string> Errors,
+    IReadOnlyList<ValidationError> Errors,
     TeamAdministrationStatus Status)
 {
     public static TeamAdministrationResult Success(Guid teamId) =>
         new(true, teamId, [], TeamAdministrationStatus.Succeeded);
 
-    public static TeamAdministrationResult Failure(params IEnumerable<string> errors) =>
+    public static TeamAdministrationResult Failure(params IEnumerable<ValidationError> errors) =>
         Failure(TeamAdministrationStatus.ValidationFailed, errors);
 
     public static TeamAdministrationResult Failure(
         TeamAdministrationStatus status,
-        params IEnumerable<string> errors) =>
+        params IEnumerable<ValidationError> errors) =>
         new(false, null, errors.ToArray(), status);
 }

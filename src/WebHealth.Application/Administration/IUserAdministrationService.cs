@@ -37,10 +37,10 @@ public sealed record UpdateManagedUser(
     IReadOnlyCollection<string> Roles,
     string? NewPassword = null);
 
-public sealed record UserAdministrationResult(bool Succeeded, Guid? UserId, IReadOnlyList<string> Errors)
+public sealed record UserAdministrationResult(bool Succeeded, Guid? UserId, IReadOnlyList<ValidationError> Errors)
 {
     public static UserAdministrationResult Success(Guid userId) => new(true, userId, []);
 
-    public static UserAdministrationResult Failure(params IEnumerable<string> errors) =>
+    public static UserAdministrationResult Failure(params IEnumerable<ValidationError> errors) =>
         new(false, null, errors.ToArray());
 }

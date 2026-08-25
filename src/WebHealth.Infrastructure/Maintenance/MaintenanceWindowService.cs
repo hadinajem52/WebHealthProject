@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Maintenance;
@@ -82,15 +83,54 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
         }
     }
 
-    private async Task<List<string>> ValidateAsync(CreateMaintenanceWindow command, CancellationToken token)
+    private async Task<List<ValidationError>> ValidateAsync(CreateMaintenanceWindow command, CancellationToken token)
     {
-        var errors = new List<string>();
-        if (command.EndsAt <= command.StartsAt) errors.Add("The maintenance end must be after its start.");
-        else if ((command.EndsAt - command.StartsAt).Ticks % TimeSpan.TicksPerSecond != 0) errors.Add("The maintenance duration must be a whole number of seconds.");
-        if (command.Reason.Trim().Length is 0 or > 500) errors.Add("A maintenance reason of up to 500 characters is required.");
-        if (!IsValidTimezone(command.TimezoneId)) errors.Add("Select a valid IANA timezone identifier.");
-        if (command.SuppressionPolicy is not (MaintenanceSuppressionPolicies.SuppressAll or MaintenanceSuppressionPolicies.None)) errors.Add("Select a valid notification suppression policy.");
-        if (!await ScopeExistsAsync(command.Scope, token)) errors.Add("Select an active target for this maintenance window.");
+        var errors = new List<ValidationError>();
+        if (command.EndsAt <= command.StartsAt)
+        {
+            errors.Add(ValidationError.For(
+                "EndsAtUtc", "The end must be after the start. Move the end later, or the start earlier."));
+        }
+        else if ((command.EndsAt - command.StartsAt).Ticks % TimeSpan.TicksPerSecond != 0)
+        {
+            errors.Add(ValidationError.For(
+                "EndsAtUtc", "Enter times to the second. Drop any fraction of a second from the start or end."));
+        }
+
+        var reasonLength = command.Reason.Trim().Length;
+        if (reasonLength == 0)
+        {
+            errors.Add(ValidationError.For(
+                "Reason", "Enter why this maintenance window exists. It is kept with the record."));
+        }
+        else if (reasonLength > 500)
+        {
+            errors.Add(ValidationError.For(
+                "Reason", $"This reason is {reasonLength} characters. Shorten it to 500 or fewer."));
+        }
+
+        if (!IsValidTimezone(command.TimezoneId))
+        {
+            errors.Add(ValidationError.For(
+                "TimezoneId",
+                "Select a time zone from the list. It only changes how these times are shown; "
+                + "they are stored in UTC either way."));
+        }
+
+        if (command.SuppressionPolicy is not (MaintenanceSuppressionPolicies.SuppressAll or MaintenanceSuppressionPolicies.None))
+        {
+            errors.Add(ValidationError.For(
+                "SuppressionPolicy", "Select a notification policy from the list."));
+        }
+
+        if (!await ScopeExistsAsync(command.Scope, token))
+        {
+            errors.Add(ValidationError.For(
+                "ScopeId",
+                "Select an active target. A target that has been archived or disabled cannot take "
+                + "a maintenance window."));
+        }
+
         errors.AddRange(ValidateRecurrence(command));
         return errors;
     }
@@ -99,12 +139,12 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
     /// BR-M05. The recurrence is the anchor occurrence's local wall-clock time repeated, so a
     /// weekly recurrence that excludes the anchor's own day would contradict its declared start.
     /// </summary>
-    private static IEnumerable<string> ValidateRecurrence(CreateMaintenanceWindow command)
+    private static IEnumerable<ValidationError> ValidateRecurrence(CreateMaintenanceWindow command)
     {
         var recurrence = command.Recurrence;
         if (!MaintenanceRecurrencePatterns.IsSupported(recurrence.Pattern))
         {
-            yield return "Select a supported recurrence pattern.";
+            yield return ValidationError.For("RecurrencePattern", "Select a repeat option from the list.");
             yield break;
         }
 
@@ -112,7 +152,10 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
         {
             if (recurrence.DaysOfWeekMask != MaintenanceDayOfWeekMask.Empty || recurrence.Until is not null)
             {
-                yield return "A one-off maintenance window cannot carry recurrence days or an end date.";
+                yield return ValidationError.For(
+                    "RecurrencePattern",
+                    "This window does not repeat, so it cannot carry repeat days or a repeat-until "
+                    + "date. Clear those, or choose a repeating option.");
             }
 
             yield break;
@@ -120,19 +163,28 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
 
         if (recurrence.Until is { } until && until <= command.StartsAt)
         {
-            yield return "The recurrence must end after the first occurrence starts.";
+            yield return ValidationError.For(
+                "RecurrenceUntilUtc",
+                "The repeat-until date is on or before the first occurrence, so nothing would ever "
+                + "run. Move it later, or clear it to repeat indefinitely.");
         }
 
         if (command.EndsAt - command.StartsAt > TimeSpan.FromDays(1))
         {
-            yield return "A recurring maintenance window cannot be longer than 24 hours.";
+            yield return ValidationError.For(
+                "EndsAtUtc",
+                "A repeating window cannot be longer than 24 hours, or its occurrences would "
+                + "overlap. Shorten it, or make it a one-off.");
         }
 
         if (recurrence.Pattern == MaintenanceRecurrencePatterns.Daily)
         {
             if (recurrence.DaysOfWeekMask != MaintenanceDayOfWeekMask.Empty)
             {
-                yield return "A daily maintenance window cannot select individual days.";
+                yield return ValidationError.For(
+                    "RecurrenceDays",
+                    "A daily window already covers every day, so individual days cannot be selected. "
+                    + "Clear them, or change the repeat to weekly.");
             }
 
             yield break;
@@ -141,7 +193,8 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
         if (recurrence.DaysOfWeekMask == MaintenanceDayOfWeekMask.Empty
             || !MaintenanceDayOfWeekMask.IsValid(recurrence.DaysOfWeekMask))
         {
-            yield return "Select at least one day for a weekly maintenance window.";
+            yield return ValidationError.For(
+                "RecurrenceDays", "Select at least one day for a weekly window.");
             yield break;
         }
 
@@ -150,7 +203,11 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
                 recurrence.DaysOfWeekMask,
                 TimeZoneInfo.ConvertTime(command.StartsAt, timeZone).DayOfWeek))
         {
-            yield return "The selected days must include the day the first occurrence starts.";
+            yield return ValidationError.For(
+                "RecurrenceDays",
+                $"The first occurrence starts on a "
+                + $"{TimeZoneInfo.ConvertTime(command.StartsAt, timeZone).DayOfWeek}, so that day must be "
+                + "selected. Tick it, or move the start to a day you have selected.");
         }
     }
 
@@ -220,5 +277,5 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
     private static MaintenanceScope ToScope(MaintenanceTarget target) => target.ClientId is { } id ? new(MaintenanceScopeKind.Client, id) : target.WebsiteId is { } websiteId ? new(MaintenanceScopeKind.Website, websiteId) : target.EnvironmentId is { } environmentId ? new(MaintenanceScopeKind.Environment, environmentId) : target.EndpointId is { } endpointId ? new(MaintenanceScopeKind.Endpoint, endpointId) : new(MaintenanceScopeKind.Monitor, target.EndpointMonitorId!.Value);
     private static MaintenanceAuditSnapshot ToAudit(MaintenanceWindow window, MaintenanceScope scope, bool reasonChanged) => new(window.Id, scope.Kind.ToString(), scope.TargetId, window.ScheduleStartsAt, window.ScheduleStartsAt.AddSeconds(window.ScheduleDurationSeconds), window.TimezoneId, window.RecurrencePattern, window.RecurrenceDaysOfWeek, window.RecurrenceUntil, window.SuppressionPolicy, window.PauseEscalation, window.ContinueFailureCounter, window.DeletedAt is not null, reasonChanged, window.Version);
     private static bool IsValidTimezone(string value) { if (string.IsNullOrWhiteSpace(value) || value.Length > 100) return false; try { _ = TimeZoneInfo.FindSystemTimeZoneById(value.Trim()); return value.Contains('/', StringComparison.Ordinal) || value.Equals("UTC", StringComparison.Ordinal); } catch (TimeZoneNotFoundException) { return false; } catch (InvalidTimeZoneException) { return false; } }
-    private static MaintenanceMutationResult Fail(MaintenanceMutationStatus status, params IEnumerable<string> errors) => MaintenanceMutationResult.Failure(status, errors);
+    private static MaintenanceMutationResult Fail(MaintenanceMutationStatus status, params IEnumerable<ValidationError> errors) => MaintenanceMutationResult.Failure(status, errors);
 }

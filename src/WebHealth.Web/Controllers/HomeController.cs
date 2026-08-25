@@ -8,6 +8,7 @@ using WebHealth.Application.Registry;
 using WebHealth.Application.Reporting;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Models;
+using WebHealth.Web.Shell;
 using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
@@ -90,7 +91,7 @@ public class HomeController(
                 });
         }
 
-        return View(ErrorViewModel.Create(500, HttpContext.TraceIdentifier));
+        return View(ErrorViewModel.Create(500, HttpContext.TraceIdentifier, GetRetryUrl()));
     }
 
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
@@ -103,7 +104,8 @@ public class HomeController(
         }
 
         Response.StatusCode = code;
-        return View("Error", ErrorViewModel.Create(code, HttpContext.TraceIdentifier, GetRetryUrl()));
+        return View("Error", ErrorViewModel.Create(
+            code, HttpContext.TraceIdentifier, GetRetryUrl(), HttpContext.MissingRecord()));
     }
 
     private async Task<DashboardFilterOptions> LoadOptionsAsync(
@@ -199,10 +201,10 @@ public class HomeController(
         errors);
 
     // Only the re-executed original path is offered as a retry target, and only
-    // when it is a local URL.
     private string? GetRetryUrl()
     {
-        var originalPath = HttpContext.Features.Get<IStatusCodeReExecuteFeature>()?.OriginalPath;
+        var originalPath = HttpContext.Features.Get<IStatusCodeReExecuteFeature>()?.OriginalPath
+            ?? HttpContext.Features.Get<IExceptionHandlerPathFeature>()?.Path;
 
         return Url.IsLocalUrl(originalPath) ? originalPath : null;
     }

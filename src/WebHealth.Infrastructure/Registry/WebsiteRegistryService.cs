@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
@@ -31,7 +32,10 @@ internal sealed class WebsiteRegistryService(
         var errors = ValidateFields(name, command.TechnologyCms, tags);
         if (command.IsEnabled)
         {
-            errors.Add("Add an active environment before enabling the website.");
+            errors.Add(ValidationError.For(
+                nameof(UpdateWebsite.IsEnabled),
+                "A website cannot be enabled until it has an active environment. Save it disabled, "
+                + "add an environment, then enable it."));
         }
 
         if (errors.Count > 0)
@@ -42,12 +46,16 @@ internal sealed class WebsiteRegistryService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         if (!await ClientAcceptsWebsiteAsync(command.ClientId, cancellationToken))
         {
-            return Validation("Select an active client.");
+            return Validation(ValidationError.For(
+                nameof(CreateWebsite.ClientId),
+                "Select an active client. An archived or inactive client cannot take new websites."));
         }
 
         if (!await support.LockValidOwnerAsync(command.OwnerSubjectId, null, cancellationToken))
         {
-            return Validation("Select an enabled user or team owner.");
+            return Validation(ValidationError.For(
+                nameof(UpdateWebsite.OwnerSubjectId),
+                "Select an enabled user or team as the owner. A disabled one cannot own records."));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -120,7 +128,7 @@ internal sealed class WebsiteRegistryService(
 
         if (website.DeletedAt is not null)
         {
-            return Validation("Restore the website before editing it.");
+            return Validation("This website is archived, so it cannot be edited. Restore it first, then reopen this form.");
         }
 
         if (!await support.LockValidOwnerAsync(
@@ -128,7 +136,9 @@ internal sealed class WebsiteRegistryService(
                 website.OwnerSubjectId,
                 cancellationToken))
         {
-            return Validation("Select an enabled user or team owner.");
+            return Validation(ValidationError.For(
+                nameof(UpdateWebsite.OwnerSubjectId),
+                "Select an enabled user or team as the owner. A disabled one cannot own records."));
         }
 
         if (command.IsEnabled
@@ -248,7 +258,7 @@ internal sealed class WebsiteRegistryService(
 
         if (website.DeletedAt is null)
         {
-            return Validation("Archive the website before deleting it permanently.");
+            return Validation("Only an archived website can be deleted permanently. Archive this one first.");
         }
 
         if (website.Version != command.Version)
@@ -357,7 +367,7 @@ internal sealed class WebsiteRegistryService(
         return environments.Count > 0;
     }
 
-    private static List<string> ValidateFields(
+    private static List<ValidationError> ValidateFields(
         string name,
         string? technologyCms,
         IReadOnlyList<NormalizedTag> tags)
@@ -365,17 +375,25 @@ internal sealed class WebsiteRegistryService(
         var errors = RegistryMutationSupport.ValidateName(name);
         if (technologyCms?.Trim().Length > 200)
         {
-            errors.Add("Technology/CMS cannot exceed 200 characters.");
+            errors.Add(ValidationError.For(
+                nameof(UpdateWebsite.TechnologyCms),
+                $"This value is {technologyCms.Trim().Length} characters. Shorten it to 200 or fewer."));
         }
 
         if (tags.Count > TagNormalizer.MaximumTagsPerWebsite)
         {
-            errors.Add($"A website can have at most {TagNormalizer.MaximumTagsPerWebsite} tags.");
+            errors.Add(ValidationError.For(
+                "Tags",
+                $"This website has {tags.Count} tags. Remove {tags.Count - TagNormalizer.MaximumTagsPerWebsite} "
+                + $"so that at most {TagNormalizer.MaximumTagsPerWebsite} remain."));
         }
 
         if (tags.Any(tag => tag.Name.Length > TagNormalizer.MaximumTagLength))
         {
-            errors.Add($"Each tag must be {TagNormalizer.MaximumTagLength} characters or fewer.");
+            errors.Add(ValidationError.For(
+                "Tags",
+                $"These tags are too long: {string.Join(", ", tags.Where(tag => tag.Name.Length > TagNormalizer.MaximumTagLength).Select(tag => tag.Name))}. "
+                + $"Each tag must be {TagNormalizer.MaximumTagLength} characters or fewer."));
         }
 
         return errors;
@@ -512,7 +530,9 @@ internal sealed class WebsiteRegistryService(
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
-        return Validation("An active website with this name already exists for the client.");
+        return Validation(ValidationError.For(
+            nameof(UpdateWebsite.Name),
+            "This client already has an active website with this name. Choose a different one."));
     }
 
     private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
@@ -532,6 +552,6 @@ internal sealed class WebsiteRegistryService(
     private static RegistryMutationResult NotFound() =>
         RegistryMutationResult.Failure(RegistryMutationStatus.NotFound, "The website was not found.");
 
-    private static RegistryMutationResult Validation(params IEnumerable<string> errors) =>
+    private static RegistryMutationResult Validation(params IEnumerable<ValidationError> errors) =>
         RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
 }

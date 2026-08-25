@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -35,7 +36,7 @@ public sealed class TargetsController(
         var website = await registryReader.FindWebsiteAsync(websiteId, access, cancellationToken);
         if (website is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("website");
         }
 
         return View(new EnvironmentListViewModel(
@@ -50,7 +51,7 @@ public sealed class TargetsController(
     {
         var access = GetAccess();
         var environment = await targetReader.FindEnvironmentAsync(id, access, cancellationToken);
-        return environment is null ? NotFound() : View(new EnvironmentDetailsViewModel(environment, CanManage(access)));
+        return environment is null ? this.NotFoundRecord("environment") : View(new EnvironmentDetailsViewModel(environment, CanManage(access)));
     }
 
     [HttpGet]
@@ -60,7 +61,7 @@ public sealed class TargetsController(
         var endpoint = await targetReader.FindEndpointAsync(id, access, cancellationToken);
         if (endpoint is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("endpoint");
         }
 
         var latestCheck = await checkHistoryReader.FindLatestForEndpointAsync(id, access, cancellationToken);
@@ -88,7 +89,7 @@ public sealed class TargetsController(
     {
         var website = await registryReader.FindWebsiteAsync(websiteId, GetAccess(), cancellationToken);
         return website is null
-            ? NotFound()
+            ? this.NotFoundRecord("website")
             : View(new EnvironmentFormViewModel { WebsiteId = website.Id, WebsiteName = website.Name });
     }
 
@@ -120,7 +121,7 @@ public sealed class TargetsController(
     public async Task<IActionResult> EditEnvironment(Guid id, CancellationToken cancellationToken)
     {
         var environment = await targetReader.FindEnvironmentAsync(id, GetAccess(), cancellationToken);
-        return environment is null ? NotFound() : View(new EnvironmentFormViewModel
+        return environment is null ? this.NotFoundRecord("environment") : View(new EnvironmentFormViewModel
         {
             EnvironmentId = environment.Id,
             WebsiteId = environment.WebsiteId,
@@ -159,7 +160,7 @@ public sealed class TargetsController(
     public async Task<IActionResult> CreateEndpoint(Guid environmentId, CancellationToken cancellationToken)
     {
         var environment = await targetReader.FindEnvironmentAsync(environmentId, GetAccess(), cancellationToken);
-        return environment is null ? NotFound() : View(await BuildEndpointFormAsync(new EndpointFormViewModel
+        return environment is null ? this.NotFoundRecord("environment") : View(await BuildEndpointFormAsync(new EndpointFormViewModel
         {
             EnvironmentId = environment.Id,
             EnvironmentName = environment.Name,
@@ -202,7 +203,7 @@ public sealed class TargetsController(
     public async Task<IActionResult> EditEndpoint(Guid id, CancellationToken cancellationToken)
     {
         var endpoint = await targetReader.FindEndpointAsync(id, GetAccess(), cancellationToken);
-        return endpoint is null ? NotFound() : View(await BuildEndpointFormAsync(new EndpointFormViewModel
+        return endpoint is null ? this.NotFoundRecord("endpoint") : View(await BuildEndpointFormAsync(new EndpointFormViewModel
         {
             EndpointId = endpoint.Id,
             EnvironmentId = endpoint.EnvironmentId,
@@ -254,7 +255,7 @@ public sealed class TargetsController(
         {
             if (result.Status == RegistryMutationStatus.NotFound)
             {
-                return NotFound();
+                return this.NotFoundRecord("endpoint");
             }
 
             AddErrors(result.Errors);
@@ -342,7 +343,7 @@ public sealed class TargetsController(
     {
         if (result.Status == RegistryMutationStatus.NotFound)
         {
-            return NotFound();
+            return this.NotFoundRecord("endpoint");
         }
 
         AddErrors(result.Errors);
@@ -363,7 +364,7 @@ public sealed class TargetsController(
         var result = await operation(new(id, version), GetAccess(), cancellationToken);
         if (result.Status == RegistryMutationStatus.NotFound)
         {
-            return NotFound();
+            return this.NotFoundRecord("endpoint");
         }
 
         var message = result.Succeeded ? successMessage : string.Join(" ", result.Errors);
@@ -387,11 +388,11 @@ public sealed class TargetsController(
         return RedirectToAction(redirectAction, redirectAction is nameof(Environment) or nameof(Endpoint) ? new { id } : null);
     }
 
-    private void AddErrors(IEnumerable<string> errors)
+    private void AddErrors(IEnumerable<ValidationError> errors)
     {
         foreach (var error in errors)
         {
-            ModelState.AddModelError(string.Empty, error);
+            ModelState.AddModelError(error.Field ?? string.Empty, error.Message);
         }
     }
 }

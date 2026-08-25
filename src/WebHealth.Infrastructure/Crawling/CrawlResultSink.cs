@@ -216,14 +216,11 @@ internal sealed class CrawlResultSink(
         var refusedBecause = outcome.RobotsOverrideGranted
             ? null
             : outcome.RobotsOverrideRefusedBecause ?? CrawlOverrideRefusals.NotRequested;
-        // Configuration errors first: they are the reason the run never really started, and they
-        // are written for a reader. The exception detail is the fallback, and the bare sentence is
-        // the last resort -- a failure with no account of itself at all.
         var failureReason = outcome.Status == CrawlRunStatuses.Failed
             ? Bounded(
                 outcome.ValidationErrors.Count > 0
                     ? string.Join(" ", outcome.ValidationErrors)
-                    : outcome.FailureDetail ?? "The crawl stopped on an unexpected error.",
+                    : outcome.FailureCode ?? CrawlFailureCodes.Unexpected,
                 CrawlRunConfiguration.MaxFailureReasonLength)
             : null;
         var finishedAt = timeProvider.GetUtcNow();

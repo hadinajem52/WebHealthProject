@@ -1,4 +1,5 @@
 using FluentAssertions;
+using WebHealth.Application;
 using WebHealth.Application.PageAudits;
 using WebHealth.Domain.PageAudits;
 using Xunit;
@@ -117,9 +118,13 @@ public sealed class PageAuditIncidentEvaluatorTests
             CumulativeLayoutShiftMaximum = 11
         };
 
-        PageAuditIncidentEvaluator.Validate(command).Should().BeEquivalentTo(
-            "SEO minimum score must be between 0 and 100.",
-            "Cumulative Layout Shift maximum must be between 0 and 10.");
+        PageAuditIncidentEvaluator.Validate(command).Should().BeEquivalentTo([
+            ValidationError.For(
+                nameof(UpdatePageAuditIncidentPolicy.SeoMinimumScore),
+                "The SEO minimum score is 101. Enter a score between 0 and 100."),
+            ValidationError.For(
+                nameof(UpdatePageAuditIncidentPolicy.CumulativeLayoutShiftMaximum),
+                "The Cumulative Layout Shift maximum is 11 score. Enter a value between 0 and 10 score — around 0.1 score is typical.")]);
     }
 
     private static PageAuditIncidentPolicy Policy() => new(

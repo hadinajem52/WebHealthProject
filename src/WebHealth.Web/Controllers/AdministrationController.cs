@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -65,7 +66,7 @@ public sealed class AdministrationController(
         var user = await userAdministration.FindUserAsync(id, cancellationToken);
         if (user is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("account");
         }
 
         return View(new EditUserViewModel
@@ -164,7 +165,7 @@ public sealed class AdministrationController(
         var team = await teamAdministration.FindTeamAsync(id, cancellationToken);
         if (team is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("team");
         }
 
         return View(await BuildTeamFormAsync(new TeamFormViewModel
@@ -202,7 +203,7 @@ public sealed class AdministrationController(
         {
             if (result.Status == TeamAdministrationStatus.NotFound)
             {
-                return NotFound();
+                return this.NotFoundRecord("team");
             }
 
             AddErrors(result.Errors);
@@ -239,11 +240,11 @@ public sealed class AdministrationController(
         }
     }
 
-    private void AddErrors(IEnumerable<string> errors)
+    private void AddErrors(IEnumerable<ValidationError> errors)
     {
         foreach (var error in errors)
         {
-            ModelState.AddModelError(string.Empty, error);
+            ModelState.AddModelError(error.Field ?? string.Empty, error.Message);
         }
     }
 

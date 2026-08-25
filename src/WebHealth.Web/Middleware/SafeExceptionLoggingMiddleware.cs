@@ -25,8 +25,11 @@ public sealed class SafeExceptionLoggingMiddleware(
         catch (Exception exception)
         {
             logger.LogError(
-                "Unhandled request failed with {ExceptionType}.",
-                exception.GetType().Name);
+                exception,
+                "Unhandled request failed. CorrelationId={CorrelationId} {RequestMethod} {RequestPath}",
+                context.TraceIdentifier,
+                context.Request.Method,
+                context.Request.Path);
             throw;
         }
     }

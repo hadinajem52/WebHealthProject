@@ -151,6 +151,7 @@
 
     <div class="app-scrim" data-shell-scrim hidden></div>
 
+    @await Html.PartialAsync("_ValidationScriptsPartial")
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

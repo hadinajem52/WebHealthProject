@@ -62,13 +62,17 @@ public static class AjaxControllerExtensions
         string redirectUrl,
         string message,
         FlashLevel level,
-        int ajaxStatusCode)
+        int ajaxStatusCode,
+        string? refreshUrl = null)
     {
         if (controller.Request.IsWebHealthAjax())
         {
             return controller.StatusCode(
                 ajaxStatusCode,
-                new AjaxFragmentViewModel(message, LevelName(level)));
+                new AjaxFragmentViewModel(
+                    message,
+                    LevelName(level),
+                    RefreshUrl: refreshUrl is null ? null : LocalUrl(controller, refreshUrl)));
         }
 
         controller.TempData.AddFlashMessage(level, message);

@@ -52,9 +52,7 @@ internal sealed class CrawlReconciler(
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(run => run.Status, CrawlRunStatuses.Failed)
                 .SetProperty(run => run.StopReason, CrawlStopReasons.Failed)
-                .SetProperty(run => run.FailureReason,
-                    "Abandoned: the crawl was still running long after its time limit, so the "
-                    + "process performing it is gone.")
+                .SetProperty(run => run.FailureReason, CrawlFailureCodes.Abandoned)
                 .SetProperty(run => run.FinishedAt, now),
                 cancellationToken);
 

@@ -53,7 +53,7 @@ public sealed record PageAuditIncidentPolicyUpdateResult(
     bool Succeeded,
     bool Conflict,
     PageAuditIncidentPolicy Policy,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<ValidationError> Errors);
 
 public interface IPageAuditIncidentPolicyService
 {
@@ -153,18 +153,18 @@ public static class PageAuditIncidentEvaluator
         return new(observations, [.. evaluated.Order(StringComparer.Ordinal)], indeterminate);
     }
 
-    public static IReadOnlyList<string> Validate(UpdatePageAuditIncidentPolicy policy)
+    public static IReadOnlyList<ValidationError> Validate(UpdatePageAuditIncidentPolicy policy)
     {
-        var errors = new List<string>();
-        ValidateScore(policy.PerformanceMinimumScore, "Performance", errors);
-        ValidateScore(policy.AccessibilityMinimumScore, "Accessibility", errors);
-        ValidateScore(policy.BestPracticesMinimumScore, "Best Practices", errors);
-        ValidateScore(policy.SeoMinimumScore, "SEO", errors);
-        ValidateMetric(PageAuditPerformanceMetrics.FirstContentfulPaint, policy.FirstContentfulPaintMaximum, errors);
-        ValidateMetric(PageAuditPerformanceMetrics.LargestContentfulPaint, policy.LargestContentfulPaintMaximum, errors);
-        ValidateMetric(PageAuditPerformanceMetrics.TotalBlockingTime, policy.TotalBlockingTimeMaximum, errors);
-        ValidateMetric(PageAuditPerformanceMetrics.CumulativeLayoutShift, policy.CumulativeLayoutShiftMaximum, errors);
-        ValidateMetric(PageAuditPerformanceMetrics.SpeedIndex, policy.SpeedIndexMaximum, errors);
+        var errors = new List<ValidationError>();
+        ValidateScore(policy.PerformanceMinimumScore, "Performance", "PerformanceMinimumScore", errors);
+        ValidateScore(policy.AccessibilityMinimumScore, "Accessibility", "AccessibilityMinimumScore", errors);
+        ValidateScore(policy.BestPracticesMinimumScore, "Best Practices", "BestPracticesMinimumScore", errors);
+        ValidateScore(policy.SeoMinimumScore, "SEO", "SeoMinimumScore", errors);
+        ValidateMetric(PageAuditPerformanceMetrics.FirstContentfulPaint, policy.FirstContentfulPaintMaximum, "FirstContentfulPaintMaximum", errors);
+        ValidateMetric(PageAuditPerformanceMetrics.LargestContentfulPaint, policy.LargestContentfulPaintMaximum, "LargestContentfulPaintMaximum", errors);
+        ValidateMetric(PageAuditPerformanceMetrics.TotalBlockingTime, policy.TotalBlockingTimeMaximum, "TotalBlockingTimeMaximum", errors);
+        ValidateMetric(PageAuditPerformanceMetrics.CumulativeLayoutShift, policy.CumulativeLayoutShiftMaximum, "CumulativeLayoutShiftMaximum", errors);
+        ValidateMetric(PageAuditPerformanceMetrics.SpeedIndex, policy.SpeedIndexMaximum, "SpeedIndexMaximum", errors);
         return errors;
     }
 
@@ -258,20 +258,34 @@ public static class PageAuditIncidentEvaluator
         _ => null
     };
 
-    private static void ValidateScore(int value, string label, ICollection<string> errors)
+    private static void ValidateScore(
+        int value,
+        string label,
+        string field,
+        ICollection<ValidationError> errors)
     {
         if (value is < 0 or > 100)
         {
-            errors.Add($"{label} minimum score must be between 0 and 100.");
+            errors.Add(ValidationError.For(
+                field,
+                $"The {label} minimum score is {value}. Enter a score between 0 and 100."));
         }
     }
 
-    private static void ValidateMetric(string auditId, decimal value, ICollection<string> errors)
+    private static void ValidateMetric(
+        string auditId,
+        decimal value,
+        string field,
+        ICollection<ValidationError> errors)
     {
         var definition = PageAuditMetricDefinitions.Get(auditId);
         if (value < 0 || value > definition.MaximumAllowed)
         {
-            errors.Add($"{definition.Label} maximum must be between 0 and {definition.MaximumAllowed}.");
+            errors.Add(ValidationError.For(
+                field,
+                $"The {definition.Label} maximum is {value} {definition.Unit}. Enter a value between "
+                + $"0 and {definition.MaximumAllowed} {definition.Unit} — around "
+                + $"{definition.SuggestedMaximum} {definition.Unit} is typical."));
         }
     }
 }

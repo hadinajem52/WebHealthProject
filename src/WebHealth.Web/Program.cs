@@ -25,10 +25,33 @@ builder.Services.AddSerilog((services, loggerConfiguration) => loggerConfigurati
     .ReadFrom.Services(services)
     .Enrich.FromLogContext()
     .Enrich.WithProperty("Application", "WebHealth")
-    .WriteTo.Console());
+    .WriteTo.Console(outputTemplate:
+        "[{Timestamp:HH:mm:ss} {Level:u3}] [{CorrelationId}] {Message:lj}{NewLine}{Exception}"));
 
 builder.Services.AddControllersWithViews(options =>
-    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
+{
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+
+    var messages = options.ModelBindingMessageProvider;
+    messages.SetValueIsInvalidAccessor(value =>
+        $"{value} is not a value this field accepts.");
+    messages.SetAttemptedValueIsInvalidAccessor((value, field) =>
+        $"{field} does not accept {value}. Enter a value of the right kind.");
+    messages.SetValueMustNotBeNullAccessor(_ => "This field is required.");
+    messages.SetMissingBindRequiredValueAccessor(field =>
+        $"{field} was missing from the request. Reload the page and submit the form again.");
+    messages.SetMissingKeyOrValueAccessor(() =>
+        "A required value was missing. Reload the page and submit the form again.");
+    messages.SetMissingRequestBodyRequiredValueAccessor(() =>
+        "The request arrived empty. Reload the page and submit the form again.");
+    messages.SetNonPropertyAttemptedValueIsInvalidAccessor(value =>
+        $"{value} is not a value this field accepts.");
+    messages.SetNonPropertyValueMustBeANumberAccessor(() => "Enter a number.");
+    messages.SetValueMustBeANumberAccessor(field => $"{field} must be a number.");
+    messages.SetUnknownValueIsInvalidAccessor(field =>
+        $"{field} does not accept that value.");
+    messages.SetNonPropertyUnknownValueIsInvalidAccessor(() => "That value is not accepted here.");
+});
 builder.Services
     .AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live", "ready"]);

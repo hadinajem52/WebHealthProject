@@ -124,9 +124,13 @@ public sealed record PageAuditExecutionOutcome(
 /// request opens a run per form factor: an existing run is a distinct answer from a new one, so
 /// the page can say "already running" rather than implying it started something.
 /// </summary>
-public sealed record PageAuditManualResult(int QueuedCount, int AlreadyRunningCount, string? Error)
+public sealed record PageAuditManualResult(
+    int QueuedCount,
+    int AlreadyRunningCount,
+    string? Error,
+    EndpointTestBlock Block = EndpointTestBlock.None)
 {
-    public bool Succeeded => Error is null;
+    public bool Succeeded => Error is null && Block == EndpointTestBlock.None;
 
     /// <summary>Every audit asked for was already in flight, so nothing new was started.</summary>
     public bool WasAlreadyRunning => QueuedCount == 0 && AlreadyRunningCount > 0;
@@ -135,6 +139,8 @@ public sealed record PageAuditManualResult(int QueuedCount, int AlreadyRunningCo
         new(queuedCount, alreadyRunningCount, null);
 
     public static PageAuditManualResult Rejected(string error) => new(0, 0, error);
+
+    public static PageAuditManualResult NotTestable(EndpointTestBlock block) => new(0, 0, null, block);
 }
 
 /// <summary>

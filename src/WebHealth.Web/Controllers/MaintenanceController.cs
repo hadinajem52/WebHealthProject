@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +26,7 @@ public sealed class MaintenanceController(
     public async Task<IActionResult> Details(Guid id, CancellationToken cancellationToken)
     {
         var window = await maintenanceReader.FindAsync(id, cancellationToken);
-        return window is null ? NotFound() : View(new MaintenanceDetailsViewModel(window));
+        return window is null ? this.NotFoundRecord("maintenance window") : View(new MaintenanceDetailsViewModel(window));
     }
 
     [HttpGet]
@@ -57,7 +58,7 @@ public sealed class MaintenanceController(
     public async Task<IActionResult> Edit(Guid id, CancellationToken cancellationToken)
     {
         var window = await maintenanceReader.FindAsync(id, cancellationToken);
-        if (window is null) return NotFound();
+        if (window is null) return this.NotFoundRecord("maintenance window");
         if (window.IsCancelled)
         {
             TempData.AddFlashMessage(FlashLevel.Error, "Cancelled maintenance windows cannot be edited.");
@@ -99,7 +100,7 @@ public sealed class MaintenanceController(
             ToRecurrence(model)), GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
-            if (result.Status == MaintenanceMutationStatus.NotFound) return NotFound();
+            if (result.Status == MaintenanceMutationStatus.NotFound) return this.NotFoundRecord("maintenance window");
             AddErrors(result.Errors);
             return this.ValidationView(
                 nameof(Edit),
@@ -124,7 +125,7 @@ public sealed class MaintenanceController(
         }
         if (result.Status == MaintenanceMutationStatus.NotFound)
         {
-            return NotFound();
+            return this.NotFoundRecord("maintenance window");
         }
 
         var detailsUrl = Url.Action(nameof(Details), new { id })!;
@@ -175,8 +176,8 @@ public sealed class MaintenanceController(
 
     private static DateTimeOffset ToUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
-    private void AddErrors(IEnumerable<string> errors)
+    private void AddErrors(IEnumerable<ValidationError> errors)
     {
-        foreach (var error in errors) ModelState.AddModelError(string.Empty, error);
+        foreach (var error in errors) ModelState.AddModelError(error.Field ?? string.Empty, error.Message);
     }
 }

@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using WebHealth.Application.Assignments;
@@ -183,7 +184,8 @@ public sealed class TeamAdministrationService(
             dbContext.ChangeTracker.Clear();
             return TeamAdministrationResult.Failure(
                 TeamAdministrationStatus.ConcurrencyConflict,
-                "This team changed after you opened it. Reload the page and try again.");
+                "Someone else changed this team after you opened it, so your change was not applied. "
+            + "Reload the page to see the current members, then reapply your change.");
         }
         catch (DbUpdateException exception) when (IsTeamNameConflict(exception))
         {
@@ -191,7 +193,7 @@ public sealed class TeamAdministrationService(
         }
     }
 
-    private async Task<List<string>> LockAndValidateMembersAsync(
+    private async Task<List<ValidationError>> LockAndValidateMembersAsync(
         IReadOnlyCollection<Guid> requestedUserIds,
         IReadOnlyCollection<Guid> retainedUserIds,
         CancellationToken cancellationToken)
@@ -215,11 +217,14 @@ public sealed class TeamAdministrationService(
         var hasNewDisabledUser = users.Any(user => user.IsDisabled && !retainedIds.Contains(user.Id));
 
         return hasMissingUser || hasNewDisabledUser
-            ? ["One or more selected users do not exist or are disabled."]
+            ? [ValidationError.For(
+                "MemberUserIds",
+                "One or more selected people no longer exist or have been disabled. "
+                + "Reload the page to see who is available, then choose again.")]
             : [];
     }
 
-    private async Task<List<string>> ValidateNameAvailableAsync(
+    private async Task<List<ValidationError>> ValidateNameAvailableAsync(
         string name,
         Guid? currentTeamId,
         CancellationToken cancellationToken)
@@ -230,7 +235,9 @@ public sealed class TeamAdministrationService(
                 && team.NormalizedName == normalizedName
                 && team.NormalizationVersion == NameNormalizer.Version,
             cancellationToken);
-        return duplicateExists ? ["A team with this name already exists."] : [];
+        return duplicateExists
+            ? [ValidationError.For("Name", "Another team already uses this name. Choose a different one.")]
+            : [];
     }
 
     private Task<List<TeamMember>> FindCurrentMembershipsAsync(
@@ -243,14 +250,18 @@ public sealed class TeamAdministrationService(
                 && (member.EffectiveUntil == null || member.EffectiveUntil > now))
             .ToListAsync(cancellationToken);
 
-    private static List<string> ValidateName(string name)
+    private static List<ValidationError> ValidateName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
-            return ["Enter a team name."];
+            return [ValidationError.For("Name", "Enter a team name.")];
         }
 
-        return name.Length > 200 ? ["The team name cannot exceed 200 characters."] : [];
+        return name.Length > 200
+            ? [ValidationError.For(
+                "Name",
+                $"This name is {name.Length} characters. Shorten it to 200 or fewer.")]
+            : [];
     }
 
     private static Team CreateTeam(string name, Guid actorUserId, DateTimeOffset now) => new()

@@ -187,23 +187,26 @@ public sealed class CrawlExecutionTests
 
         outcome.Status.Should().Be(CrawlRunStatuses.Failed);
         outcome.StopReason.Should().Be(CrawlStopReasons.Failed);
-        outcome.FailureDetail.Should()
-            .Contain("InvalidOperationException", "the type is half of what identifies the fault")
-            .And.Contain("the connection pool is exhausted");
-        sink.Outcome!.FailureDetail.Should().Be(outcome.FailureDetail,
+        outcome.FailureCode.Should().Be(
+            CrawlFailureCodes.Unexpected,
+            "an unclassified fault still has to be recorded as something");
+        sink.Outcome!.FailureCode.Should().Be(outcome.FailureCode,
             "the reason has to reach the store, not only the caller");
+        outcome.FailureCode.Should().NotContain("Exception",
+            "the report shows written copy; the exception belongs in the log");
+        outcome.FailureCode.Should().NotContain("connection pool",
+            "an exception message must never reach a page the user reads");
     }
 
-    /// <summary>A run that ended normally must carry no failure text at all.</summary>
     [Fact]
-    public async Task ExecuteAsync_LeavesNoFailureDetailOnARunThatCompleted()
+    public async Task ExecuteAsync_LeavesNoFailureCodeOnARunThatCompleted()
     {
         var site = Site().Page(Seed, CrawlTestHarness.LinkTo());
 
         var (outcome, _) = await CrawlTestHarness.RunAsync(site, CrawlTestHarness.Request());
 
         outcome.Status.Should().Be(CrawlRunStatuses.Completed);
-        outcome.FailureDetail.Should().BeNull();
+        outcome.FailureCode.Should().BeNull();
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +8,7 @@ using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Web.Ajax;
 using WebHealth.Web.Models;
+using WebHealth.Web.Shell;
 
 namespace WebHealth.Web.Controllers;
 
@@ -23,7 +25,7 @@ public sealed class PageAuditSettingsController(
         var endpoint = await FindEndpointAsync(endpointId, cancellationToken);
         if (endpoint is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("endpoint");
         }
 
         return View(PageAuditIncidentSettingsViewModel.From(
@@ -39,7 +41,7 @@ public sealed class PageAuditSettingsController(
         var endpoint = await FindEndpointAsync(model.EndpointId, cancellationToken);
         if (endpoint is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("endpoint");
         }
 
         if (!ModelState.IsValid)
@@ -52,14 +54,24 @@ public sealed class PageAuditSettingsController(
             model.EndpointId, model.ToCommand(), GetActorUserId(), cancellationToken);
         if (!result.Succeeded)
         {
-            foreach (var error in result.Errors)
+            model.EndpointLabel = Describe(endpoint);
+            if (result.Conflict)
             {
-                ModelState.AddModelError(string.Empty, error);
+                ModelState.Clear();
+                model = PageAuditIncidentSettingsViewModel.From(result.Policy, Describe(endpoint));
             }
 
-            return View(PageAuditIncidentSettingsViewModel.From(
-                result.Policy,
-                Describe(endpoint)));
+            foreach (var error in result.Errors)
+            {
+                ModelState.AddModelError(error.Field ?? string.Empty, error.Message);
+            }
+
+            return this.ValidationView(
+                nameof(Index),
+                model,
+                result.Conflict
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status422UnprocessableEntity);
         }
 
         return this.RedirectOrAjaxNavigate(

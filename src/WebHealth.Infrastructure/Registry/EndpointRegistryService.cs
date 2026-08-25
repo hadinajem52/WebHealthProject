@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
@@ -32,25 +33,31 @@ internal sealed class EndpointRegistryService(
         var url = EndpointUrlNormalizer.Normalize(command.Url);
         if (!url.Succeeded)
         {
-            return Validation(url.Errors);
+            return Validation(url.Errors.Select(error =>
+                ValidationError.For(nameof(CreateEndpoint.Url), error)));
+        }
+
+        if (DestinationHostPolicy.IsDefinitelyUnreachable(url.NormalizedHost, out var unreachable))
+        {
+            return Validation(ValidationError.For(nameof(CreateEndpoint.Url), unreachable!));
         }
 
         var interval = DecideIntervalOverride(command.IntervalMinutesOverride, access, null);
         if (interval.Error is not null)
         {
-            return Validation(interval.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.IntervalMinutesOverride), interval.Error));
         }
 
         var thresholds = ResponseThresholdOverride.Decide(
             command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
         if (thresholds.Error is not null)
         {
-            return Validation(thresholds.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.WarningThresholdMsOverride), thresholds.Error));
         }
 
         if (ValidateSeoPolicy(command.SeoIndexingExpectation, command.SeoExpectedCanonicalHost) is { } seoError)
         {
-            return Validation(seoError);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.SeoIndexingExpectation), seoError));
         }
 
         if (PageAuditConfiguration.Validate(
@@ -59,25 +66,31 @@ internal sealed class EndpointRegistryService(
             command.PageAuditIntervalHours,
             url.NormalizedUrl!) is { } pageAuditError)
         {
-            return Validation(pageAuditError);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.PageAuditIntervalHours), pageAuditError));
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var environment = await LockEnvironmentAsync(command.EnvironmentId, cancellationToken);
         if (environment is null)
         {
-            return Validation("Select an active environment under a non-deleted website.");
+            return Validation(ValidationError.For(
+                nameof(CreateEndpoint.EnvironmentId),
+                "Select an active environment whose website is not archived. An inactive environment "
+                + "cannot take new endpoints."));
         }
 
         if (!await IsValidOwnerAsync(command.OwnerSubjectId, null, cancellationToken))
         {
-            return Validation("Select an enabled user or team owner, or inherit the website owner.");
+            return Validation(ValidationError.For(
+                nameof(UpdateEndpoint.OwnerSubjectId),
+                "Select an enabled user or team as the owner, or leave it blank to inherit the "
+                + "website owner. A disabled owner cannot own records."));
         }
 
         var exception = DecideHttpException(url.NormalizedUrl!, command.HttpExceptionReason, environment.IsProduction, access, null);
         if (exception.Error is not null)
         {
-            return Validation(exception.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.HttpExceptionReason), exception.Error));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -86,7 +99,7 @@ internal sealed class EndpointRegistryService(
             command.TargetAuthorizationExpiresAt, command.IsEnabled, url, null, now);
         if (authorization.Error is not null)
         {
-            return Validation(authorization.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.TargetAuthorizationEvidence), authorization.Error));
         }
 
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
@@ -137,7 +150,13 @@ internal sealed class EndpointRegistryService(
         var url = EndpointUrlNormalizer.Normalize(command.Url);
         if (!url.Succeeded)
         {
-            return Validation(url.Errors);
+            return Validation(url.Errors.Select(error =>
+                ValidationError.For(nameof(CreateEndpoint.Url), error)));
+        }
+
+        if (DestinationHostPolicy.IsDefinitelyUnreachable(url.NormalizedHost, out var unreachable))
+        {
+            return Validation(ValidationError.For(nameof(CreateEndpoint.Url), unreachable!));
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -154,7 +173,7 @@ internal sealed class EndpointRegistryService(
 
         if (endpoint.DeletedAt is not null)
         {
-            return Validation("Restore the endpoint before editing it.");
+            return Validation("This endpoint is archived, so it cannot be edited. Restore it first, then reopen this form.");
         }
 
         var monitor = AvailabilityMonitor(endpoint);
@@ -163,19 +182,19 @@ internal sealed class EndpointRegistryService(
             command.IntervalMinutesOverride, access, currentIntervalOverride);
         if (interval.Error is not null)
         {
-            return Validation(interval.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.IntervalMinutesOverride), interval.Error));
         }
 
         var thresholds = ResponseThresholdOverride.Decide(
             command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
         if (thresholds.Error is not null)
         {
-            return Validation(thresholds.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.WarningThresholdMsOverride), thresholds.Error));
         }
 
         if (ValidateSeoPolicy(command.SeoIndexingExpectation, command.SeoExpectedCanonicalHost) is { } seoError)
         {
-            return Validation(seoError);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.SeoIndexingExpectation), seoError));
         }
 
         if (PageAuditConfiguration.Validate(
@@ -184,19 +203,22 @@ internal sealed class EndpointRegistryService(
             command.PageAuditIntervalHours,
             url.NormalizedUrl!) is { } pageAuditError)
         {
-            return Validation(pageAuditError);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.PageAuditIntervalHours), pageAuditError));
         }
 
         if (!await IsValidOwnerAsync(command.OwnerSubjectId, endpoint.OwnerSubjectId, cancellationToken))
         {
-            return Validation("Select an enabled user or team owner, or inherit the website owner.");
+            return Validation(ValidationError.For(
+                nameof(UpdateEndpoint.OwnerSubjectId),
+                "Select an enabled user or team as the owner, or leave it blank to inherit the "
+                + "website owner. A disabled owner cannot own records."));
         }
 
         var exception = DecideHttpException(url.NormalizedUrl!, command.HttpExceptionReason,
             endpoint.Environment.IsProduction, access, endpoint);
         if (exception.Error is not null)
         {
-            return Validation(exception.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.HttpExceptionReason), exception.Error));
         }
 
         dbContext.Entry(endpoint).Property(candidate => candidate.Version).OriginalValue = command.Version;
@@ -213,7 +235,7 @@ internal sealed class EndpointRegistryService(
             command.TargetAuthorizationExpiresAt, command.IsEnabled, url, currentAuthorization, now);
         if (authorization.Error is not null)
         {
-            return Validation(authorization.Error);
+            return Validation(ValidationError.For(nameof(UpdateEndpoint.TargetAuthorizationEvidence), authorization.Error));
         }
 
         var pageAuditBefore = await PageAuditConfiguration.ReadAsync(
@@ -311,7 +333,7 @@ internal sealed class EndpointRegistryService(
 
         if (endpoint.DeletedAt is null)
         {
-            return Validation("Archive the endpoint before deleting it permanently.");
+            return Validation("Only an archived endpoint can be deleted permanently. Archive this one first.");
         }
 
         if (endpoint.Version != command.Version)
@@ -364,7 +386,7 @@ internal sealed class EndpointRegistryService(
 
         if (endpoint.DeletedAt is not null)
         {
-            return Validation("Restore the endpoint before changing its schedule.");
+            return Validation("This endpoint is archived, so its schedule cannot change. Restore it first.");
         }
 
         var monitor = endpoint.Monitors.SingleOrDefault(candidate =>
@@ -372,12 +394,14 @@ internal sealed class EndpointRegistryService(
             && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
         if (monitor is null)
         {
-            return Validation("The endpoint has no active monitor.");
+            return Validation("This endpoint has no active monitor, so there is no schedule to change. "
+                + "Open Edit endpoint and enable a check first.");
         }
 
         if (!monitor.SchedulingEnabled)
         {
-            return Validation("This endpoint runs manual checks only. Enable scheduled checks in Edit endpoint first.");
+            return Validation("This endpoint runs on-demand checks only. Turn on “Run scheduled checks” "
+                + "in Edit endpoint before pausing or resuming a schedule.");
         }
 
         if (monitor.IsEnabled == scheduleEnabled)
@@ -521,7 +545,7 @@ internal sealed class EndpointRegistryService(
         var reason = submittedReason?.Trim();
         if (reason?.Length > 500)
         {
-            return new(null, null, null, "The HTTP exception reason cannot exceed 500 characters.");
+            return new(null, null, null, "This reason is longer than 500 characters. Shorten it.");
         }
 
         var canRetain = existing is not null
@@ -536,11 +560,13 @@ internal sealed class EndpointRegistryService(
 
         if (!access.Roles.Contains(ApplicationRoles.Administrator, StringComparer.Ordinal))
         {
-            return new(null, null, null, "Only an Administrator can approve HTTP for a Production endpoint.");
+            return new(null, null, null, "Only an Administrator can approve plain HTTP for a Production endpoint. "
+                + "Ask one to record the exception, or use an https:// URL.");
         }
 
         return string.IsNullOrWhiteSpace(reason)
-            ? new(null, null, null, "Enter a required reason for the Production HTTP exception.")
+            ? new(null, null, null, "This Production endpoint uses plain http://, which needs a written reason. "
+                + "Enter one, or change the URL to https://.")
             : new(reason, access.UserId, DateTimeOffset.UtcNow, null);
     }
 
@@ -585,12 +611,12 @@ internal sealed class EndpointRegistryService(
     {
         if (!SeoIndexingExpectations.IsSupported(expectation))
         {
-            return "Select a supported indexing expectation.";
+            return "Select an indexing expectation from the list.";
         }
 
         var host = NormalizeExpectedHost(expectedHost);
         return host is not null && (host.Length > 253 || Uri.CheckHostName(host) == UriHostNameType.Unknown)
-            ? "The expected canonical host must be a valid host name."
+            ? "Enter a host name only, such as www.example.com — no scheme, port or path."
             : null;
     }
 
@@ -1013,7 +1039,8 @@ internal sealed class EndpointRegistryService(
     {
         if (intervalMinutes is < 1 or > 1440)
         {
-            return new(null, "The monitoring interval must be between 1 minute and 24 hours.");
+            return new(null, "Enter a monitoring interval between 1 and 1440 minutes, or leave it blank "
+                + "to use the default for this environment.");
         }
 
         int? submittedSeconds = intervalMinutes * 60;
@@ -1021,7 +1048,8 @@ internal sealed class EndpointRegistryService(
         if (submittedSeconds != currentSeconds
             && !access.Roles.Contains(ApplicationRoles.Administrator, StringComparer.Ordinal))
         {
-            return new(null, "Only an Administrator can change the monitoring interval.");
+            return new(null, "Only an Administrator can change the monitoring interval. Leave it blank to "
+                + "keep the default for this environment.");
         }
 
         return new(submittedSeconds, null);
@@ -1049,23 +1077,26 @@ internal sealed class EndpointRegistryService(
         if (string.IsNullOrEmpty(kind) && string.IsNullOrEmpty(evidence) && expiresAt is null)
         {
             return endpointEnabled
-                ? new(null, current, false, "Enabled endpoints require ownership or explicit testing-permission evidence.")
+                ? new(null, current, false, "An enabled endpoint needs testing evidence: record that you own this "
+                    + "target or that you have explicit permission, or save the endpoint disabled.")
                 : new(null, current, current is not null, null);
         }
 
         if (!TargetAuthorizationKinds.All.Contains(kind, StringComparer.Ordinal))
         {
-            return new(null, current, false, "Select owned target or explicit testing permission.");
+            return new(null, current, false, "Choose how this target is authorized: owned, or explicit permission.");
         }
 
         if (string.IsNullOrWhiteSpace(evidence) || evidence.Length > 500)
         {
-            return new(null, current, false, "Enter a target-authorization reference of at most 500 characters.");
+            return new(null, current, false, "Enter a reference for this authorization, 500 characters or fewer — "
+                + "never a credential or token.");
         }
 
         if (expiresAt is not null && expiresAt <= now)
         {
-            return new(null, current, false, "Target authorization must expire in the future.");
+            return new(null, current, false, "This authorization expires in the past, so it would never permit a check. "
+                + "Choose a future date, or leave it blank for no expiry.");
         }
 
         var unchanged = current is not null
@@ -1156,8 +1187,14 @@ internal sealed class EndpointRegistryService(
             .Select(endpoint => endpoint.NormalizedUrl)
             .SingleOrDefaultAsync(cancellationToken);
         return string.Equals(existingUrl, normalizedUrl, StringComparison.Ordinal)
-            ? Validation("An endpoint with this normalized URL already exists in the environment.")
-            : Validation("A URL identity hash collision was detected. No endpoint was saved.");
+            ? Validation(ValidationError.For(
+                nameof(CreateEndpoint.Url),
+                "This environment already has an endpoint at this URL. URLs are compared after "
+                + "normalization, so a differently written address can still be the same endpoint."))
+            : Validation(ValidationError.For(
+                nameof(CreateEndpoint.Url),
+                "This URL could not be stored because its identity clashes with an existing one. "
+                + "Nothing was saved. Report this with the URL you entered."));
     }
 
     private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
@@ -1172,7 +1209,7 @@ internal sealed class EndpointRegistryService(
 
     private static RegistryMutationResult Forbidden() => RegistryMutationResult.Failure(RegistryMutationStatus.Forbidden, "Registry management is not permitted.");
     private static RegistryMutationResult NotFound() => RegistryMutationResult.Failure(RegistryMutationStatus.NotFound, "The endpoint was not found.");
-    private static RegistryMutationResult Validation(params IEnumerable<string> errors) => RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
+    private static RegistryMutationResult Validation(params IEnumerable<ValidationError> errors) => RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
 
     private sealed record HttpExceptionDecision(
         string? Reason, Guid? ApprovedByUserId, DateTimeOffset? ApprovedAt, string? Error);

@@ -8,7 +8,9 @@ namespace WebHealth.Web.Controllers;
 
 public sealed class AccountController : Controller
 {
-    private const string InvalidSignInMessage = "The email or password is incorrect.";
+    private const string InvalidSignInMessage =
+        "That email address and password do not match an active account. Check both, and note "
+        + "that a disabled account cannot sign in even with the right password.";
 
     [AllowAnonymous]
     [HttpGet]
@@ -57,7 +59,8 @@ public sealed class AccountController : Controller
         ModelState.AddModelError(
             string.Empty,
             result.IsLockedOut
-                ? "Sign-in is temporarily locked. Try again later."
+                ? "Too many failed attempts, so this account is locked for 15 minutes. "
+                    + "Wait and try again, or ask an Administrator to reset the password."
                 : InvalidSignInMessage);
         return View(model);
     }

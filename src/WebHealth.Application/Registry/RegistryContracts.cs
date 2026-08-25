@@ -94,7 +94,7 @@ public enum RegistryMutationStatus
 public sealed record RegistryMutationResult(
     RegistryMutationStatus Status,
     Guid? EntityId,
-    IReadOnlyList<string> Errors)
+    IReadOnlyList<ValidationError> Errors)
 {
     public bool Succeeded => Status == RegistryMutationStatus.Succeeded;
 
@@ -103,5 +103,5 @@ public sealed record RegistryMutationResult(
 
     public static RegistryMutationResult Failure(
         RegistryMutationStatus status,
-        params IEnumerable<string> errors) => new(status, null, errors.ToArray());
+        params IEnumerable<ValidationError> errors) => new(status, null, errors.ToArray());
 }

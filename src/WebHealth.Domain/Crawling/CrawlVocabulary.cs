@@ -81,6 +81,19 @@ public static class CrawlStopReasons
         value is FrontierExhausted or PageLimit or DurationLimit or Cancelled or Failed;
 }
 
+public static class CrawlFailureCodes
+{
+    public const string WorkerUnavailable = "WorkerUnavailable";
+    public const string Abandoned = "Abandoned";
+    public const string StorageUnavailable = "StorageUnavailable";
+    public const string SiteUnreachable = "SiteUnreachable";
+    public const string Unexpected = "Unexpected";
+
+    public static bool IsSupported(string value) =>
+        value is WorkerUnavailable or Abandoned or StorageUnavailable
+            or SiteUnreachable or Unexpected;
+}
+
 /// <summary>BR-L10: a cancelled run keeps its findings and is never labelled complete.</summary>
 public static class CrawlRunStatuses
 {

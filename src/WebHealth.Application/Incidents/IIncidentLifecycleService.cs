@@ -77,7 +77,7 @@ public enum IncidentMutationStatus
 public sealed record IncidentMutationResult(
     IncidentMutationStatus Status,
     Guid? IncidentId,
-    IReadOnlyList<string> Errors)
+    IReadOnlyList<ValidationError> Errors)
 {
     public bool Succeeded => Status == IncidentMutationStatus.Succeeded;
 
@@ -86,7 +86,7 @@ public sealed record IncidentMutationResult(
 
     public static IncidentMutationResult Failure(
         IncidentMutationStatus status,
-        params IEnumerable<string> errors) => new(status, null, errors.ToArray());
+        params IEnumerable<ValidationError> errors) => new(status, null, errors.ToArray());
 }
 
 /// <summary>
@@ -96,7 +96,7 @@ public sealed record IncidentMutationResult(
 public sealed record IncidentArchiveResult(
     IncidentMutationStatus Status,
     int ArchivedCount,
-    IReadOnlyList<string> Errors)
+    IReadOnlyList<ValidationError> Errors)
 {
     public bool Succeeded => Status == IncidentMutationStatus.Succeeded;
 
@@ -105,5 +105,5 @@ public sealed record IncidentArchiveResult(
 
     public static IncidentArchiveResult Failure(
         IncidentMutationStatus status,
-        params IEnumerable<string> errors) => new(status, 0, errors.ToArray());
+        params IEnumerable<ValidationError> errors) => new(status, 0, errors.ToArray());
 }

@@ -35,6 +35,7 @@
         <p>Website Health Monitoring &mdash; internal monitoring workspace.</p>
     </footer>
 
+    @await Html.PartialAsync("_ValidationScriptsPartial")
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

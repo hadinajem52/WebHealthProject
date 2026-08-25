@@ -2637,6 +2637,15 @@ code,
     content: "—";
 }
 
+.audit-list__source {
+    color: var(--text-secondary);
+    display: block;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
 @media (max-width: 48em) {
     .audit-list__row {
         grid-template-columns: minmax(0, 1fr);

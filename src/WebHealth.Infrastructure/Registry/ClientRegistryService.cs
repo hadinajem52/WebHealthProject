@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
@@ -27,7 +28,9 @@ internal sealed class ClientRegistryService(
         var errors = RegistryMutationSupport.ValidateName(name);
         if (command.Notes?.Trim().Length > 2000)
         {
-            errors.Add("Notes cannot exceed 2000 characters.");
+            errors.Add(ValidationError.For(
+                nameof(UpdateClient.Notes),
+                $"These notes are {command.Notes!.Trim().Length} characters. Shorten them to 2000 or fewer."));
         }
         if (errors.Count > 0)
         {
@@ -37,7 +40,9 @@ internal sealed class ClientRegistryService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         if (!await support.LockValidOwnerAsync(command.OwnerSubjectId, null, cancellationToken))
         {
-            return Validation("Select an enabled user or team owner.");
+            return Validation(ValidationError.For(
+                nameof(UpdateClient.OwnerSubjectId),
+                "Select an enabled user or team as the owner. A disabled one cannot own records."));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -90,7 +95,9 @@ internal sealed class ClientRegistryService(
         var errors = RegistryMutationSupport.ValidateName(name);
         if (command.Notes?.Trim().Length > 2000)
         {
-            errors.Add("Notes cannot exceed 2000 characters.");
+            errors.Add(ValidationError.For(
+                nameof(UpdateClient.Notes),
+                $"These notes are {command.Notes!.Trim().Length} characters. Shorten them to 2000 or fewer."));
         }
         if (errors.Count > 0)
         {
@@ -108,7 +115,7 @@ internal sealed class ClientRegistryService(
 
         if (client.DeletedAt is not null)
         {
-            return Validation("Restore the client before editing it.");
+            return Validation("This client is archived, so it cannot be edited. Restore it first, then reopen this form.");
         }
 
         if (!await support.LockValidOwnerAsync(
@@ -116,7 +123,9 @@ internal sealed class ClientRegistryService(
                 client.OwnerSubjectId,
                 cancellationToken))
         {
-            return Validation("Select an enabled user or team owner.");
+            return Validation(ValidationError.For(
+                nameof(UpdateClient.OwnerSubjectId),
+                "Select an enabled user or team as the owner. A disabled one cannot own records."));
         }
 
         dbContext.Entry(client).Property(candidate => candidate.Version).OriginalValue = command.Version;
@@ -286,7 +295,9 @@ internal sealed class ClientRegistryService(
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
-        return Validation("An active client with this name already exists.");
+        return Validation(ValidationError.For(
+            nameof(UpdateClient.Name),
+            "Another active client already uses this name. Choose a different one."));
     }
 
     private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
@@ -306,6 +317,6 @@ internal sealed class ClientRegistryService(
     private static RegistryMutationResult NotFound() =>
         RegistryMutationResult.Failure(RegistryMutationStatus.NotFound, "The client was not found.");
 
-    private static RegistryMutationResult Validation(params IEnumerable<string> errors) =>
+    private static RegistryMutationResult Validation(params IEnumerable<ValidationError> errors) =>
         RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
 }

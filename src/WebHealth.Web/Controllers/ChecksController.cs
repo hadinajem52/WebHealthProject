@@ -38,17 +38,28 @@ public sealed class ChecksController(
         switch (result.Status)
         {
             case ManualCheckStatus.Forbidden:
-                return Forbid();
+                return this.AjaxMessage(
+                    endpointUrl,
+                    EndpointTestBlockDisplay.Describe(result.Block, "this check")
+                        ?? "This endpoint cannot be checked right now.",
+                    FlashLevel.Error,
+                    result.Block is EndpointTestBlock.NotVisible or EndpointTestBlock.NotPermitted
+                        ? StatusCodes.Status403Forbidden
+                        : StatusCodes.Status422UnprocessableEntity,
+                    endpointUrl);
             case ManualCheckStatus.MonitorNotAvailable:
                 return this.AjaxMessage(
                     endpointUrl,
-                    "This endpoint has no active monitor to run.",
+                    "This endpoint has no active monitor to run. Open Edit endpoint and enable the "
+                    + "check you want before running it.",
                     FlashLevel.Error,
-                    StatusCodes.Status422UnprocessableEntity);
+                    StatusCodes.Status422UnprocessableEntity,
+                    endpointUrl);
             case ManualCheckStatus.SchedulingUnavailable:
                 return this.AjaxMessage(
                     endpointUrl,
-                    "Manual checks are unavailable while monitoring scheduling is disabled.",
+                    "Checks are not running on this instance, so none can be started. "
+                    + "Enable Monitoring:Scheduling to run them.",
                     FlashLevel.Error,
                     StatusCodes.Status422UnprocessableEntity);
         }
@@ -71,7 +82,7 @@ public sealed class ChecksController(
         var check = await checkHistoryReader.FindCheckAsync(id, GetAccess(), cancellationToken);
         if (check is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("check");
         }
 
         var isComplete = check.State == LogicalCheckStates.Completed;
@@ -91,7 +102,7 @@ public sealed class ChecksController(
         var result = await checkHistoryReader.ListForEndpointAsync(id, GetAccess(), page, cancellationToken);
         // BR-R01: the page states which endpoint it is scoped to and when it was read.
         return result is null
-            ? NotFound()
+            ? this.NotFoundRecord("endpoint")
             : View(new CheckHistoryViewModel(
                 result,
                 new FilterSummaryViewModel(
@@ -103,7 +114,7 @@ public sealed class ChecksController(
     public async Task<IActionResult> Check(Guid id, CancellationToken cancellationToken)
     {
         var check = await checkHistoryReader.FindCheckAsync(id, GetAccess(), cancellationToken);
-        return check is null ? NotFound() : View(new CheckDetailsViewModel(check));
+        return check is null ? this.NotFoundRecord("check") : View(new CheckDetailsViewModel(check));
     }
 
     private RegistryAccessContext GetAccess()

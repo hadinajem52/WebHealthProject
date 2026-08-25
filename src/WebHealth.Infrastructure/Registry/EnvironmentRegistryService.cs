@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
@@ -34,7 +35,9 @@ internal sealed class EnvironmentRegistryService(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         if (!await LockWebsiteAsync(command.WebsiteId, cancellationToken))
         {
-            return Validation("Select an active website.");
+            return Validation(ValidationError.For(
+                nameof(CreateEnvironment.WebsiteId),
+                "Select an active website. An archived website cannot take new environments."));
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -102,7 +105,7 @@ internal sealed class EnvironmentRegistryService(
 
         if (environment.DeletedAt is not null)
         {
-            return Validation("Restore the environment before editing it.");
+            return Validation("This environment is archived, so it cannot be edited. Restore it first, then reopen this form.");
         }
 
         if (!command.IsActive && !await CanBecomeInactiveAsync(environment, cancellationToken))
@@ -255,28 +258,39 @@ internal sealed class EnvironmentRegistryService(
     {
         var displayName = NameNormalizer.TrimDisplayName(name);
         var type = environmentType.Trim();
-        var errors = new List<string>();
-        if (displayName.Length == 0 || displayName.Length > 100)
+        var errors = new List<ValidationError>();
+        if (displayName.Length == 0)
         {
-            errors.Add("Enter an environment name of 100 characters or fewer.");
+            errors.Add(ValidationError.For(nameof(UpdateEnvironment.Name), "Enter an environment name."));
+        }
+        else if (displayName.Length > 100)
+        {
+            errors.Add(ValidationError.For(
+                nameof(UpdateEnvironment.Name),
+                $"This name is {displayName.Length} characters. Shorten it to 100 or fewer."));
         }
 
         if (!EnvironmentTypes.All.Contains(type, StringComparer.Ordinal))
         {
-            errors.Add("Select a supported environment type.");
+            errors.Add(ValidationError.For(
+                nameof(UpdateEnvironment.EnvironmentType),
+                $"Select an environment type. The supported ones are {string.Join(", ", EnvironmentTypes.All)}."));
         }
 
         var normalizedBaseUrl = NormalizeBaseUrl(baseUrl, errors);
         var isProduction = type == EnvironmentTypes.Production;
         if (isProduction && normalizedBaseUrl?.StartsWith("http://", StringComparison.Ordinal) == true)
         {
-            errors.Add("Production environment base URLs must use HTTPS.");
+            errors.Add(ValidationError.For(
+                nameof(UpdateEnvironment.BaseUrl),
+                "A Production base URL must use https://. Change the scheme, or set this environment "
+                + "to a non-production type."));
         }
 
         return new(displayName, type, isProduction, normalizedBaseUrl, errors);
     }
 
-    private static string? NormalizeBaseUrl(string? baseUrl, ICollection<string> errors)
+    private static string? NormalizeBaseUrl(string? baseUrl, ICollection<ValidationError> errors)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
         {
@@ -288,9 +302,15 @@ internal sealed class EnvironmentRegistryService(
         {
             foreach (var error in result.Errors)
             {
-                errors.Add($"Base URL: {error}");
+                errors.Add(ValidationError.For(nameof(UpdateEnvironment.BaseUrl), error));
             }
 
+            return null;
+        }
+
+        if (DestinationHostPolicy.IsDefinitelyUnreachable(result.NormalizedHost, out var unreachable))
+        {
+            errors.Add(ValidationError.For(nameof(UpdateEnvironment.BaseUrl), unreachable!));
             return null;
         }
 
@@ -372,7 +392,9 @@ internal sealed class EnvironmentRegistryService(
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
-        return Validation("An environment with this name already exists for the website.");
+        return Validation(ValidationError.For(
+            nameof(UpdateEnvironment.Name),
+            "This website already has an environment with this name. Choose a different one."));
     }
 
     private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
@@ -387,8 +409,8 @@ internal sealed class EnvironmentRegistryService(
 
     private static RegistryMutationResult Forbidden() => RegistryMutationResult.Failure(RegistryMutationStatus.Forbidden, "Registry management is not permitted.");
     private static RegistryMutationResult NotFound() => RegistryMutationResult.Failure(RegistryMutationStatus.NotFound, "The environment was not found.");
-    private static RegistryMutationResult Validation(params IEnumerable<string> errors) => RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
+    private static RegistryMutationResult Validation(params IEnumerable<ValidationError> errors) => RegistryMutationResult.Failure(RegistryMutationStatus.ValidationFailed, errors);
 
     private sealed record EnvironmentInput(
-        string Name, string EnvironmentType, bool IsProduction, string? BaseUrl, IReadOnlyList<string> Errors);
+        string Name, string EnvironmentType, bool IsProduction, string? BaseUrl, IReadOnlyList<ValidationError> Errors);
 }

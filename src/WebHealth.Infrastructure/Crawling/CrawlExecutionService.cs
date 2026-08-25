@@ -1,3 +1,7 @@
+using System.Data.Common;
+using System.Net.Sockets;
+using System.Security.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.Monitoring;
@@ -324,26 +328,25 @@ internal sealed class CrawlRunExecution
             granted ? null : _firstOverrideRefusal ?? CrawlOverrideRefusals.NotRequested,
             [])
         {
-            FailureDetail = failure is null ? null : Describe(failure),
+            FailureCode = failure is null ? null : Classify(failure),
             CoverageLimited = _coverageLimited
         };
     }
 
-    /// <summary>
-    /// The exception chain as one sentence a reader of the report can act on. The inner exceptions
-    /// are what carry the actual cause -- an <c>HttpRequestException</c> alone says "a request
-    /// failed" where its inner socket error says which host refused and why -- so the chain is
-    /// kept rather than only its outermost frame.
-    /// </summary>
-    private static string Describe(Exception exception)
+    private static string Classify(Exception exception)
     {
-        var parts = new List<string>();
-        for (var current = exception; current is not null && parts.Count < 3; current = current.InnerException)
+        for (Exception? current = exception; current is not null; current = current.InnerException)
         {
-            parts.Add($"{current.GetType().Name}: {current.Message}");
+            switch (current)
+            {
+                case DbException or DbUpdateException:
+                    return CrawlFailureCodes.StorageUnavailable;
+                case SocketException or AuthenticationException or HttpRequestException or IOException:
+                    return CrawlFailureCodes.SiteUnreachable;
+            }
         }
 
-        return string.Join(" -> ", parts);
+        return CrawlFailureCodes.Unexpected;
     }
 
     /// <summary>

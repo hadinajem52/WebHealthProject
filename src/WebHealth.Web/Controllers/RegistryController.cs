@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -57,7 +58,7 @@ public sealed class RegistryController(
         var access = GetAccess();
         var client = await registryReader.FindClientAsync(id, access, cancellationToken);
         return client is null
-            ? NotFound()
+            ? this.NotFoundRecord("client")
             : View(new ClientDetailsViewModel(client, RegistryCanManage(access)));
     }
 
@@ -67,7 +68,7 @@ public sealed class RegistryController(
         var access = GetAccess();
         var website = await registryReader.FindWebsiteAsync(id, access, cancellationToken);
         return website is null
-            ? NotFound()
+            ? this.NotFoundRecord("website")
             : View(new WebsiteDetailsViewModel(website, RegistryCanManage(access)));
     }
 
@@ -110,7 +111,7 @@ public sealed class RegistryController(
         var client = await registryReader.FindClientAsync(id, GetAccess(), cancellationToken);
         if (client is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("client");
         }
 
         return View(await BuildClientFormAsync(new ClientFormViewModel
@@ -215,7 +216,7 @@ public sealed class RegistryController(
         var website = await registryReader.FindWebsiteAsync(id, GetAccess(), cancellationToken);
         if (website is null)
         {
-            return NotFound();
+            return this.NotFoundRecord("website");
         }
 
         return View(await BuildWebsiteFormAsync(new WebsiteFormViewModel
@@ -284,7 +285,7 @@ public sealed class RegistryController(
         var result = await websiteService.PurgeAsync(new(id, version), GetAccess(), cancellationToken);
         if (result.Status == RegistryMutationStatus.NotFound)
         {
-            return NotFound();
+            return this.NotFoundRecord("website");
         }
 
         TempData.AddFlashMessage(
@@ -335,7 +336,7 @@ public sealed class RegistryController(
     {
         if (result.Status == RegistryMutationStatus.NotFound)
         {
-            return NotFound();
+            return this.NotFoundRecord("client");
         }
 
         AddErrors(result.Errors);
@@ -354,7 +355,7 @@ public sealed class RegistryController(
     {
         if (result.Status == RegistryMutationStatus.NotFound)
         {
-            return NotFound();
+            return this.NotFoundRecord("website");
         }
 
         AddErrors(result.Errors);
@@ -374,7 +375,7 @@ public sealed class RegistryController(
         CancellationToken cancellationToken)
     {
         var result = await operation(new(id, version), GetAccess(), cancellationToken);
-        return FinishStateChange(result, nameof(Clients), nameof(Client), id, successMessage);
+        return FinishStateChange(result, "client", nameof(Clients), nameof(Client), id, successMessage);
     }
 
     private async Task<IActionResult> ChangeWebsiteStateAsync(
@@ -385,11 +386,12 @@ public sealed class RegistryController(
         CancellationToken cancellationToken)
     {
         var result = await operation(new(id, version), GetAccess(), cancellationToken);
-        return FinishStateChange(result, nameof(Websites), nameof(Website), id, successMessage);
+        return FinishStateChange(result, "website", nameof(Websites), nameof(Website), id, successMessage);
     }
 
     private IActionResult FinishStateChange(
         RegistryMutationResult result,
+        string noun,
         string listAction,
         string detailsAction,
         Guid id,
@@ -397,7 +399,7 @@ public sealed class RegistryController(
     {
         if (result.Status == RegistryMutationStatus.NotFound)
         {
-            return NotFound();
+            return this.NotFoundRecord(noun);
         }
 
         if (!result.Succeeded)
@@ -429,11 +431,11 @@ public sealed class RegistryController(
         return RedirectToAction(listAction);
     }
 
-    private void AddErrors(IEnumerable<string> errors)
+    private void AddErrors(IEnumerable<ValidationError> errors)
     {
         foreach (var error in errors)
         {
-            ModelState.AddModelError(string.Empty, error);
+            ModelState.AddModelError(error.Field ?? string.Empty, error.Message);
         }
     }
 }

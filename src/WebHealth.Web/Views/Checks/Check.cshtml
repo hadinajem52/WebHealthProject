@@ -115,7 +115,7 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
                             <span>Outcome</span>
                         </span>
-                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? check.State, check.FailureCategory, inFlight, $"check-detail-{check.LogicalCheckId}"))</span>
+                        <span class="detail-list__value">@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(outcomeStatus, check.Outcome ?? check.State, check.FailureCategory is null ? null : IssueDisplay.DescribeRule($"Http.{check.FailureCategory}"), inFlight, $"check-detail-{check.LogicalCheckId}"))</span>
                     </div>
                 </li>
                 <li>
@@ -124,7 +124,11 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "warning")</span>
                             <span>Failure category</span>
                         </span>
-                        <span class="detail-list__value">@(check.FailureCategory ?? "None")</span>
+                        <span class="detail-list__value">
+                            @(check.FailureCategory is null
+                                ? "None"
+                                : IssueDisplay.DescribeRule($"Http.{check.FailureCategory}"))
+                        </span>
                     </div>
                 </li>
                 <li>

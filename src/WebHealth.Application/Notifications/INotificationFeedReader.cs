@@ -17,7 +17,14 @@ public sealed record NotificationFeedItem(
 /// <param name="UnreadCount">
 /// Notifications raised after the reader last marked their feed read. Drives the header dot.
 /// </param>
-public sealed record NotificationFeed(IReadOnlyList<NotificationFeedItem> Items, int UnreadCount);
+public sealed record NotificationFeed(IReadOnlyList<NotificationFeedItem> Items, int UnreadCount)
+{
+    public static NotificationFeed Empty { get; } = new([], 0);
+
+    public static NotificationFeed Unavailable { get; } = new([], 0) { IsUnavailable = true };
+
+    public bool IsUnavailable { get; init; }
+}
 
 public interface INotificationFeedReader
 {

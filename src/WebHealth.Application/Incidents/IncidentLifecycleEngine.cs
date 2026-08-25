@@ -28,7 +28,7 @@ public sealed record IncidentTransitionDecision(
     string? NewStatus,
     string? ResolutionCategory,
     string? ResolutionNote,
-    IReadOnlyList<string> Errors)
+    IReadOnlyList<ValidationError> Errors)
 {
     public static IncidentTransitionDecision Success(
         string status,

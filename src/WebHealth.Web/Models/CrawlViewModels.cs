@@ -101,24 +101,55 @@ public static class CrawlRunDisplay
             CrawlStopReasons.PageLimit => "Stopped at the page limit — the site was not fully covered",
             CrawlStopReasons.DurationLimit => "Stopped at the time limit — the site was not fully covered",
             CrawlStopReasons.Cancelled => "Cancelled — partial results only",
-            _ => string.IsNullOrWhiteSpace(run.FailureReason)
-                ? "Failed before it finished"
-                : $"Failed before it finished — {Shortened(run.FailureReason)}"
+            _ => $"Failed before it finished — {SummarizeFailure(run.FailureReason)}"
         };
     }
 
-    /// <summary>
-    /// The whole recorded reason, for the run's own page. "It failed" with nothing behind it is a
-    /// dead end for the one person who has to work out why, so the stored reason is shown rather
-    /// than only logged.
-    /// </summary>
+    private static string SummarizeFailure(string? failureReason) => failureReason switch
+    {
+        CrawlFailureCodes.WorkerUnavailable => "no crawl worker was running",
+        CrawlFailureCodes.Abandoned => "the process performing it is gone",
+        CrawlFailureCodes.StorageUnavailable => "the database could not be reached",
+        CrawlFailureCodes.SiteUnreachable => "the site stopped responding",
+        CrawlFailureCodes.Unexpected or null or "" => "open the run for what is known",
+        _ => IsAuthored(failureReason)
+            ? Shortened(failureReason)
+            : "open the run for what is known"
+    };
+
     public static string DescribeFailure(CrawlRunSummary run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        return string.IsNullOrWhiteSpace(run.FailureReason)
-            ? "No reason was recorded. Check the application log for this run id."
-            : run.FailureReason;
+        return DescribeFailureReason(run.FailureReason);
     }
+
+    public static string DescribeFailureReason(string? failureReason) => failureReason switch
+    {
+        CrawlFailureCodes.WorkerUnavailable =>
+            "No crawl worker is running on this instance, so the crawl was never started. "
+            + "Enable Crawling:Scheduling and run it again.",
+        CrawlFailureCodes.Abandoned =>
+            "The crawl was still running long after its time limit, so the process performing it "
+            + "is gone. Run it again; if it keeps happening, lower the page or time limit.",
+        CrawlFailureCodes.StorageUnavailable =>
+            "The crawl could not reach the database while recording what it had found. "
+            + "Whatever it recorded before that point is kept. Run it again.",
+        CrawlFailureCodes.SiteUnreachable =>
+            "The site stopped responding partway through, so the crawl could not finish. "
+            + "Check that the site is up and reachable, then run it again.",
+        CrawlFailureCodes.Unexpected =>
+            "The crawl stopped on an unexpected error. Nothing further is recorded here; "
+            + "the application log holds the detail for this run id.",
+        null or "" => "No reason was recorded. The application log holds the detail for this run id.",
+        _ => IsAuthored(failureReason)
+            ? failureReason
+            : "The crawl stopped on an unexpected error. Nothing further is recorded here; "
+                + "the application log holds the detail for this run id."
+    };
+
+    private static bool IsAuthored(string failureReason) =>
+        !failureReason.Contains(" -> ", StringComparison.Ordinal)
+        && !failureReason.Contains("Exception: ", StringComparison.Ordinal);
 
     /// <summary>
     /// Why a URL was never requested, in the reader's terms. The stored values are a small fixed

@@ -67,18 +67,31 @@
 
     function statusMessage(status) {
         switch (status) {
+            case 400:
+                return 'The request was invalid or expired. Nothing was changed. Reload the page and try again.';
             case 401:
                 return 'Your session has expired. Sign in again to continue.';
             case 403:
-                return 'You do not have permission to perform this action.';
+                return 'Your role does not include this action. Nothing was changed.';
             case 404:
-                return 'The requested record is no longer available.';
+                return 'This record no longer exists, or it is outside what your role can see.';
+            case 405:
+                return 'That action is not available here. Use the page’s own controls.';
+            case 408:
+            case 504:
+                return 'The request took too long and was stopped. Nothing was changed. Try again.';
             case 409:
-                return 'This record changed before the action could be applied.';
+                return 'Someone else changed this first, so your change was not applied. Reload to see the current values, then reapply it.';
+            case 413:
+                return 'What you submitted is larger than this form accepts. Reduce it and try again.';
             case 422:
                 return 'Review the highlighted fields and try again.';
+            case 429:
+                return 'Too many requests arrived in a short time. Wait a moment, then try again.';
+            case 503:
+                return 'A service this page depends on is unavailable. Nothing was changed. Try again shortly.';
             default:
-                return 'The request could not be completed.';
+                return 'The request could not be completed, and nothing was changed. Try again.';
         }
     }
 
@@ -292,6 +305,13 @@
             return statusMessage(status);
         }
 
+        if (Array.isArray(payload)) {
+            var messages = payload.filter(function (item) {
+                return typeof item === 'string' && item.length > 0;
+            });
+            return messages.length > 0 ? messages.join(' ') : statusMessage(status);
+        }
+
         var message = payload.detail || payload.title || payload.message || statusMessage(status);
         if (payload.correlationId) {
             message += ' Reference: ' + payload.correlationId;
@@ -345,6 +365,10 @@
         };
     }
 
+    function actionForStatus(status) {
+        return status === 409 ? reloadAction() : null;
+    }
+
     function lockAmbiguousMutation(selector, request, message) {
         request.isAmbiguous = true;
         ambiguousTargets.add(selector);
@@ -371,6 +395,11 @@
     }
 
     async function handleJson(source, selector, response, payload, request) {
+        if (Array.isArray(payload) && !response.ok) {
+            renderMessage(problemMessage(payload, response.status), 'error', actionForStatus(response.status));
+            return null;
+        }
+
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
             if (!request.isRead && response.ok) {
                 lockAmbiguousMutation(
@@ -385,7 +414,7 @@
 
         var isError = !response.ok && response.status !== 409;
         if (isError) {
-            renderMessage(problemMessage(payload, response.status), 'error');
+            renderMessage(problemMessage(payload, response.status), 'error', actionForStatus(response.status));
         }
 
         if (response.ok) {
@@ -438,7 +467,7 @@
         }
 
         if (!response.ok && response.status !== 409 && response.status !== 422) {
-            renderMessage(statusMessage(response.status), 'error');
+            renderMessage(statusMessage(response.status), 'error', actionForStatus(response.status));
             return null;
         }
 

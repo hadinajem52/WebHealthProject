@@ -1,3 +1,4 @@
+using WebHealth.Application;
 using System.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -115,7 +116,8 @@ public sealed class UserAdministrationService(
         var user = await userManager.FindByIdAsync(command.UserId.ToString());
         if (user is null)
         {
-            return UserAdministrationResult.Failure("The user no longer exists.");
+            return UserAdministrationResult.Failure(
+                "This account no longer exists. Return to Users to see the current list.");
         }
 
         var currentRoles = await userManager.GetRolesAsync(user);
@@ -126,7 +128,8 @@ public sealed class UserAdministrationService(
         if (user.Id == actorUserId && (command.IsDisabled || removesAdministrator))
         {
             return UserAdministrationResult.Failure(
-                "You cannot disable your own account or remove your own Administrator role.");
+                "You cannot disable your own account or remove your own Administrator role. "
+                + "Ask another Administrator to make this change.");
         }
 
         if ((command.IsDisabled || removesAdministrator)
@@ -134,7 +137,9 @@ public sealed class UserAdministrationService(
             && await IsLastEnabledAdministratorAsync(user.Id, cancellationToken))
         {
             return UserAdministrationResult.Failure(
-                "The last enabled administrator cannot be disabled or demoted.");
+                "This is the last enabled Administrator, and disabling or demoting it would leave "
+                + "nobody able to administer the system. Give another account the Administrator "
+                + "role first.");
         }
 
         var disabledStateChanged = user.IsDisabled != command.IsDisabled;
@@ -227,24 +232,66 @@ public sealed class UserAdministrationService(
             .OrderBy(role => role, StringComparer.Ordinal)
             .ToArray();
 
-    private static List<string> ValidateRoles(IReadOnlyCollection<string> roles)
+    private static List<ValidationError> ValidateRoles(IReadOnlyCollection<string> roles)
     {
-        var errors = new List<string>();
+        var errors = new List<ValidationError>();
         if (roles.Count == 0)
         {
-            errors.Add("Select at least one role.");
+            errors.Add(ValidationError.For("Roles", "Select at least one role."));
         }
 
-        if (roles.Any(role => !SupportedRoles.Contains(role)))
+        var unsupported = roles.Where(role => !SupportedRoles.Contains(role)).ToArray();
+        if (unsupported.Length > 0)
         {
-            errors.Add("One or more selected roles are not supported.");
+            errors.Add(ValidationError.For(
+                "Roles",
+                $"These roles are not recognised: {string.Join(", ", unsupported)}. "
+                + "Reload the page and choose from the list."));
         }
 
         return errors;
     }
 
     private static UserAdministrationResult IdentityFailure(IdentityResult result) =>
-        UserAdministrationResult.Failure(result.Errors.Select(error => error.Description));
+        UserAdministrationResult.Failure(result.Errors
+            .Select(DescribeIdentityError)
+            .Where(error => error is not null)
+            .Select(error => error!)
+            .DistinctBy(error => error.Message, StringComparer.Ordinal));
+
+    private static ValidationError? DescribeIdentityError(IdentityError error) => error.Code switch
+    {
+        "DuplicateUserName" => ValidationError.For(
+            "Email", "An account already uses this email address. Use a different one."),
+        "InvalidUserName" => ValidationError.For(
+            "Email", "Enter a valid email address, such as name@example.com."),
+        "DuplicateEmail" => ValidationError.For(
+            "Email", "An account already uses this email address. Use a different one."),
+        "InvalidEmail" => ValidationError.For(
+            "Email", "Enter a valid email address, such as name@example.com."),
+        "PasswordTooShort" => ValidationError.For(
+            "Password", "The password must be at least 12 characters."),
+        "PasswordRequiresDigit" => ValidationError.For(
+            "Password", "The password must include at least one digit (0-9)."),
+        "PasswordRequiresLower" => ValidationError.For(
+            "Password", "The password must include at least one lowercase letter."),
+        "PasswordRequiresUpper" => ValidationError.For(
+            "Password", "The password must include at least one uppercase letter."),
+        "PasswordRequiresNonAlphanumeric" => ValidationError.For(
+            "Password", "The password must include at least one symbol, such as ! ? # or %."),
+        "PasswordRequiresUniqueChars" => ValidationError.For(
+            "Password", "The password must use at least 4 different characters."),
+        "PasswordMismatch" => ValidationError.For(
+            "Password", "That password is not correct."),
+        "UserAlreadyHasPassword" => ValidationError.For(
+            "Password", "This account already has a password. Use the reset field instead."),
+        "UserAlreadyInRole" or "UserNotInRole" =>
+            "The roles on this account changed while you were editing it. Reload the page and try again.",
+        "ConcurrencyFailure" =>
+            "Someone else changed this account after you opened it, so your change was not applied. "
+            + "Reload the page to see the current values, then reapply your change.",
+        _ => "This account could not be saved. Reload the page and try again."
+    };
 
     private static UserAuditSnapshot ToAuditSnapshot(
         ApplicationUser user,

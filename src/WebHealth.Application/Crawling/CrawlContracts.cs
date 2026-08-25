@@ -41,12 +41,7 @@ public sealed record CrawlRunOutcome(
     string? RobotsOverrideRefusedBecause,
     IReadOnlyList<string> ValidationErrors)
 {
-    /// <summary>
-    /// What went wrong, when the run failed on an exception rather than on invalid configuration.
-    /// A failed run whose only account of itself is "it failed" leaves the reader with nowhere to
-    /// go, and the exception is otherwise lost the moment the run is summarised.
-    /// </summary>
-    public string? FailureDetail { get; init; }
+    public string? FailureCode { get; init; }
 
     /// <summary>
     /// Whether anything left part of the site unexamined: a page nobody could read, a robots rule,
@@ -344,7 +339,11 @@ public interface ICrawlReportReader
 /// What happened to a crawl somebody asked for by hand. An existing run is a distinct answer from
 /// a new one, so the page can say "already running" rather than implying it started something.
 /// </summary>
-public sealed record CrawlManualResult(Guid? RunId, bool WasAlreadyRunning, string? Error)
+public sealed record CrawlManualResult(
+    Guid? RunId,
+    bool WasAlreadyRunning,
+    string? Error,
+    EndpointTestBlock Block = EndpointTestBlock.None)
 {
     public bool Succeeded => RunId is not null;
 
@@ -353,6 +352,8 @@ public sealed record CrawlManualResult(Guid? RunId, bool WasAlreadyRunning, stri
     public static CrawlManualResult AlreadyRunning(Guid runId) => new(runId, true, null);
 
     public static CrawlManualResult Rejected(string error) => new(null, false, error);
+
+    public static CrawlManualResult NotTestable(EndpointTestBlock block) => new(null, false, null, block);
 }
 
 /// <summary>
