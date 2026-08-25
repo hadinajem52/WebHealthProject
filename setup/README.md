@@ -65,7 +65,8 @@ Open <https://localhost:7144> and sign in:
    locates `psql` and `pg_restore`. It considers every copy on `PATH` and every installation under
    `C:\Program Files\PostgreSQL`, and picks the newest — an old PostgreSQL earlier on `PATH` does
    not hide a newer one.
-2. **Finds the server.** Probes ports 5432, 6432 and 5433, then authenticates. It first tries
+2. **Finds the server.** Probes ports 5432, 6432 and 5433, then authenticates. It disables PostgreSQL
+   passfiles so a successful probe always uses credentials the application can reuse. It first tries
    connecting without a password, for servers configured for trust authentication, and only then
    prompts. A wrong password gets three attempts rather than a stack trace.
 3. **Creates the database.** Drops an existing one only after you confirm, then creates it fresh
@@ -80,23 +81,24 @@ Open <https://localhost:7144> and sign in:
    NuGet restore, and a build of the web project. If the vendored Chart.js asset is somehow absent
    it falls back to `npm ci` and `npm run vendor`.
 6. **Seeds the database.** Restores `setup/webhealth-seed.dump`, a complete `pg_dump` of the
-   development database — schema, application data and Hangfire tables — then runs `ANALYZE` so the
-   query planner has statistics for the reporting pages.
+   development database — schema, application data and Hangfire tables — applies any migrations
+   added after the snapshot was captured, then runs `ANALYZE` so the query planner has statistics
+   for the reporting pages.
 7. **Bootstraps the administrator.** Runs the application's own `--bootstrap-admin` entry point.
    This creates the four application roles and the administrator when they are missing and leaves
    them alone when they are not, so it is safe on both a seeded and an empty database. It doubles
    as a check that the application itself can reach the database with the configuration just
    written.
 8. **Trusts the HTTPS certificate.** The authentication cookie is `Secure`-only, so the application
-   is unusable over plain HTTP. The script checks the ASP.NET Core development certificate, trusts
-   it if needed, and replaces it if the existing one turns out to be unusable. Accept the Windows
-   prompt if one appears.
+   is unusable over plain HTTP. The script checks the ASP.NET Core development certificate and trusts
+   it if needed without removing certificates used by other projects. Accept the Windows prompt if
+   one appears.
 9. **Verifies.** Prints the migration, user, website, endpoint and incident counts actually present
    in the new database, and warns if the application's usual ports are already taken.
 
-While it runs, the script neutralises any `PGSERVICE`, `PGSSLMODE`, `PGOPTIONS` and similar
-variables that would otherwise redirect `psql`, and restores them, along with `PGPASSWORD`, before
-it exits — including when it fails.
+While it runs, the script neutralises any `PGSERVICE`, `PGSSLMODE`, `PGOPTIONS`, `PGPASSFILE` and
+similar variables that would otherwise redirect or authenticate `psql`, and restores them, along
+with `PGPASSWORD`, before it exits — including when it fails.
 
 ## Options
 
@@ -111,7 +113,8 @@ it exits — including when it fails.
 | `-Seed` | `Snapshot` | `Snapshot` restores the development data. `Empty` builds the schema from migrations and leaves only the roles and the administrator. |
 | `-AdminEmail` | `admin@example.test` | Administrator sign-in address. |
 | `-AdminPassword` | `Hnjm1hnjm23_` | Administrator password. Applies only when the account is being created — see below. |
-| `-NoScheduling` | off | Switch off all background work, so the seeded data stays exactly as shipped. |
+| `-EnableScheduling` | off | Enable live background monitoring, crawling, maintenance, page audits and notifications. |
+| `-NoScheduling` | off | Explicitly keep background work disabled; retained for existing setup commands. |
 | `-Force` | off | Replace an existing database without the confirmation prompt. |
 | `-Run` | off | Start the application when setup finishes. |
 
@@ -125,16 +128,15 @@ a password when it *creates* an account, so with `-Seed Snapshot` the snapshot's
 password that would not work. To choose your own password, either use `-Seed Empty`, or pass a new
 `-AdminEmail` so a second administrator is created.
 
-### About `-NoScheduling`
+### About scheduling
 
-By default the application monitors four real websites, and every seeded schedule is long overdue
-by the time you restore it — so within a minute of starting it makes outbound requests to those
-sites, and the dashboard begins to change. On a network that blocks outbound traffic this fills the
-dashboard with fresh "down" incidents that say more about the network than about the project.
+By default all six scheduling switches are off, so nothing runs in the background and the seeded
+data stays exactly as it was captured. This is the predictable supervisor-demo mode.
 
-`-NoScheduling` writes all six scheduling switches off, so nothing runs in the background and the
-seeded data stays exactly as it was captured. Use it for a predictable demo; leave it off to watch
-the system actually work.
+Pass `-EnableScheduling` to monitor the four seeded websites and watch the system work. Every seeded
+schedule may be overdue by the time you restore it, so the application can make outbound requests
+and change the dashboard within a minute. On a network that blocks outbound traffic this can create
+fresh "down" incidents that say more about the network than about the project.
 
 ## If something goes wrong
 
