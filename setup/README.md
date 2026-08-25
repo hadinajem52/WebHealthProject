@@ -1,0 +1,183 @@
+# Running WebHealth on a fresh machine
+
+`setup.ps1` at the repository root takes a clean clone to a running application with the same
+database contents the project is developed against. It is meant to be run once, on a machine that
+has never seen this project.
+
+## Before you start
+
+Install these two things. Nothing else is required.
+
+| Requirement | Version | Where |
+| --- | --- | --- |
+| .NET SDK | 10.0.4xx | <https://dotnet.microsoft.com/download/dotnet/10.0> |
+| PostgreSQL | 18 | <https://www.postgresql.org/download/windows/> |
+
+Accept the PostgreSQL installer defaults and keep the **Command Line Tools** component selected —
+the script needs `psql` and `pg_restore`. Remember the password you give the `postgres` user.
+
+PostgreSQL 18 is a hard requirement for the seeded database: the snapshot is a version 18 archive
+and older tools cannot read it. If you already run an older server, use `-Seed Empty` (below) to
+build the schema from migrations instead.
+
+Node.js is **not** required.
+
+## Run it
+
+From the repository root:
+
+```
+setup.cmd
+```
+
+Use `setup.cmd` rather than calling the `.ps1` directly. Windows blocks unsigned PowerShell scripts
+by default, and the `.cmd` wrapper starts PowerShell with that restriction lifted for this one
+script. If you would rather run the script yourself:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+The script asks for the `postgres` password and does the rest. It takes about a minute.
+
+Arguments pass straight through the wrapper:
+
+```
+setup.cmd -PgPort 5432 -PgPassword "your postgres password"
+```
+
+## Then sign in
+
+```powershell
+dotnet run --project src\WebHealth.Web --launch-profile https
+```
+
+Open <https://localhost:7144> and sign in:
+
+- **Email** `admin@example.test`
+- **Password** `Hnjm1hnjm23_`
+
+`setup.cmd -Run` starts the application as its last step, so you can do both in one command.
+
+## What the script does
+
+1. **Verifies prerequisites.** Confirms the .NET 10 SDK feature band pinned in `global.json`, then
+   locates `psql` and `pg_restore`. It considers every copy on `PATH` and every installation under
+   `C:\Program Files\PostgreSQL`, and picks the newest — an old PostgreSQL earlier on `PATH` does
+   not hide a newer one.
+2. **Finds the server.** Probes ports 5432, 6432 and 5433, then authenticates. It first tries
+   connecting without a password, for servers configured for trust authentication, and only then
+   prompts. A wrong password gets three attempts rather than a stack trace.
+3. **Creates the database.** Drops an existing one only after you confirm, then creates it fresh
+   with UTF-8 encoding from `template0`. If the cluster refuses UTF-8 it retries with the cluster's
+   own defaults and warns.
+4. **Writes local configuration.** Generates the .NET user-secrets file for the
+   `web-health-project-development` secrets id: the connection string built from the host, port and
+   credentials it just validated, plus the bootstrap administrator, the PageSpeed Insights key and
+   the Mailgun sandbox SMTP settings. An existing secrets file is copied to a timestamped backup
+   beside it first, so repeated runs never destroy the original.
+5. **Restores build dependencies.** `dotnet tool restore` for the pinned `dotnet-ef`, a locked-mode
+   NuGet restore, and a build of the web project. If the vendored Chart.js asset is somehow absent
+   it falls back to `npm ci` and `npm run vendor`.
+6. **Seeds the database.** Restores `setup/webhealth-seed.dump`, a complete `pg_dump` of the
+   development database — schema, application data and Hangfire tables — then runs `ANALYZE` so the
+   query planner has statistics for the reporting pages.
+7. **Bootstraps the administrator.** Runs the application's own `--bootstrap-admin` entry point.
+   This creates the four application roles and the administrator when they are missing and leaves
+   them alone when they are not, so it is safe on both a seeded and an empty database. It doubles
+   as a check that the application itself can reach the database with the configuration just
+   written.
+8. **Trusts the HTTPS certificate.** The authentication cookie is `Secure`-only, so the application
+   is unusable over plain HTTP. The script checks the ASP.NET Core development certificate, trusts
+   it if needed, and replaces it if the existing one turns out to be unusable. Accept the Windows
+   prompt if one appears.
+9. **Verifies.** Prints the migration, user, website, endpoint and incident counts actually present
+   in the new database, and warns if the application's usual ports are already taken.
+
+While it runs, the script neutralises any `PGSERVICE`, `PGSSLMODE`, `PGOPTIONS` and similar
+variables that would otherwise redirect `psql`, and restores them, along with `PGPASSWORD`, before
+it exits — including when it fails.
+
+## Options
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `-PgHost` | `127.0.0.1` | PostgreSQL host. |
+| `-PgPort` | auto | Skip port probing and use this one. |
+| `-PgUser` | `postgres` | Login role. Needs permission to create databases. |
+| `-PgPassword` | prompted | Also read from `PGPASSWORD` when set. |
+| `-PgBinPath` | auto | The `bin` directory of a PostgreSQL install, for layouts the search does not find. |
+| `-Database` | `webhealth` | Database to create. |
+| `-Seed` | `Snapshot` | `Snapshot` restores the development data. `Empty` builds the schema from migrations and leaves only the roles and the administrator. |
+| `-AdminEmail` | `admin@example.test` | Administrator sign-in address. |
+| `-AdminPassword` | `Hnjm1hnjm23_` | Administrator password. Applies only when the account is being created — see below. |
+| `-NoScheduling` | off | Switch off all background work, so the seeded data stays exactly as shipped. |
+| `-Force` | off | Replace an existing database without the confirmation prompt. |
+| `-Run` | off | Start the application when setup finishes. |
+
+Running the script a second time rebuilds the database from scratch. It is not incremental.
+
+### About `-AdminPassword`
+
+The snapshot already contains `admin@example.test` with a stored password. Bootstrapping only sets
+a password when it *creates* an account, so with `-Seed Snapshot` the snapshot's password wins and
+`-AdminPassword` has no effect. The script detects this and tells you, rather than printing a
+password that would not work. To choose your own password, either use `-Seed Empty`, or pass a new
+`-AdminEmail` so a second administrator is created.
+
+### About `-NoScheduling`
+
+By default the application monitors four real websites, and every seeded schedule is long overdue
+by the time you restore it — so within a minute of starting it makes outbound requests to those
+sites, and the dashboard begins to change. On a network that blocks outbound traffic this fills the
+dashboard with fresh "down" incidents that say more about the network than about the project.
+
+`-NoScheduling` writes all six scheduling switches off, so nothing runs in the background and the
+seeded data stays exactly as it was captured. Use it for a predictable demo; leave it off to watch
+the system actually work.
+
+## If something goes wrong
+
+**"running scripts is disabled on this system"** — use `setup.cmd`, or
+`powershell -ExecutionPolicy Bypass -File .\setup.ps1`.
+
+**"No PostgreSQL server is listening"** — the service is not running, or it is on an unusual port.
+Start it from `services.msc`, or pass `-PgPort`.
+
+**"Could not authenticate"** — this is the password for the PostgreSQL `postgres` role chosen
+during installation, not a Windows password.
+
+**"PostgreSQL client tools were not found"** — PostgreSQL is installed somewhere the search does
+not reach, such as a Docker container or WSL. Point at a local `bin` directory with `-PgBinPath`,
+or install the Windows client tools.
+
+**"pg_restore N cannot read a PostgreSQL 18 archive"** — no version 18 was found anywhere. Install
+it, point `-PgBinPath` at it, or run `-Seed Empty`.
+
+**"The database could not be created"** — if you are connecting through pgbouncer or another
+connection pooler, connect to the PostgreSQL server directly instead.
+
+**Browser warns about the certificate** — run `dotnet dev-certs https --trust` in a new terminal and
+restart the browser. Firefox keeps its own certificate store and will warn regardless.
+
+**Port 7144 already in use** — an instance is already running. Close it, or start on another port
+with `dotnet run --project src\WebHealth.Web --no-launch-profile --urls https://localhost:7199`.
+
+## Refreshing the snapshot
+
+`setup/webhealth-seed.dump` is a point-in-time capture, so its timestamps age. To re-capture it from
+the current development database before handing the project over:
+
+```powershell
+.\scripts\capture-seed-snapshot.ps1
+```
+
+Commit the result so a fresh clone seeds the current data.
+
+## A note on the secrets in this repository
+
+The connection string, the PageSpeed Insights key and the Mailgun sandbox SMTP credentials are
+committed deliberately. This is a personal internship project with no deployment: the Mailgun
+domain is a sandbox that only delivers to pre-authorized addresses, and the database is local. None
+of it protects anything of value, and keeping it in the repository is what makes a single-command
+setup possible. A real deployment would move all of it to a secret store.

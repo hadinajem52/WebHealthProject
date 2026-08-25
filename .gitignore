@@ -14,6 +14,7 @@ obj/
 *.DotSettings.user
 
 # Test and coverage output
+setup.log
 TestResults/
 coverage/
 *.coverage
@@ -32,6 +33,9 @@ Thumbs.db
 # Frontend dependencies and generated assets
 node_modules/
 dist/
+!/src/WebHealth.Web/wwwroot/lib/chartjs/dist/
+!/src/WebHealth.Web/wwwroot/lib/chartjs/dist/chart.umd.js
+/src/WebHealth.Web/wwwroot/lib/chartjs/dist/*.map
 .parcel-cache/
 .vite/
 npm-debug.log*
@@ -50,3 +54,4 @@ Claude.md
 /.claude
 /.genkit
 /.artifacts
+backups/

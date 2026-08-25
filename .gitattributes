@@ -1,0 +1,14 @@
+* text=auto
+
+*.cs text eol=crlf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+src/WebHealth.Web/wwwroot/lib/** -text
+
+*.dump binary
+*.woff2 binary
+*.png binary
+*.ico binary
