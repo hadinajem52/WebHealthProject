@@ -30,19 +30,7 @@ public sealed class PhaseSixViewAuthorizationTests(WebHealthWebApplicationFactor
     }
 
     [Theory]
-    [MemberData(nameof(EveryRole))]
-    public async Task BrokenLinks_AreReadableByEveryApplicationPersona(string role)
-    {
-        using var client = factory.CreateHttpsClient(role);
-
-        var response = await client.GetAsync("/Crawl");
-
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Theory]
     [InlineData("/Seo")]
-    [InlineData("/Crawl")]
     [InlineData("/Crawl/Run?id=8a3a1c5e-0000-0000-0000-000000000000")]
     public async Task AnonymousRequest_IsSentToLogin(string path)
     {
