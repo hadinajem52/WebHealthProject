@@ -6,6 +6,7 @@ public sealed record MaintenanceRecurrenceSpec(string Pattern, int DaysOfWeekMas
 public sealed record CreateMaintenanceWindow(MaintenanceScope Scope, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string TimezoneId, string Reason, string SuppressionPolicy, bool PauseEscalation, bool ContinueFailureCounter, MaintenanceRecurrenceSpec Recurrence);
 public sealed record UpdateMaintenanceWindow(Guid MaintenanceWindowId, long Version, MaintenanceScope Scope, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string TimezoneId, string Reason, string SuppressionPolicy, bool PauseEscalation, bool ContinueFailureCounter, MaintenanceRecurrenceSpec Recurrence);
 public sealed record CancelMaintenanceWindow(Guid MaintenanceWindowId, long Version);
+public sealed record RestoreMaintenanceWindow(Guid MaintenanceWindowId, long Version);
 public enum MaintenanceMutationStatus { Succeeded, Forbidden, NotFound, ValidationFailed, ConcurrencyConflict }
 public sealed record MaintenanceMutationResult(MaintenanceMutationStatus Status, Guid? MaintenanceWindowId, IReadOnlyList<ValidationError> Errors)
 {
@@ -13,7 +14,14 @@ public sealed record MaintenanceMutationResult(MaintenanceMutationStatus Status,
     public static MaintenanceMutationResult Success(Guid id) => new(MaintenanceMutationStatus.Succeeded, id, []);
     public static MaintenanceMutationResult Failure(MaintenanceMutationStatus status, params IEnumerable<ValidationError> errors) => new(status, null, errors.ToArray());
 }
-public sealed record MaintenanceWindowListItem(Guid Id, string ScopeLabel, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string TimezoneId, string SuppressionPolicy, bool PauseEscalation, bool IsCancelled, MaintenanceRecurrenceSpec Recurrence, DateTimeOffset? NextOccurrenceStartsAt, long Version);
-public sealed record MaintenanceWindowDetails(Guid Id, MaintenanceScope Scope, string ScopeLabel, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string TimezoneId, string Reason, string SuppressionPolicy, bool PauseEscalation, bool ContinueFailureCounter, bool IsCancelled, MaintenanceRecurrenceSpec Recurrence, DateTimeOffset? NextOccurrenceStartsAt, int OccurrenceCount, long Version);
+public sealed record MaintenanceArchiveResult(MaintenanceMutationStatus Status, int ArchivedCount, IReadOnlyList<ValidationError> Errors)
+{
+    public bool Succeeded => Status == MaintenanceMutationStatus.Succeeded;
+    public static MaintenanceArchiveResult Success(int archivedCount) => new(MaintenanceMutationStatus.Succeeded, archivedCount, []);
+    public static MaintenanceArchiveResult Failure(MaintenanceMutationStatus status, params IEnumerable<ValidationError> errors) => new(status, 0, errors.ToArray());
+}
+public sealed record MaintenanceWindowListItem(Guid Id, string ScopeLabel, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string TimezoneId, string SuppressionPolicy, bool PauseEscalation, bool IsCancelled, MaintenanceRecurrenceSpec Recurrence, DateTimeOffset? NextOccurrenceStartsAt, long Version, bool IsFinished = false, DateTimeOffset? ArchivedAt = null);
+public sealed record MaintenanceWindowListPage(IReadOnlyList<MaintenanceWindowListItem> Items, int ArchivableCount);
+public sealed record MaintenanceWindowDetails(Guid Id, MaintenanceScope Scope, string ScopeLabel, DateTimeOffset StartsAt, DateTimeOffset EndsAt, string TimezoneId, string Reason, string SuppressionPolicy, bool PauseEscalation, bool ContinueFailureCounter, bool IsCancelled, MaintenanceRecurrenceSpec Recurrence, DateTimeOffset? NextOccurrenceStartsAt, int OccurrenceCount, long Version, DateTimeOffset? ArchivedAt = null, bool IsFinished = false);
 public sealed record MaintenanceScopeOption(MaintenanceScopeKind Kind, Guid Id, string Label);
 public sealed record ActiveMaintenanceOccurrence(Guid OccurrenceId, string SuppressionPolicy, bool PauseEscalation, bool ContinueFailureCounter);

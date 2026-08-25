@@ -215,15 +215,15 @@ Each of these came from a defect in this rebuild. They read as fussy; they are n
 Pages still on the old pattern, in rough order of value:
 
 Already migrated: `Views/Targets/Endpoint.cshtml`, `Views/Checks/Check.cshtml`,
-`Views/Incidents/Details.cshtml`, and `Views/Checks/History.cshtml` (the list-page variant --
-header and eyebrow only; its table stays a `.data-table`).
+`Views/Incidents/Details.cshtml`, `Views/Maintenance/Details.cshtml`, and the list-page variant
+(header and eyebrow only; the table stays a `.data-table`) on `Views/Checks/History.cshtml`,
+`Views/Maintenance/Index.cshtml` and `Views/Maintenance/Archived.cshtml`.
 
 | Page | Uses |
 |---|---|
 | `Views/Registry/Website.cshtml` | `registry-facts`, `registry-lifecycle` |
 | `Views/Registry/Client.cshtml` | `registry-facts`, `registry-lifecycle` |
 | `Views/Targets/Environment.cshtml` | `registry-facts`, `registry-lifecycle` |
-| `Views/Maintenance/Details.cshtml` | `registry-facts`, `registry-lifecycle` |
 | `Views/Crawl/Run.cshtml`, `Views/Crawl/Index.cshtml` | `registry-facts` |
 | `Views/PageAudits/Index.cshtml` | `registry-facts` |
 

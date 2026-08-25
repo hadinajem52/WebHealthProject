@@ -74,7 +74,7 @@ Open <https://localhost:7144> and sign in:
 4. **Writes local configuration.** Generates the .NET user-secrets file for the
    `web-health-project-development` secrets id: the connection string built from the host, port and
    credentials it just validated, plus the bootstrap administrator, the PageSpeed Insights key and
-   the Mailgun sandbox SMTP settings. An existing secrets file is copied to a timestamped backup
+   the Gmail SMTP settings. An existing secrets file is copied to a timestamped backup
    beside it first, so repeated runs never destroy the original.
 5. **Restores build dependencies.** `dotnet tool restore` for the pinned `dotnet-ef`, a locked-mode
    NuGet restore, and a build of the web project. If the vendored Chart.js asset is somehow absent
@@ -176,8 +176,13 @@ Commit the result so a fresh clone seeds the current data.
 
 ## A note on the secrets in this repository
 
-The connection string, the PageSpeed Insights key and the Mailgun sandbox SMTP credentials are
-committed deliberately. This is a personal internship project with no deployment: the Mailgun
-domain is a sandbox that only delivers to pre-authorized addresses, and the database is local. None
-of it protects anything of value, and keeping it in the repository is what makes a single-command
-setup possible. A real deployment would move all of it to a secret store.
+The connection string, the PageSpeed Insights key and the Gmail SMTP credentials are committed
+deliberately. This is a personal internship project with no deployment, and the database is local.
+Keeping them in the repository is what makes a single-command setup possible. A real deployment
+would move all of it to a secret store.
+
+The SMTP credential is a Gmail App Password, not the account password: the account has 2-Step
+Verification enabled, and the app password is scoped to SMTP only and revocable on its own from
+[Google Account app passwords](https://myaccount.google.com/apppasswords). Unlike the Mailgun
+sandbox it replaced, it does grant send-as access to a real mailbox, so revoke and reissue it from
+that page if the repository is ever shared more widely.

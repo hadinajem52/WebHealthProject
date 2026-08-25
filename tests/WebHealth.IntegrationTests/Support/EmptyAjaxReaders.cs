@@ -126,8 +126,8 @@ internal sealed class EmptyMaintenanceReader : IMaintenanceReader
 {
     public static Guid ScopeId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000020");
 
-    public Task<IReadOnlyList<MaintenanceWindowListItem>> ListAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<MaintenanceWindowListItem>>([]);
+    public Task<MaintenanceWindowListPage> ListAsync(bool archivedOnly = false, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new MaintenanceWindowListPage([], 0));
 
     public Task<MaintenanceWindowDetails?> FindAsync(Guid maintenanceWindowId, CancellationToken cancellationToken = default) =>
         Task.FromResult<MaintenanceWindowDetails?>(null);
@@ -149,6 +149,12 @@ internal sealed class EmptyMaintenanceWindowService : IMaintenanceWindowService
         Task.FromResult(MaintenanceMutationResult.Success(WindowId));
 
     public Task<MaintenanceMutationResult> CancelAsync(CancelMaintenanceWindow command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
+        Task.FromResult(MaintenanceMutationResult.Success(command.MaintenanceWindowId));
+
+    public Task<MaintenanceArchiveResult> ArchiveCompletedAsync(RegistryAccessContext access, CancellationToken cancellationToken = default) =>
+        Task.FromResult(MaintenanceArchiveResult.Success(0));
+
+    public Task<MaintenanceMutationResult> RestoreAsync(RestoreMaintenanceWindow command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
         Task.FromResult(MaintenanceMutationResult.Success(command.MaintenanceWindowId));
 }
 

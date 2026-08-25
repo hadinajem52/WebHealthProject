@@ -1,10 +1,21 @@
 using System.ComponentModel.DataAnnotations;
 using WebHealth.Application.Maintenance;
 using WebHealth.Domain.Maintenance;
+using WebHealth.Web.Shell;
 
 namespace WebHealth.Web.Models;
 
-public sealed record MaintenanceListViewModel(IReadOnlyList<MaintenanceWindowListItem> Windows);
+public sealed record MaintenanceListViewModel(MaintenanceWindowListPage Page)
+{
+    public IReadOnlyList<MaintenanceWindowListItem> Windows => Page.Items;
+
+    public int ArchivableCount => Page.ArchivableCount;
+}
+
+public sealed record MaintenanceArchiveViewModel(MaintenanceWindowListPage Page)
+{
+    public IReadOnlyList<MaintenanceWindowListItem> Windows => Page.Items;
+}
 
 public sealed record MaintenanceDetailsViewModel(MaintenanceWindowDetails Window);
 
@@ -40,6 +51,70 @@ public sealed class MaintenanceWindowFormViewModel
     public int RecurrenceDaysMask => Enum.GetValues<DayOfWeek>()
         .Where(day => RecurrenceDays.Length > (int)day && RecurrenceDays[(int)day])
         .Aggregate(MaintenanceDayOfWeekMask.Empty, (mask, day) => mask | MaintenanceDayOfWeekMask.Of(day));
+}
+
+/// <summary>
+/// One status vocabulary for a maintenance window, whichever shape the page is holding. The list
+/// and the detail page each had their own, and they disagreed: a window the list called Finished
+/// read as Scheduled on its own page.
+/// </summary>
+public static class MaintenanceStatusDisplay
+{
+    public static string Name(MaintenanceWindowListItem window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return Name(window.IsCancelled, window.IsFinished);
+    }
+
+    public static string Name(MaintenanceWindowDetails window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return Name(window.IsCancelled, window.IsFinished);
+    }
+
+    public static string Badge(MaintenanceWindowListItem window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return Badge(window.IsCancelled, window.IsFinished);
+    }
+
+    public static string Badge(MaintenanceWindowDetails window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return Badge(window.IsCancelled, window.IsFinished);
+    }
+
+    /// <summary>
+    /// What the status means, for the badge's own tooltip. A window is a schedule, not a job, so
+    /// "Finished" and "Cancelled" say different things about the suppression that was in force.
+    /// </summary>
+    public static string Detail(bool isCancelled, bool isFinished, bool isArchived)
+    {
+        var state = isCancelled
+            ? "Cancelled before it could run again. Checks already taken keep their evidence."
+            : isFinished
+                ? "Every occurrence has passed and none remain, so nothing is suppressed any more."
+                : "Occurrences remain. Checks keep running while one is active; the notification policy below decides what is sent.";
+        return isArchived ? $"{state} It is filed in the archive and can be restored unchanged." : state;
+    }
+
+    public static string Detail(MaintenanceWindowListItem window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return Detail(window.IsCancelled, window.IsFinished, window.ArchivedAt is not null);
+    }
+
+    public static string Detail(MaintenanceWindowDetails window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        return Detail(window.IsCancelled, window.IsFinished, window.ArchivedAt is not null);
+    }
+
+    private static string Name(bool isCancelled, bool isFinished) =>
+        isCancelled ? "Cancelled" : isFinished ? "Finished" : "Scheduled";
+
+    private static string Badge(bool isCancelled, bool isFinished) =>
+        isCancelled ? StatusBadges.Danger : isFinished ? StatusBadges.Neutral : StatusBadges.Warning;
 }
 
 public static class MaintenanceRecurrenceDisplay

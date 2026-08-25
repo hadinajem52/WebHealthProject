@@ -6,24 +6,36 @@ namespace WebHealth.Infrastructure.Maintenance;
 
 internal sealed class MaintenanceReader(ApplicationDbContext dbContext, TimeProvider timeProvider) : IMaintenanceReader
 {
-    public async Task<IReadOnlyList<MaintenanceWindowListItem>> ListAsync(CancellationToken cancellationToken = default)
+    public async Task<MaintenanceWindowListPage> ListAsync(bool archivedOnly = false, CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
-        var windows = await dbContext.MaintenanceWindows.AsNoTracking().Include(item => item.Targets)
+        var scoped = archivedOnly
+            ? dbContext.MaintenanceWindows.AsNoTracking().Where(item => item.ArchivedAt != null)
+            : dbContext.MaintenanceWindows.AsNoTracking().Where(item => item.ArchivedAt == null);
+        var archivableCount = archivedOnly
+            ? 0
+            : await dbContext.MaintenanceWindows.AsNoTracking()
+                .CountAsync(MaintenanceArchiveEligibility.Archivable(now), cancellationToken);
+        var windows = await scoped.Include(item => item.Targets)
             .OrderByDescending(item => item.CreatedAt)
             .Select(item => new
             {
                 Window = item,
                 NextOccurrenceStartsAt = item.Occurrences
                     .Where(occurrence => occurrence.EndsAt > now)
-                    .Min(occurrence => (DateTimeOffset?)occurrence.StartsAt)
+                    .Min(occurrence => (DateTimeOffset?)occurrence.StartsAt),
+                HasRemainingOccurrence = item.Occurrences.Any(occurrence => occurrence.EndsAt > now)
             })
             .ToArrayAsync(cancellationToken);
-        return windows.Select(row => new MaintenanceWindowListItem(
+        var items = windows.Select(row => new MaintenanceWindowListItem(
             row.Window.Id, ScopeLabel(row.Window.Targets.Single()), row.Window.ScheduleStartsAt,
             ScheduleEndsAt(row.Window), row.Window.TimezoneId, row.Window.SuppressionPolicy,
             row.Window.PauseEscalation, row.Window.DeletedAt is not null, ToRecurrence(row.Window),
-            row.NextOccurrenceStartsAt, row.Window.Version)).ToArray();
+            row.NextOccurrenceStartsAt, row.Window.Version,
+            MaintenanceArchiveEligibility.IsFinished(
+                row.HasRemainingOccurrence, row.Window.RecurrencePattern, row.Window.RecurrenceUntil, now),
+            row.Window.ArchivedAt)).ToArray();
+        return new MaintenanceWindowListPage(items, archivableCount);
     }
 
     public async Task<MaintenanceWindowDetails?> FindAsync(Guid maintenanceWindowId, CancellationToken cancellationToken = default)
@@ -37,7 +49,8 @@ internal sealed class MaintenanceReader(ApplicationDbContext dbContext, TimeProv
                 OccurrenceCount = window.Occurrences.Count,
                 NextOccurrenceStartsAt = window.Occurrences
                     .Where(occurrence => occurrence.EndsAt > now)
-                    .Min(occurrence => (DateTimeOffset?)occurrence.StartsAt)
+                    .Min(occurrence => (DateTimeOffset?)occurrence.StartsAt),
+                HasRemainingOccurrence = window.Occurrences.Any(occurrence => occurrence.EndsAt > now)
             })
             .SingleOrDefaultAsync(cancellationToken);
         if (row is null) return null;
@@ -46,7 +59,13 @@ internal sealed class MaintenanceReader(ApplicationDbContext dbContext, TimeProv
             row.Window.ScheduleStartsAt, ScheduleEndsAt(row.Window), row.Window.TimezoneId, row.Window.Reason,
             row.Window.SuppressionPolicy, row.Window.PauseEscalation, row.Window.ContinueFailureCounter,
             row.Window.DeletedAt is not null, ToRecurrence(row.Window), row.NextOccurrenceStartsAt,
-            row.OccurrenceCount, row.Window.Version);
+            row.OccurrenceCount, row.Window.Version, row.Window.ArchivedAt,
+            // Finished is decided the same way the list decides it. Computed here rather than in
+            // the view because a detail page that called a finished window "Scheduled" -- which it
+            // did -- disagrees with the row the reader clicked to get here.
+            MaintenanceArchiveEligibility.IsFinished(
+                row.HasRemainingOccurrence, row.Window.RecurrencePattern,
+                row.Window.RecurrenceUntil, now));
     }
 
     public async Task<IReadOnlyList<MaintenanceScopeOption>> ListScopeOptionsAsync(CancellationToken cancellationToken = default)

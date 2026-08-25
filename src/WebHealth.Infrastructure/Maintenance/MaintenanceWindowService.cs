@@ -83,6 +83,63 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
         }
     }
 
+    public async Task<MaintenanceArchiveResult> ArchiveCompletedAsync(RegistryAccessContext access, CancellationToken cancellationToken = default)
+    {
+        if (!RegistryVisibility.CanManage(access)) return MaintenanceArchiveResult.Failure(MaintenanceMutationStatus.Forbidden, "You cannot manage maintenance windows.");
+        var now = timeProvider.GetUtcNow();
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var windows = await dbContext.MaintenanceWindows.Include(item => item.Targets)
+            .Where(MaintenanceArchiveEligibility.Archivable(now))
+            .ToListAsync(cancellationToken);
+        try
+        {
+            foreach (var window in windows)
+            {
+                var scope = ToScope(window.Targets.Single());
+                var before = ToAudit(window, scope, false);
+                Archive(window, access.UserId, now);
+                await auditTrail.RecordMaintenanceMutationAsync(new(access.UserId, now), MaintenanceAuditAction.Archived, before, ToAudit(window, scope, false), cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return MaintenanceArchiveResult.Success(windows.Count);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return MaintenanceArchiveResult.Failure(MaintenanceMutationStatus.ConcurrencyConflict, "A maintenance window changed while it was being archived. Nothing was archived; try again.");
+        }
+    }
+
+    public async Task<MaintenanceMutationResult> RestoreAsync(RestoreMaintenanceWindow command, RegistryAccessContext access, CancellationToken cancellationToken = default)
+    {
+        if (!RegistryVisibility.CanManage(access)) return Fail(MaintenanceMutationStatus.Forbidden, "You cannot manage maintenance windows.");
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var window = await dbContext.MaintenanceWindows.Include(item => item.Targets)
+            .SingleOrDefaultAsync(item => item.Id == command.MaintenanceWindowId, cancellationToken);
+        if (window is null) return Fail(MaintenanceMutationStatus.NotFound, "The maintenance window was not found.");
+        if (window.ArchivedAt is null) return Fail(MaintenanceMutationStatus.ValidationFailed, "This maintenance window is not archived.");
+        dbContext.Entry(window).Property(item => item.Version).OriginalValue = command.Version;
+        var now = timeProvider.GetUtcNow();
+        var scope = ToScope(window.Targets.Single());
+        var before = ToAudit(window, scope, false);
+        window.ArchivedAt = null;
+        window.UpdatedAt = now;
+        window.UpdatedByUserId = access.UserId;
+        window.Version++;
+        try
+        {
+            await auditTrail.RecordMaintenanceMutationAsync(new(access.UserId, now), MaintenanceAuditAction.Restored, before, ToAudit(window, scope, false), cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return MaintenanceMutationResult.Success(window.Id);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Fail(MaintenanceMutationStatus.ConcurrencyConflict, "This maintenance window changed. Reload it before trying again.");
+        }
+    }
+
     private async Task<List<ValidationError>> ValidateAsync(CreateMaintenanceWindow command, CancellationToken token)
     {
         var errors = new List<ValidationError>();
@@ -261,6 +318,7 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
 
     private static MaintenanceTarget CreateTarget(MaintenanceScope scope) => new() { Id = Guid.NewGuid(), ClientId = scope.Kind == MaintenanceScopeKind.Client ? scope.TargetId : null, WebsiteId = scope.Kind == MaintenanceScopeKind.Website ? scope.TargetId : null, EnvironmentId = scope.Kind == MaintenanceScopeKind.Environment ? scope.TargetId : null, EndpointId = scope.Kind == MaintenanceScopeKind.Endpoint ? scope.TargetId : null, EndpointMonitorId = scope.Kind == MaintenanceScopeKind.Monitor ? scope.TargetId : null };
     private static void Cancel(MaintenanceWindow window, Guid userId, DateTimeOffset now) { window.DeletedAt = now; window.DeletedByUserId = userId; window.UpdatedAt = now; window.UpdatedByUserId = userId; window.Version++; }
+    private static void Archive(MaintenanceWindow window, Guid userId, DateTimeOffset now) { window.ArchivedAt = now; window.UpdatedAt = now; window.UpdatedByUserId = userId; window.Version++; }
     private static MaintenanceScope ToScope(MaintenanceTarget target) => target.ClientId is { } id ? new(MaintenanceScopeKind.Client, id) : target.WebsiteId is { } websiteId ? new(MaintenanceScopeKind.Website, websiteId) : target.EnvironmentId is { } environmentId ? new(MaintenanceScopeKind.Environment, environmentId) : target.EndpointId is { } endpointId ? new(MaintenanceScopeKind.Endpoint, endpointId) : new(MaintenanceScopeKind.Monitor, target.EndpointMonitorId!.Value);
     private static MaintenanceAuditSnapshot ToAudit(MaintenanceWindow window, MaintenanceScope scope, bool reasonChanged) => new(window.Id, scope.Kind.ToString(), scope.TargetId, window.ScheduleStartsAt, window.ScheduleStartsAt.AddSeconds(window.ScheduleDurationSeconds), window.TimezoneId, window.RecurrencePattern, window.RecurrenceDaysOfWeek, window.RecurrenceUntil, window.SuppressionPolicy, window.PauseEscalation, window.ContinueFailureCounter, window.DeletedAt is not null, reasonChanged, window.Version);
     private static bool IsValidTimezone(string value) { if (string.IsNullOrWhiteSpace(value) || value.Length > 100) return false; try { _ = TimeZoneInfo.FindSystemTimeZoneById(value.Trim()); return value.Contains('/', StringComparison.Ordinal) || value.Equals("UTC", StringComparison.Ordinal); } catch (TimeZoneNotFoundException) { return false; } catch (InvalidTimeZoneException) { return false; } }

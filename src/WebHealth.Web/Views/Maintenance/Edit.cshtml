@@ -1,3 +1,39 @@
 @model MaintenanceWindowFormViewModel
-@{ ViewData.SetTitle("Edit maintenance"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Maintenance", "/Maintenance"), new BreadcrumbItem("Edit")); }
-<section class="card form-card"><h2 class="card__title">Edit maintenance</h2><p class="card__subtitle">Editing replaces this window with a new immutable occurrence; prior check evidence remains linked to the original.</p><form asp-action="Edit" method="post" class="form-stack" id="ajax-form-region" data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region"><partial name="_AjaxValidationSummary" /><input asp-for="MaintenanceWindowId" type="hidden" /><input asp-for="Version" type="hidden" /><partial name="_Form" model="Model" /><div class="form-actions"><button class="button button--primary" type="submit">Save replacement</button><a class="button button--secondary" asp-action="Details" asp-route-id="@Model.MaintenanceWindowId">Cancel</a></div></form></section>
+@{
+    ViewData.SetTitle("Edit maintenance");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Maintenance", "/Maintenance"),
+        new BreadcrumbItem("Edit"));
+}
+
+<section class="card form-card">
+    <h2 class="card__title">Edit maintenance</h2>
+    <p class="card__subtitle">
+        Saving replaces this window with a new immutable occurrence. Check evidence already
+        recorded stays linked to the original.
+    </p>
+
+    <form asp-action="Edit"
+          method="post"
+          class="form-stack"
+          id="ajax-form-region"
+          data-ajax-region
+          data-ajax-form
+          data-ajax-target="#ajax-form-region">
+        <partial name="_AjaxValidationSummary" />
+        <input asp-for="MaintenanceWindowId" type="hidden" />
+        <input asp-for="Version" type="hidden" />
+        <partial name="_Form" model="Model" />
+
+        <div class="form-actions">
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "check")
+                <span>Save replacement</span>
+            </button>
+            <a class="button button--secondary" asp-action="Details" asp-route-id="@Model.MaintenanceWindowId">
+                @await Html.PartialAsync("_Icon", "close")
+                <span>Cancel</span>
+            </a>
+        </div>
+    </form>
+</section>

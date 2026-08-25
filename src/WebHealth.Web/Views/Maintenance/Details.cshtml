@@ -1,8 +1,242 @@
-﻿@model MaintenanceDetailsViewModel
-@{ ViewData.SetTitle("Maintenance details"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Maintenance", "/Maintenance"), new BreadcrumbItem("Details")); }
-<div id="ajax-page" data-ajax-region>
-<section class="card"><div class="page-intro"><div><h2 class="card__title">Maintenance window</h2><p class="card__subtitle">@Model.Window.ScopeLabel · Version @Model.Window.Version</p></div><div class="form-actions">@if (!Model.Window.IsCancelled) { <a class="button button--primary" asp-action="Edit" asp-route-id="@Model.Window.Id">Edit</a> }</div></div>
-    <dl class="registry-facts"><div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Window.IsCancelled ? "danger" : "warning")">@(Model.Window.IsCancelled ? "Cancelled" : "Scheduled")</span></dd></div><div><dt>First occurrence starts</dt><dd>@Html.TimestampWithSeconds(Model.Window.StartsAt)</dd></div><div><dt>First occurrence ends</dt><dd>@Html.TimestampWithSeconds(Model.Window.EndsAt)</dd></div><div><dt>Display timezone</dt><dd>@Model.Window.TimezoneId</dd></div><div><dt>Repeats</dt><dd>@MaintenanceRecurrenceDisplay.Describe(Model.Window.Recurrence)</dd></div><div><dt>Next occurrence</dt><dd>@Html.TimestampWithSeconds(Model.Window.NextOccurrenceStartsAt, "None remaining")</dd></div><div><dt>Materialised occurrences</dt><dd>@Model.Window.OccurrenceCount</dd></div><div><dt>Notification policy</dt><dd>@(Model.Window.SuppressionPolicy == "SuppressAll" ? "Suppress all notifications" : "Do not suppress notifications")</dd></div><div><dt>Escalation</dt><dd>@(Model.Window.PauseEscalation ? "Paused while active" : "Continues while active")</dd></div><div><dt>Failure confirmation</dt><dd>@(Model.Window.ContinueFailureCounter ? "Continues after maintenance" : "Restarts after maintenance")</dd></div><div><dt>Reason</dt><dd>@Model.Window.Reason</dd></div></dl>
-    @if (!Model.Window.IsCancelled) { <div class="registry-lifecycle"><form asp-action="Cancel" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Window.Id" /><input type="hidden" name="version" value="@Model.Window.Version" /><button class="button button--danger" type="submit">Cancel maintenance</button></form></div> }
-</section>
+@model MaintenanceDetailsViewModel
+@{
+    ViewData.SetTitle("Maintenance details");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("Maintenance", "/Maintenance"),
+        new BreadcrumbItem("Details"));
+
+    var window = Model.Window;
+    var isArchived = window.ArchivedAt is not null;
+    var statusTone = MaintenanceStatusDisplay.Badge(window);
+    var statusName = MaintenanceStatusDisplay.Name(window);
+    var suppresses = window.SuppressionPolicy == "SuppressAll";
+}
+
+<div id="ajax-page" class="stack" data-ajax-region>
+    @* The card title is the record's identity -- what this window covers -- rather than the word
+       "Maintenance window", which the page heading and the breadcrumb already say twice. *@
+    <section class="card" aria-labelledby="maintenance-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="maintenance-heading">@window.ScopeLabel</h2>
+                <p class="card__status" data-status="@statusTone">
+                    @await Html.PartialAsync("_Icon", StatusBadges.Icon(statusTone))
+                    @* The state and what it means, together. It was a row among a dozen others,
+                       where the one fact a reader opens this page for read as one more line. *@
+                    <span>@statusName &middot; @MaintenanceStatusDisplay.Detail(window)</span>
+                </p>
+            </div>
+
+            <div class="form-actions">
+                @if (!window.IsCancelled && !isArchived)
+                {
+                    <a class="button button--primary" asp-action="Edit" asp-route-id="@window.Id">
+                        @await Html.PartialAsync("_Icon", "pencil")
+                        <span>Edit</span>
+                    </a>
+                }
+
+                @* Cancelling and restoring were a loose button strip under the facts, weighted the
+                   same as everything else on the card. They are state changes on this record, so
+                   they sit behind the one Actions menu the rest of the site uses. *@
+                @if (isArchived || !window.IsCancelled)
+                {
+                    <div class="action-menu" data-shell-menu data-open="false">
+                        <button type="button"
+                                class="button button--secondary"
+                                data-shell-menu-toggle
+                                aria-controls="maintenance-actions-menu"
+                                aria-expanded="false"
+                                aria-haspopup="true">
+                            @await Html.PartialAsync("_Icon", "settings")
+                            <span>Actions</span>
+                            <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        </button>
+
+                        <div class="action-menu__panel" id="maintenance-actions-menu" data-shell-menu-panel>
+                            @if (isArchived)
+                            {
+                                <form asp-action="Restore" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                    <input type="hidden" name="id" value="@window.Id" />
+                                    <input type="hidden" name="version" value="@window.Version" />
+                                    <button class="action-menu__item" type="submit">
+                                        @await Html.PartialAsync("_Icon", "restore")
+                                        <span>Restore from archive</span>
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                <form asp-action="Cancel"
+                                      method="post"
+                                      data-ajax-form
+                                      data-ajax-target="#ajax-page"
+                                      data-shell-confirm="Cancel this maintenance window? Occurrences that have not run are dropped, and checks stop being suppressed.">
+                                    <input type="hidden" name="id" value="@window.Id" />
+                                    <input type="hidden" name="version" value="@window.Version" />
+                                    <button class="action-menu__item action-menu__item--danger" type="submit">
+                                        @await Html.PartialAsync("_Icon", "close")
+                                        <span>Cancel maintenance</span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
+            </div>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "building")</span>
+                            <span>Scope</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <span>@window.ScopeLabel</span>
+                            <span class="detail-list__note">@window.Scope.Kind</span>
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                            <span>First occurrence starts</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(window.StartsAt)</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                            <span>First occurrence ends</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(window.EndsAt)</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "calendar")</span>
+                            <span>Repeats</span>
+                        </span>
+                        <span class="detail-list__value">@MaintenanceRecurrenceDisplay.Describe(window.Recurrence)</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "calendar")</span>
+                            <span>Next occurrence</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @Html.TimestampWithSeconds(window.NextOccurrenceStartsAt, "None remaining")
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "audit")</span>
+                            <span>Materialised occurrences</span>
+                        </span>
+                        <span class="detail-list__value">@window.OccurrenceCount</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "settings")</span>
+                            <span>Display timezone</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <span>@window.TimezoneId</span>
+                            <span class="detail-list__note">Times above are shown in your own timezone</span>
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "bell")</span>
+                            <span>Notification policy</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                suppresses ? StatusBadges.Neutral : StatusBadges.Info,
+                                suppresses ? "Suppress all" : "Do not suppress",
+                                suppresses
+                                    ? "Checks still run while this window is active; the notifications they would have sent are suppressed and recorded with the result."
+                                    : "Checks run and notify as usual while this window is active."))
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            @* Not the incidents glyph: it is the warning triangle, and a triangle
+                               beside a neutral fact reads as a problem with that fact. *@
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                            <span>Escalation</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @(window.PauseEscalation ? "Paused while active" : "Continues while active")
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "restore")</span>
+                            <span>Failure confirmation</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @(window.ContinueFailureCounter ? "Continues after maintenance" : "Restarts after maintenance")
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "help")</span>
+                            <span>Reason</span>
+                        </span>
+                        <span class="detail-list__value">@window.Reason</span>
+                    </div>
+                </li>
+                @if (window.ArchivedAt is not null)
+                {
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "archive")</span>
+                                <span>Archived</span>
+                            </span>
+                            <span class="detail-list__value">
+                                <span>@Html.TimestampWithSeconds(window.ArchivedAt)</span>
+                                <span class="detail-list__note">Nothing was deleted; restoring puts it back unchanged</span>
+                            </span>
+                        </div>
+                    </li>
+                }
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "key")</span>
+                            <span>Version</span>
+                        </span>
+                        <span class="detail-list__value">@window.Version</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
 </div>

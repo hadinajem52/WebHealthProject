@@ -35,6 +35,7 @@ internal sealed class MaintenanceWindowConfiguration : IEntityTypeConfiguration<
         builder.Property(window => window.RecurrencePattern).HasMaxLength(10).IsRequired().HasDefaultValue(MaintenanceRecurrencePatterns.None);
         builder.Property(window => window.Version).IsConcurrencyToken();
         builder.HasIndex(window => window.DeletedAt);
+        builder.HasIndex(window => window.ArchivedAt);
         builder.HasIndex(window => new { window.RecurrencePattern, window.ExpandedThrough })
             .HasDatabaseName("ix_maintenance_window_recurrence_expansion");
         builder.HasOne<ApplicationUser>().WithMany()
