@@ -11,6 +11,7 @@ namespace WebHealth.Infrastructure.Registry;
 
 internal sealed class EnvironmentRegistryService(
     ApplicationDbContext dbContext,
+    RegistryHierarchyLock hierarchyLock,
     IAuditTrailWriter auditTrail) : IEnvironmentRegistryService
 {
     private const string EnvironmentNameIndex =
@@ -55,7 +56,8 @@ internal sealed class EnvironmentRegistryService(
         }
 
         var input = preparation.Input!;
-        if (!await LockWebsiteAsync(command.WebsiteId, cancellationToken))
+        var website = await hierarchyLock.LockWebsiteAsync(command.WebsiteId, cancellationToken);
+        if (website is not { DeletedAt: null })
         {
             return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(CreateEnvironment.WebsiteId),
@@ -235,14 +237,6 @@ internal sealed class EnvironmentRegistryService(
         {
             return await RollBackDuplicateAsync(transaction, cancellationToken);
         }
-    }
-
-    private async Task<bool> LockWebsiteAsync(Guid websiteId, CancellationToken cancellationToken)
-    {
-        var website = await dbContext.Websites.FromSqlInterpolated($"""
-            SELECT * FROM web_health.website WHERE id = {websiteId} FOR SHARE
-            """).AsNoTracking().SingleOrDefaultAsync(cancellationToken);
-        return website is { DeletedAt: null };
     }
 
     private async Task<bool> CanBecomeInactiveAsync(WebsiteEnvironment environment, CancellationToken cancellationToken)
@@ -428,10 +422,13 @@ internal sealed class EnvironmentRegistryService(
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
-        return Validation(ValidationError.For(
+        return ResolveEnvironmentNameDuplicate();
+    }
+
+    internal RegistryMutationResult ResolveEnvironmentNameDuplicate() =>
+        Validation(ValidationError.For(
             nameof(UpdateEnvironment.Name),
             "This website already has an environment with this name. Choose a different one."));
-    }
 
     private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,

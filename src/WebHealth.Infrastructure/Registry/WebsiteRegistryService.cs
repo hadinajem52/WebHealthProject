@@ -11,6 +11,7 @@ namespace WebHealth.Infrastructure.Registry;
 internal sealed class WebsiteRegistryService(
     ApplicationDbContext dbContext,
     RegistryMutationSupport support,
+    RegistryHierarchyLock hierarchyLock,
     WebsitePurgeCascade purgeCascade,
     IAuditTrailWriter auditTrail) : IWebsiteRegistryService
 {
@@ -22,7 +23,7 @@ internal sealed class WebsiteRegistryService(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        var preparation = PrepareCreate(command, access);
+        var preparation = PrepareCreate(command, access, WebsiteCreationPolicy.Standalone);
         if (preparation.Failure is not null)
         {
             return preparation.Failure;
@@ -44,22 +45,37 @@ internal sealed class WebsiteRegistryService(
         return result;
     }
 
+    internal Task<RegistryCreateCoreResult> CreateWebsiteCoreAsync(
+        CreateWebsite command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        CreateWebsiteCoreAsync(
+            command,
+            access,
+            WebsiteCreationPolicy.Standalone,
+            cancellationToken);
+
     internal async Task<RegistryCreateCoreResult> CreateWebsiteCoreAsync(
         CreateWebsite command,
         RegistryAccessContext access,
+        WebsiteCreationPolicy policy,
         CancellationToken cancellationToken = default)
     {
-        var preparation = PrepareCreate(command, access);
+        var preparation = PrepareCreate(command, access, policy);
         if (preparation.Failure is not null)
         {
             return new RegistryCreateCompleted(preparation.Failure);
         }
 
-        if (!await ClientAcceptsWebsiteAsync(command.ClientId, cancellationToken))
+        var client = await hierarchyLock.LockClientAsync(command.ClientId, cancellationToken);
+        var requiresActiveClient = policy != WebsiteCreationPolicy.RegisteredOnlyEndpointRegistration;
+        if (client is not { DeletedAt: null } || requiresActiveClient && !client.IsActive)
         {
             return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(CreateWebsite.ClientId),
-                "Select an active client. An archived or inactive client cannot take new websites.")));
+                requiresActiveClient
+                    ? "Select an active client. An archived or inactive client cannot take new websites."
+                    : "Select a client that is not archived.")));
         }
 
         if (!await support.LockValidOwnerAsync(command.OwnerSubjectId, null, cancellationToken))
@@ -79,7 +95,7 @@ internal sealed class WebsiteRegistryService(
             NormalizedName = RegistryMutationSupport.NormalizeName(preparation.Name),
             NormalizationVersion = NameNormalizer.Version,
             TechnologyCms = preparation.TechnologyCms,
-            IsEnabled = false,
+            IsEnabled = command.IsEnabled,
             CreatedAt = now,
             CreatedByUserId = access.UserId,
             UpdatedAt = now,
@@ -331,21 +347,6 @@ internal sealed class WebsiteRegistryService(
         }
     }
 
-    private async Task<bool> ClientAcceptsWebsiteAsync(
-        Guid clientId,
-        CancellationToken cancellationToken)
-    {
-        var client = await dbContext.Clients
-            .FromSqlInterpolated($"""
-                SELECT * FROM web_health.client
-                WHERE id = {clientId}
-                FOR SHARE
-                """)
-            .AsNoTracking()
-            .SingleOrDefaultAsync(cancellationToken);
-        return client is { DeletedAt: null, IsActive: true };
-    }
-
     private async Task<bool> HasActiveEnvironmentAsync(
         Guid websiteId,
         CancellationToken cancellationToken)
@@ -516,7 +517,8 @@ internal sealed class WebsiteRegistryService(
 
     private static WebsiteCreatePreparation PrepareCreate(
         CreateWebsite command,
-        RegistryAccessContext access)
+        RegistryAccessContext access,
+        WebsiteCreationPolicy policy)
     {
         if (!RegistryVisibility.CanManage(access))
         {
@@ -526,7 +528,7 @@ internal sealed class WebsiteRegistryService(
         var name = RegistryMutationSupport.TrimName(command.Name);
         var tags = TagNormalizer.Normalize(command.Tags);
         var errors = ValidateFields(name, command.TechnologyCms, tags);
-        if (command.IsEnabled)
+        if (command.IsEnabled && policy == WebsiteCreationPolicy.Standalone)
         {
             errors.Add(ValidationError.For(
                 nameof(UpdateWebsite.IsEnabled),
@@ -551,10 +553,13 @@ internal sealed class WebsiteRegistryService(
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
-        return Validation(ValidationError.For(
+        return ResolveWebsiteNameDuplicate();
+    }
+
+    internal RegistryMutationResult ResolveWebsiteNameDuplicate() =>
+        Validation(ValidationError.For(
             nameof(UpdateWebsite.Name),
             "This client already has an active website with this name. Choose a different one."));
-    }
 
     private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
@@ -581,4 +586,12 @@ internal sealed class WebsiteRegistryService(
         IReadOnlyList<NormalizedTag> Tags,
         string? TechnologyCms,
         RegistryMutationResult? Failure);
+
+}
+
+internal enum WebsiteCreationPolicy
+{
+    Standalone,
+    MonitoredEndpointRegistration,
+    RegisteredOnlyEndpointRegistration
 }

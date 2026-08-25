@@ -258,6 +258,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyPageAuditReadModelAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
+        await EndpointRegistrationAssertions.VerifyAsync(connectionString);
 
         await VerifyUpgradePathsAsync(connectionString);
     }
@@ -268,16 +269,23 @@ internal static class DatabaseFoundationAssertions
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var database = new ApplicationDbContext(options.Options);
         var mutationSupport = new RegistryMutationSupport(database);
+        var hierarchyLock = new RegistryHierarchyLock(database);
         var auditTrail = new AuditTrailWriter(database);
         var endpointPurge = new EndpointPurgeCascade(database);
         var clients = new ClientRegistryService(database, mutationSupport, auditTrail);
         var websites = new WebsiteRegistryService(
             database,
             mutationSupport,
+            hierarchyLock,
             new WebsitePurgeCascade(database, endpointPurge),
             auditTrail);
-        var environments = new EnvironmentRegistryService(database, auditTrail);
-        var endpoints = new EndpointRegistryService(database, mutationSupport, endpointPurge, auditTrail);
+        var environments = new EnvironmentRegistryService(database, hierarchyLock, auditTrail);
+        var endpoints = new EndpointRegistryService(
+            database,
+            mutationSupport,
+            hierarchyLock,
+            endpointPurge,
+            auditTrail);
 
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var ownerSubjectId = await database.OwnerSubjects

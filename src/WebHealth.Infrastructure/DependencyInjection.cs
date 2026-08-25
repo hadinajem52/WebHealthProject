@@ -126,14 +126,24 @@ public static class DependencyInjection
         services.AddScoped<IAuthorizationDenialAuditWriter, AuthorizationDenialAuditWriter>();
         services.AddScoped<RegistryVisibility>();
         services.AddScoped<RegistryMutationSupport>();
+        services.AddScoped<RegistryHierarchyLock>();
         services.AddScoped<EndpointPurgeCascade>();
         services.AddScoped<WebsitePurgeCascade>();
         services.AddScoped<IRegistryReader, RegistryReader>();
-        services.AddScoped<IClientRegistryService, ClientRegistryService>();
-        services.AddScoped<IWebsiteRegistryService, WebsiteRegistryService>();
+        services.AddScoped<ClientRegistryService>();
+        services.AddScoped<IClientRegistryService>(provider =>
+            provider.GetRequiredService<ClientRegistryService>());
+        services.AddScoped<WebsiteRegistryService>();
+        services.AddScoped<IWebsiteRegistryService>(provider =>
+            provider.GetRequiredService<WebsiteRegistryService>());
         services.AddScoped<ITargetRegistryReader, TargetRegistryReader>();
-        services.AddScoped<IEnvironmentRegistryService, EnvironmentRegistryService>();
-        services.AddScoped<IEndpointRegistryService, EndpointRegistryService>();
+        services.AddScoped<EnvironmentRegistryService>();
+        services.AddScoped<IEnvironmentRegistryService>(provider =>
+            provider.GetRequiredService<EnvironmentRegistryService>());
+        services.AddScoped<EndpointRegistryService>();
+        services.AddScoped<IEndpointRegistryService>(provider =>
+            provider.GetRequiredService<EndpointRegistryService>());
+        services.AddScoped<IEndpointRegistrationService, EndpointRegistrationService>();
         services.AddScoped<ITargetAuthorizationService, TargetAuthorizationService>();
         services.AddScoped<IMonitoringEligibilityService, MonitoringEligibilityService>();
         services.AddScoped<IExecutionLeaseService, ExecutionLeaseService>();

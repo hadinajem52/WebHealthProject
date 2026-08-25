@@ -15,6 +15,7 @@ namespace WebHealth.Infrastructure.Registry;
 internal sealed class EndpointRegistryService(
     ApplicationDbContext dbContext,
     RegistryMutationSupport mutationSupport,
+    RegistryHierarchyLock hierarchyLock,
     EndpointPurgeCascade purgeCascade,
     IAuditTrailWriter auditTrail) : IEndpointRegistryService
 {
@@ -481,17 +482,14 @@ internal sealed class EndpointRegistryService(
 
     private async Task<WebsiteEnvironment?> LockEnvironmentAsync(Guid environmentId, CancellationToken cancellationToken)
     {
-        var environment = await dbContext.Environments.FromSqlInterpolated($"""
-            SELECT * FROM web_health.environment WHERE id = {environmentId} FOR SHARE
-            """).AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+        var environment = await hierarchyLock.LockEnvironmentAsync(environmentId, cancellationToken);
         if (environment is not { DeletedAt: null, IsActive: true })
         {
             return null;
         }
 
-        var websiteExists = await dbContext.Websites.AnyAsync(website =>
-            website.Id == environment.WebsiteId && website.DeletedAt == null, cancellationToken);
-        return websiteExists ? environment : null;
+        var website = await hierarchyLock.LockWebsiteAsync(environment.WebsiteId, cancellationToken);
+        return website is { DeletedAt: null } ? environment : null;
     }
 
     private Task<bool> IsValidOwnerAsync(Guid? ownerId, Guid? retainedOwnerId, CancellationToken cancellationToken) =>
@@ -1171,14 +1169,23 @@ internal sealed class EndpointRegistryService(
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
+        return await ResolveEndpointUrlDuplicateAsync(
+            new EndpointUrlDuplicate(environmentId, normalizedUrl, normalizedUrlHash),
+            cancellationToken);
+    }
+
+    internal async Task<RegistryMutationResult> ResolveEndpointUrlDuplicateAsync(
+        EndpointUrlDuplicate duplicate,
+        CancellationToken cancellationToken = default)
+    {
         var existingUrl = await dbContext.Endpoints.AsNoTracking()
-            .Where(endpoint => endpoint.EnvironmentId == environmentId
+            .Where(endpoint => endpoint.EnvironmentId == duplicate.EnvironmentId
                 && endpoint.DeletedAt == null
                 && endpoint.NormalizationVersion == EndpointUrlNormalizer.Version
-                && endpoint.NormalizedUrlHash.SequenceEqual(normalizedUrlHash))
+                && endpoint.NormalizedUrlHash.SequenceEqual(duplicate.NormalizedUrlHash))
             .Select(endpoint => endpoint.NormalizedUrl)
             .SingleOrDefaultAsync(cancellationToken);
-        return string.Equals(existingUrl, normalizedUrl, StringComparison.Ordinal)
+        return string.Equals(existingUrl, duplicate.NormalizedUrl, StringComparison.Ordinal)
             ? Validation(ValidationError.For(
                 nameof(CreateEndpoint.Url),
                 "This environment already has an endpoint at this URL. URLs are compared after "

@@ -331,10 +331,13 @@ internal sealed class ClientRegistryService(
     {
         await transaction.RollbackAsync(cancellationToken);
         dbContext.ChangeTracker.Clear();
-        return Validation(ValidationError.For(
+        return ResolveClientNameDuplicate();
+    }
+
+    internal RegistryMutationResult ResolveClientNameDuplicate() =>
+        Validation(ValidationError.For(
             nameof(UpdateClient.Name),
             "Another active client already uses this name. Choose a different one."));
-    }
 
     private async Task<RegistryMutationResult> RollBackConcurrencyAsync(
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
