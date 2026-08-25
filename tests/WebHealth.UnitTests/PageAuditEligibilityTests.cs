@@ -13,8 +13,13 @@ public sealed class PageAuditEligibilityTests
     [InlineData("https://example.com/")]
     [InlineData("http://example.co.uk/")]
     [InlineData("https://sub.domain.example.org/path")]
-    public void Evaluate_AcceptsAPublicHttpOrHttpsPage(string url) =>
-        Evaluate(url).IsEligible.Should().BeTrue();
+    public void Evaluate_AcceptsAPublicHttpOrHttpsPage(string url)
+    {
+        var result = Evaluate(url);
+
+        result.IsEligible.Should().BeTrue();
+        result.Reason.Should().BeNull();
+    }
 
     [Fact]
     public void Evaluate_AcceptsAPublicLiteralAddress() =>
@@ -91,8 +96,4 @@ public sealed class PageAuditEligibilityTests
     public void Evaluate_IgnoresATrailingRootDotWhenMatchingASuffix() =>
         Evaluate("http://printer.local./").Reason
             .Should().Be(PageAuditIneligibilityReasons.HostNotPublic);
-
-    [Fact]
-    public void Evaluate_CarriesNoReasonWhenItAccepts() =>
-        Evaluate("https://example.com/").Reason.Should().BeNull();
 }
