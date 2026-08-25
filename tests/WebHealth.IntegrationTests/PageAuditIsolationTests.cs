@@ -47,8 +47,10 @@ public sealed class PageAuditIsolationTests
         var options = new PageAuditSchedulingOptions();
 
         options.Enabled.Should().BeFalse("the feature ships off until somebody configures a key");
-        options.WorkerCount.Should().Be(1,
-            "concurrency here buys latency at the cost of spending somebody else's quota faster");
+        options.WorkerCount.Should().Be(2,
+            "one run now opens a batch per strategy, so a single worker made the mobile batch wait "
+            + "out the desktop one and doubled its observed latency for no gain; two workers let "
+            + "the pair overlap while still capping what one endpoint spends of somebody else's quota");
     }
 
     [Fact]

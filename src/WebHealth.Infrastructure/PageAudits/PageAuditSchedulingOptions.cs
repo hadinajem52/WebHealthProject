@@ -6,7 +6,7 @@ public sealed record PageAuditSchedulingOptions
 
     public bool Enabled { get; init; }
 
-    public int WorkerCount { get; init; } = 1;
+    public int WorkerCount { get; init; } = 2;
 
     public int DispatchBatchSize { get; init; } = 10;
 
