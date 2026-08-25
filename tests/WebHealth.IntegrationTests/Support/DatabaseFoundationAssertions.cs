@@ -91,7 +91,8 @@ internal static class DatabaseFoundationAssertions
         "20260824065425_PageAuditAllCategories",
         "20260824081054_PageAuditIncidentPoliciesAndBatches",
         "20260824084650_PageAuditEndpointIncidentPolicies",
-        "20260824102608_CrawlRunExecutionClaim"
+        "20260824102608_CrawlRunExecutionClaim",
+        "20260825090421_MaintenanceWindowArchive"
     ];
 
     private static readonly string[] ExpectedTables =

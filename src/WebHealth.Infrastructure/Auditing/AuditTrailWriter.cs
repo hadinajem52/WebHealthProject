@@ -130,6 +130,8 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
             MaintenanceAuditAction.Created => "maintenance.created",
             MaintenanceAuditAction.Updated => "maintenance.updated",
             MaintenanceAuditAction.Cancelled => "maintenance.cancelled",
+            MaintenanceAuditAction.Archived => "maintenance.archived",
+            MaintenanceAuditAction.Restored => "maintenance.restored",
             _ => throw new ArgumentOutOfRangeException(nameof(action))
         }, "maintenance_window", after.MaintenanceWindowId, before, after, cancellationToken);
 

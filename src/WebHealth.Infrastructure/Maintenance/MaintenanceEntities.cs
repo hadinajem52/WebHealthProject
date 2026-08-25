@@ -20,6 +20,7 @@ public sealed class MaintenanceWindow
     public Guid UpdatedByUserId { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
     public Guid? DeletedByUserId { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
     public long Version { get; set; }
     public ICollection<MaintenanceTarget> Targets { get; } = [];
     public ICollection<MaintenanceOccurrence> Occurrences { get; } = [];

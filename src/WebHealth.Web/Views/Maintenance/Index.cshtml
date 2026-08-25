@@ -1,29 +1,121 @@
-﻿@model MaintenanceListViewModel
-@{ ViewData.SetTitle("Maintenance"); ViewData.SetBreadcrumbs(new BreadcrumbItem("Maintenance")); }
-<section class="card">
-    <div class="page-intro">
-        <div><h2 class="card__title">Maintenance windows</h2><p class="card__subtitle">Checks continue while active; notification suppression is recorded alongside the result.</p></div>
-        <a class="button button--primary" asp-action="Create">@await Html.PartialAsync("_Icon", "plus")<span>Schedule maintenance</span></a>
-    </div>
-    @if (Model.Windows.Count == 0)
-    {
-        <p class="card__subtitle">No maintenance windows have been scheduled.</p>
-    }
-    else
-    {
-        <div class="table-scroll"><table class="data-table"><thead><tr><th>Scope</th><th>Window</th><th>Repeats</th><th>Next occurrence</th><th>Policy</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        @foreach (var window in Model.Windows)
+@model MaintenanceListViewModel
+@{
+    ViewData.SetTitle("Maintenance");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("Maintenance"));
+}
+
+<div id="ajax-page" class="stack" data-ajax-region>
+    <section class="card" aria-labelledby="maintenance-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="maintenance-heading">Maintenance windows</h2>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "calendar")
+                    <span>@Model.Windows.Count window@(Model.Windows.Count == 1 ? null : "s") &middot; checks keep running while one is active</span>
+                </p>
+            </div>
+
+            <div class="form-actions">
+                <a class="button button--secondary" asp-action="Archived" data-ajax-link data-ajax-target="#ajax-page">
+                    @await Html.PartialAsync("_Icon", "archive")
+                    <span>View archive</span>
+                </a>
+
+                <a class="button button--primary" asp-action="Create">
+                    @await Html.PartialAsync("_Icon", "plus")
+                    <span>Schedule maintenance</span>
+                </a>
+
+                @* Bulk archiving is an operation on the whole list rather than an action a reader
+                   takes on their way somewhere, so it sits behind the Actions menu instead of
+                   competing with the two navigational buttons. It appears only when there is
+                   something to archive: an item that could only report "nothing to do" is noise. *@
+                @if (Model.ArchivableCount > 0)
+                {
+                    <div class="action-menu" data-shell-menu data-open="false">
+                        <button type="button"
+                                class="button button--secondary"
+                                data-shell-menu-toggle
+                                aria-controls="maintenance-list-actions"
+                                aria-expanded="false"
+                                aria-haspopup="true">
+                            @await Html.PartialAsync("_Icon", "settings")
+                            <span>Actions</span>
+                            <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        </button>
+
+                        <div class="action-menu__panel" id="maintenance-list-actions" data-shell-menu-panel>
+                            <form method="post" asp-action="ArchiveCompleted" data-ajax-form data-ajax-target="#ajax-page">
+                                <button class="action-menu__item"
+                                        type="submit"
+                                        title="Moves every cancelled window, and every window that can no longer run again, out of this list into the archive. Nothing is deleted.">
+                                    @await Html.PartialAsync("_Icon", "archive")
+                                    <span>Archive completed (@Model.ArchivableCount)</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (Model.Windows.Count == 0)
         {
-            <tr>
-                <td data-label="Scope"><span class="data-table__primary">@window.ScopeLabel</span></td>
-                <td data-label="Window">@Html.Timestamp(window.StartsAt) – @Html.Timestamp(window.EndsAt)</td>
-                <td data-label="Repeats">@MaintenanceRecurrenceDisplay.Describe(window.Recurrence)</td>
-                <td data-label="Next occurrence">@Html.Timestamp(window.NextOccurrenceStartsAt, "—")</td>
-                <td data-label="Policy">@(window.SuppressionPolicy == "SuppressAll" ? "Suppress notifications" : "Do not suppress")</td>
-                <td data-label="Status"><span class="badge" data-status="@(window.IsCancelled ? "danger" : "warning")">@(window.IsCancelled ? "Cancelled" : "Scheduled")</span></td>
-                <td class="data-table__action" data-label="Actions"><a asp-action="Details" asp-route-id="@window.Id">Details</a></td>
-            </tr>
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No maintenance windows are scheduled",
+                "A window suppresses the notifications a planned outage would otherwise raise. Checks keep running, and their results are kept.",
+                "calendar"))
         }
-        </tbody></table></div>
-    }
-</section>
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Scheduled maintenance windows</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Scope</th>
+                            <th scope="col">Window</th>
+                            <th scope="col">Repeats</th>
+                            <th scope="col">Next occurrence</th>
+                            <th scope="col">Policy</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var window in Model.Windows)
+                        {
+                            var suppresses = window.SuppressionPolicy == "SuppressAll";
+                            <tr>
+                                <td data-label="Scope"><span class="data-table__primary">@window.ScopeLabel</span></td>
+                                <td data-label="Window">@Html.Timestamp(window.StartsAt) &ndash; @Html.Timestamp(window.EndsAt)</td>
+                                <td data-label="Repeats">@MaintenanceRecurrenceDisplay.Describe(window.Recurrence)</td>
+                                <td data-label="Next occurrence">@Html.Timestamp(window.NextOccurrenceStartsAt, "—")</td>
+                                @* The escalation rule used to have nowhere to go, so it was invisible
+                                   here. It qualifies the policy, which is what the badge's added
+                                   context is for. *@
+                                <td data-label="Policy">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        suppresses ? StatusBadges.Neutral : StatusBadges.Info,
+                                        suppresses ? "Suppress" : "Notify",
+                                        suppresses
+                                            ? $"Notifications are suppressed while this window is active. Escalation {(window.PauseEscalation ? "is paused" : "continues")}."
+                                            : $"Notifications are sent as usual while this window is active. Escalation {(window.PauseEscalation ? "is paused" : "continues")}."))
+                                </td>
+                                <td data-label="Status">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        MaintenanceStatusDisplay.Badge(window),
+                                        MaintenanceStatusDisplay.Name(window),
+                                        MaintenanceStatusDisplay.Detail(window)))
+                                </td>
+                                <td class="data-table__action" data-label="Details">
+                                    <a asp-action="Details" asp-route-id="@window.Id">View</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

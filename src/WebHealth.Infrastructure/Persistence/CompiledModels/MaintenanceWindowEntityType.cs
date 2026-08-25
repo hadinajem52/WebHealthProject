@@ -21,10 +21,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Maintenance.MaintenanceWindow",
                 typeof(MaintenanceWindow),
                 baseEntityType,
-                propertyCount: 19,
+                propertyCount: 20,
                 navigationCount: 2,
                 foreignKeyCount: 3,
-                unnamedIndexCount: 5,
+                unnamedIndexCount: 6,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -37,6 +37,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
             id.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             id.AddAnnotation("Relational:ColumnName", "id");
+
+            var archivedAt = runtimeEntityType.AddProperty(
+                "ArchivedAt",
+                typeof(DateTimeOffset?),
+                propertyInfo: typeof(MaintenanceWindow).GetProperty("ArchivedAt", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(MaintenanceWindow).GetField("<ArchivedAt>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            archivedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            archivedAt.AddAnnotation("Relational:ColumnName", "archived_at");
+            archivedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
 
             var continueFailureCounter = runtimeEntityType.AddProperty(
                 "ContinueFailureCounter",
@@ -215,24 +225,28 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             key.AddAnnotation("Relational:Name", "pk_maintenance_window");
 
             var index = runtimeEntityType.AddIndex(
-                new[] { createdByUserId });
-            index.AddAnnotation("Relational:Name", "ix_maintenance_window_created_by_user_id");
+                new[] { archivedAt });
+            index.AddAnnotation("Relational:Name", "ix_maintenance_window_archived_at");
 
             var index0 = runtimeEntityType.AddIndex(
-                new[] { deletedAt });
-            index0.AddAnnotation("Relational:Name", "ix_maintenance_window_deleted_at");
+                new[] { createdByUserId });
+            index0.AddAnnotation("Relational:Name", "ix_maintenance_window_created_by_user_id");
 
             var index1 = runtimeEntityType.AddIndex(
-                new[] { deletedByUserId });
-            index1.AddAnnotation("Relational:Name", "ix_maintenance_window_deleted_by_user_id");
+                new[] { deletedAt });
+            index1.AddAnnotation("Relational:Name", "ix_maintenance_window_deleted_at");
 
             var index2 = runtimeEntityType.AddIndex(
-                new[] { updatedByUserId });
-            index2.AddAnnotation("Relational:Name", "ix_maintenance_window_updated_by_user_id");
+                new[] { deletedByUserId });
+            index2.AddAnnotation("Relational:Name", "ix_maintenance_window_deleted_by_user_id");
 
             var index3 = runtimeEntityType.AddIndex(
+                new[] { updatedByUserId });
+            index3.AddAnnotation("Relational:Name", "ix_maintenance_window_updated_by_user_id");
+
+            var index4 = runtimeEntityType.AddIndex(
                 new[] { recurrencePattern, expandedThrough });
-            index3.AddAnnotation("Relational:Name", "ix_maintenance_window_recurrence_expansion");
+            index4.AddAnnotation("Relational:Name", "ix_maintenance_window_recurrence_expansion");
 
             return runtimeEntityType;
         }

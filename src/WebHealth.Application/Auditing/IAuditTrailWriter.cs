@@ -209,7 +209,7 @@ public sealed record RobotsPolicyAuditSnapshot(
     string? ExceptionReason,
     long Version);
 
-public enum MaintenanceAuditAction { Created, Updated, Cancelled }
+public enum MaintenanceAuditAction { Created, Updated, Cancelled, Archived, Restored }
 
 public sealed record MaintenanceAuditSnapshot(
     Guid MaintenanceWindowId,

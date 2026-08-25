@@ -20,7 +20,52 @@ public sealed class MaintenanceController(
 {
     [HttpGet]
     public async Task<IActionResult> Index(CancellationToken cancellationToken) =>
-        View(new MaintenanceListViewModel(await maintenanceReader.ListAsync(cancellationToken)));
+        View(new MaintenanceListViewModel(await maintenanceReader.ListAsync(false, cancellationToken)));
+
+    [HttpGet]
+    public async Task<IActionResult> Archived(CancellationToken cancellationToken) =>
+        View(new MaintenanceArchiveViewModel(await maintenanceReader.ListAsync(true, cancellationToken)));
+
+    [HttpPost]
+    public async Task<IActionResult> ArchiveCompleted(CancellationToken cancellationToken)
+    {
+        var result = await maintenanceService.ArchiveCompletedAsync(GetAccess(), cancellationToken);
+        if (result.Status == MaintenanceMutationStatus.Forbidden) return Forbid();
+        var indexUrl = Url.Action(nameof(Index))!;
+        return this.RedirectOrAjaxRefresh(
+            indexUrl,
+            indexUrl,
+            result.Succeeded
+                ? result.ArchivedCount == 0
+                    ? "There was nothing cancelled or finished to archive."
+                    : $"{result.ArchivedCount} maintenance window{(result.ArchivedCount == 1 ? null : "s")} moved to the archive."
+                : string.Join(" ", result.Errors),
+            result.Succeeded
+                ? result.ArchivedCount == 0 ? FlashLevel.Information : FlashLevel.Success
+                : FlashLevel.Error,
+            result.Succeeded ? StatusCodes.Status200OK : StatusCodes.Status409Conflict);
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Restore(Guid id, long version, CancellationToken cancellationToken)
+    {
+        var result = await maintenanceService.RestoreAsync(new(id, version), GetAccess(), cancellationToken);
+        if (result.Status == MaintenanceMutationStatus.Forbidden) return Forbid();
+        if (result.Status == MaintenanceMutationStatus.NotFound) return this.NotFoundRecord("maintenance window");
+        var archivedUrl = Url.Action(nameof(Archived))!;
+        return this.RedirectOrAjaxRefresh(
+            archivedUrl,
+            archivedUrl,
+            result.Succeeded
+                ? "Maintenance window restored from the archive."
+                : string.Join(" ", result.Errors),
+            result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
+            result.Succeeded
+                ? StatusCodes.Status200OK
+                : result.Status == MaintenanceMutationStatus.ConcurrencyConflict
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status422UnprocessableEntity);
+    }
 
     [HttpGet]
     public async Task<IActionResult> Details(Guid id, CancellationToken cancellationToken)
