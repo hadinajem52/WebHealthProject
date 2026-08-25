@@ -12,30 +12,93 @@
             <p class="card__subtitle">Every endpoint across clients, websites and environments within your access scope, in one place.</p>
         </div>
         <div class="form-actions">
+            @if (Model.CanManage)
+            {
+                <a class="button button--primary" asp-action="RegisterEndpoint">
+                    @await Html.PartialAsync("_Icon", "plus")
+                    <span>Register endpoint</span>
+                </a>
+            }
             <a class="button button--secondary" asp-controller="Registry" asp-action="Clients">View clients</a>
             <a class="button button--secondary" asp-controller="Registry" asp-action="Websites">View websites</a>
         </div>
     </div>
 
-    <form method="get" class="filter-inline" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
+    <form method="get" class="filter-bar" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
         <div class="form-field">
             <label for="search">Search</label>
-            <input id="search" name="search" type="search" value="@Model.Search" placeholder="Filter by URL, website or client" />
+            <input id="search" name="search" type="search" value="@Model.Filter.Search" placeholder="URL, website or client" />
         </div>
-        <button class="button button--primary" type="submit">Filter</button>
-        @if (!string.IsNullOrWhiteSpace(Model.Search))
-        {
-            <a class="button button--secondary" asp-action="Endpoints" data-ajax-link data-ajax-target="#ajax-page">Clear</a>
-        }
+        <div class="form-field">
+            <label for="clientId">Client</label>
+            <select id="clientId" name="clientId">
+                <option value="">All clients</option>
+                @foreach (var client in Model.Clients)
+                {
+                    <option value="@client.Id" selected="@(Model.Filter.ClientId == client.Id)">@client.Name</option>
+                }
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="websiteId">Website</label>
+            <select id="websiteId" name="websiteId">
+                <option value="">All websites</option>
+                @foreach (var website in Model.Websites)
+                {
+                    <option value="@website.Id" selected="@(Model.Filter.WebsiteId == website.Id)">@website.ClientName / @website.Name</option>
+                }
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="environmentId">Environment</label>
+            <select id="environmentId" name="environmentId">
+                <option value="">All environments</option>
+                @foreach (var environment in Model.Environments)
+                {
+                    <option value="@environment.Id" selected="@(Model.Filter.EnvironmentId == environment.Id)">@environment.ClientName / @environment.WebsiteName / @environment.Name</option>
+                }
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="enabled">Endpoint state</label>
+            <select id="enabled" name="enabled">
+                <option value="">Any state</option>
+                <option value="true" selected="@(Model.Filter.Enabled == true)">Enabled</option>
+                <option value="false" selected="@(Model.Filter.Enabled == false)">Disabled</option>
+            </select>
+        </div>
+        <div class="form-field">
+            <label for="monitoringMode">Monitoring</label>
+            <select id="monitoringMode" name="monitoringMode">
+                <option value="">Any mode</option>
+                <option value="@EndpointMonitoringMode.Scheduled" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.Scheduled)">Monitored</option>
+                <option value="@EndpointMonitoringMode.Paused" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.Paused)">Paused</option>
+                <option value="@EndpointMonitoringMode.ManualOnly" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.ManualOnly)">Manual only</option>
+                <option value="@EndpointMonitoringMode.Disabled" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.Disabled)">Disabled</option>
+            </select>
+        </div>
+        <div class="filter-bar__actions">
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "filter")
+                <span>Apply filters</span>
+            </button>
+            @if (Model.Filter.HasValues)
+            {
+                <a class="button button--secondary" asp-action="Endpoints" data-ajax-link data-ajax-target="#ajax-page">
+                    @await Html.PartialAsync("_Icon", "close")
+                    <span>Clear</span>
+                </a>
+            }
+        </div>
     </form>
 
     @if (Model.Endpoints.Count == 0)
     {
         @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
             "No endpoints found",
-            string.IsNullOrWhiteSpace(Model.Search)
+            !Model.Filter.HasValues
                 ? "No endpoint records are available within your current access scope."
-                : "No endpoints match your search. Try a different URL, website or client name.",
+                : "No endpoints match these filters. Widen the hierarchy, state or monitoring selection.",
             "registry"))
     }
     else

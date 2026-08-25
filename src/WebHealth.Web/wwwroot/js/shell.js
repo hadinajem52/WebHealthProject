@@ -709,6 +709,50 @@
         sync();
     }
 
+    function setUpEndpointRegistration(form) {
+        if (!beginInitialization(form)) {
+            return;
+        }
+
+        var modes = Array.prototype.slice.call(form.querySelectorAll('input[name="HierarchyMode"]'));
+        var panels = Array.prototype.slice.call(form.querySelectorAll('[data-registration-show]'));
+        var monitoring = form.querySelector('[data-registration-monitoring]');
+        var authorization = form.querySelector('.registration-authorization');
+        var advanced = form.querySelector('[data-registration-advanced]');
+        var advancedState = form.querySelector('[data-registration-advanced-state]');
+
+        function syncMode() {
+            var selected = modes.find(function (mode) { return mode.checked; });
+            var value = selected ? selected.value : '';
+            panels.forEach(function (panel) {
+                var visibleModes = panel.getAttribute('data-registration-show').split(',');
+                panel.hidden = visibleModes.indexOf(value) === -1;
+            });
+        }
+
+        function syncMonitoring() {
+            if (authorization && monitoring) {
+                authorization.setAttribute('data-inactive', monitoring.checked ? 'false' : 'true');
+            }
+        }
+
+        modes.forEach(function (mode) {
+            mode.addEventListener('change', syncMode);
+        });
+        if (monitoring) {
+            monitoring.addEventListener('change', syncMonitoring);
+        }
+        if (advanced && advancedState) {
+            advanced.addEventListener('toggle', function () {
+                advancedState.value = advanced.open ? 'true' : 'false';
+            });
+            advancedState.value = advanced.open ? 'true' : 'false';
+        }
+
+        syncMode();
+        syncMonitoring();
+    }
+
     function initialize(root) {
         root = root || document;
         var sidebar = first(root, '[data-shell-sidebar]');
@@ -796,6 +840,9 @@
 
         elements(root, '[data-shell-password-toggle]')
             .forEach(setUpPasswordReveal);
+
+        elements(root, '[data-registration-form]')
+            .forEach(setUpEndpointRegistration);
 
         setUpBadgeTooltips(root);
 

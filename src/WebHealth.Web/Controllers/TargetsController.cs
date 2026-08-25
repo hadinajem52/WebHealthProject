@@ -6,6 +6,7 @@ using WebHealth.Application.Authorization;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
+using WebHealth.Domain.Normalization;
 using WebHealth.Web.Models;
 using WebHealth.Web.Shell;
 using WebHealth.Web.Ajax;
@@ -18,16 +19,100 @@ public sealed class TargetsController(
     ITargetRegistryReader targetReader,
     IEnvironmentRegistryService environmentService,
     IEndpointRegistryService endpointService,
+    IEndpointRegistrationService endpointRegistrationService,
     ICheckHistoryReader checkHistoryReader,
     ITargetAuthorizationService targetAuthorization) : Controller
 {
     [HttpGet]
-    public async Task<IActionResult> Endpoints(string? search, CancellationToken cancellationToken)
+    public async Task<IActionResult> Endpoints(
+        [FromQuery] EndpointRegistryFilter filter,
+        CancellationToken cancellationToken)
     {
         var access = GetAccess();
         return View(new RegistryEndpointListViewModel(
-            await targetReader.ListAllEndpointsAsync(access, search, cancellationToken),
-            search));
+            await targetReader.ListAllEndpointsAsync(access, filter, cancellationToken),
+            filter,
+            await registryReader.ListClientsAsync(access, cancellationToken),
+            await registryReader.ListWebsitesAsync(access, cancellationToken: cancellationToken),
+            await targetReader.ListAllEnvironmentsAsync(access, cancellationToken),
+            CanManage(access)));
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
+    public async Task<IActionResult> RegisterEndpoint(
+        Guid? clientId,
+        Guid? websiteId,
+        Guid? environmentId,
+        CancellationToken cancellationToken)
+    {
+        var model = await BuildRegistrationFormAsync(new(), cancellationToken);
+        if (environmentId is { } selectedEnvironmentId)
+        {
+            if (!model.Environments.Any(environment => environment.Id == selectedEnvironmentId))
+            {
+                return this.NotFoundRecord("environment");
+            }
+
+            model.HierarchyMode = EndpointRegistrationModes.ExistingEnvironment;
+            model.EnvironmentId = selectedEnvironmentId;
+        }
+        else if (websiteId is { } selectedWebsiteId)
+        {
+            if (!model.Websites.Any(website => website.Id == selectedWebsiteId))
+            {
+                return this.NotFoundRecord("website");
+            }
+
+            model.HierarchyMode = EndpointRegistrationModes.NewEnvironment;
+            model.WebsiteId = selectedWebsiteId;
+        }
+        else if (clientId is { } selectedClientId)
+        {
+            if (!model.Clients.Any(client => client.Id == selectedClientId))
+            {
+                return this.NotFoundRecord("client");
+            }
+
+            model.HierarchyMode = EndpointRegistrationModes.NewWebsite;
+            model.ClientId = selectedClientId;
+        }
+        else
+        {
+            SelectDefaultRegistrationMode(model);
+        }
+
+        return View(model);
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
+    public async Task<IActionResult> RegisterEndpoint(
+        EndpointRegistrationFormViewModel model,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return this.ValidationView(
+                nameof(RegisterEndpoint),
+                await BuildRegistrationFormAsync(model, cancellationToken));
+        }
+
+        var result = await endpointRegistrationService.RegisterAsync(
+            new RegisterEndpointRequest(
+                BuildRegistrationHierarchy(model),
+                BuildRegistrationSettings(model)),
+            GetAccess(),
+            cancellationToken);
+        if (!result.Succeeded)
+        {
+            AddErrors(result.Errors);
+            return this.ValidationView(
+                nameof(RegisterEndpoint),
+                await BuildRegistrationFormAsync(model, cancellationToken));
+        }
+
+        return this.RedirectOrAjaxNavigate(
+            Url.Action(nameof(Endpoint), new { id = result.EntityId })!,
+            "Endpoint registered and ready for monitoring.");
     }
 
     [HttpGet]
@@ -320,6 +405,138 @@ public sealed class TargetsController(
 
     private static bool CanManage(RegistryAccessContext access) => RegistryVisibilityRoleNames.Any(access.Roles.Contains);
     private static readonly string[] RegistryVisibilityRoleNames = [ApplicationRoles.Administrator, ApplicationRoles.Operations];
+
+    private async Task<EndpointRegistrationFormViewModel> BuildRegistrationFormAsync(
+        EndpointRegistrationFormViewModel model,
+        CancellationToken cancellationToken)
+    {
+        var access = GetAccess();
+        model.Clients = (await registryReader.ListClientsAsync(access, cancellationToken))
+            .Where(client => !client.IsDeleted)
+            .ToArray();
+        model.Websites = (await registryReader.ListWebsitesAsync(access, cancellationToken: cancellationToken))
+            .Where(website => !website.IsDeleted)
+            .ToArray();
+        model.Environments = (await targetReader.ListAllEnvironmentsAsync(access, cancellationToken))
+            .Where(environment => !environment.IsDeleted && environment.IsActive)
+            .ToArray();
+        var owners = (await registryReader.ListOwnersAsync(cancellationToken: cancellationToken)).ToList();
+        var selectedOwnerIds = new[]
+        {
+            model.ClientOwnerSubjectId,
+            model.WebsiteOwnerSubjectId,
+            model.OwnerSubjectId
+        }.OfType<Guid>().Distinct();
+        foreach (var selectedOwnerId in selectedOwnerIds.Where(selectedOwnerId =>
+                     owners.All(owner => owner.OwnerSubjectId != selectedOwnerId)))
+        {
+            owners.AddRange((await registryReader.ListOwnersAsync(selectedOwnerId, cancellationToken))
+                .Where(owner => owners.All(existing => existing.OwnerSubjectId != owner.OwnerSubjectId)));
+        }
+        model.Owners = owners.OrderBy(owner => owner.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
+        model.CanApproveHttp = User.IsInRole(ApplicationRoles.Administrator);
+        model.CanConfigureInterval = User.IsInRole(ApplicationRoles.Administrator);
+        model.AdvancedSettingsOpen = model.AdvancedSettingsOpen || AdvancedRegistrationFields.Any(field =>
+            ModelState.TryGetValue(field, out var entry) && entry.Errors.Count > 0);
+        return model;
+    }
+
+    private static readonly string[] AdvancedRegistrationFields =
+    [
+        nameof(EndpointRegistrationFormViewModel.OwnerSubjectId),
+        nameof(EndpointRegistrationFormViewModel.TargetAuthorizationExpiresAt),
+        nameof(EndpointRegistrationFormViewModel.SchedulingEnabled),
+        nameof(EndpointRegistrationFormViewModel.IntervalMinutesOverride),
+        nameof(EndpointRegistrationFormViewModel.WarningThresholdMsOverride),
+        nameof(EndpointRegistrationFormViewModel.CriticalThresholdMsOverride),
+        nameof(EndpointRegistrationFormViewModel.SeoExpectedCanonicalHost),
+        nameof(EndpointRegistrationFormViewModel.SeoIndexingExpectation),
+        nameof(EndpointRegistrationFormViewModel.SeoDescriptionRequired),
+        nameof(EndpointRegistrationFormViewModel.PageAuditEnabled),
+        nameof(EndpointRegistrationFormViewModel.PageAuditSchedulingEnabled),
+        nameof(EndpointRegistrationFormViewModel.PageAuditIntervalHours),
+        nameof(EndpointRegistrationFormViewModel.HttpExceptionReason)
+    ];
+
+    private static void SelectDefaultRegistrationMode(EndpointRegistrationFormViewModel model)
+    {
+        if (model.Environments.Count > 0)
+        {
+            model.HierarchyMode = EndpointRegistrationModes.ExistingEnvironment;
+            return;
+        }
+
+        if (model.Websites.Count > 0)
+        {
+            model.HierarchyMode = EndpointRegistrationModes.NewEnvironment;
+            return;
+        }
+
+        model.HierarchyMode = model.Clients.Count > 0
+            ? EndpointRegistrationModes.NewWebsite
+            : EndpointRegistrationModes.NewClient;
+    }
+
+    private static EndpointRegistrationHierarchy BuildRegistrationHierarchy(
+        EndpointRegistrationFormViewModel model) => model.HierarchyMode switch
+        {
+            EndpointRegistrationModes.ExistingEnvironment =>
+                new ExistingEnvironment(Required(model.EnvironmentId)),
+            EndpointRegistrationModes.NewEnvironment =>
+                new NewEnvironment(Required(model.WebsiteId), BuildEnvironment(model)),
+            EndpointRegistrationModes.NewWebsite =>
+                new NewWebsite(
+                    Required(model.ClientId),
+                    BuildWebsite(model),
+                    BuildEnvironment(model)),
+            EndpointRegistrationModes.NewClient =>
+                new NewClient(
+                    new EndpointRegistrationClient(
+                        model.ClientName,
+                        Required(model.ClientOwnerSubjectId),
+                        model.ClientNotes),
+                    BuildWebsite(model),
+                    BuildEnvironment(model)),
+            _ => throw new InvalidOperationException("Unknown endpoint registration mode.")
+        };
+
+    private static EndpointRegistrationWebsite BuildWebsite(
+        EndpointRegistrationFormViewModel model) => new(
+        model.WebsiteName,
+        Required(model.WebsiteOwnerSubjectId),
+        model.WebsiteTechnologyCms,
+        TagNormalizer.Split(model.WebsiteTags));
+
+    private static EndpointRegistrationEnvironment BuildEnvironment(
+        EndpointRegistrationFormViewModel model) => new(
+        model.EnvironmentName,
+        model.EnvironmentType,
+        model.EnvironmentBaseUrl);
+
+    private static EndpointRegistrationSettings BuildRegistrationSettings(
+        EndpointRegistrationFormViewModel model) => new()
+        {
+            Url = model.Url,
+            OwnerSubjectId = model.OwnerSubjectId,
+            IsEnabled = model.IsEnabled,
+            HttpExceptionReason = model.HttpExceptionReason,
+            TargetAuthorizationKind = model.TargetAuthorizationKind,
+            TargetAuthorizationEvidence = model.TargetAuthorizationEvidence,
+            TargetAuthorizationExpiresAt = model.TargetAuthorizationExpiresAt,
+            IntervalMinutesOverride = model.IntervalMinutesOverride,
+            SchedulingEnabled = model.SchedulingEnabled,
+            WarningThresholdMsOverride = model.WarningThresholdMsOverride,
+            CriticalThresholdMsOverride = model.CriticalThresholdMsOverride,
+            SeoExpectedCanonicalHost = model.SeoExpectedCanonicalHost,
+            SeoIndexingExpectation = model.SeoIndexingExpectation,
+            SeoDescriptionRequired = model.SeoDescriptionRequired,
+            PageAuditEnabled = model.PageAuditEnabled,
+            PageAuditSchedulingEnabled = model.PageAuditSchedulingEnabled,
+            PageAuditIntervalHours = model.PageAuditIntervalHours
+        };
+
+    private static Guid Required(Guid? value) =>
+        value ?? throw new InvalidOperationException("A validated registration field is missing.");
 
     private async Task<EndpointFormViewModel> BuildEndpointFormAsync(EndpointFormViewModel model, CancellationToken cancellationToken)
     {

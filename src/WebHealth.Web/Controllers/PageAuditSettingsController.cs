@@ -84,7 +84,7 @@ public sealed class PageAuditSettingsController(
         CancellationToken cancellationToken)
     {
         var endpoints = await targetReader.ListAllEndpointsAsync(
-            GetAccess(), null, cancellationToken);
+            GetAccess(), cancellationToken: cancellationToken);
         return endpoints.SingleOrDefault(endpoint => endpoint.Id == endpointId);
     }
 

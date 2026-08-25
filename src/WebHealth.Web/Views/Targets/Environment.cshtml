@@ -9,11 +9,18 @@
 <section class="card">
     <div class="page-intro"><div><h2 class="card__title">@Model.Environment.Name</h2><p class="card__subtitle">@Model.Environment.WebsiteName · @Model.Environment.EnvironmentType · Version @Model.Environment.Version</p></div><div class="form-actions">@if (Model.CanManage && !Model.Environment.IsDeleted)
     {
-        <a class="button button--secondary" asp-action="CreateEndpoint" asp-route-environmentId="@Model.Environment.Id">
-            @await Html.PartialAsync("_Icon", "plus")
-            <span>Add endpoint</span>
-        </a>
-        <a class="button button--primary" asp-action="EditEnvironment" asp-route-id="@Model.Environment.Id">
+        @if (Model.Environment.IsActive)
+        {
+            <a class="button button--primary"
+               asp-action="RegisterEndpoint"
+               asp-route-clientId="@Model.Environment.ClientId"
+               asp-route-websiteId="@Model.Environment.WebsiteId"
+               asp-route-environmentId="@Model.Environment.Id">
+                @await Html.PartialAsync("_Icon", "plus")
+                <span>Register endpoint</span>
+            </a>
+        }
+        <a class="button button--secondary" asp-action="EditEnvironment" asp-route-id="@Model.Environment.Id">
             @await Html.PartialAsync("_Icon", "pencil")
             <span>Edit environment</span>
         </a>

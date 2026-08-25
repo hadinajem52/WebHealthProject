@@ -1,0 +1,42 @@
+@model EndpointRegistrationFormViewModel
+@{
+    ViewData.SetTitle("Register endpoint");
+    ViewData.SetSubtitle("Add the endpoint and any missing hierarchy in one atomic operation.");
+    ViewData.SetBreadcrumbs(
+        Breadcrumbs.Registry(Url),
+        Breadcrumbs.Endpoints(Url),
+        new BreadcrumbItem("Register endpoint"));
+}
+
+<section class="card form-card registration-card" aria-labelledby="register-endpoint-label">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title" id="register-endpoint-label">Endpoint registration</h2>
+            <p class="card__subtitle">
+                Start with the URL, then place it in an existing environment or create the missing levels here.
+                Nothing is saved until you register the endpoint.
+            </p>
+        </div>
+        <span class="registration-atomicity">
+            @await Html.PartialAsync("_Icon", "check")
+            One transaction
+        </span>
+    </div>
+
+    <form asp-action="RegisterEndpoint" method="post" class="form-stack" id="ajax-form-region"
+          data-ajax-region data-ajax-form data-ajax-target="#ajax-form-region" data-registration-form>
+        <partial name="_AjaxValidationSummary" />
+        <partial name="_EndpointRegistrationForm" model="Model" />
+
+        <div class="form-actions form-actions--spaced">
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "plus")
+                <span>Register endpoint</span>
+            </button>
+            <a class="button button--secondary" asp-action="Endpoints">
+                @await Html.PartialAsync("_Icon", "close")
+                <span>Cancel</span>
+            </a>
+        </div>
+    </form>
+</section>

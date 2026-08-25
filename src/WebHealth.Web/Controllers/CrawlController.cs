@@ -25,7 +25,7 @@ public sealed class CrawlController(
     public async Task<IActionResult> Index(Guid? endpointId, CancellationToken cancellationToken = default)
     {
         var access = GetAccess();
-        var endpoints = await targetReader.ListAllEndpointsAsync(access, null, cancellationToken);
+        var endpoints = await targetReader.ListAllEndpointsAsync(access, cancellationToken: cancellationToken);
         var options = endpoints
             .Select(endpoint => new EndpointOption(
                 endpoint.Id,

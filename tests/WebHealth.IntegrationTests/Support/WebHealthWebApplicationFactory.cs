@@ -64,11 +64,13 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.RemoveAll<IWebsiteRegistryService>();
             services.RemoveAll<IEnvironmentRegistryService>();
             services.RemoveAll<IEndpointRegistryService>();
+            services.RemoveAll<IEndpointRegistrationService>();
             services.AddScoped<EmptyRegistryMutationServices>();
             services.AddScoped<IClientRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
             services.AddScoped<IWebsiteRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
             services.AddScoped<IEnvironmentRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
             services.AddScoped<IEndpointRegistryService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
+            services.AddScoped<IEndpointRegistrationService>(provider => provider.GetRequiredService<EmptyRegistryMutationServices>());
             services.RemoveAll<IIncidentLifecycleService>();
             services.AddScoped<IIncidentLifecycleService, EmptyIncidentLifecycleService>();
             services.RemoveAll<IManualCheckService>();

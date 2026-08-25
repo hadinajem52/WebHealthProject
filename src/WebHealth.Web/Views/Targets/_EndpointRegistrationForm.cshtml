@@ -1,0 +1,451 @@
+@using WebHealth.Application.Seo
+@using WebHealth.Domain.PageAudits
+@model EndpointRegistrationFormViewModel
+
+<fieldset class="form-section registration-primary">
+    <legend class="form-section__title">Endpoint</legend>
+    <p class="form-section__hint">The URL is the endpoint identity and must be reachable from the monitoring host.</p>
+    <div class="form-section__body">
+        <div class="form-field">
+            <label asp-for="Url"></label>
+            <input asp-for="Url" type="url" autocomplete="url" autofocus
+                   placeholder="https://example.com/health" />
+            <span asp-validation-for="Url"></span>
+        </div>
+
+        <div class="switch-block">
+            <label class="switch-field">
+                <input asp-for="IsEnabled" type="checkbox" data-registration-monitoring />
+                <span>@Html.DisplayNameFor(model => model.IsEnabled)</span>
+            </label>
+            <span class="form-field__hint">
+                Off registers the endpoint without testing evidence or scheduled monitoring.
+            </span>
+        </div>
+    </div>
+</fieldset>
+
+<fieldset class="form-section">
+    <legend class="form-section__title">Where it belongs</legend>
+    <p class="form-section__hint">Choose the lowest level that already exists. Parent records are derived automatically.</p>
+    <div class="registration-mode-grid" role="radiogroup" aria-describedby="hierarchy-mode-hint">
+        <label class="registration-mode">
+            <input asp-for="HierarchyMode" id="hierarchy-existing-environment" type="radio"
+                   value="@EndpointRegistrationModes.ExistingEnvironment" />
+            <span class="registration-mode__number">1</span>
+            <span><strong>Existing environment</strong><small>Select an environment</small></span>
+        </label>
+        <label class="registration-mode">
+            <input asp-for="HierarchyMode" id="hierarchy-new-environment" type="radio"
+                   value="@EndpointRegistrationModes.NewEnvironment" />
+            <span class="registration-mode__number">2</span>
+            <span><strong>New environment</strong><small>Select a website</small></span>
+        </label>
+        <label class="registration-mode">
+            <input asp-for="HierarchyMode" id="hierarchy-new-website" type="radio"
+                   value="@EndpointRegistrationModes.NewWebsite" />
+            <span class="registration-mode__number">3</span>
+            <span><strong>New website</strong><small>Select a client</small></span>
+        </label>
+        <label class="registration-mode">
+            <input asp-for="HierarchyMode" id="hierarchy-new-client" type="radio"
+                   value="@EndpointRegistrationModes.NewClient" />
+            <span class="registration-mode__number">4</span>
+            <span><strong>New client</strong><small>Create every level</small></span>
+        </label>
+    </div>
+    <span class="form-field__hint" id="hierarchy-mode-hint">Only the fields needed by the selected path are saved.</span>
+    <span asp-validation-for="HierarchyMode"></span>
+
+    <div class="registration-levels">
+        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.ExistingEnvironment">
+            <div class="registration-level__heading">
+                <span class="registration-level__index">Environment</span>
+                <strong>Use an existing active environment</strong>
+            </div>
+            <div class="form-field">
+                <label asp-for="EnvironmentId">Environment</label>
+                <select asp-for="EnvironmentId">
+                    <option value="">Select an environment</option>
+                    @if (Model.EnvironmentId is { } selectedEnvironmentId
+                        && Model.Environments.All(environment => environment.Id != selectedEnvironmentId))
+                    {
+                        <option value="@selectedEnvironmentId">Previously selected environment — no longer available</option>
+                    }
+                    @foreach (var group in Model.Environments.GroupBy(environment => $"{environment.ClientName} / {environment.WebsiteName}"))
+                    {
+                        <optgroup label="@group.Key">
+                            @foreach (var environment in group)
+                            {
+                                <option value="@environment.Id">@environment.Name (@environment.EnvironmentType)</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+                <span asp-validation-for="EnvironmentId"></span>
+            </div>
+        </section>
+
+        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.NewEnvironment">
+            <div class="registration-level__heading">
+                <span class="registration-level__index">Website</span>
+                <strong>Use an existing website</strong>
+            </div>
+            <div class="form-field">
+                <label asp-for="WebsiteId">Website</label>
+                <select asp-for="WebsiteId">
+                    <option value="">Select a website</option>
+                    @if (Model.WebsiteId is { } selectedWebsiteId
+                        && Model.Websites.All(website => website.Id != selectedWebsiteId))
+                    {
+                        <option value="@selectedWebsiteId">Previously selected website — no longer available</option>
+                    }
+                    @foreach (var group in Model.Websites.GroupBy(website => website.ClientName))
+                    {
+                        <optgroup label="@group.Key">
+                            @foreach (var website in group)
+                            {
+                                <option value="@website.Id">@website.Name@(website.IsEnabled ? "" : " — disabled")</option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+                <span class="form-field__hint">Websites with no environments are available here.</span>
+                <span asp-validation-for="WebsiteId"></span>
+            </div>
+        </section>
+
+        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.NewWebsite">
+            <div class="registration-level__heading">
+                <span class="registration-level__index">Client</span>
+                <strong>Use an existing client</strong>
+            </div>
+            <div class="form-field">
+                <label asp-for="ClientId">Client</label>
+                <select asp-for="ClientId">
+                    <option value="">Select a client</option>
+                    @if (Model.ClientId is { } selectedClientId
+                        && Model.Clients.All(client => client.Id != selectedClientId))
+                    {
+                        <option value="@selectedClientId">Previously selected client — no longer available</option>
+                    }
+                    @foreach (var client in Model.Clients)
+                    {
+                        <option value="@client.Id">@client.Name@(client.IsActive ? "" : " — inactive")</option>
+                    }
+                </select>
+                <span asp-validation-for="ClientId"></span>
+            </div>
+        </section>
+
+        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.NewClient">
+            <div class="registration-level__heading">
+                <span class="registration-level__index">New client</span>
+                <strong>Create the owning client</strong>
+            </div>
+            <div class="form-grid form-grid--two">
+                <div class="form-field">
+                    <label asp-for="ClientName"></label>
+                    <input asp-for="ClientName" autocomplete="organization" />
+                    <span asp-validation-for="ClientName"></span>
+                </div>
+                <div class="form-field">
+                    <label asp-for="ClientOwnerSubjectId"></label>
+                    <select asp-for="ClientOwnerSubjectId">
+                        <option value="">Select an owner</option>
+                        @if (Model.ClientOwnerSubjectId is { } selectedClientOwnerId
+                            && Model.Owners.All(owner => owner.OwnerSubjectId != selectedClientOwnerId))
+                        {
+                            <option value="@selectedClientOwnerId">Previously selected owner — no longer available</option>
+                        }
+                        @foreach (var owner in Model.Owners)
+                        {
+                            <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+                        }
+                    </select>
+                    <span asp-validation-for="ClientOwnerSubjectId"></span>
+                </div>
+            </div>
+            <div class="form-field">
+                <label asp-for="ClientNotes">
+                    @Html.DisplayNameFor(model => model.ClientNotes)
+                    <span class="form-field__optional">Optional</span>
+                </label>
+                <textarea asp-for="ClientNotes" rows="3"></textarea>
+                <span asp-validation-for="ClientNotes"></span>
+            </div>
+        </section>
+
+        <section class="registration-level"
+                 data-registration-show="@EndpointRegistrationModes.NewWebsite,@EndpointRegistrationModes.NewClient">
+            <div class="registration-level__heading">
+                <span class="registration-level__index">New website</span>
+                <strong>Create the website enabled</strong>
+            </div>
+            <div class="form-grid form-grid--two">
+                <div class="form-field">
+                    <label asp-for="WebsiteName"></label>
+                    <input asp-for="WebsiteName" />
+                    <span asp-validation-for="WebsiteName"></span>
+                </div>
+                <div class="form-field">
+                    <label asp-for="WebsiteOwnerSubjectId"></label>
+                    <select asp-for="WebsiteOwnerSubjectId">
+                        <option value="">Select an owner</option>
+                        @if (Model.WebsiteOwnerSubjectId is { } selectedWebsiteOwnerId
+                            && Model.Owners.All(owner => owner.OwnerSubjectId != selectedWebsiteOwnerId))
+                        {
+                            <option value="@selectedWebsiteOwnerId">Previously selected owner — no longer available</option>
+                        }
+                        @foreach (var owner in Model.Owners)
+                        {
+                            <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+                        }
+                    </select>
+                    <span asp-validation-for="WebsiteOwnerSubjectId"></span>
+                </div>
+            </div>
+            <div class="form-grid form-grid--two">
+                <div class="form-field">
+                    <label asp-for="WebsiteTechnologyCms">
+                        @Html.DisplayNameFor(model => model.WebsiteTechnologyCms)
+                        <span class="form-field__optional">Optional</span>
+                    </label>
+                    <input asp-for="WebsiteTechnologyCms" placeholder="For example, WordPress" />
+                    <span asp-validation-for="WebsiteTechnologyCms"></span>
+                </div>
+                <div class="form-field">
+                    <label asp-for="WebsiteTags">
+                        @Html.DisplayNameFor(model => model.WebsiteTags)
+                        <span class="form-field__optional">Optional</span>
+                    </label>
+                    <input asp-for="WebsiteTags" placeholder="WordPress, Europe, Support" />
+                    <span asp-validation-for="WebsiteTags"></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="registration-level"
+                 data-registration-show="@EndpointRegistrationModes.NewEnvironment,@EndpointRegistrationModes.NewWebsite,@EndpointRegistrationModes.NewClient">
+            <div class="registration-level__heading">
+                <span class="registration-level__index">New environment</span>
+                <strong>Create an active deployment environment</strong>
+            </div>
+            <div class="form-grid form-grid--two">
+                <div class="form-field">
+                    <label asp-for="EnvironmentName"></label>
+                    <input asp-for="EnvironmentName" placeholder="Production" />
+                    <span asp-validation-for="EnvironmentName"></span>
+                </div>
+                <div class="form-field">
+                    <label asp-for="EnvironmentType"></label>
+                    <select asp-for="EnvironmentType">
+                        @foreach (var type in EnvironmentTypes.All)
+                        {
+                            <option value="@type">@type</option>
+                        }
+                    </select>
+                    <span asp-validation-for="EnvironmentType"></span>
+                </div>
+            </div>
+            <div class="form-field">
+                <label asp-for="EnvironmentBaseUrl">
+                    @Html.DisplayNameFor(model => model.EnvironmentBaseUrl)
+                    <span class="form-field__optional">Optional</span>
+                </label>
+                <input asp-for="EnvironmentBaseUrl" type="url" placeholder="https://example.com/" />
+                <span class="form-field__hint">Production base URLs require HTTPS.</span>
+                <span asp-validation-for="EnvironmentBaseUrl"></span>
+            </div>
+        </section>
+    </div>
+</fieldset>
+
+<fieldset class="form-section registration-authorization">
+    <legend class="form-section__title">Permission to test</legend>
+    <p class="form-section__hint">Required when monitoring starts immediately. Record a reference, never a credential or token.</p>
+    <div class="form-section__body">
+        <div class="form-grid form-grid--two">
+            <div class="form-field">
+                <label asp-for="TargetAuthorizationKind"></label>
+                <select asp-for="TargetAuthorizationKind">
+                    <option value="">No evidence recorded</option>
+                    <option value="@TargetAuthorizationKinds.Owned">I own this target</option>
+                    <option value="@TargetAuthorizationKinds.ExplicitPermission">I have explicit testing permission</option>
+                </select>
+                <span asp-validation-for="TargetAuthorizationKind"></span>
+            </div>
+            <div class="form-field">
+                <label asp-for="TargetAuthorizationEvidence"></label>
+                <input asp-for="TargetAuthorizationEvidence" placeholder="Domain owned by me" />
+                <span asp-validation-for="TargetAuthorizationEvidence"></span>
+            </div>
+        </div>
+    </div>
+</fieldset>
+
+<details class="disclosure registration-advanced" data-registration-advanced open="@Model.AdvancedSettingsOpen">
+    <summary class="disclosure__summary">
+        <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+        <span>
+            <span class="disclosure__title">Advanced settings</span>
+            <span class="disclosure__description">Scheduling, ownership, thresholds, SEO, PageSpeed and HTTP exceptions</span>
+        </span>
+    </summary>
+    <div class="disclosure__body form-stack">
+        <input asp-for="AdvancedSettingsOpen" type="hidden" data-registration-advanced-state />
+
+        <fieldset class="form-section">
+            <legend class="form-section__title">Ownership and authorization lifetime</legend>
+            <div class="form-section__body">
+                <div class="form-grid form-grid--two">
+                    <div class="form-field">
+                        <label asp-for="OwnerSubjectId">
+                            @Html.DisplayNameFor(model => model.OwnerSubjectId)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <select asp-for="OwnerSubjectId">
+                            <option value="">Inherit the website owner</option>
+                            @if (Model.OwnerSubjectId is { } selectedEndpointOwnerId
+                                && Model.Owners.All(owner => owner.OwnerSubjectId != selectedEndpointOwnerId))
+                            {
+                                <option value="@selectedEndpointOwnerId">Previously selected owner — no longer available</option>
+                            }
+                            @foreach (var owner in Model.Owners)
+                            {
+                                <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+                            }
+                        </select>
+                        <span asp-validation-for="OwnerSubjectId"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="TargetAuthorizationExpiresAt">
+                            @Html.DisplayNameFor(model => model.TargetAuthorizationExpiresAt)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <input asp-for="TargetAuthorizationExpiresAt" type="datetime-local" />
+                        <span asp-validation-for="TargetAuthorizationExpiresAt"></span>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend class="form-section__title">Availability checks</legend>
+            <div class="form-section__body">
+                <div class="switch-block">
+                    <label class="switch-field">
+                        <input asp-for="SchedulingEnabled" type="checkbox" data-shell-scheduling-toggle />
+                        <span>@Html.DisplayNameFor(model => model.SchedulingEnabled)</span>
+                    </label>
+                    <span class="form-field__hint">Off keeps manual Run now available without a timer.</span>
+                </div>
+                <div class="form-dependent" data-shell-interval-field
+                     data-inactive="@((!Model.SchedulingEnabled).ToString().ToLowerInvariant())">
+                    <div class="form-field">
+                        <label asp-for="IntervalMinutesOverride">
+                            @Html.DisplayNameFor(model => model.IntervalMinutesOverride)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <input asp-for="IntervalMinutesOverride" type="number" min="1" max="1440"
+                               readonly="@((!Model.CanConfigureInterval || !Model.SchedulingEnabled) ? "readonly" : null)"
+                               data-shell-interval-input
+                               data-permission-locked="@((!Model.CanConfigureInterval).ToString().ToLowerInvariant())" />
+                        <span asp-validation-for="IntervalMinutesOverride"></span>
+                    </div>
+                </div>
+                <div class="form-grid form-grid--two">
+                    <div class="form-field">
+                        <label asp-for="WarningThresholdMsOverride">
+                            @Html.DisplayNameFor(model => model.WarningThresholdMsOverride)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <input asp-for="WarningThresholdMsOverride" type="number"
+                               min="@ResponseThresholdOverride.MinimumMs" max="@ResponseThresholdOverride.MaximumMs" placeholder="1500" />
+                        <span asp-validation-for="WarningThresholdMsOverride"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="CriticalThresholdMsOverride">
+                            @Html.DisplayNameFor(model => model.CriticalThresholdMsOverride)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <input asp-for="CriticalThresholdMsOverride" type="number"
+                               min="@ResponseThresholdOverride.MinimumMs" max="@ResponseThresholdOverride.MaximumMs" placeholder="3000" />
+                        <span asp-validation-for="CriticalThresholdMsOverride"></span>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend class="form-section__title">SEO expectations</legend>
+            <div class="form-section__body">
+                <div class="form-grid form-grid--two">
+                    <div class="form-field">
+                        <label asp-for="SeoIndexingExpectation"></label>
+                        <select asp-for="SeoIndexingExpectation">
+                            <option value="@SeoIndexingExpectations.Default">Default for the environment</option>
+                            <option value="@SeoIndexingExpectations.Indexable">Must be indexable</option>
+                            <option value="@SeoIndexingExpectations.NoIndex">Must carry noindex</option>
+                        </select>
+                        <span asp-validation-for="SeoIndexingExpectation"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="SeoExpectedCanonicalHost">
+                            @Html.DisplayNameFor(model => model.SeoExpectedCanonicalHost)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <input asp-for="SeoExpectedCanonicalHost" placeholder="www.example.com" />
+                        <span asp-validation-for="SeoExpectedCanonicalHost"></span>
+                    </div>
+                </div>
+                <label class="switch-field">
+                    <input asp-for="SeoDescriptionRequired" type="checkbox" />
+                    <span>@Html.DisplayNameFor(model => model.SeoDescriptionRequired)</span>
+                </label>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend class="form-section__title">Google PageSpeed audits</legend>
+            <div class="form-section__body">
+                <p class="form-notice">
+                    @await Html.PartialAsync("_Icon", "warning")
+                    <span>Enabling this sends the URL to Google. Do not use it for private or authenticated targets.</span>
+                </p>
+                <label class="switch-field">
+                    <input asp-for="PageAuditEnabled" type="checkbox" data-shell-dependency="registration-page-audits" />
+                    <span>@Html.DisplayNameFor(model => model.PageAuditEnabled)</span>
+                </label>
+                <div class="form-dependent" data-shell-dependent-on="registration-page-audits"
+                     data-inactive="@((!Model.PageAuditEnabled).ToString().ToLowerInvariant())">
+                    <label class="switch-field">
+                        <input asp-for="PageAuditSchedulingEnabled" type="checkbox" />
+                        <span>@Html.DisplayNameFor(model => model.PageAuditSchedulingEnabled)</span>
+                    </label>
+                    <div class="form-field">
+                        <label asp-for="PageAuditIntervalHours"></label>
+                        <input asp-for="PageAuditIntervalHours" type="number"
+                               min="@PageAuditCadence.MinimumIntervalHours" max="@PageAuditCadence.MaximumIntervalHours" />
+                        <span asp-validation-for="PageAuditIntervalHours"></span>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend class="form-section__title">Production HTTP exception</legend>
+            <p class="form-section__hint">Only used when a new Production environment points at plain HTTP.</p>
+            <div class="form-section__body">
+                <div class="form-field">
+                    <label asp-for="HttpExceptionReason">
+                        @Html.DisplayNameFor(model => model.HttpExceptionReason)
+                        <span class="form-field__optional">Optional</span>
+                    </label>
+                    <textarea asp-for="HttpExceptionReason" rows="3" readonly="@(!Model.CanApproveHttp ? "readonly" : null)"></textarea>
+                    <span asp-validation-for="HttpExceptionReason"></span>
+                </div>
+            </div>
+        </fieldset>
+    </div>
+</details>

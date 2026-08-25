@@ -5,7 +5,7 @@ namespace WebHealth.Web.Shell;
 public static class Breadcrumbs
 {
     public static BreadcrumbItem Registry(IUrlHelper url) =>
-        new("Registry", url.Action("Clients", "Registry"));
+        new("Registry", url.Action("Endpoints", "Targets"));
 
     public static BreadcrumbItem Clients(IUrlHelper url) =>
         new("Clients", url.Action("Clients", "Registry"));

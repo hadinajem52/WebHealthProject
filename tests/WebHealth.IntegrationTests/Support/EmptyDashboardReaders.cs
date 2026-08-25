@@ -83,10 +83,43 @@ internal sealed class EmptyRegistryReader : IRegistryReader
         ActiveEnvironmentCount: 1,
         Tags: []);
 
+    private static WebsiteListItem WebsiteItem { get; } = new(
+        Website.Id,
+        Website.ClientId,
+        Website.ClientName,
+        Website.Name,
+        Website.OwnerName,
+        Website.TechnologyCms,
+        Website.IsEnabled,
+        Website.IsDeleted,
+        Website.Version,
+        Website.ActiveEnvironmentCount,
+        Website.Tags);
+
+    public static ClientDetails Client { get; } = new(
+        Website.ClientId,
+        Website.ClientName,
+        Website.OwnerSubjectId,
+        Website.OwnerName,
+        "Endpoint-first test client",
+        IsActive: true,
+        IsDeleted: false,
+        Version: 1,
+        Websites: [WebsiteItem]);
+
+    private static ClientListItem ClientItem { get; } = new(
+        Client.Id,
+        Client.Name,
+        Client.OwnerName,
+        Client.IsActive,
+        Client.IsDeleted,
+        Client.Version,
+        Client.Websites.Count);
+
     public Task<IReadOnlyList<ClientListItem>> ListClientsAsync(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<ClientListItem>>([]);
+        Task.FromResult<IReadOnlyList<ClientListItem>>([ClientItem]);
 
     public Task<IReadOnlyList<ClientListItem>> ListDeletedClientsAsync(
         RegistryAccessContext access,
@@ -97,13 +130,13 @@ internal sealed class EmptyRegistryReader : IRegistryReader
         Guid clientId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<ClientDetails?>(null);
+        Task.FromResult<ClientDetails?>(clientId == Client.Id ? Client : null);
 
     public Task<IReadOnlyList<WebsiteListItem>> ListWebsitesAsync(
         RegistryAccessContext access,
         Guid? tagId = null,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<WebsiteListItem>>([]);
+        Task.FromResult<IReadOnlyList<WebsiteListItem>>([WebsiteItem]);
 
     public Task<IReadOnlyList<RegistryTagOption>> ListTagsAsync(
         RegistryAccessContext access,
@@ -147,6 +180,7 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
 {
     public static EnvironmentDetails Environment { get; } = new(
         Guid.Parse("6f1c9a20-0000-0000-0000-000000000004"),
+        EmptyRegistryReader.Website.ClientId,
         EmptyRegistryReader.Website.Id,
         EmptyRegistryReader.Website.Name,
         "Production",
@@ -157,6 +191,20 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
         IsDeleted: false,
         Version: 1,
         Endpoints: []);
+
+    private static EnvironmentListItem EnvironmentItem { get; } = new(
+        Environment.Id,
+        Environment.WebsiteId,
+        EmptyRegistryReader.Client.Name,
+        Environment.WebsiteName,
+        Environment.Name,
+        Environment.EnvironmentType,
+        Environment.IsProduction,
+        Environment.BaseUrl,
+        Environment.IsActive,
+        Environment.IsDeleted,
+        Environment.Version,
+        Environment.Endpoints.Count);
 
     public static EndpointDetails BlockedEndpoint { get; } = new(
         Id: Guid.Parse("6f1c9a20-0000-0000-0000-000000000005"),
@@ -196,12 +244,13 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
         Guid websiteId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<EnvironmentListItem>>([]);
+        Task.FromResult<IReadOnlyList<EnvironmentListItem>>(
+            websiteId == Environment.WebsiteId ? [EnvironmentItem] : []);
 
     public Task<IReadOnlyList<EnvironmentListItem>> ListAllEnvironmentsAsync(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<EnvironmentListItem>>([]);
+        Task.FromResult<IReadOnlyList<EnvironmentListItem>>([EnvironmentItem]);
 
     public Task<EnvironmentDetails?> FindEnvironmentAsync(
         Guid environmentId,
@@ -231,9 +280,21 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
 
     public Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
         RegistryAccessContext access,
-        string? search = null,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<RegistryEndpointItem>>([Endpoint]);
+        EndpointRegistryFilter? filter = null,
+        CancellationToken cancellationToken = default)
+    {
+        filter ??= new EndpointRegistryFilter();
+        var matches = (string.IsNullOrWhiteSpace(filter.Search)
+                || Endpoint.DisplayUrl.Contains(filter.Search, StringComparison.OrdinalIgnoreCase)
+                || Endpoint.WebsiteName.Contains(filter.Search, StringComparison.OrdinalIgnoreCase)
+                || Endpoint.ClientName.Contains(filter.Search, StringComparison.OrdinalIgnoreCase))
+            && (filter.ClientId is null || filter.ClientId == Endpoint.ClientId)
+            && (filter.WebsiteId is null || filter.WebsiteId == Endpoint.WebsiteId)
+            && (filter.EnvironmentId is null || filter.EnvironmentId == Endpoint.EnvironmentId)
+            && (filter.Enabled is null || filter.Enabled == Endpoint.IsEnabled)
+            && (filter.MonitoringMode is null || filter.MonitoringMode == Endpoint.MonitoringMode);
+        return Task.FromResult<IReadOnlyList<RegistryEndpointItem>>(matches ? [Endpoint] : []);
+    }
 
     public Task<EndpointDetails?> FindEndpointAsync(
         Guid endpointId,

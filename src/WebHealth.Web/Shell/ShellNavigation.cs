@@ -10,9 +10,10 @@ public static class ShellNavigation
             new NavigationItem(
                 "Registry",
                 "registry",
-                "Registry",
-                "Clients",
-                ["Administrator", "Operations", "Developer/Support", "Viewer"]),
+                "Targets",
+                "Endpoints",
+                ["Administrator", "Operations", "Developer/Support", "Viewer"],
+                ["Registry", "Targets"]),
             new NavigationItem("Maintenance", "warning", "Maintenance", "Index", ["Administrator", "Operations"]),
             new NavigationItem(
                 "Incidents",

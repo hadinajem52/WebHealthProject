@@ -27,6 +27,7 @@ public static class TargetAuthorizationKinds
 public sealed record EnvironmentListItem(
     Guid Id,
     Guid WebsiteId,
+    string ClientName,
     string WebsiteName,
     string Name,
     string EnvironmentType,
@@ -39,6 +40,7 @@ public sealed record EnvironmentListItem(
 
 public sealed record EnvironmentDetails(
     Guid Id,
+    Guid ClientId,
     Guid WebsiteId,
     string WebsiteName,
     string Name,
@@ -86,6 +88,23 @@ public enum EndpointMonitoringMode
     Paused,
 
     ManualOnly
+}
+
+public sealed class EndpointRegistryFilter
+{
+    public string? Search { get; set; }
+    public Guid? ClientId { get; set; }
+    public Guid? WebsiteId { get; set; }
+    public Guid? EnvironmentId { get; set; }
+    public bool? Enabled { get; set; }
+    public EndpointMonitoringMode? MonitoringMode { get; set; }
+
+    public bool HasValues => !string.IsNullOrWhiteSpace(Search)
+        || ClientId is not null
+        || WebsiteId is not null
+        || EnvironmentId is not null
+        || Enabled is not null
+        || MonitoringMode is not null;
 }
 
 public sealed record EndpointDetails(

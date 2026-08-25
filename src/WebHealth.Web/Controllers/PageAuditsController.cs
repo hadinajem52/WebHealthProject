@@ -157,7 +157,7 @@ public sealed class PageAuditsController(
         RegistryAccessContext access,
         CancellationToken cancellationToken)
     {
-        var endpoints = await targetReader.ListAllEndpointsAsync(access, null, cancellationToken);
+        var endpoints = await targetReader.ListAllEndpointsAsync(access, cancellationToken: cancellationToken);
         var options = endpoints
             .Select(endpoint => new EndpointOption(
                 endpoint.Id,

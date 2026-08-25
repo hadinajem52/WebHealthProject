@@ -212,6 +212,7 @@ public sealed class AjaxMutationTests(WebHealthWebApplicationFactory factory)
     [InlineData("/Maintenance/Create")]
     [InlineData("/Maintenance/Edit")]
     [InlineData("/Targets/CreateEndpoint")]
+    [InlineData("/Targets/RegisterEndpoint")]
     [InlineData("/Targets/EditEndpoint")]
     [InlineData("/Administration/CreateTeam")]
     [InlineData("/Administration/EditTeam")]

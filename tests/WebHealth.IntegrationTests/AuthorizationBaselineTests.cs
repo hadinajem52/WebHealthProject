@@ -219,8 +219,8 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
         administratorHtml.Should().Contain("href=\"/Administration/Users\"");
         administratorHtml.Should().Contain("href=\"/Administration/Teams\"");
         administratorHtml.Should().Contain("href=\"/Audit\"");
-        administratorHtml.Should().Contain("href=\"/Registry/Clients\"");
-        viewerHtml.Should().Contain("href=\"/Registry/Clients\"");
+        administratorHtml.Should().Contain("href=\"/Targets/Endpoints\"");
+        viewerHtml.Should().Contain("href=\"/Targets/Endpoints\"");
         viewerHtml.Should().NotContain("href=\"/Administration/Users\"");
         viewerHtml.Should().NotContain("href=\"/Administration/Teams\"");
         viewerHtml.Should().NotContain("href=\"/Audit\"");

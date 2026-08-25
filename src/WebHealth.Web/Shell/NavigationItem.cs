@@ -5,7 +5,8 @@ public sealed record NavigationItem(
     string IconKey,
     string? Controller = null,
     string? Action = null,
-    IReadOnlyCollection<string>? RequiredRoles = null)
+    IReadOnlyCollection<string>? RequiredRoles = null,
+    IReadOnlyCollection<string>? CurrentControllers = null)
 {
     public bool IsAvailable => Controller is not null && Action is not null;
 
@@ -14,8 +15,9 @@ public sealed record NavigationItem(
 
     public bool IsCurrent(string? controller, string? action)
     {
-        return IsAvailable
-            && string.Equals(Controller, controller, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(Action, action, StringComparison.OrdinalIgnoreCase);
+        return IsAvailable && (
+            CurrentControllers?.Contains(controller ?? string.Empty, StringComparer.OrdinalIgnoreCase) == true
+            || string.Equals(Controller, controller, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(Action, action, StringComparison.OrdinalIgnoreCase));
     }
 }

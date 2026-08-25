@@ -28,12 +28,20 @@
             <div class="form-actions">
                 @if (Model.CanManage && !client.IsDeleted)
                 {
+                    <a class="button button--primary"
+                       asp-controller="Targets"
+                       asp-action="RegisterEndpoint"
+                       asp-route-clientId="@client.Id">
+                        @await Html.PartialAsync("_Icon", "plus")
+                        <span>Register endpoint</span>
+                    </a>
+
                     <a class="button button--secondary" asp-action="CreateWebsite" asp-route-clientId="@client.Id">
                         @await Html.PartialAsync("_Icon", "plus")
                         <span>Add website</span>
                     </a>
 
-                    <a class="button button--primary" asp-action="EditClient" asp-route-id="@client.Id">
+                    <a class="button button--secondary" asp-action="EditClient" asp-route-id="@client.Id">
                         @await Html.PartialAsync("_Icon", "pencil")
                         <span>Edit client</span>
                     </a>

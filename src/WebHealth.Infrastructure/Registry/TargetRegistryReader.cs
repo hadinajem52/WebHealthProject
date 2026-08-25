@@ -39,6 +39,8 @@ internal sealed class TargetRegistryReader(
             .Select(candidate => new EnvironmentRow(
                 candidate.Id,
                 candidate.WebsiteId,
+                candidate.Website.ClientId,
+                candidate.Website.Client.Name,
                 candidate.Website.Name,
                 candidate.Name,
                 candidate.EnvironmentType,
@@ -56,6 +58,7 @@ internal sealed class TargetRegistryReader(
 
         return new EnvironmentDetails(
             environment.Id,
+            environment.ClientId,
             environment.WebsiteId,
             environment.WebsiteName,
             environment.Name,
@@ -143,17 +146,38 @@ internal sealed class TargetRegistryReader(
 
     public async Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
         RegistryAccessContext access,
-        string? search = null,
+        EndpointRegistryFilter? filter = null,
         CancellationToken cancellationToken = default)
     {
+        filter ??= new EndpointRegistryFilter();
         var query = visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, DateTimeOffset.UtcNow)
             .Where(endpoint => endpoint.DeletedAt == null);
-        if (!string.IsNullOrWhiteSpace(search))
+        if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var pattern = $"%{search.Trim()}%";
+            var pattern = $"%{filter.Search.Trim()}%";
             query = query.Where(endpoint => EF.Functions.ILike(endpoint.DisplayUrl, pattern)
                 || EF.Functions.ILike(endpoint.Environment.Website.Name, pattern)
                 || EF.Functions.ILike(endpoint.Environment.Website.Client.Name, pattern));
+        }
+
+        if (filter.ClientId is { } clientId)
+        {
+            query = query.Where(endpoint => endpoint.Environment.Website.ClientId == clientId);
+        }
+
+        if (filter.WebsiteId is { } websiteId)
+        {
+            query = query.Where(endpoint => endpoint.Environment.WebsiteId == websiteId);
+        }
+
+        if (filter.EnvironmentId is { } environmentId)
+        {
+            query = query.Where(endpoint => endpoint.EnvironmentId == environmentId);
+        }
+
+        if (filter.Enabled is { } enabled)
+        {
+            query = query.Where(endpoint => endpoint.IsEnabled == enabled);
         }
 
         var rows = await query
@@ -201,11 +225,14 @@ internal sealed class TargetRegistryReader(
                     ? EndpointMonitoringMode.Scheduled
                     : EndpointMonitoringMode.Paused);
 
-        return rows.Select(row => new RegistryEndpointItem(
+        var endpoints = rows.Select(row => new RegistryEndpointItem(
             row.Id, row.ClientId, row.ClientName, row.WebsiteId, row.WebsiteName,
             row.EnvironmentId, row.EnvironmentName, row.DisplayUrl, row.IsEnabled,
             testable.Contains(row.Id), row.Version,
             modes.GetValueOrDefault(row.Id, EndpointMonitoringMode.Disabled))).ToArray();
+        return filter.MonitoringMode is { } monitoringMode
+            ? endpoints.Where(endpoint => endpoint.MonitoringMode == monitoringMode).ToArray()
+            : endpoints;
     }
 
     public async Task<CertificateStatus?> FindCertificateStatusAsync(
@@ -326,6 +353,8 @@ internal sealed class TargetRegistryReader(
             .Select(environment => new EnvironmentRow(
                 environment.Id,
                 environment.WebsiteId,
+                environment.Website.ClientId,
+                environment.Website.Client.Name,
                 environment.Website.Name,
                 environment.Name,
                 environment.EnvironmentType,
@@ -436,6 +465,7 @@ internal sealed class TargetRegistryReader(
     private static EnvironmentListItem ToEnvironmentItem(EnvironmentRow environment) => new(
         environment.Id,
         environment.WebsiteId,
+        environment.ClientName,
         environment.WebsiteName,
         environment.Name,
         environment.EnvironmentType,
@@ -447,7 +477,7 @@ internal sealed class TargetRegistryReader(
         environment.ActiveEndpointCount);
 
     private sealed record EnvironmentRow(
-        Guid Id, Guid WebsiteId, string WebsiteName, string Name, string EnvironmentType,
+        Guid Id, Guid WebsiteId, Guid ClientId, string ClientName, string WebsiteName, string Name, string EnvironmentType,
         bool IsProduction, string? BaseUrl, bool IsActive, bool IsDeleted, long Version,
         int ActiveEndpointCount);
 

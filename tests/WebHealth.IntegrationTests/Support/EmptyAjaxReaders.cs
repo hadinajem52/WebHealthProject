@@ -94,7 +94,8 @@ internal sealed class EmptyRegistryMutationServices :
     IClientRegistryService,
     IWebsiteRegistryService,
     IEnvironmentRegistryService,
-    IEndpointRegistryService
+    IEndpointRegistryService,
+    IEndpointRegistrationService
 {
     public Task<RegistryMutationResult> CreateAsync(CreateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
     public Task<RegistryMutationResult> UpdateAsync(UpdateClient command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Updated(command.ClientId, command.Version);
@@ -110,6 +111,7 @@ internal sealed class EmptyRegistryMutationServices :
     public Task<RegistryMutationResult> PurgeAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
     public Task<RegistryMutationResult> PauseScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
     public Task<RegistryMutationResult> ResumeScheduleAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(command.EntityId);
+    public Task<RegistryMutationResult> RegisterAsync(RegisterEndpointRequest request, RegistryAccessContext access, CancellationToken cancellationToken = default) => Result(Guid.NewGuid());
 
     private static Task<RegistryMutationResult> Result(Guid id) =>
         Task.FromResult(RegistryMutationResult.Success(id));

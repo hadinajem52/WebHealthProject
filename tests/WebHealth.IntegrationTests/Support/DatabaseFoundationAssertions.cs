@@ -712,6 +712,39 @@ internal static class DatabaseFoundationAssertions
             new(stagingId, "http://staging.example.test/", null, false, null, null, null, null),
             administratorAccess);
         stagingHttp.Succeeded.Should().BeTrue(string.Join(" ", stagingHttp.Errors));
+        var stagingHttpId = stagingHttp.EntityId
+            ?? throw new InvalidOperationException("Disabled endpoint id was not returned.");
+        var clientEndpoints = await targetReader.ListAllEndpointsAsync(
+            administratorAccess,
+            new EndpointRegistryFilter { ClientId = website.ClientId });
+        clientEndpoints.Should().Contain(item => item.Id == endpointId);
+        clientEndpoints.Should().OnlyContain(item => item.ClientId == website.ClientId);
+        var websiteEndpoints = await targetReader.ListAllEndpointsAsync(
+            administratorAccess,
+            new EndpointRegistryFilter { WebsiteId = website.Id });
+        websiteEndpoints.Should().Contain(item => item.Id == endpointId);
+        websiteEndpoints.Should().OnlyContain(item => item.WebsiteId == website.Id);
+        var environmentEndpoints = await targetReader.ListAllEndpointsAsync(
+            administratorAccess,
+            new EndpointRegistryFilter { EnvironmentId = stagingId });
+        environmentEndpoints.Should().Contain(item => item.Id == endpointId);
+        environmentEndpoints.Should().OnlyContain(item => item.EnvironmentId == stagingId);
+        (await targetReader.ListAllEndpointsAsync(
+                administratorAccess,
+                new EndpointRegistryFilter { Enabled = false }))
+            .Should().Contain(item => item.Id == stagingHttpId);
+        (await targetReader.ListAllEndpointsAsync(
+                administratorAccess,
+                new EndpointRegistryFilter { MonitoringMode = EndpointMonitoringMode.Scheduled }))
+            .Should().Contain(item => item.Id == endpointId);
+        (await targetReader.ListAllEndpointsAsync(
+                administratorAccess,
+                new EndpointRegistryFilter { MonitoringMode = EndpointMonitoringMode.Disabled }))
+            .Should().Contain(item => item.Id == stagingHttpId);
+        (await targetReader.ListAllEndpointsAsync(
+                administratorAccess,
+                new EndpointRegistryFilter { Search = "Health?q=A" }))
+            .Should().ContainSingle(item => item.Id == endpointId);
         database.ChangeTracker.Clear();
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
         (await environmentService.UpdateAsync(
