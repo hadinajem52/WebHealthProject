@@ -12,6 +12,7 @@ namespace WebHealth.Infrastructure.Registry;
 internal sealed class EnvironmentRegistryService(
     ApplicationDbContext dbContext,
     RegistryHierarchyLock hierarchyLock,
+    RegistryArchiveCascade archiveCascade,
     IAuditTrailWriter auditTrail) : IEnvironmentRegistryService
 {
     private const string EnvironmentNameIndex =
@@ -197,8 +198,6 @@ internal sealed class EnvironmentRegistryService(
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var environment = await dbContext.Environments
-            .Include(candidate => candidate.Endpoints).ThenInclude(endpoint => endpoint.Monitors)
-            .AsSingleQuery()
             .SingleOrDefaultAsync(candidate => candidate.Id == command.EntityId, cancellationToken);
         if (environment is null)
         {
@@ -220,6 +219,12 @@ internal sealed class EnvironmentRegistryService(
         dbContext.Entry(environment).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var before = ToAudit(environment, baseUrlChanged: false);
         var now = DateTimeOffset.UtcNow;
+        if (action == EnvironmentAuditAction.Deleted)
+        {
+            await archiveCascade.ArchiveEnvironmentDescendantsAsync(
+                environment.Id, access.UserId, now, cancellationToken);
+        }
+
         ApplyState(environment, action, access.UserId, now);
 
         try

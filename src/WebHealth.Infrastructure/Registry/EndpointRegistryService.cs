@@ -72,7 +72,7 @@ internal sealed class EndpointRegistryService(
         {
             return new RegistryCreateCompleted(Validation(ValidationError.For(
                 nameof(CreateEndpoint.EnvironmentId),
-                "Select an active environment whose website is not archived. An inactive environment "
+                "Select an environment whose website is not archived. An archived environment "
                 + "cannot take new endpoints.")));
         }
 
@@ -318,11 +318,6 @@ internal sealed class EndpointRegistryService(
             return NotFound();
         }
 
-        if (endpoint.DeletedAt is null)
-        {
-            return Validation("Only an archived endpoint can be deleted permanently. Archive this one first.");
-        }
-
         if (endpoint.Version != command.Version)
         {
             return await RollBackConcurrencyAsync(transaction, cancellationToken);
@@ -483,7 +478,7 @@ internal sealed class EndpointRegistryService(
     private async Task<WebsiteEnvironment?> LockEnvironmentAsync(Guid environmentId, CancellationToken cancellationToken)
     {
         var environment = await hierarchyLock.LockEnvironmentAsync(environmentId, cancellationToken);
-        if (environment is not { DeletedAt: null, IsActive: true })
+        if (environment is not { DeletedAt: null })
         {
             return null;
         }

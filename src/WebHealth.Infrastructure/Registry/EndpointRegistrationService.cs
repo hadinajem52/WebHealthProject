@@ -41,13 +41,13 @@ internal sealed class EndpointRegistrationService(
         var hierarchy = hierarchySuccess.Value;
 
         if (hierarchy.CreatedWebsiteId is { } websiteId
-            && !await HasActiveEnvironmentAsync(websiteId, cancellationToken))
+            && !await HasEnvironmentAsync(websiteId, cancellationToken))
         {
             return await RollBackAsync(
                 transaction,
                 Failure(Validation(
                     EndpointRegistrationFields.EnvironmentName,
-                    "The new website needs an active environment before it can be enabled.")),
+                    "The new website needs an environment before it can be enabled.")),
                 cancellationToken);
         }
 
@@ -104,13 +104,6 @@ internal sealed class EndpointRegistrationService(
             return Failed<ResolvedHierarchy>(Validation(
                 EndpointRegistrationFields.EnvironmentId,
                 "Select an environment that is not archived."));
-        }
-
-        if (!ancestors.Environment.IsActive)
-        {
-            return Failed<ResolvedHierarchy>(Validation(
-                EndpointRegistrationFields.EnvironmentId,
-                $"The environment '{ancestors.Environment.Name}' is inactive. Activate it before registering an endpoint."));
         }
 
         var ancestorFailure = ValidateMonitoringAncestors(
@@ -381,11 +374,10 @@ internal sealed class EndpointRegistrationService(
             EndpointRegistrationFields.ClientId,
             $"The client '{client.Name}' is inactive. Activate it before starting monitoring, or clear Start monitoring immediately."));
 
-    private Task<bool> HasActiveEnvironmentAsync(Guid websiteId, CancellationToken cancellationToken) =>
+    private Task<bool> HasEnvironmentAsync(Guid websiteId, CancellationToken cancellationToken) =>
         dbContext.Environments.AnyAsync(environment =>
             environment.WebsiteId == websiteId
-            && environment.DeletedAt == null
-            && environment.IsActive,
+            && environment.DeletedAt == null,
             cancellationToken);
 
     private static CreateWebsite ToCreateWebsite(

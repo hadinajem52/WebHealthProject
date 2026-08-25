@@ -116,7 +116,7 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
         client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
         var endpoint = EmptyTargetRegistryReader.Endpoint;
         var query = $"search=example&clientId={endpoint.ClientId}&websiteId={endpoint.WebsiteId}"
-            + $"&environmentId={endpoint.EnvironmentId}&enabled=true&monitoringMode={EndpointMonitoringMode.Scheduled}";
+            + $"&environmentId={endpoint.EnvironmentId}";
 
         using var response = await client.GetAsync($"/Targets/Endpoints?{query}");
         var content = await response.Content.ReadAsStringAsync();
@@ -127,8 +127,6 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
         AssertSelected(content, endpoint.ClientId.ToString());
         AssertSelected(content, endpoint.WebsiteId.ToString());
         AssertSelected(content, endpoint.EnvironmentId.ToString());
-        AssertSelected(content, "true");
-        AssertSelected(content, EndpointMonitoringMode.Scheduled.ToString());
         Assert.Contains(endpoint.DisplayUrl, content, StringComparison.Ordinal);
         Assert.Contains("Clear", content, StringComparison.Ordinal);
     }
@@ -138,8 +136,6 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
     [InlineData("clientId=11111111-1111-1111-1111-111111111111")]
     [InlineData("websiteId=11111111-1111-1111-1111-111111111111")]
     [InlineData("environmentId=11111111-1111-1111-1111-111111111111")]
-    [InlineData("enabled=false")]
-    [InlineData("monitoringMode=ManualOnly")]
     public async Task EachEndpointFilterCanNarrowTheInventory(string query)
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
@@ -148,39 +144,6 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
 
         Assert.Contains("No endpoints found", content, StringComparison.Ordinal);
         Assert.DoesNotContain(EmptyTargetRegistryReader.Endpoint.DisplayUrl, content, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task InventoryGroupingSurvivesAjaxAndRendersAnAccessibleGroup()
-    {
-        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
-        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
-
-        using var response = await client.GetAsync(
-            $"/Targets/Endpoints?groupBy={EndpointRegistryGroupings.Environment}");
-        var content = await response.Content.ReadAsStringAsync();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        AssertSelected(content, EndpointRegistryGroupings.Environment);
-        Assert.Contains("class=\"data-table__group\"", content, StringComparison.Ordinal);
-        Assert.Contains("scope=\"rowgroup\"", content, StringComparison.Ordinal);
-        Assert.Contains("Example client / Example / Production", content, StringComparison.Ordinal);
-        Assert.Contains("1 endpoint", content, StringComparison.Ordinal);
-        Assert.Contains("Clear", content, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task EndpointInventoryOffersBrowserLocalSavedViews()
-    {
-        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
-
-        var content = await client.GetStringAsync("/Targets/Endpoints");
-
-        Assert.Contains("data-endpoint-saved-views", content, StringComparison.Ordinal);
-        Assert.Contains("data-endpoint-view-save", content, StringComparison.Ordinal);
-        Assert.Contains("data-endpoint-view-open", content, StringComparison.Ordinal);
-        Assert.Contains("data-endpoint-view-remove", content, StringComparison.Ordinal);
-        Assert.Contains("on this browser", content, StringComparison.Ordinal);
     }
 
     [Fact]

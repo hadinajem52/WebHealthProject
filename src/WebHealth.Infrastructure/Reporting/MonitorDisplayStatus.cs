@@ -17,7 +17,6 @@ public static class MonitorDisplayStatus
         !monitor.IsEnabled
             || !monitor.Endpoint.IsEnabled
             || monitor.Endpoint.DeletedAt != null
-            || !monitor.Endpoint.Environment.IsActive
             || monitor.Endpoint.Environment.DeletedAt != null
             || !monitor.Endpoint.Environment.Website.IsEnabled
             || monitor.Endpoint.Environment.Website.DeletedAt != null
@@ -33,7 +32,6 @@ public static class MonitorDisplayStatus
             !monitor.IsEnabled
             || !monitor.Endpoint.IsEnabled
             || monitor.Endpoint.DeletedAt != null
-            || !monitor.Endpoint.Environment.IsActive
             || monitor.Endpoint.Environment.DeletedAt != null
             || !monitor.Endpoint.Environment.Website.IsEnabled
             || monitor.Endpoint.Environment.Website.DeletedAt != null
@@ -42,7 +40,7 @@ public static class MonitorDisplayStatus
 
         EndpointHealthStatuses.Unknown => monitor => monitor.IsEnabled && monitor.Endpoint.IsEnabled
             && monitor.Endpoint.DeletedAt == null
-            && monitor.Endpoint.Environment.IsActive && monitor.Endpoint.Environment.DeletedAt == null
+            && monitor.Endpoint.Environment.DeletedAt == null
             && monitor.Endpoint.Environment.Website.IsEnabled
             && monitor.Endpoint.Environment.Website.DeletedAt == null
             && monitor.Endpoint.Environment.Website.Client.IsActive
@@ -52,7 +50,7 @@ public static class MonitorDisplayStatus
 
         _ => monitor => monitor.IsEnabled && monitor.Endpoint.IsEnabled
             && monitor.Endpoint.DeletedAt == null
-            && monitor.Endpoint.Environment.IsActive && monitor.Endpoint.Environment.DeletedAt == null
+            && monitor.Endpoint.Environment.DeletedAt == null
             && monitor.Endpoint.Environment.Website.IsEnabled
             && monitor.Endpoint.Environment.Website.DeletedAt == null
             && monitor.Endpoint.Environment.Website.Client.IsActive

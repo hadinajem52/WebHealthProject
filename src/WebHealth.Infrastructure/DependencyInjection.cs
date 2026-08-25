@@ -127,8 +127,10 @@ public static class DependencyInjection
         services.AddScoped<RegistryVisibility>();
         services.AddScoped<RegistryMutationSupport>();
         services.AddScoped<RegistryHierarchyLock>();
+        services.AddScoped<RegistryArchiveCascade>();
         services.AddScoped<EndpointPurgeCascade>();
         services.AddScoped<WebsitePurgeCascade>();
+        services.AddScoped<ClientPurgeCascade>();
         services.AddScoped<IRegistryReader, RegistryReader>();
         services.AddScoped<ClientRegistryService>();
         services.AddScoped<IClientRegistryService>(provider =>

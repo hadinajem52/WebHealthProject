@@ -12,15 +12,45 @@
             <p class="card__subtitle">Assignment and grant scope is applied before records are returned.</p>
         </div>
         <div class="form-actions">
+            @if (Model.CanManage)
+            {
+                <div class="action-menu" data-shell-menu data-open="false">
+                    <button type="button"
+                            class="button button--primary"
+                            data-shell-menu-toggle
+                            aria-controls="website-registry-actions-menu"
+                            aria-expanded="false"
+                            aria-haspopup="true">
+                        @await Html.PartialAsync("_Icon", "settings")
+                        <span>Actions</span>
+                        <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                    </button>
+
+                    <div class="action-menu__panel" id="website-registry-actions-menu" data-shell-menu-panel>
+                        <a class="action-menu__item" asp-action="CreateWebsite">
+                            @await Html.PartialAsync("_Icon", "plus")
+                            <span>Create website</span>
+                        </a>
+                        <a class="action-menu__item" asp-action="ArchiveWebsites">
+                            @await Html.PartialAsync("_Icon", "archive")
+                            <span>Archive website</span>
+                        </a>
+                        @if (Model.CanPurge)
+                        {
+                            <hr class="action-menu__separator" />
+                            <a class="action-menu__item action-menu__item--danger" asp-action="DeleteWebsites">
+                                @await Html.PartialAsync("_Icon", "trash")
+                                <span>Delete website</span>
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
             <a class="button button--secondary" asp-action="Clients">View clients</a>
             <a class="button button--secondary" asp-controller="Targets" asp-action="Endpoints">View endpoints</a>
             @if (Model.CanManage)
             {
                 <a class="button button--secondary" asp-action="Archived">Archived</a>
-                <a class="button button--secondary" asp-action="CreateWebsite">
-                    @await Html.PartialAsync("_Icon", "plus")
-                    <span>Add website</span>
-                </a>
             }
         </div>
     </div>

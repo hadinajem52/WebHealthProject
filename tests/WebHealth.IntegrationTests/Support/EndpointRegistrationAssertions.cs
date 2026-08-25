@@ -97,7 +97,8 @@ internal static class EndpointRegistrationAssertions
         await VerifyDuplicateWebsiteAsync(registration, baseEndpoint, administratorOwnerId, label, access);
         await VerifyRollbackAsync(registration, database, administratorOwnerId, label, access);
         await VerifyUnreachableHostAsync(registration, database, administratorOwnerId, label, access);
-        await VerifyInactiveEnvironmentAsync(registration, database, modeTwoEndpoint, label, access);
+        await VerifyInactiveEnvironmentAsync(
+            registration, database, eligibility, modeTwoEndpoint, label, access);
         await VerifyDisabledOwnerAsync(registration, baseEndpoint, disabledOwnerId, label, access);
         await VerifyMissingAuthorizationAsync(
             registration,
@@ -224,6 +225,7 @@ internal static class EndpointRegistrationAssertions
     private static async Task VerifyInactiveEnvironmentAsync(
         IEndpointRegistrationService registration,
         ApplicationDbContext database,
+        IMonitoringEligibilityService eligibility,
         Endpoint endpoint,
         string label,
         RegistryAccessContext access)
@@ -240,8 +242,15 @@ internal static class EndpointRegistrationAssertions
                 Settings($"https://inactive-environment-{label}.example.test/")),
             access);
 
-        AssertField(result, EndpointRegistrationFields.EnvironmentId)
-            .Should().Contain(environment.Name);
+        result.Succeeded.Should().BeTrue(string.Join(" ", result.Errors));
+        (await eligibility.IsEndpointEligibleAsync(result.EntityId!.Value)).Should().BeTrue();
+        (await eligibility.IsEndpointEligibleAsync(endpoint.Id)).Should().BeTrue();
+
+        environment = await database.Environments.SingleAsync(item => item.Id == endpoint.EnvironmentId);
+        environment.IsActive = true;
+        environment.Version++;
+        await database.SaveChangesAsync();
+        database.ChangeTracker.Clear();
     }
 
     private static async Task VerifyDisabledOwnerAsync(

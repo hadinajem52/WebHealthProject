@@ -11,7 +11,6 @@ internal static class MonitoringEligibility
             endpoint.DeletedAt == null
             && endpoint.IsEnabled
             && endpoint.Environment.DeletedAt == null
-            && endpoint.Environment.IsActive
             && endpoint.Environment.Website.DeletedAt == null
             && endpoint.Environment.Website.IsEnabled
             && endpoint.Environment.Website.Client.DeletedAt == null
@@ -29,7 +28,7 @@ internal static class MonitoringEligibility
         DateTimeOffset now) =>
         endpoints.Select(endpoint => new EndpointTestReadiness(
             endpoint.IsEnabled,
-            endpoint.Environment.DeletedAt == null && endpoint.Environment.IsActive,
+            endpoint.Environment.DeletedAt == null,
             endpoint.Environment.Website.DeletedAt == null && endpoint.Environment.Website.IsEnabled,
             endpoint.Environment.Website.Client.DeletedAt == null && endpoint.Environment.Website.Client.IsActive,
             endpoint.Monitors.Any(monitor => monitor.DeletedAt == null),
@@ -48,7 +47,7 @@ internal static class MonitoringEligibility
 
 internal sealed record EndpointTestReadiness(
     bool EndpointEnabled,
-    bool EnvironmentActive,
+    bool EnvironmentAvailable,
     bool WebsiteEnabled,
     bool ClientActive,
     bool HasMonitor,
@@ -57,7 +56,7 @@ internal sealed record EndpointTestReadiness(
     public EndpointTestBlock Block => this switch
     {
         { EndpointEnabled: false } => EndpointTestBlock.EndpointDisabled,
-        { EnvironmentActive: false } => EndpointTestBlock.EnvironmentInactive,
+        { EnvironmentAvailable: false } => EndpointTestBlock.EnvironmentArchived,
         { WebsiteEnabled: false } => EndpointTestBlock.WebsiteDisabled,
         { ClientActive: false } => EndpointTestBlock.ClientInactive,
         { HasMonitor: false } => EndpointTestBlock.NoMonitor,

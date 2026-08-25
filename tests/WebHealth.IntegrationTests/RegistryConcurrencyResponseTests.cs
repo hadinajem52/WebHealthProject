@@ -140,6 +140,11 @@ public sealed class RegistryConcurrencyResponseTests
             RegistryAccessContext access,
             CancellationToken cancellationToken) => Task.FromResult(Conflict);
 
+        Task<RegistryMutationResult> IClientRegistryService.PurgeAsync(
+            RegistryVersionCommand command,
+            RegistryAccessContext access,
+            CancellationToken cancellationToken) => Task.FromResult(Conflict);
+
         Task<RegistryMutationResult> IWebsiteRegistryService.CreateAsync(
             CreateWebsite command,
             RegistryAccessContext access,

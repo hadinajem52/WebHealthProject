@@ -12,6 +12,7 @@ internal sealed class WebsiteRegistryService(
     ApplicationDbContext dbContext,
     RegistryMutationSupport support,
     RegistryHierarchyLock hierarchyLock,
+    RegistryArchiveCascade archiveCascade,
     WebsitePurgeCascade purgeCascade,
     IAuditTrailWriter auditTrail) : IWebsiteRegistryService
 {
@@ -168,9 +169,9 @@ internal sealed class WebsiteRegistryService(
         }
 
         if (command.IsEnabled
-            && !await HasActiveEnvironmentAsync(website.Id, cancellationToken))
+            && !await HasEnvironmentAsync(website.Id, cancellationToken))
         {
-            return Validation("Add an active environment before enabling the website.");
+            return Validation("Add an environment before enabling the website.");
         }
 
         dbContext.Entry(website).Property(candidate => candidate.Version).OriginalValue = command.Version;
@@ -270,11 +271,6 @@ internal sealed class WebsiteRegistryService(
             return NotFound();
         }
 
-        if (website.DeletedAt is null)
-        {
-            return Validation("Only an archived website can be deleted permanently. Archive this one first.");
-        }
-
         if (website.Version != command.Version)
         {
             return await RollBackConcurrencyAsync(transaction, cancellationToken);
@@ -323,6 +319,12 @@ internal sealed class WebsiteRegistryService(
         dbContext.Entry(website).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var before = ToAuditSnapshot(website);
         var now = DateTimeOffset.UtcNow;
+        if (action == WebsiteAuditAction.Deleted)
+        {
+            await archiveCascade.ArchiveWebsiteDescendantsAsync(
+                website.Id, access.UserId, now, cancellationToken);
+        }
+
         ApplyState(website, action, access.UserId, now);
 
         try
@@ -347,7 +349,7 @@ internal sealed class WebsiteRegistryService(
         }
     }
 
-    private async Task<bool> HasActiveEnvironmentAsync(
+    private async Task<bool> HasEnvironmentAsync(
         Guid websiteId,
         CancellationToken cancellationToken)
     {
@@ -356,7 +358,6 @@ internal sealed class WebsiteRegistryService(
                 SELECT * FROM web_health.environment
                 WHERE website_id = {websiteId}
                   AND deleted_at IS NULL
-                  AND is_active
                 FOR SHARE
                 """)
             .AsNoTracking()

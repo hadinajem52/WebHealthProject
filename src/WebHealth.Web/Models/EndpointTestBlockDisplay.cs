@@ -13,8 +13,8 @@ public static class EndpointTestBlockDisplay
             $"Your role may read this endpoint but not test it, so {runLabel} cannot be started here.",
         EndpointTestBlock.EndpointDisabled =>
             $"This endpoint is disabled. Enable it on the endpoint page to allow {runLabel}.",
-        EndpointTestBlock.EnvironmentInactive =>
-            $"The environment this endpoint belongs to is inactive, which stops {runLabel} for every endpoint in it.",
+        EndpointTestBlock.EnvironmentArchived =>
+            $"The environment this endpoint belongs to is archived, which stops {runLabel} for every endpoint in it.",
         EndpointTestBlock.WebsiteDisabled =>
             $"The website this endpoint belongs to is disabled, which stops {runLabel} for every endpoint under it.",
         EndpointTestBlock.ClientInactive =>

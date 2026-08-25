@@ -8,7 +8,8 @@ public sealed record RegistryListViewModel(
     IReadOnlyList<WebsiteListItem> Websites,
     bool CanManage,
     IReadOnlyList<RegistryTagOption> Tags,
-    Guid? SelectedTagId);
+    Guid? SelectedTagId,
+    bool CanPurge);
 
 public sealed record ClientDetailsViewModel(ClientDetails Client, bool CanManage);
 
@@ -16,8 +17,7 @@ public sealed record WebsiteDetailsViewModel(WebsiteDetails Website, bool CanMan
 
 public sealed record RegistryArchiveViewModel(
     IReadOnlyList<ClientListItem> Clients,
-    IReadOnlyList<WebsiteListItem> Websites,
-    bool CanPurge);
+    IReadOnlyList<WebsiteListItem> Websites);
 
 public sealed class ClientFormViewModel
 {

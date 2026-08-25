@@ -39,30 +39,11 @@ internal sealed class WebsitePurgeCascade(
             await endpointPurge.ExecuteAsync(endpointId, cancellationToken);
         }
 
-        var maintenanceWindowIds = await dbContext.MaintenanceTargets.AsNoTracking()
-            .Where(target => target.WebsiteId == websiteId
-                || (target.EnvironmentId != null && environmentIds.Contains(target.EnvironmentId.Value)))
-            .Select(target => target.MaintenanceWindowId)
-            .Distinct()
-            .ToArrayAsync(cancellationToken);
-        if (maintenanceWindowIds.Length > 0)
-        {
-            await dbContext.MaintenanceTargets
-                .Where(target => target.WebsiteId == websiteId
-                    || (target.EnvironmentId != null && environmentIds.Contains(target.EnvironmentId.Value)))
-                .ExecuteDeleteAsync(cancellationToken);
-            var orphanedWindowIds = await dbContext.MaintenanceWindows.AsNoTracking()
-                .Where(window => maintenanceWindowIds.Contains(window.Id)
-                    && !dbContext.MaintenanceTargets.Any(target => target.MaintenanceWindowId == window.Id))
-                .Select(window => window.Id)
-                .ToArrayAsync(cancellationToken);
-            await dbContext.MaintenanceOccurrences
-                .Where(occurrence => orphanedWindowIds.Contains(occurrence.MaintenanceWindowId))
-                .ExecuteDeleteAsync(cancellationToken);
-            await dbContext.MaintenanceWindows
-                .Where(window => orphanedWindowIds.Contains(window.Id))
-                .ExecuteDeleteAsync(cancellationToken);
-        }
+        await MaintenanceScopePurge.RemoveTargetsAsync(
+            dbContext,
+            target => target.WebsiteId == websiteId
+                || (target.EnvironmentId != null && environmentIds.Contains(target.EnvironmentId.Value)),
+            cancellationToken);
 
         await dbContext.AccessGrants
             .Where(grant => grant.WebsiteId == websiteId

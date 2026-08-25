@@ -75,6 +75,7 @@ public sealed record RegistryEndpointItem(
     string EnvironmentName,
     string DisplayUrl,
     bool IsEnabled,
+    bool IsDeleted,
     bool CanTest,
     long Version,
     EndpointMonitoringMode MonitoringMode);
@@ -96,15 +97,11 @@ public sealed class EndpointRegistryFilter
     public Guid? ClientId { get; set; }
     public Guid? WebsiteId { get; set; }
     public Guid? EnvironmentId { get; set; }
-    public bool? Enabled { get; set; }
-    public EndpointMonitoringMode? MonitoringMode { get; set; }
 
     public bool HasValues => !string.IsNullOrWhiteSpace(Search)
         || ClientId is not null
         || WebsiteId is not null
-        || EnvironmentId is not null
-        || Enabled is not null
-        || MonitoringMode is not null;
+        || EnvironmentId is not null;
 }
 
 public sealed record EndpointDetails(

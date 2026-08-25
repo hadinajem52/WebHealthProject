@@ -147,11 +147,12 @@ internal sealed class TargetRegistryReader(
     public async Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
         RegistryAccessContext access,
         EndpointRegistryFilter? filter = null,
+        bool includeArchived = false,
         CancellationToken cancellationToken = default)
     {
         filter ??= new EndpointRegistryFilter();
         var query = visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, DateTimeOffset.UtcNow)
-            .Where(endpoint => endpoint.DeletedAt == null);
+            .Where(endpoint => includeArchived || endpoint.DeletedAt == null);
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             var pattern = $"%{filter.Search.Trim()}%";
@@ -175,11 +176,6 @@ internal sealed class TargetRegistryReader(
             query = query.Where(endpoint => endpoint.EnvironmentId == environmentId);
         }
 
-        if (filter.Enabled is { } enabled)
-        {
-            query = query.Where(endpoint => endpoint.IsEnabled == enabled);
-        }
-
         var rows = await query
             .OrderBy(endpoint => endpoint.Environment.Website.Client.Name)
             .ThenBy(endpoint => endpoint.Environment.Website.Name)
@@ -196,6 +192,7 @@ internal sealed class TargetRegistryReader(
                 EnvironmentName = endpoint.Environment.Name,
                 endpoint.DisplayUrl,
                 endpoint.IsEnabled,
+                IsDeleted = endpoint.DeletedAt != null,
                 endpoint.Version
             })
             .ToListAsync(cancellationToken);
@@ -225,14 +222,11 @@ internal sealed class TargetRegistryReader(
                     ? EndpointMonitoringMode.Scheduled
                     : EndpointMonitoringMode.Paused);
 
-        var endpoints = rows.Select(row => new RegistryEndpointItem(
+        return rows.Select(row => new RegistryEndpointItem(
             row.Id, row.ClientId, row.ClientName, row.WebsiteId, row.WebsiteName,
-            row.EnvironmentId, row.EnvironmentName, row.DisplayUrl, row.IsEnabled,
+            row.EnvironmentId, row.EnvironmentName, row.DisplayUrl, row.IsEnabled, row.IsDeleted,
             testable.Contains(row.Id), row.Version,
             modes.GetValueOrDefault(row.Id, EndpointMonitoringMode.Disabled))).ToArray();
-        return filter.MonitoringMode is { } monitoringMode
-            ? endpoints.Where(endpoint => endpoint.MonitoringMode == monitoringMode).ToArray()
-            : endpoints;
     }
 
     public async Task<CertificateStatus?> FindCertificateStatusAsync(

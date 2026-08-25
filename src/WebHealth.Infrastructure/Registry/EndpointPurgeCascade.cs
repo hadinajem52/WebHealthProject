@@ -40,13 +40,6 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
         var deliveries = dbContext.NotificationDeliveries
             .Where(delivery => notifications.Contains(delivery.NotificationEventId)).Select(delivery => delivery.Id);
 
-        var maintenanceWindowIds = await dbContext.MaintenanceTargets.AsNoTracking()
-            .Where(target => target.EndpointId == endpointId
-                || (target.EndpointMonitorId != null && monitors.Contains(target.EndpointMonitorId.Value)))
-            .Select(target => target.MaintenanceWindowId)
-            .Distinct()
-            .ToArrayAsync(cancellationToken);
-
         await dbContext.NotificationAttempts
             .Where(attempt => deliveries.Contains(attempt.NotificationDeliveryId))
             .ExecuteDeleteAsync(cancellationToken);
@@ -137,24 +130,11 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
             .Where(run => run.EndpointId == endpointId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        if (maintenanceWindowIds.Length > 0)
-        {
-            await dbContext.MaintenanceTargets
-                .Where(target => target.EndpointId == endpointId
-                    || (target.EndpointMonitorId != null && monitors.Contains(target.EndpointMonitorId.Value)))
-                .ExecuteDeleteAsync(cancellationToken);
-            var orphanedWindowIds = await dbContext.MaintenanceWindows.AsNoTracking()
-                .Where(window => maintenanceWindowIds.Contains(window.Id)
-                    && !dbContext.MaintenanceTargets.Any(target => target.MaintenanceWindowId == window.Id))
-                .Select(window => window.Id)
-                .ToArrayAsync(cancellationToken);
-            await dbContext.MaintenanceOccurrences
-                .Where(occurrence => orphanedWindowIds.Contains(occurrence.MaintenanceWindowId))
-                .ExecuteDeleteAsync(cancellationToken);
-            await dbContext.MaintenanceWindows
-                .Where(window => orphanedWindowIds.Contains(window.Id))
-                .ExecuteDeleteAsync(cancellationToken);
-        }
+        await MaintenanceScopePurge.RemoveTargetsAsync(
+            dbContext,
+            target => target.EndpointId == endpointId
+                || (target.EndpointMonitorId != null && monitors.Contains(target.EndpointMonitorId.Value)),
+            cancellationToken);
 
         await dbContext.AccessGrants
             .Where(grant => grant.EndpointId == endpointId)

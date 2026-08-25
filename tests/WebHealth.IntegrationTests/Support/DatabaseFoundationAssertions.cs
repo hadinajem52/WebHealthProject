@@ -272,14 +272,23 @@ internal static class DatabaseFoundationAssertions
         var hierarchyLock = new RegistryHierarchyLock(database);
         var auditTrail = new AuditTrailWriter(database);
         var endpointPurge = new EndpointPurgeCascade(database);
-        var clients = new ClientRegistryService(database, mutationSupport, auditTrail);
+        var websitePurge = new WebsitePurgeCascade(database, endpointPurge);
+        var archiveCascade = new RegistryArchiveCascade(database);
+        var clients = new ClientRegistryService(
+            database,
+            mutationSupport,
+            archiveCascade,
+            new ClientPurgeCascade(database, websitePurge),
+            auditTrail);
         var websites = new WebsiteRegistryService(
             database,
             mutationSupport,
             hierarchyLock,
-            new WebsitePurgeCascade(database, endpointPurge),
+            archiveCascade,
+            websitePurge,
             auditTrail);
-        var environments = new EnvironmentRegistryService(database, hierarchyLock, auditTrail);
+        var environments = new EnvironmentRegistryService(
+            database, hierarchyLock, archiveCascade, auditTrail);
         var endpoints = new EndpointRegistryService(
             database,
             mutationSupport,
@@ -731,18 +740,6 @@ internal static class DatabaseFoundationAssertions
         environmentEndpoints.Should().OnlyContain(item => item.EnvironmentId == stagingId);
         (await targetReader.ListAllEndpointsAsync(
                 administratorAccess,
-                new EndpointRegistryFilter { Enabled = false }))
-            .Should().Contain(item => item.Id == stagingHttpId);
-        (await targetReader.ListAllEndpointsAsync(
-                administratorAccess,
-                new EndpointRegistryFilter { MonitoringMode = EndpointMonitoringMode.Scheduled }))
-            .Should().Contain(item => item.Id == endpointId);
-        (await targetReader.ListAllEndpointsAsync(
-                administratorAccess,
-                new EndpointRegistryFilter { MonitoringMode = EndpointMonitoringMode.Disabled }))
-            .Should().Contain(item => item.Id == stagingHttpId);
-        (await targetReader.ListAllEndpointsAsync(
-                administratorAccess,
                 new EndpointRegistryFilter { Search = endpoint.DisplayUrl }))
             .Should().ContainSingle(item => item.Id == endpointId);
         database.ChangeTracker.Clear();
@@ -944,7 +941,8 @@ internal static class DatabaseFoundationAssertions
                         .ThenInclude(website => website.Client)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.TargetAuthorizations)
-            .OrderBy(candidate => candidate.CreatedAt)
+            .Where(candidate => candidate.DeletedAt == null && candidate.IsEnabled)
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
             .FirstAsync();
         monitor.ConfigurationFingerprint.Should().Be(HttpPolicyFingerprint.Create(new(
             monitor.Endpoint.NormalizedUrl,
@@ -1532,7 +1530,8 @@ internal static class DatabaseFoundationAssertions
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
                     .ThenInclude(environment => environment.Website)
-            .OrderBy(candidate => candidate.CreatedAt)
+            .Where(candidate => candidate.DeletedAt == null && candidate.IsEnabled)
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
             .FirstAsync();
 
         database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
@@ -2368,11 +2367,11 @@ internal static class DatabaseFoundationAssertions
                 && eligibleEndpointIds.Contains(candidate.EndpointId))
             .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
             .FirstAsync();
-        var otherEnabledMonitorIds = await AvailabilityMonitors(database).AsNoTracking()
+        var otherEnabledMonitorIds = await database.EndpointMonitors.AsNoTracking()
             .Where(candidate => candidate.Id != monitor.Id && candidate.IsEnabled)
             .Select(candidate => candidate.Id)
             .ToArrayAsync();
-        await AvailabilityMonitors(database)
+        await database.EndpointMonitors
             .Where(candidate => otherEnabledMonitorIds.Contains(candidate.Id))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(candidate => candidate.IsEnabled, false)
@@ -2435,10 +2434,6 @@ internal static class DatabaseFoundationAssertions
             database, scheduling, clock, monitor.Id,
             candidate => candidate.Endpoint.Environment.Website.IsEnabled = false,
             candidate => candidate.Endpoint.Environment.Website.IsEnabled = true);
-        await VerifySuppressedSchedulingAsync(
-            database, scheduling, clock, monitor.Id,
-            candidate => candidate.Endpoint.Environment.IsActive = false,
-            candidate => candidate.Endpoint.Environment.IsActive = true);
         await VerifySuppressedSchedulingAsync(
             database, scheduling, clock, monitor.Id,
             candidate => candidate.IsEnabled = false,
@@ -3207,7 +3202,9 @@ internal static class DatabaseFoundationAssertions
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         var monitor = await AvailabilityMonitors(database)
-            .OrderBy(candidate => candidate.CreatedAt).FirstAsync();
+            .Where(candidate => candidate.DeletedAt == null && candidate.IsEnabled)
+            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
+            .FirstAsync();
         var otherMonitorId = await database.EndpointMonitors
             .Where(candidate => candidate.Id != monitor.Id)
             .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
@@ -4138,23 +4135,13 @@ internal static class DatabaseFoundationAssertions
 
         var live = await database.Endpoints.AsNoTracking()
             .SingleAsync(candidate => candidate.Id == endpointId);
-        (await endpointService.PurgeAsync(new(endpointId, live.Version), administratorAccess))
-            .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
 
-        var archived = await endpointService.DeleteAsync(new(endpointId, live.Version), administratorAccess);
-        archived.Succeeded.Should().BeTrue(string.Join(" ", archived.Errors));
-        database.ChangeTracker.Clear();
-
-        var archivedVersion = await database.Endpoints.AsNoTracking()
-            .Where(candidate => candidate.Id == endpointId)
-            .Select(candidate => candidate.Version).SingleAsync();
-
-        (await endpointService.PurgeAsync(new(endpointId, archivedVersion), operationsAccess))
+        (await endpointService.PurgeAsync(new(endpointId, live.Version), operationsAccess))
             .Status.Should().Be(RegistryMutationStatus.Forbidden);
-        (await endpointService.PurgeAsync(new(endpointId, archivedVersion - 1), administratorAccess))
+        (await endpointService.PurgeAsync(new(endpointId, live.Version - 1), administratorAccess))
             .Status.Should().Be(RegistryMutationStatus.ConcurrencyConflict);
 
-        var purged = await endpointService.PurgeAsync(new(endpointId, archivedVersion), administratorAccess);
+        var purged = await endpointService.PurgeAsync(new(endpointId, live.Version), administratorAccess);
         purged.Succeeded.Should().BeTrue(string.Join(" ", purged.Errors));
         database.ChangeTracker.Clear();
 

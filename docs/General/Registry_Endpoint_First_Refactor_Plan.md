@@ -123,6 +123,7 @@ That is untrue. `EndpointFormViewModel.IsEnabled` defaults to `true`, and an ena
 - Removal of the existing per-level create pages.
 - Any change to the update or concurrency paths of the registry services.
 - Broader Client/Website management redesign.
+- Grouping and browser-local saved views on the inventory: built during Phase 6 and removed again for the same reason as the withdrawn filters.
 
 ## 5. Fixed decisions
 
@@ -461,7 +462,7 @@ The payoff.
 **Changes**
 
 - `ShellNavigation`: Registry points at the endpoint inventory. Clients and Websites remain reachable, as their own entries or from the inventory.
-- Filters for client, website, environment, enabled state, and monitoring mode. This is not a Razor-only change: `ITargetRegistryReader.ListAllEndpointsAsync` currently accepts only `search`, and `RegistryEndpointListViewModel` carries only endpoints and search. Both need extending, along with the projection behind them.
+- Filters for client, website, and environment. This is not a Razor-only change: `ITargetRegistryReader.ListAllEndpointsAsync` currently accepts only `search`, and `RegistryEndpointListViewModel` carries only endpoints and search. Both need extending, along with the projection behind them. Enabled state and monitoring mode were built and then withdrawn: both are columns in the table, the inventory is small enough to read at a glance, and seven controls made the filter bar unreadable.
 - Context-aware CTAs, each prefilling what the page already knows:
 
 ```text
@@ -508,7 +509,6 @@ flowchart LR
 Only after Phase 4 has proven stable in real use.
 
 - Demote the standalone "Add client" and "Add website" CTAs from primary to secondary; they remain available for deliberate structural administration.
-- Grouping and saved filters on the inventory.
 - Revisit the remaining `registry-facts` pages listed in `docs/General/Detail_Page_UI_Pattern.md`.
 
 ## 7. Test plan

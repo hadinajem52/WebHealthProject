@@ -1,0 +1,76 @@
+@model RegistryActionScreenViewModel
+@{
+    ViewData.SetTitle(Model.Title);
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem(Model.Title));
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">@Model.Title</h2>
+            <p class="card__subtitle">@Model.Subtitle</p>
+        </div>
+        <div class="form-actions">
+            <a class="button button--secondary" asp-action="@Model.BackAction">@Model.BackLabel</a>
+        </div>
+    </div>
+
+    @if (Model.Rows.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            Model.EmptyTitle,
+            Model.EmptyDescription,
+            "registry"))
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">@Model.Title</caption>
+                <thead>
+                    <tr>
+                        <th>@Model.PrimaryColumn</th>
+                        @foreach (var column in Model.Columns)
+                        {
+                            <th>@column</th>
+                        }
+                        <th>Status</th>
+                        <th><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td data-label="@Model.PrimaryColumn">
+                            <span class="data-table__primary">@row.Primary</span>
+                            @if (row.Secondary is not null)
+                            {
+                                <span class="data-table__secondary">@row.Secondary</span>
+                            }
+                        </td>
+                        @for (var index = 0; index < Model.Columns.Count; index++)
+                        {
+                            <td data-label="@Model.Columns[index]">@(index < row.Cells.Count ? row.Cells[index] : string.Empty)</td>
+                        }
+                        <td data-label="Status"><span class="badge" data-status="@row.StatusTone">@row.StatusLabel</span></td>
+                        <td class="data-table__action" data-label="Actions">
+                            <div class="data-table__action-group">
+                                <a asp-action="@Model.DetailsAction" asp-route-id="@row.Id">Open<span class="visually-hidden"> @row.Primary</span></a>
+                                <form asp-action="@Model.FormAction" method="post" data-shell-confirm="@string.Format(Model.ConfirmPrompt, row.Primary)">
+                                    <input type="hidden" name="id" value="@row.Id" />
+                                    <input type="hidden" name="version" value="@row.Version" />
+                                    <button class="button @(Model.IsDestructive ? "button--danger" : "button--secondary")" type="submit">
+                                        @await Html.PartialAsync("_Icon", Model.ButtonIcon)
+                                        <span>@Model.ButtonLabel<span class="visually-hidden"> @row.Primary</span></span>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

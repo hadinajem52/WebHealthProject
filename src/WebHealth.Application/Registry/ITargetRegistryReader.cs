@@ -20,6 +20,7 @@ public interface ITargetRegistryReader
     Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
         RegistryAccessContext access,
         EndpointRegistryFilter? filter = null,
+        bool includeArchived = false,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<EnvironmentListItem>> ListAllEnvironmentsAsync(

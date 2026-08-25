@@ -11,15 +11,45 @@
             <p class="card__subtitle">Only clients within your role and assignment scope are shown.</p>
         </div>
         <div class="form-actions">
+            @if (Model.CanManage)
+            {
+                <div class="action-menu" data-shell-menu data-open="false">
+                    <button type="button"
+                            class="button button--primary"
+                            data-shell-menu-toggle
+                            aria-controls="client-registry-actions-menu"
+                            aria-expanded="false"
+                            aria-haspopup="true">
+                        @await Html.PartialAsync("_Icon", "settings")
+                        <span>Actions</span>
+                        <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                    </button>
+
+                    <div class="action-menu__panel" id="client-registry-actions-menu" data-shell-menu-panel>
+                        <a class="action-menu__item" asp-action="CreateClient">
+                            @await Html.PartialAsync("_Icon", "plus")
+                            <span>Create client</span>
+                        </a>
+                        <a class="action-menu__item" asp-action="ArchiveClients">
+                            @await Html.PartialAsync("_Icon", "archive")
+                            <span>Archive client</span>
+                        </a>
+                        @if (Model.CanPurge)
+                        {
+                            <hr class="action-menu__separator" />
+                            <a class="action-menu__item action-menu__item--danger" asp-action="DeleteClients">
+                                @await Html.PartialAsync("_Icon", "trash")
+                                <span>Delete client</span>
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
             <a class="button button--secondary" asp-action="Websites">View websites</a>
             <a class="button button--secondary" asp-controller="Targets" asp-action="Endpoints">View endpoints</a>
             @if (Model.CanManage)
             {
                 <a class="button button--secondary" asp-action="Archived">Archived</a>
-                <a class="button button--secondary" asp-action="CreateClient">
-                    @await Html.PartialAsync("_Icon", "plus")
-                    <span>Add client</span>
-                </a>
             }
         </div>
     </div>

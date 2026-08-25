@@ -391,6 +391,7 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
         public Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
             RegistryAccessContext access,
             EndpointRegistryFilter? filter = null,
+            bool includeArchived = false,
             CancellationToken cancellationToken = default) => Result<RegistryEndpointItem>();
 
         public Task<IReadOnlyList<EnvironmentListItem>> ListAllEnvironmentsAsync(

@@ -158,7 +158,6 @@ internal sealed class ReportingReader(
             {
                 LifecycleEnabled = monitor.Endpoint.IsEnabled
                     && monitor.Endpoint.DeletedAt == null
-                    && monitor.Endpoint.Environment.IsActive
                     && monitor.Endpoint.Environment.DeletedAt == null
                     && monitor.Endpoint.Environment.Website.IsEnabled
                     && monitor.Endpoint.Environment.Website.DeletedAt == null
@@ -324,8 +323,7 @@ internal sealed class ReportingReader(
                 !monitor.IsEnabled
                     || !monitor.Endpoint.IsEnabled
                     || monitor.Endpoint.DeletedAt != null
-                    || !monitor.Endpoint.Environment.IsActive
-                    || monitor.Endpoint.Environment.DeletedAt != null
+                            || monitor.Endpoint.Environment.DeletedAt != null
                     || !monitor.Endpoint.Environment.Website.IsEnabled
                     || monitor.Endpoint.Environment.Website.DeletedAt != null
                     || !monitor.Endpoint.Environment.Website.Client.IsActive
@@ -336,7 +334,6 @@ internal sealed class ReportingReader(
                         : monitor.EndpointHealth.ConfirmedStatus,
                 (monitor.IsEnabled && monitor.Endpoint.IsEnabled
                     && monitor.Endpoint.DeletedAt == null
-                    && monitor.Endpoint.Environment.IsActive
                     && monitor.Endpoint.Environment.DeletedAt == null
                     && monitor.Endpoint.Environment.Website.IsEnabled
                     && monitor.Endpoint.Environment.Website.DeletedAt == null

@@ -26,22 +26,17 @@ public sealed class TargetsController(
     [HttpGet]
     public async Task<IActionResult> Endpoints(
         [FromQuery] EndpointRegistryFilter filter,
-        string? groupBy,
         CancellationToken cancellationToken)
     {
         var access = GetAccess();
-        var grouping = groupBy is not null
-            && EndpointRegistryGroupings.All.Contains(groupBy, StringComparer.Ordinal)
-            ? groupBy
-            : EndpointRegistryGroupings.None;
         return View(new RegistryEndpointListViewModel(
-            await targetReader.ListAllEndpointsAsync(access, filter, cancellationToken),
+            await targetReader.ListAllEndpointsAsync(access, filter, cancellationToken: cancellationToken),
             filter,
             await registryReader.ListClientsAsync(access, cancellationToken),
             await registryReader.ListWebsitesAsync(access, cancellationToken: cancellationToken),
             await targetReader.ListAllEnvironmentsAsync(access, cancellationToken),
-            grouping,
-            CanManage(access)));
+            CanManage(access),
+            User.IsInRole(ApplicationRoles.Administrator)));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -169,13 +164,25 @@ public sealed class TargetsController(
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
+    public async Task<IActionResult> ArchiveEndpoints(CancellationToken cancellationToken) =>
+        View(RegistryActionScreens.ViewName, BuildEndpointScreen(
+            await targetReader.ListAllEndpointsAsync(GetAccess(), cancellationToken: cancellationToken),
+            destructive: false));
+
+    [Authorize(Policy = AuthorizationPolicies.Administration), HttpGet]
+    public async Task<IActionResult> DeleteEndpoints(CancellationToken cancellationToken) =>
+        View(RegistryActionScreens.ViewName, BuildEndpointScreen(
+            await targetReader.ListAllEndpointsAsync(
+                GetAccess(), includeArchived: true, cancellationToken: cancellationToken),
+            destructive: true));
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
     public async Task<IActionResult> Archived(CancellationToken cancellationToken)
     {
         var access = GetAccess();
         return View(new TargetArchiveViewModel(
             await targetReader.ListDeletedEnvironmentsAsync(access, cancellationToken),
-            await targetReader.ListDeletedEndpointsAsync(access, cancellationToken),
-            User.IsInRole(ApplicationRoles.Administrator)));
+            await targetReader.ListDeletedEndpointsAsync(access, cancellationToken)));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -398,10 +405,65 @@ public sealed class TargetsController(
     public Task<IActionResult> RestoreEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeStateAsync(id, version, endpointService.RestoreAsync, nameof(Archived), nameof(Endpoint), "Endpoint restored in a disabled state.", cancellationToken);
 
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
+    public Task<IActionResult> ArchiveEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
+        RunScreenActionAsync(id, version, endpointService.DeleteAsync, nameof(ArchiveEndpoints),
+            "Endpoint archived and its checks stopped.", cancellationToken);
+
     [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
     public Task<IActionResult> PurgeEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, endpointService.PurgeAsync, nameof(Archived),
-            nameof(Endpoint), "Endpoint permanently deleted with all of its monitoring history.", cancellationToken);
+        RunScreenActionAsync(id, version, endpointService.PurgeAsync, nameof(DeleteEndpoints),
+            "Endpoint permanently deleted with all of its monitoring history.", cancellationToken);
+
+    private static RegistryActionScreenViewModel BuildEndpointScreen(
+        IReadOnlyList<RegistryEndpointItem> endpoints,
+        bool destructive) => new(
+        destructive ? "Delete endpoints" : "Archive endpoints",
+        destructive
+            ? "Permanent deletion removes the endpoint with all of its checks, results, SEO observations, crawls, incidents and notifications. Archived and active endpoints are both listed."
+            : "Archiving stops the endpoint's checks and hides it from active lists.",
+        "Endpoint",
+        ["Client", "Website", "Environment"],
+        endpoints.Select(endpoint => new RegistryActionRow(
+            endpoint.Id,
+            endpoint.Version,
+            endpoint.DisplayUrl,
+            null,
+            [endpoint.ClientName, endpoint.WebsiteName, endpoint.EnvironmentName],
+            endpoint.IsDeleted ? "Archived" : endpoint.IsEnabled ? "Enabled" : "Disabled",
+            RegistryActionScreens.Tone(endpoint.IsDeleted, endpoint.IsEnabled))).ToArray(),
+        destructive ? nameof(PurgeEndpoint) : nameof(ArchiveEndpoint),
+        nameof(Endpoint),
+        destructive ? "Delete permanently" : "Archive",
+        destructive ? "trash" : "archive",
+        destructive,
+        destructive
+            ? "Permanently delete {0} and all of its checks, results, SEO observations, crawls, incidents and notifications? This cannot be undone."
+            : "Archive {0}? Its scheduled checks stop and it moves to the archive.",
+        destructive ? "No endpoints to delete" : "No endpoints to archive",
+        "No endpoint records are available within your current access scope.",
+        nameof(Endpoints),
+        "Back to endpoints");
+
+    private async Task<IActionResult> RunScreenActionAsync(
+        Guid id,
+        long version,
+        Func<RegistryVersionCommand, RegistryAccessContext, CancellationToken, Task<RegistryMutationResult>> operation,
+        string screenAction,
+        string successMessage,
+        CancellationToken cancellationToken)
+    {
+        var result = await operation(new(id, version), GetAccess(), cancellationToken);
+        if (result.Status == RegistryMutationStatus.NotFound)
+        {
+            return this.NotFoundRecord("endpoint");
+        }
+
+        TempData.AddFlashMessage(
+            result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
+            result.Succeeded ? successMessage : string.Join(" ", result.Errors));
+        return RedirectToAction(screenAction);
+    }
 
     private RegistryAccessContext GetAccess()
     {
@@ -424,7 +486,7 @@ public sealed class TargetsController(
             .Where(website => !website.IsDeleted)
             .ToArray();
         model.Environments = (await targetReader.ListAllEnvironmentsAsync(access, cancellationToken))
-            .Where(environment => !environment.IsDeleted && environment.IsActive)
+            .Where(environment => !environment.IsDeleted)
             .ToArray();
         var owners = (await registryReader.ListOwnersAsync(cancellationToken: cancellationToken)).ToList();
         var selectedOwnerIds = new[]

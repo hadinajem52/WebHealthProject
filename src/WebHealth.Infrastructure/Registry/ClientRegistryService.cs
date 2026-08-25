@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Registry;
 using WebHealth.Domain.Normalization;
+using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Registry;
@@ -10,6 +11,8 @@ namespace WebHealth.Infrastructure.Registry;
 internal sealed class ClientRegistryService(
     ApplicationDbContext dbContext,
     RegistryMutationSupport support,
+    RegistryArchiveCascade archiveCascade,
+    ClientPurgeCascade purgeCascade,
     IAuditTrailWriter auditTrail) : IClientRegistryService
 {
     private const string ClientNameIndex = "ix_client_normalized_name_normalization_version";
@@ -193,6 +196,46 @@ internal sealed class ClientRegistryService(
         CancellationToken cancellationToken = default) =>
         ChangeStateAsync(command, access, ClientAuditAction.Restored, cancellationToken);
 
+    public async Task<RegistryMutationResult> PurgeAsync(
+        RegistryVersionCommand command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        if (!access.Roles.Contains(ApplicationRoles.Administrator, StringComparer.Ordinal))
+        {
+            return Forbidden();
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var client = await dbContext.Clients.FromSqlInterpolated($"""
+            SELECT * FROM web_health.client WHERE id = {command.EntityId} FOR UPDATE
+            """)
+            .AsNoTracking()
+            .SingleOrDefaultAsync(cancellationToken);
+        if (client is null)
+        {
+            return NotFound();
+        }
+
+        if (client.Version != command.Version)
+        {
+            return await RollBackConcurrencyAsync(transaction, cancellationToken);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = ToAuditSnapshot(client, notesChanged: false);
+        await auditTrail.RecordClientMutationAsync(
+            new AuditWriteContext(access.UserId, now),
+            ClientAuditAction.Purged,
+            snapshot,
+            snapshot,
+            cancellationToken);
+        await purgeCascade.ExecuteAsync(client.Id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return RegistryMutationResult.Success(client.Id);
+    }
+
     private async Task<RegistryMutationResult> ChangeStateAsync(
         RegistryVersionCommand command,
         RegistryAccessContext access,
@@ -222,6 +265,12 @@ internal sealed class ClientRegistryService(
         dbContext.Entry(client).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var before = ToAuditSnapshot(client, notesChanged: false);
         var now = DateTimeOffset.UtcNow;
+        if (action == ClientAuditAction.Deleted)
+        {
+            await archiveCascade.ArchiveClientDescendantsAsync(
+                client.Id, access.UserId, now, cancellationToken);
+        }
+
         ApplyState(client, action, access.UserId, now);
 
         try

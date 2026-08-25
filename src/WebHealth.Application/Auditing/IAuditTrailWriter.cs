@@ -106,7 +106,8 @@ public enum ClientAuditAction
     Updated,
     Disabled,
     Deleted,
-    Restored
+    Restored,
+    Purged
 }
 
 public sealed record ClientAuditSnapshot(

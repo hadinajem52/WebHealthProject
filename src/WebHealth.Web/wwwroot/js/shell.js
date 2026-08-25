@@ -6,8 +6,6 @@
     window.WebHealth = window.WebHealth || {};
 
     var SIDEBAR_COLLAPSE_STORAGE_KEY = 'webhealth.sidebar-collapsed';
-    var ENDPOINT_VIEW_STORAGE_KEY = 'webhealth.endpoint-inventory.views.v1';
-    var MAX_ENDPOINT_VIEWS = 10;
 
     function readStoredSidebarCollapsed() {
         try {
@@ -755,145 +753,6 @@
         syncMonitoring();
     }
 
-    function readEndpointViews() {
-        try {
-            var parsed = JSON.parse(window.localStorage.getItem(ENDPOINT_VIEW_STORAGE_KEY) || '[]');
-            if (!Array.isArray(parsed)) {
-                return [];
-            }
-            return parsed.filter(function (view) {
-                return view
-                    && typeof view.name === 'string'
-                    && view.name.length > 0
-                    && view.name.length <= 40
-                    && typeof view.query === 'string'
-                    && view.query.length <= 2048;
-            }).slice(0, MAX_ENDPOINT_VIEWS);
-        } catch (error) {
-            return [];
-        }
-    }
-
-    function writeEndpointViews(views) {
-        try {
-            window.localStorage.setItem(ENDPOINT_VIEW_STORAGE_KEY, JSON.stringify(views));
-            return true;
-        } catch (error) {
-            return false;
-        }
-    }
-
-    function endpointViewQuery(form) {
-        var query = new URLSearchParams();
-        Array.from(new FormData(form).entries()).forEach(function (entry) {
-            if (typeof entry[1] === 'string' && entry[1].length > 0) {
-                query.append(entry[0], entry[1]);
-            }
-        });
-        return query.toString();
-    }
-
-    function setUpEndpointSavedViews(container) {
-        if (!beginInitialization(container)) {
-            return;
-        }
-
-        var region = container.closest('[data-ajax-region]') || document;
-        var filterForm = region.querySelector('[data-endpoint-filter-form]');
-        var nameInput = container.querySelector('[data-endpoint-view-name]');
-        var saveButton = container.querySelector('[data-endpoint-view-save]');
-        var select = container.querySelector('[data-endpoint-view-select]');
-        var openButton = container.querySelector('[data-endpoint-view-open]');
-        var removeButton = container.querySelector('[data-endpoint-view-remove]');
-        var status = container.querySelector('[data-endpoint-view-status]');
-        if (!filterForm || !nameInput || !saveButton || !select || !openButton || !removeButton || !status) {
-            return;
-        }
-
-        var views = readEndpointViews();
-
-        function render(selectedName) {
-            select.replaceChildren();
-            var placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.textContent = views.length === 0 ? 'No saved views yet' : 'Choose a saved view';
-            select.appendChild(placeholder);
-            views.forEach(function (view) {
-                var option = document.createElement('option');
-                option.value = view.name;
-                option.textContent = view.name;
-                select.appendChild(option);
-            });
-            select.value = selectedName || '';
-            openButton.disabled = !select.value;
-            removeButton.disabled = !select.value;
-        }
-
-        select.addEventListener('change', function () {
-            openButton.disabled = !select.value;
-            removeButton.disabled = !select.value;
-        });
-
-        saveButton.addEventListener('click', function () {
-            var name = nameInput.value.trim();
-            if (!name) {
-                status.textContent = 'Enter a name before saving this view.';
-                nameInput.focus();
-                return;
-            }
-
-            var existingIndex = views.findIndex(function (view) {
-                return view.name.toLowerCase() === name.toLowerCase();
-            });
-            var savedView = { name: name, query: endpointViewQuery(filterForm) };
-            if (existingIndex >= 0) {
-                views[existingIndex] = savedView;
-            } else if (views.length >= MAX_ENDPOINT_VIEWS) {
-                status.textContent = 'Remove a saved view before adding another.';
-                return;
-            } else {
-                views.push(savedView);
-            }
-
-            views.sort(function (left, right) { return left.name.localeCompare(right.name); });
-            if (!writeEndpointViews(views)) {
-                status.textContent = 'Saved views are unavailable in this browser.';
-                return;
-            }
-            render(name);
-            nameInput.value = '';
-            status.textContent = 'Saved view ' + name + '.';
-        });
-
-        openButton.addEventListener('click', function () {
-            var view = views.find(function (candidate) { return candidate.name === select.value; });
-            if (!view) {
-                return;
-            }
-            var url = new URL(filterForm.action, window.location.href);
-            url.search = view.query;
-            window.location.assign(url.toString());
-        });
-
-        removeButton.addEventListener('click', function () {
-            var name = select.value;
-            if (!name) {
-                return;
-            }
-            views = views.filter(function (view) { return view.name !== name; });
-            if (!writeEndpointViews(views)) {
-                status.textContent = 'Saved views are unavailable in this browser.';
-                return;
-            }
-            render();
-            status.textContent = 'Removed saved view ' + name + '.';
-        });
-
-        var currentQuery = endpointViewQuery(filterForm);
-        var currentView = views.find(function (view) { return view.query === currentQuery; });
-        render(currentView ? currentView.name : null);
-    }
-
     function initialize(root) {
         root = root || document;
         var sidebar = first(root, '[data-shell-sidebar]');
@@ -984,9 +843,6 @@
 
         elements(root, '[data-registration-form]')
             .forEach(setUpEndpointRegistration);
-
-        elements(root, '[data-endpoint-saved-views]')
-            .forEach(setUpEndpointSavedViews);
 
         setUpBadgeTooltips(root);
 

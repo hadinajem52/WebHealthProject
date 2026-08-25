@@ -274,6 +274,7 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
         "Production",
         "https://example.com/",
         IsEnabled: true,
+        IsDeleted: false,
         CanTest: true,
         Version: 1,
         EndpointMonitoringMode.Scheduled);
@@ -281,6 +282,7 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
     public Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
         RegistryAccessContext access,
         EndpointRegistryFilter? filter = null,
+        bool includeArchived = false,
         CancellationToken cancellationToken = default)
     {
         filter ??= new EndpointRegistryFilter();
@@ -290,9 +292,7 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
                 || Endpoint.ClientName.Contains(filter.Search, StringComparison.OrdinalIgnoreCase))
             && (filter.ClientId is null || filter.ClientId == Endpoint.ClientId)
             && (filter.WebsiteId is null || filter.WebsiteId == Endpoint.WebsiteId)
-            && (filter.EnvironmentId is null || filter.EnvironmentId == Endpoint.EnvironmentId)
-            && (filter.Enabled is null || filter.Enabled == Endpoint.IsEnabled)
-            && (filter.MonitoringMode is null || filter.MonitoringMode == Endpoint.MonitoringMode);
+            && (filter.EnvironmentId is null || filter.EnvironmentId == Endpoint.EnvironmentId);
         return Task.FromResult<IReadOnlyList<RegistryEndpointItem>>(matches ? [Endpoint] : []);
     }
 

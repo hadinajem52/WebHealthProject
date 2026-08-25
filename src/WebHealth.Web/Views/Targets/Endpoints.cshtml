@@ -2,16 +2,6 @@
 @{
     ViewData.SetTitle("Endpoints");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Endpoints"));
-    var endpointGroups = Model.Grouping switch
-    {
-        EndpointRegistryGroupings.Client => Model.Endpoints.GroupBy(endpoint => endpoint.ClientName),
-        EndpointRegistryGroupings.Website => Model.Endpoints.GroupBy(
-            endpoint => $"{endpoint.ClientName} / {endpoint.WebsiteName}"),
-        EndpointRegistryGroupings.Environment => Model.Endpoints.GroupBy(
-            endpoint => $"{endpoint.ClientName} / {endpoint.WebsiteName} / {endpoint.EnvironmentName}"),
-        _ => Model.Endpoints.GroupBy(_ => string.Empty)
-    };
-    var hasViewOptions = Model.Filter.HasValues || Model.Grouping != EndpointRegistryGroupings.None;
 }
 
 <div id="ajax-page" data-ajax-region>
@@ -24,18 +14,44 @@
         <div class="form-actions">
             @if (Model.CanManage)
             {
-                <a class="button button--primary" asp-action="RegisterEndpoint">
-                    @await Html.PartialAsync("_Icon", "plus")
-                    <span>Register endpoint</span>
-                </a>
+                <div class="action-menu" data-shell-menu data-open="false">
+                    <button type="button"
+                            class="button button--primary"
+                            data-shell-menu-toggle
+                            aria-controls="endpoint-registry-actions-menu"
+                            aria-expanded="false"
+                            aria-haspopup="true">
+                        @await Html.PartialAsync("_Icon", "settings")
+                        <span>Actions</span>
+                        <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                    </button>
+
+                    <div class="action-menu__panel" id="endpoint-registry-actions-menu" data-shell-menu-panel>
+                        <a class="action-menu__item" asp-action="RegisterEndpoint">
+                            @await Html.PartialAsync("_Icon", "plus")
+                            <span>Create endpoint</span>
+                        </a>
+                        <a class="action-menu__item" asp-action="ArchiveEndpoints">
+                            @await Html.PartialAsync("_Icon", "archive")
+                            <span>Archive endpoint</span>
+                        </a>
+                        @if (Model.CanPurge)
+                        {
+                            <hr class="action-menu__separator" />
+                            <a class="action-menu__item action-menu__item--danger" asp-action="DeleteEndpoints">
+                                @await Html.PartialAsync("_Icon", "trash")
+                                <span>Delete endpoint</span>
+                            </a>
+                        }
+                    </div>
+                </div>
             }
             <a class="button button--secondary" asp-controller="Registry" asp-action="Clients">View clients</a>
             <a class="button button--secondary" asp-controller="Registry" asp-action="Websites">View websites</a>
         </div>
     </div>
 
-    <form method="get" class="filter-bar" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push"
-          data-endpoint-filter-form>
+    <form method="get" class="filter-bar" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
         <div class="form-field">
             <label for="search">Search</label>
             <input id="search" name="search" type="search" value="@Model.Filter.Search" placeholder="URL, website or client" />
@@ -70,39 +86,12 @@
                 }
             </select>
         </div>
-        <div class="form-field">
-            <label for="enabled">Endpoint state</label>
-            <select id="enabled" name="enabled">
-                <option value="">Any state</option>
-                <option value="true" selected="@(Model.Filter.Enabled == true)">Enabled</option>
-                <option value="false" selected="@(Model.Filter.Enabled == false)">Disabled</option>
-            </select>
-        </div>
-        <div class="form-field">
-            <label for="monitoringMode">Monitoring</label>
-            <select id="monitoringMode" name="monitoringMode">
-                <option value="">Any mode</option>
-                <option value="@EndpointMonitoringMode.Scheduled" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.Scheduled)">Monitored</option>
-                <option value="@EndpointMonitoringMode.Paused" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.Paused)">Paused</option>
-                <option value="@EndpointMonitoringMode.ManualOnly" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.ManualOnly)">Manual only</option>
-                <option value="@EndpointMonitoringMode.Disabled" selected="@(Model.Filter.MonitoringMode == EndpointMonitoringMode.Disabled)">Disabled</option>
-            </select>
-        </div>
-        <div class="form-field">
-            <label for="groupBy">Group results</label>
-            <select id="groupBy" name="groupBy">
-                <option value="@EndpointRegistryGroupings.None" selected="@(Model.Grouping == EndpointRegistryGroupings.None)">No grouping</option>
-                <option value="@EndpointRegistryGroupings.Client" selected="@(Model.Grouping == EndpointRegistryGroupings.Client)">Client</option>
-                <option value="@EndpointRegistryGroupings.Website" selected="@(Model.Grouping == EndpointRegistryGroupings.Website)">Website</option>
-                <option value="@EndpointRegistryGroupings.Environment" selected="@(Model.Grouping == EndpointRegistryGroupings.Environment)">Environment</option>
-            </select>
-        </div>
         <div class="filter-bar__actions">
             <button class="button button--primary" type="submit">
                 @await Html.PartialAsync("_Icon", "filter")
                 <span>Apply filters</span>
             </button>
-            @if (hasViewOptions)
+            @if (Model.Filter.HasValues)
             {
                 <a class="button button--secondary" asp-action="Endpoints" data-ajax-link data-ajax-target="#ajax-page">
                     @await Html.PartialAsync("_Icon", "close")
@@ -112,46 +101,13 @@
         </div>
     </form>
 
-    <div class="inventory-view-tools" data-endpoint-saved-views>
-        <div class="inventory-view-tools__copy">
-            <strong>Saved views</strong>
-            <span>Keep named filter and grouping combinations on this browser.</span>
-        </div>
-        <div class="inventory-view-tools__controls">
-            <div class="form-field">
-                <label for="endpoint-view-name">View name</label>
-                <input id="endpoint-view-name" type="text" maxlength="40"
-                       placeholder="For example, paused production" data-endpoint-view-name />
-            </div>
-            <button class="button button--secondary" type="button" data-endpoint-view-save>
-                @await Html.PartialAsync("_Icon", "check")
-                <span>Save current</span>
-            </button>
-            <div class="form-field">
-                <label for="endpoint-saved-view">Open saved view</label>
-                <select id="endpoint-saved-view" data-endpoint-view-select>
-                    <option value="">Choose a saved view</option>
-                </select>
-            </div>
-            <button class="button button--secondary" type="button" data-endpoint-view-open disabled>
-                @await Html.PartialAsync("_Icon", "arrow-right")
-                <span>Open</span>
-            </button>
-            <button class="button button--secondary" type="button" data-endpoint-view-remove disabled>
-                @await Html.PartialAsync("_Icon", "trash")
-                <span>Remove</span>
-            </button>
-        </div>
-        <p class="visually-hidden" aria-live="polite" data-endpoint-view-status></p>
-    </div>
-
     @if (Model.Endpoints.Count == 0)
     {
         @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
             "No endpoints found",
             !Model.Filter.HasValues
                 ? "No endpoint records are available within your current access scope."
-                : "No endpoints match these filters. Widen the hierarchy, state or monitoring selection.",
+                : "No endpoints match these filters. Widen the search or hierarchy selection.",
             "registry"))
     }
     else
@@ -170,17 +126,8 @@
                         <th><span class="visually-hidden">Actions</span></th>
                     </tr>
                 </thead>
-                @foreach (var group in endpointGroups)
-                {
-                    var groupCount = group.Count();
-                    <tbody>
-                    @if (Model.Grouping != EndpointRegistryGroupings.None)
-                    {
-                        <tr class="data-table__group">
-                            <th colspan="7" scope="rowgroup">@group.Key <span>@groupCount endpoint@(groupCount == 1 ? null : "s")</span></th>
-                        </tr>
-                    }
-                    @foreach (var endpoint in group)
+                <tbody>
+                    @foreach (var endpoint in Model.Endpoints)
                     {
                         <tr>
                             <td data-label="Endpoint" class="target-url">@endpoint.DisplayUrl</td>
@@ -196,8 +143,7 @@
                             </td>
                         </tr>
                     }
-                    </tbody>
-                }
+                </tbody>
             </table>
         </div>
     }

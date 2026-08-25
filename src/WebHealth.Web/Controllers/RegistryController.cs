@@ -27,7 +27,8 @@ public sealed class RegistryController(
             [],
             RegistryCanManage(access),
             [],
-            null));
+            null,
+            User.IsInRole(ApplicationRoles.Administrator)));
     }
 
     [HttpGet]
@@ -39,7 +40,44 @@ public sealed class RegistryController(
             await registryReader.ListWebsitesAsync(access, tagId, cancellationToken),
             RegistryCanManage(access),
             await registryReader.ListTagsAsync(access, cancellationToken),
-            tagId));
+            tagId,
+            User.IsInRole(ApplicationRoles.Administrator)));
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
+    public async Task<IActionResult> ArchiveClients(CancellationToken cancellationToken) =>
+        View(RegistryActionScreens.ViewName, BuildClientScreen(
+            await registryReader.ListClientsAsync(GetAccess(), cancellationToken),
+            destructive: false));
+
+    [Authorize(Policy = AuthorizationPolicies.Administration), HttpGet]
+    public async Task<IActionResult> DeleteClients(CancellationToken cancellationToken)
+    {
+        var access = GetAccess();
+        return View(RegistryActionScreens.ViewName, BuildClientScreen(
+            RegistryActionScreens.Merge(
+                await registryReader.ListClientsAsync(access, cancellationToken),
+                await registryReader.ListDeletedClientsAsync(access, cancellationToken),
+                client => client.Name),
+            destructive: true));
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
+    public async Task<IActionResult> ArchiveWebsites(CancellationToken cancellationToken) =>
+        View(RegistryActionScreens.ViewName, BuildWebsiteScreen(
+            await registryReader.ListWebsitesAsync(GetAccess(), cancellationToken: cancellationToken),
+            destructive: false));
+
+    [Authorize(Policy = AuthorizationPolicies.Administration), HttpGet]
+    public async Task<IActionResult> DeleteWebsites(CancellationToken cancellationToken)
+    {
+        var access = GetAccess();
+        return View(RegistryActionScreens.ViewName, BuildWebsiteScreen(
+            RegistryActionScreens.Merge(
+                await registryReader.ListWebsitesAsync(access, cancellationToken: cancellationToken),
+                await registryReader.ListDeletedWebsitesAsync(access, cancellationToken),
+                website => $"{website.ClientName} {website.Name}"),
+            destructive: true));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -48,8 +86,7 @@ public sealed class RegistryController(
         var access = GetAccess();
         return View(new RegistryArchiveViewModel(
             await registryReader.ListDeletedClientsAsync(access, cancellationToken),
-            await registryReader.ListDeletedWebsitesAsync(access, cancellationToken),
-            User.IsInRole(ApplicationRoles.Administrator)));
+            await registryReader.ListDeletedWebsitesAsync(access, cancellationToken)));
     }
 
     [HttpGet]
@@ -277,22 +314,27 @@ public sealed class RegistryController(
     public Task<IActionResult> RestoreWebsite(Guid id, long version, CancellationToken cancellationToken) =>
         ChangeWebsiteStateAsync(id, version, websiteService.RestoreAsync, "Website restored in a disabled state.", cancellationToken);
 
-    [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
-    public async Task<IActionResult> PurgeWebsite(Guid id, long version, CancellationToken cancellationToken)
-    {
-        var result = await websiteService.PurgeAsync(new(id, version), GetAccess(), cancellationToken);
-        if (result.Status == RegistryMutationStatus.NotFound)
-        {
-            return this.NotFoundRecord("website");
-        }
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
+    public Task<IActionResult> ArchiveClient(Guid id, long version, CancellationToken cancellationToken) =>
+        RunScreenActionAsync(id, version, clientService.DeleteAsync, "client", nameof(ArchiveClients),
+            "Client archived with every website, environment and endpoint beneath it.", cancellationToken);
 
-        TempData.AddFlashMessage(
-            result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
-            result.Succeeded
-                ? "Website permanently deleted with its environments, endpoints and monitoring history."
-                : string.Join(" ", result.Errors));
-        return RedirectToAction(nameof(Archived));
-    }
+    [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
+    public Task<IActionResult> PurgeClient(Guid id, long version, CancellationToken cancellationToken) =>
+        RunScreenActionAsync(id, version, clientService.PurgeAsync, "client", nameof(DeleteClients),
+            "Client permanently deleted with every website, environment, endpoint and monitoring record beneath it.",
+            cancellationToken);
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
+    public Task<IActionResult> ArchiveWebsite(Guid id, long version, CancellationToken cancellationToken) =>
+        RunScreenActionAsync(id, version, websiteService.DeleteAsync, "website", nameof(ArchiveWebsites),
+            "Website archived with every environment and endpoint beneath it.", cancellationToken);
+
+    [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
+    public Task<IActionResult> PurgeWebsite(Guid id, long version, CancellationToken cancellationToken) =>
+        RunScreenActionAsync(id, version, websiteService.PurgeAsync, "website", nameof(DeleteWebsites),
+            "Website permanently deleted with every environment, endpoint and monitoring record beneath it.",
+            cancellationToken);
 
     private RegistryAccessContext GetAccess()
     {
@@ -363,6 +405,87 @@ public sealed class RegistryController(
             result.Status == RegistryMutationStatus.ConcurrencyConflict
                 ? StatusCodes.Status409Conflict
                 : StatusCodes.Status422UnprocessableEntity);
+    }
+
+    private static RegistryActionScreenViewModel BuildClientScreen(
+        IReadOnlyList<ClientListItem> clients,
+        bool destructive) => new(
+        destructive ? "Delete clients" : "Archive clients",
+        destructive
+            ? "Permanent deletion removes the client with every website, environment, endpoint and monitoring record beneath it. Archived and active clients are both listed."
+            : "Archiving hides the client from active lists and archives every website, environment and endpoint beneath it.",
+        "Client",
+        ["Owner", "Websites"],
+        clients.Select(client => new RegistryActionRow(
+            client.Id,
+            client.Version,
+            client.Name,
+            $"Version {client.Version}",
+            [client.OwnerName, $"{client.VisibleWebsiteCount}"],
+            client.IsDeleted ? "Archived" : client.IsActive ? "Active" : "Disabled",
+            RegistryActionScreens.Tone(client.IsDeleted, client.IsActive))).ToArray(),
+        destructive ? nameof(PurgeClient) : nameof(ArchiveClient),
+        nameof(Client),
+        destructive ? "Delete permanently" : "Archive",
+        destructive ? "trash" : "archive",
+        destructive,
+        destructive
+            ? "Permanently delete {0} with every website, environment, endpoint and monitoring record beneath it? This cannot be undone."
+            : "Archive {0}? Every website, environment and endpoint beneath it is archived too and monitoring stops.",
+        destructive ? "No clients to delete" : "No clients to archive",
+        "No client records are available within your current access scope.",
+        nameof(Clients),
+        "Back to clients");
+
+    private static RegistryActionScreenViewModel BuildWebsiteScreen(
+        IReadOnlyList<WebsiteListItem> websites,
+        bool destructive) => new(
+        destructive ? "Delete websites" : "Archive websites",
+        destructive
+            ? "Permanent deletion removes the website with every environment, endpoint and monitoring record beneath it. Archived and active websites are both listed."
+            : "Archiving hides the website from active lists and archives every environment and endpoint beneath it.",
+        "Website",
+        ["Client", "Owner", "Environments"],
+        websites.Select(website => new RegistryActionRow(
+            website.Id,
+            website.Version,
+            website.Name,
+            website.TechnologyCms ?? "Technology not set",
+            [website.ClientName, website.OwnerName, $"{website.ActiveEnvironmentCount} active"],
+            website.IsDeleted ? "Archived" : website.IsEnabled ? "Enabled" : "Disabled",
+            RegistryActionScreens.Tone(website.IsDeleted, website.IsEnabled))).ToArray(),
+        destructive ? nameof(PurgeWebsite) : nameof(ArchiveWebsite),
+        nameof(Website),
+        destructive ? "Delete permanently" : "Archive",
+        destructive ? "trash" : "archive",
+        destructive,
+        destructive
+            ? "Permanently delete {0} with every environment, endpoint and monitoring record beneath it? This cannot be undone."
+            : "Archive {0}? Every environment and endpoint beneath it is archived too and monitoring stops.",
+        destructive ? "No websites to delete" : "No websites to archive",
+        "No website records are available within your current access scope.",
+        nameof(Websites),
+        "Back to websites");
+
+    private async Task<IActionResult> RunScreenActionAsync(
+        Guid id,
+        long version,
+        Func<RegistryVersionCommand, RegistryAccessContext, CancellationToken, Task<RegistryMutationResult>> operation,
+        string noun,
+        string screenAction,
+        string successMessage,
+        CancellationToken cancellationToken)
+    {
+        var result = await operation(new(id, version), GetAccess(), cancellationToken);
+        if (result.Status == RegistryMutationStatus.NotFound)
+        {
+            return this.NotFoundRecord(noun);
+        }
+
+        TempData.AddFlashMessage(
+            result.Succeeded ? FlashLevel.Success : FlashLevel.Error,
+            result.Succeeded ? successMessage : string.Join(" ", result.Errors));
+        return RedirectToAction(screenAction);
     }
 
     private async Task<IActionResult> ChangeClientStateAsync(

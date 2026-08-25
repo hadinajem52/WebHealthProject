@@ -24,7 +24,7 @@ public enum EndpointTestBlock
     NotVisible,
     NotPermitted,
     EndpointDisabled,
-    EnvironmentInactive,
+    EnvironmentArchived,
     WebsiteDisabled,
     ClientInactive,
     NoMonitor,

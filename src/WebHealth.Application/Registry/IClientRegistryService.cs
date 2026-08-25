@@ -22,6 +22,11 @@ public interface IClientRegistryService
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
+    Task<RegistryMutationResult> PurgeAsync(
+        RegistryVersionCommand command,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
     Task<RegistryMutationResult> RestoreAsync(
         RegistryVersionCommand command,
         RegistryAccessContext access,

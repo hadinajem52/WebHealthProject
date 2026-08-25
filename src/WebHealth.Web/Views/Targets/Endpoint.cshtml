@@ -136,20 +136,6 @@
                                     <span>Restore endpoint</span>
                                 </button>
                             </form>
-                            @if (Model.CanPurge)
-                            {
-                                <hr class="action-menu__separator" />
-                                <form asp-action="PurgeEndpoint"
-                                      method="post"
-                                      data-shell-confirm="Permanently delete this endpoint and all of its checks, results, SEO observations, crawls, incidents and notifications? This cannot be undone.">
-                                    <input type="hidden" name="id" value="@Model.Endpoint.Id" />
-                                    <input type="hidden" name="version" value="@Model.Endpoint.Version" />
-                                    <button class="action-menu__item action-menu__item--danger" type="submit">
-                                        @await Html.PartialAsync("_Icon", "trash")
-                                        <span>Delete permanently</span>
-                                    </button>
-                                </form>
-                            }
                         }
                         else
                         {
@@ -184,6 +170,21 @@
                                 <button class="action-menu__item action-menu__item--danger" type="submit">
                                     @await Html.PartialAsync("_Icon", "archive")
                                     <span>Archive endpoint</span>
+                                </button>
+                            </form>
+                        }
+
+                        @if (Model.CanPurge)
+                        {
+                            <hr class="action-menu__separator" />
+                            <form asp-action="PurgeEndpoint"
+                                  method="post"
+                                  data-shell-confirm="Permanently delete this endpoint and all of its checks, results, SEO observations, crawls, incidents and notifications? This cannot be undone.">
+                                <input type="hidden" name="id" value="@Model.Endpoint.Id" />
+                                <input type="hidden" name="version" value="@Model.Endpoint.Version" />
+                                <button class="action-menu__item action-menu__item--danger" type="submit">
+                                    @await Html.PartialAsync("_Icon", "trash")
+                                    <span>Delete permanently</span>
                                 </button>
                             </form>
                         }
