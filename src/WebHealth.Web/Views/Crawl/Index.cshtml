@@ -11,17 +11,12 @@
 }
 
 <div id="ajax-page" class="stack" data-ajax-region data-run-scope="#crawl-results">
-    @* No card title here: the page heading already reads "Broken links". This card is the
-       control that scopes everything below it, so it carries the explanation and the picker. *@
     <section class="card" aria-labelledby="crawl-scope-label">
         <p class="card__subtitle" id="crawl-scope-label">
             Crawl history for one endpoint, and how its latest full-scope crawl compares to the
             one before it.
         </p>
 
-        @* Two forms, one row: picking an endpoint is a GET and starting a crawl is a POST, so
-           they cannot share a form element. The row is the flex container and each form is an
-           item in it. *@
         <div class="filter-inline filter-inline--wide">
             <form method="get" class="filter-inline__group" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
                 <div class="form-field">
@@ -40,13 +35,6 @@
                 </button>
             </form>
 
-            @* The selection has to be one the picker actually lists. An endpointId in the query
-               string that resolves to nothing leaves the select showing its placeholder, and a
-               Run crawl button beside a picker reading "Select an endpoint" offers to crawl
-               something the page cannot name. *@
-            @* The action is a region of its own because the poller swaps it: a crawl that finished
-               while the page sat open must not leave "Crawl in progress" beside a run that has
-               stopped. It is display: contents, so it adds no box to the row. *@
             <div id="crawl-run-action" class="filter-inline__action">
                 @if (Model.SelectedEndpointId is { } runTarget
                     && Model.CanRunNow
@@ -54,8 +42,6 @@
                 {
                     @if (Model.ActiveRunId is { } activeRunId)
                     {
-                        @* One crawl per endpoint is a database constraint, so a second press could
-                           only be refused. Offer the run that is already going instead. *@
                         <a class="button button--secondary" asp-action="Run" asp-route-id="@activeRunId">
                             @await Html.PartialAsync("_Spinner", $"crawl-action-{activeRunId}")
                             <span>Crawl in progress</span>
@@ -80,7 +66,6 @@
             </div>
         </div>
 
-        @* A missing Run crawl button reads as a defect unless the page says what is missing. *@
         @if (Model.SelectedEndpointId is { } blockedTarget && !Model.CanRunNow && Model.ActiveRunId is null)
         {
             var blockedReason = Model.CrawlingAvailable
@@ -102,9 +87,6 @@
         }
     </section>
 
-    @* Everything a running crawl changes lives in here, so the poller can replace it without
-       touching the endpoint picker above: replacing a select the reader is using would close
-       its dropdown and discard an unsubmitted choice. *@
     <div id="crawl-results"
          class="stack"
          data-run-status
@@ -177,8 +159,6 @@
                                         <span class="history-cell__time">@Html.Timestamp(run.StartedAt)</span>
                                     </span>
                                 </td>
-                                @* The stop reason was its own column of long sentences. It is what
-                                   the status means, so it belongs behind the status badge. *@
                                 <td data-label="Status">
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                         CrawlRunDisplay.StatusTone(run),
@@ -226,9 +206,6 @@
             }
             else
             {
-                @* Was a <div class="registry-facts"> holding bare <dt>/<dd> pairs, which are only
-                   valid inside a <dl>. The detail list is a real list, so the markup now matches
-                   what it claims to be. *@
                 <div class="detail-list">
                     <div class="detail-list__head" aria-hidden="true">
                         <span>Subject</span>
@@ -274,9 +251,6 @@
                     </ul>
                 </div>
 
-                @* Four stacked headings each followed by a table made one card scroll for pages.
-                   Each bucket is now a disclosure, open only when it holds something that needs
-                   acting on, so the card opens at the size of what changed. *@
                 @foreach (var bucket in new[]
                 {
                     ("New broken links", comparison.New, "These were not broken in the previous crawl.", StatusBadges.Danger, true),

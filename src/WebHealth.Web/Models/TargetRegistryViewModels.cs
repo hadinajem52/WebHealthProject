@@ -93,8 +93,6 @@ public sealed class EndpointFormViewModel
     [Display(Name = "Monitoring interval override (minutes)")]
     public int? IntervalMinutesOverride { get; set; }
 
-    // BR-P02. Left blank, the endpoint uses the documented 1,500 / 3,000 ms budget; the
-    // registry service rejects one value without the other.
     [Range(ResponseThresholdOverride.MinimumMs, ResponseThresholdOverride.MaximumMs,
         ErrorMessage = "Enter between {1} and {2} milliseconds, or leave blank for the 1,500 ms default.")]
     [Display(Name = "Slow-response warning threshold (ms)")]
@@ -105,12 +103,10 @@ public sealed class EndpointFormViewModel
     [Display(Name = "Slow-response critical threshold (ms)")]
     public int? CriticalThresholdMsOverride { get; set; }
 
-    // BR-E04: blank means the endpoint's own host is the expected canonical host.
     [StringLength(253, ErrorMessage = "A host name cannot be longer than 253 characters.")]
     [Display(Name = "Expected canonical host")]
     public string? SeoExpectedCanonicalHost { get; set; }
 
-    // BR-E05 and BR-E09 as one setting; Default resolves from the environment.
     [Required(ErrorMessage = "Select an indexing expectation from the list.")]
     [Display(Name = "Indexing expectation")]
     public string SeoIndexingExpectation { get; set; } = SeoIndexingExpectations.Default;
@@ -118,8 +114,6 @@ public sealed class EndpointFormViewModel
     [Display(Name = "Require a meta description")]
     public bool SeoDescriptionRequired { get; set; } = true;
 
-    // Enabling this sends the endpoint URL to Google and asks Google to load it, which is why
-    // the form states that beside the switch rather than only in documentation.
     [Display(Name = "Enable Google PageSpeed audits")]
     public bool PageAuditEnabled { get; set; }
 

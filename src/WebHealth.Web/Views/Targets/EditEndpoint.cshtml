@@ -11,12 +11,9 @@
         new BreadcrumbItem("Edit endpoint"));
 }
 
-@* No card title: the page heading already reads "Edit endpoint", and repeating it costs a line
-   the reader has to skip past to reach the first field. *@
+
 <section class="card form-card" aria-labelledby="edit-endpoint-label">
-    @* Names the endpoint being edited. "The original version protects concurrent configuration
-       changes" was the whole subtitle: an implementation note, in the one place that should say
-       which record is about to change. *@
+    
     <p class="card__subtitle" id="edit-endpoint-label">
         Changing <span class="target-url">@Model.Url</span> in
         <strong>@Model.WebsiteName / @Model.EnvironmentName</strong>. If someone else saves this

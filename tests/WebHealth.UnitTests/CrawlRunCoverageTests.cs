@@ -5,14 +5,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// Phase 6. What "covered the whole scope" is allowed to mean.
-/// <para>
-/// These exist because a robots-disallowed crawl reproduced the failure the comparison was built
-/// to prevent: it drained its frontier without fetching a page, counted as full scope, became the
-/// baseline, and reported every previously broken link as resolved.
-/// </para>
-/// </summary>
 public sealed class CrawlRunCoverageTests
 {
     private static CrawlRunSummary Run(
@@ -34,11 +26,6 @@ public sealed class CrawlRunCoverageTests
         run.CoveredWholeScope.Should().BeTrue();
     }
 
-    /// <summary>
-    /// The regression. Every request was refused — robots disallowing the origin, or no authorized
-    /// target — so the frontier drained with nothing fetched. The stop reason alone cannot tell
-    /// that apart from a real sweep, which is why the page count is part of the test.
-    /// </summary>
     [Fact]
     public void RunRefusedAtEveryDoor_DidNotCoverTheWholeScope()
     {
@@ -49,13 +36,6 @@ public sealed class CrawlRunCoverageTests
             + "a clean result or as a comparison baseline");
     }
 
-    /// <summary>
-    /// The same regression one step further in. This run fetched pages and drained its frontier,
-    /// so every earlier test passes it — and some of what it fetched could not be read, so the
-    /// links those pages carry are missing from it. Absence is what the comparison reads as
-    /// resolved, which is why coverage is its own fact rather than something inferred from the
-    /// stop reason and the page count.
-    /// </summary>
     [Fact]
     public void RunThatCouldNotReadEveryPage_DidNotCoverTheWholeScope()
     {

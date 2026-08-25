@@ -2,9 +2,6 @@ using WebHealth.Domain.Seo;
 
 namespace WebHealth.Application.Seo;
 
-/// <summary>
-/// The bytes are the ones the transport already read; nothing here fetches anything.
-/// </summary>
 public sealed record SeoExtractionInput(
     bool TransportSucceeded,
     int? StatusCode,
@@ -13,10 +10,6 @@ public sealed record SeoExtractionInput(
     bool BodyTruncated,
     ReadOnlyMemory<byte> Body);
 
-/// <summary>
-/// BR-E10: extracted values and their observed lengths only. There is deliberately no member that
-/// can carry the document, so no caller can persist or log one through this contract.
-/// </summary>
 public sealed record SeoExtraction(
     string Applicability,
     string? NotApplicableReason,

@@ -1,28 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Domain.PageAudits;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.PageAudits;
 
-/// <summary>
-/// Creates and updates an endpoint's page-audit target inside the endpoint's own transaction.
-/// </summary>
-/// <remarks>
-/// It lives beside the endpoint mutation rather than behind a separate call because the two must
-/// commit together. A target row enabled by a transaction that then rolled back would schedule
-/// audits for a configuration nobody saved.
-/// </remarks>
 internal static class PageAuditConfiguration
 {
-    /// <summary>
-    /// Why this configuration cannot be saved, or null.
-    /// </summary>
-    /// <remarks>
-    /// Eligibility is checked at configuration time as well as at dispatch. Refusing here is what
-    /// lets an operator find out that an internal URL cannot be audited while they are looking at
-    /// the form, rather than a day later from a failed run.
-    /// </remarks>
     public static string? Validate(
         bool enabled,
         bool schedulingEnabled,
@@ -50,17 +34,6 @@ internal static class PageAuditConfiguration
         return eligibility.IsEligible ? null : Describe(eligibility.Reason);
     }
 
-    /// <summary>
-    /// Brings the endpoint's target row into line with the submitted configuration, and returns
-    /// whether anything changed so the caller can decide what to record.
-    /// </summary>
-    /// <remarks>
-    /// One row per form factor, kept in step by the same submission: an endpoint is audited on
-    /// mobile and on desktop, and the two scores are only comparable when both were configured
-    /// the same way. A disabled target is kept rather than deleted. Deleting it would orphan the
-    /// run history that references it, and switching the feature off is not a request to forget
-    /// every score it ever produced.
-    /// </remarks>
     public static async Task<bool> ApplyAsync(
         ApplicationDbContext dbContext,
         Guid endpointId,
@@ -105,11 +78,6 @@ internal static class PageAuditConfiguration
         return changed;
     }
 
-    /// <summary>
-    /// One form factor's row. The strategies share every setting the form collects, so the loop
-    /// above applies the same configuration to each rather than the page asking twice for a
-    /// cadence that would only ever be answered the same way.
-    /// </summary>
     private static bool ApplyProfile(
         ApplicationDbContext dbContext,
         Guid endpointId,
@@ -123,8 +91,6 @@ internal static class PageAuditConfiguration
     {
         if (target is null)
         {
-            // Nothing to store for an endpoint that never had the feature turned on: an empty row
-            // would put every endpoint in the scheduler's table for no reason.
             if (!enabled)
             {
                 return false;
@@ -142,8 +108,6 @@ internal static class PageAuditConfiguration
                 IntervalSeconds = intervalSeconds,
                 ScheduleAnchor = now,
 
-                // Due immediately, so enabling the feature produces a score to look at rather than
-                // a promise of one tomorrow.
                 NextDueAt = now,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -160,8 +124,6 @@ internal static class PageAuditConfiguration
             return false;
         }
 
-        // A cadence change re-anchors, so the new interval counts from now rather than from an
-        // anchor set when the endpoint was created.
         if (target.IntervalSeconds != intervalSeconds)
         {
             target.IntervalSeconds = intervalSeconds;
@@ -169,8 +131,6 @@ internal static class PageAuditConfiguration
             target.NextDueAt = MonitorCadence.GetFirstSlotAfter(now, intervalSeconds, now);
         }
 
-        // Scheduling resumed after a pause runs at the next slot, not immediately: resuming is not
-        // a request for a fresh audit, and treating it as one would spend quota on every toggle.
         if (!target.SchedulingEnabled && schedulingEnabled)
         {
             target.NextDueAt = MonitorCadence.GetFirstSlotAfter(
@@ -184,15 +144,11 @@ internal static class PageAuditConfiguration
         return true;
     }
 
-    /// <summary>The current configuration for a reader, or the defaults when there is none.</summary>
     public static async Task<PageAuditConfigurationState> ReadAsync(
         ApplicationDbContext dbContext,
         Guid endpointId,
         CancellationToken cancellationToken)
     {
-        // Read from one row rather than all of them: every strategy carries the configuration the
-        // form submitted, so they agree by construction, and an endpoint configured before the
-        // desktop strategy existed still has the mobile row this finds.
         var target = await dbContext.PageAuditTargets.AsNoTracking()
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.Provider == PageAuditProviders.PageSpeedInsights)

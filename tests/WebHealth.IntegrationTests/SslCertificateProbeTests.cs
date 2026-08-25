@@ -12,11 +12,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// Controlled-TLS coverage for the certificate probe: every category BR-C03 requires is
-/// produced against a real handshake, and every one of them is produced without the probe ever
-/// accepting the certificate (BR-Q04).
-/// </summary>
 public sealed class SslCertificateProbeTests
 {
     [Fact]
@@ -44,8 +39,6 @@ public sealed class SslCertificateProbeTests
         observed.SubjectAlternativeNames.Should().Equal("allowed.test");
         observed.HostnameMatched.Should().BeTrue();
 
-        // Self-signed: the hostname matches and the dates are fine, so the only remaining
-        // problem is trust.
         observed.ChainTrusted.Should().BeFalse();
         observed.ValidationCategory.Should().Be(TlsValidationCategory.Untrusted);
     }
@@ -109,18 +102,12 @@ public sealed class SslCertificateProbeTests
         await server.Completed;
         server.ContactCount.Should().Be(1);
 
-        // Under TLS 1.3 the server can consider its own side of the handshake complete before
-        // the client's rejection alert arrives, so the server-side handshake result proves
-        // nothing. What matters is that the client rejected the certificate and therefore
-        // never sent a single application byte over the connection.
         server.ApplicationDataObserved.Should().BeFalse();
     }
 
     [Fact]
     public async Task ProbeAsync_ReportsHandshakeFailureWhenTheTargetDropsTheConnection()
     {
-        // The socket connected, so the failure belongs to the handshake phase even though the
-        // platform surfaces it as a dropped stream rather than an authentication error.
         await using var server = await TlsServerFixture.StartClosing();
 
         var result = await CreateProbe().ProbeAsync(
@@ -145,8 +132,6 @@ public sealed class SslCertificateProbeTests
     [Fact]
     public async Task ProbeAsync_ReportsHandshakeFailureWhenNoCertificateIsPresented()
     {
-        // A server that refuses the handshake outright — no matching cipher or protocol, or
-        // an unknown SNI name — never presents a certificate to categorise.
         await using var server = await TlsServerFixture.StartRefusingHandshake();
 
         var result = await CreateProbe().ProbeAsync(
@@ -351,8 +336,6 @@ public sealed class SslCertificateProbeTests
 
                 if (_behavior is ServerBehavior.RefuseHandshake)
                 {
-                    // A fatal TLS "handshake_failure" alert, which is what a real server sends
-                    // when it cannot agree on a protocol, cipher or name.
                     await client.GetStream().WriteAsync(
                         new byte[] { 0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28 }, _stop.Token);
                     return;

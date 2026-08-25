@@ -1,13 +1,8 @@
-﻿using WebHealth.Application.Seo;
+using WebHealth.Application.Seo;
 using WebHealth.Domain.Seo;
 
 namespace WebHealth.Web.Models;
 
-/// <summary>
-/// The SEO list. The filter values are echoed back so the form keeps its state, but they are only
-/// ever *displayed* here — the reader applied them in the database, and nothing on this page
-/// re-filters what it was handed.
-/// </summary>
 public sealed record SeoListViewModel(
     SeoListPage Results,
     string? Applicability,
@@ -16,12 +11,6 @@ public sealed record SeoListViewModel(
     string? Subject,
     string FilterSummary)
 {
-    /// <summary>
-    /// Whether the request narrowed the list at all. An empty result means something different in
-    /// each case — "nothing matched what you asked for" against "nothing has been observed yet" —
-    /// and telling a reader to relax filters they never set sends them looking for a control that
-    /// is already cleared.
-    /// </summary>
     public bool HasFilters =>
         !string.IsNullOrWhiteSpace(Applicability)
         || !string.IsNullOrWhiteSpace(Environment)
@@ -38,18 +27,11 @@ public sealed record SeoListViewModel(
         if (!string.IsNullOrWhiteSpace(applicability)) parts.Add(applicability);
         if (environment == SeoQuery.Production) parts.Add("production only");
         if (environment == SeoQuery.NonProduction) parts.Add("non-production only");
-        // The subject is the narrower statement, so it replaces the general one rather than
-        // reading as two conditions: "with SEO findings, with robots findings" says one thing
-        // twice.
         if (!string.IsNullOrWhiteSpace(subject)) parts.Add($"with {subject.ToLowerInvariant()} findings");
         else if (problemsOnly) parts.Add("with SEO findings");
         return parts.Count == 0 ? "All endpoints" : string.Join(", ", parts);
     }
 
-    /// <summary>
-    /// What the environment expects of this page, resolved the same way the rules resolve it, so
-    /// the column and the finding cannot disagree.
-    /// </summary>
     public static string DescribeExpectation(SeoListItem item)
     {
         ArgumentNullException.ThrowIfNull(item);

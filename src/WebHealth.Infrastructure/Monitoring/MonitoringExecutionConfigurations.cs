@@ -135,9 +135,6 @@ internal sealed class CertificateObservationConfiguration
         builder.HasIndex(observation => new { observation.EndpointMonitorId, observation.ObservedAt })
             .IsDescending(false, true);
         builder.HasIndex(observation => observation.Sha256Fingerprint);
-        // The composite key stops an observation from claiming a logical check that belongs to
-        // one monitor while pointing at another; the application writes matching values, and
-        // this makes the database refuse anything else.
         builder.HasOne(observation => observation.LogicalCheck).WithOne()
             .HasForeignKey<CertificateObservation>(observation =>
                 new { observation.LogicalCheckId, observation.EndpointMonitorId })
@@ -209,12 +206,6 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
         builder.Property(result => result.SafeDiagnostic).HasMaxLength(200);
         builder.HasIndex(result => new { result.MeasuredAt, result.LogicalCheckId });
         builder.HasIndex(result => result.MaintenanceOccurrenceId);
-        // The reporting index: every aggregate asks for one set of monitors over one window, so
-        // both halves of the predicate are leading columns here. The payload columns are included
-        // so the index carries everything the aggregates read, which lets PostgreSQL choose an
-        // index-only scan when the visibility map permits one; the captured plans show it
-        // choosing a bitmap heap scan over this index on a freshly loaded table, which is the
-        // normal outcome before the pages are all-visible.
         builder.HasIndex(result => new { result.EndpointMonitorId, result.MeasuredAt })
             .IncludeProperties(result => new
             {

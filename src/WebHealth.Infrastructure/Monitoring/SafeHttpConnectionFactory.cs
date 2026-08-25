@@ -22,10 +22,6 @@ internal static class SafeHttpConnectionFactory
             MaxResponseHeadersLength = options.MaxResponseHeadersKilobytes,
             PooledConnectionLifetime = TimeSpan.Zero,
             PooledConnectionIdleTimeout = TimeSpan.Zero,
-            // Fires once the connection is ready to carry HTTP: right after TCP connect for
-            // plain HTTP, or right after the TLS handshake completes for HTTPS. Unlike
-            // ConnectCallback, its context carries the same InitialRequestMessage, so this is
-            // the correlated hook for "handshake done" timing rather than a global callback.
             PlaintextStreamFilter = (context, _) =>
             {
                 if (context.InitialRequestMessage.RequestUri?.Scheme == Uri.UriSchemeHttps)
@@ -64,19 +60,11 @@ internal static class SafeHttpConnectionFactory
         }
     }
 
-    /// <summary>
-    /// This filter only runs after a fully validated handshake, so the certificate recorded
-    /// here is by definition trusted and hostname-matched: the availability path never sees a
-    /// rejected certificate, and certificate validation stays untouched (BR-Q04). Evidence for
-    /// invalid certificates comes from <see cref="SslCertificateProbe" /> instead.
-    /// </summary>
     private static void RecordNegotiatedCertificate(HttpRequestMessage request, Stream plaintextStream)
     {
         if (plaintextStream is SslStream { RemoteCertificate: { } negotiated }
             && request.Options.TryGetValue(SafeHttpTlsOptions.Key, out var tls))
         {
-            // Copy the encoded certificate now: the instance is owned by the SslStream and is
-            // disposed with the connection, well before the result is assembled.
             tls.CertificateDer = negotiated.GetRawCertData();
         }
     }

@@ -16,46 +16,15 @@ using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// Phase 5 increment 5.7: representative data, query plans, and the NFR-02 dashboard baseline.
-/// </summary>
-/// <remarks>
-/// <para>
-/// Plans are captured with <c>auto_explain</c> rather than by running <c>EXPLAIN</c> over SQL
-/// copied into this file. The reporting layer issues a mixture of Entity Framework translations
-/// and raw aggregates, and a transcription of either would be evidence about the transcription
-/// rather than about the application: it could drift the moment the reader changed and nothing
-/// would fail. With <c>auto_explain</c> the plan recorded is the plan PostgreSQL chose for the
-/// statement the application actually sent.
-/// </para>
-/// <para>
-/// Plan capture and timing are separate passes. <c>auto_explain</c> with <c>log_analyze</c>
-/// instruments every node, which inflates the very durations NFR-02 is about, so the timing pass
-/// runs with it switched off.
-/// </para>
-/// </remarks>
 internal static class ReportingPerformanceBaseline
 {
-    // The fleet. Chosen to sit above what this project's own deployment would carry, so the
-    // headroom is measured rather than assumed, while staying inside the 5,000-monitor bound the
-    // query layer refuses to exceed.
     private const int ClientCount = 6;
     private const int WebsitesPerClient = 4;
     private const int EndpointsPerEnvironment = 2;
     private const int HistoryDays = 90;
 
-    /// <summary>
-    /// Iterations per scenario.
-    /// </summary>
-    /// <remarks>
-    /// Ten, which keeps a whole run inside about ten minutes on a developer machine. The
-    /// percentile index is <c>ceil(0.95 x n) - 1</c>, so at ten samples the reported P95 is the
-    /// slowest of the ten rather than an interpolated value. That reads high rather than low,
-    /// which is the right direction for a budget check: it cannot flatter a result into passing.
-    /// </remarks>
     private const int TimedIterations = 10;
 
-    /// <summary>NFR-02: the dashboard answers within three seconds.</summary>
     private static readonly TimeSpan DashboardBudget = TimeSpan.FromSeconds(3);
 
     private static readonly DateTimeOffset AsOf = new(2026, 8, 18, 0, 0, 0, TimeSpan.Zero);
@@ -77,8 +46,6 @@ internal static class ReportingPerformanceBaseline
             RenderEvidence(fixture, scenarios, plans, timings),
             new UTF8Encoding(false));
 
-        // NFR-02 is stated about the dashboard, so it is the dashboard scenarios that carry the
-        // budget; the export and the trend endpoint are recorded but not gated by it.
         foreach (var scenario in scenarios.Where(candidate => candidate.IsDashboard))
         {
             timings[scenario.Name].Percentile95.Should().BeLessThan(
@@ -88,16 +55,6 @@ internal static class ReportingPerformanceBaseline
         }
     }
 
-    /// <summary>
-    /// The measured services, connected the way the application connects.
-    /// </summary>
-    /// <remarks>
-    /// Pooling is forced on. The harness scripts disable it in their own connection string so a
-    /// database can be dropped and recreated between steps, but measuring through an unpooled
-    /// string would time a fresh TCP connection and authentication handshake for every statement
-    /// a screen issues - about two and a half seconds per dashboard here, none of which the
-    /// application pays. That would be a measurement of the harness.
-    /// </remarks>
     private static ServiceProvider BuildServices(string connectionString)
     {
         var pooled = new NpgsqlConnectionStringBuilder(connectionString) { Pooling = true }.ToString();
@@ -112,14 +69,7 @@ internal static class ReportingPerformanceBaseline
         return new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
     }
 
-    // ------------------------------------------------------------------ seeding
 
-    /// <summary>
-    /// The registry is built through the real services so the rows carry real fingerprints,
-    /// snapshots and monitor defaults; the history is written with set-based SQL because two
-    /// million samples through the change tracker would measure Entity Framework rather than
-    /// PostgreSQL.
-    /// </summary>
     private static async Task<BaselineFixture> SeedAsync(
         ServiceProvider services,
         string connectionString)
@@ -154,14 +104,10 @@ internal static class ReportingPerformanceBaseline
             for (var websiteIndex = 0; websiteIndex < WebsitesPerClient; websiteIndex++)
             {
                 var websiteName = $"Site {clientIndex:D2}-{websiteIndex:D2}";
-                // A website cannot be enabled before it has an active environment, so it is
-                // created disabled and enabled once its environments exist.
                 var website = await websiteService.CreateAsync(
                     new(client.EntityId!.Value, websiteName, ownerSubjectId, null, false, []), access);
                 Succeeded(website, "website");
 
-                // One production and one staging environment, so the fleet carries both default
-                // cadences: five minutes and fifteen.
                 foreach (var environmentType in new[] { EnvironmentTypes.Production, EnvironmentTypes.Staging })
                 {
                     var environment = await environmentService.CreateAsync(
@@ -201,7 +147,6 @@ internal static class ReportingPerformanceBaseline
             sampleCount);
     }
 
-    /// <summary>Fails with the service's own errors rather than with a bare false.</summary>
     private static void Succeeded(RegistryMutationResult result, string what) =>
         result.Succeeded.Should().BeTrue(
             "creating the baseline {0} must succeed, but it reported {1}: {2}",
@@ -209,12 +154,6 @@ internal static class ReportingPerformanceBaseline
             result.Status,
             string.Join("; ", result.Errors));
 
-    /// <summary>
-    /// A viewer scoped to one client. The administrator's plans never exercise the visibility
-    /// scope at all - <c>ApplyEndpointScope</c> short-circuits for global access - so measuring
-    /// only the administrator would leave the grant subqueries every other role pays for on the
-    /// critical path entirely unmeasured.
-    /// </summary>
     private static async Task<Guid> CreateViewerWithOneClientGrantAsync(
         AsyncServiceScope scope,
         ApplicationDbContext database,
@@ -248,14 +187,6 @@ internal static class ReportingPerformanceBaseline
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
-        // Two of the tables written below carry DEFERRABLE per-row constraint triggers, which
-        // queue one event per inserted row and settle them all at commit. That is the right
-        // design for the application, which inserts a handful of rows per check, and completely
-        // impractical for a bulk load of millions. The load therefore runs with replication role
-        // 'replica', which is PostgreSQL's own answer for this, and every invariant those
-        // triggers and the foreign keys enforce is re-checked as a set operation once the role is
-        // back to normal - see VerifyHistoryIntegrityAsync. Skipping the checks without
-        // re-running them would mean measuring queries over data that might not be valid.
         await ExecuteAsync(connection, "SET session_replication_role = replica;");
         try
         {
@@ -273,10 +204,6 @@ internal static class ReportingPerformanceBaseline
         }
         finally
         {
-            // Only if the connection survived. Restoring the role on a connection the server has
-            // already dropped throws, and that secondary failure replaces the one that actually
-            // explains the run - which is exactly how a cluster being recreated underneath this
-            // harness surfaced as a bare "Connection is not open".
             if (connection.State == System.Data.ConnectionState.Open)
             {
                 await ExecuteAsync(connection, "SET session_replication_role = origin;");
@@ -285,14 +212,9 @@ internal static class ReportingPerformanceBaseline
 
         await VerifyHistoryIntegrityAsync(connection);
 
-        // Without statistics, every plan below would be a plan for an empty table.
         await ExecuteAsync(connection, "ANALYZE;");
     }
 
-    /// <summary>
-    /// Re-establishes, as set operations, what the bypassed row triggers and foreign keys would
-    /// have enforced one row at a time.
-    /// </summary>
     private static async Task VerifyHistoryIntegrityAsync(NpgsqlConnection connection)
     {
         var invariants = new (string Description, string Sql)[]
@@ -345,14 +267,8 @@ internal static class ReportingPerformanceBaseline
         await command.ExecuteNonQueryAsync();
     }
 
-    /// <summary>
-    /// One transaction, because the deferred trigger on <c>logical_check</c> requires every
-    /// non-pending check to carry its configuration snapshot by commit time.
-    /// </summary>
     private static IReadOnlyList<string> HistoryStatements { get; } =
     [
-        // A slot per monitor per cadence interval. The identifier is derived from the monitor and
-        // the instant, so re-running the harness produces byte-identical rows.
         """
         INSERT INTO web_health.logical_check
             (id, endpoint_monitor_id, source, scheduled_for, state, cadence_key,
@@ -391,9 +307,6 @@ internal static class ReportingPerformanceBaseline
         JOIN web_health.endpoint_monitor AS monitor ON monitor.id = check_row.endpoint_monitor_id;
         """,
 
-        // Outcomes and durations are derived from a hash of the check identifier: reproducible,
-        // uncorrelated with time, and spread widely enough that the percentile aggregates have a
-        // real distribution to sort rather than one repeated value.
         """
         INSERT INTO web_health.check_result
             (logical_check_id, endpoint_monitor_id, outcome, failure_category, http_status,
@@ -437,8 +350,6 @@ internal static class ReportingPerformanceBaseline
         ) AS sample;
         """,
 
-        // One observation per certificate check, with expiry spread across every band so the
-        // certificate card has to classify rather than count one repeated value.
         """
         INSERT INTO web_health.certificate_observation
             (logical_check_id, endpoint_monitor_id, subject, issuer, serial_number,
@@ -470,7 +381,6 @@ internal static class ReportingPerformanceBaseline
         WHERE monitor.monitor_type = 'SslCertificate';
         """,
 
-        // BR-U06: the dashboard reads the latest confirmed state, so every monitor has one.
         """
         INSERT INTO web_health.endpoint_health
             (endpoint_monitor_id, evidence_logical_check_id, confirmed_status, confirmed_at, version)
@@ -489,8 +399,6 @@ internal static class ReportingPerformanceBaseline
         ORDER BY check_row.endpoint_monitor_id, result.measured_at DESC, check_row.id;
         """,
 
-        // An open incident wherever the confirmed state is critical, which is what the dashboard's
-        // incident card and the count above it both read.
         """
         INSERT INTO web_health.incident
             (id, endpoint_monitor_id, owner_subject_id, issue_key, severity, status,
@@ -514,13 +422,7 @@ internal static class ReportingPerformanceBaseline
         """
     ];
 
-    // ---------------------------------------------------------------- scenarios
 
-    /// <summary>
-    /// A scenario is a whole screen's worth of reads rather than one query, because that is the
-    /// unit NFR-02 is stated in: a dashboard issuing seven fast queries and one slow one is a slow
-    /// dashboard.
-    /// </summary>
     private sealed record Scenario(
         string Name,
         string Purpose,
@@ -570,7 +472,6 @@ internal static class ReportingPerformanceBaseline
             })
     ];
 
-    /// <summary>Exactly the reads <c>HomeController.Index</c> performs, in the same order.</summary>
     private static async Task RunDashboardAsync(
         IServiceProvider provider,
         RegistryAccessContext access,
@@ -601,13 +502,7 @@ internal static class ReportingPerformanceBaseline
         return normalized.Query!;
     }
 
-    // ------------------------------------------------------------- plan capture
 
-    /// <summary>
-    /// Runs each scenario once with <c>auto_explain</c> active and slices the server log around
-    /// it, so every plan is attributed to the scenario that produced it without having to match
-    /// statement text back to a caller.
-    /// </summary>
     private static async Task<Dictionary<string, string>> CapturePlansAsync(
         ServiceProvider services,
         string connectionString,
@@ -620,8 +515,6 @@ internal static class ReportingPerformanceBaseline
         {
             foreach (var scenario in scenarios)
             {
-                // A warm-up outside the captured slice, so the recorded plan is not dominated by
-                // first-touch reads of pages no steady-state request would fault in.
                 await RunScopedAsync(services, scenario);
 
                 var offset = new FileInfo(serverLogPath).Length;
@@ -654,10 +547,6 @@ internal static class ReportingPerformanceBaseline
         await using var command = new NpgsqlCommand($"{settings}\nSELECT pg_reload_conf();", connection);
         await command.ExecuteNonQueryAsync();
 
-        // session_preload_libraries is read when a session starts, and a reload does not reach
-        // sessions that already exist. The measured services pool their connections, so without
-        // this the pool would hand back connections opened during seeding - before auto_explain
-        // was switched on - and the capture pass would log nothing at all.
         NpgsqlConnection.ClearAllPools();
     }
 
@@ -669,7 +558,6 @@ internal static class ReportingPerformanceBaseline
 
     private static async Task<string> ReadPlansAsync(string serverLogPath, long offset)
     {
-        // The server writes plans to its own stderr; give it a moment to reach the file.
         await Task.Delay(TimeSpan.FromMilliseconds(750));
 
         await using var stream = new FileStream(
@@ -697,7 +585,6 @@ internal static class ReportingPerformanceBaseline
                 continue;
             }
 
-            // A plan block is the indented continuation; the first unindented line ends it.
             if (trimmed.Length > 0 && !char.IsWhiteSpace(trimmed[0]))
             {
                 keeping = false;
@@ -710,7 +597,6 @@ internal static class ReportingPerformanceBaseline
         return captured.Length == 0 ? "(no plan captured)" : captured.ToString().Trim();
     }
 
-    // ------------------------------------------------------------------ timing
 
     private static async Task<Dictionary<string, Timing>> MeasureAsync(
         ServiceProvider services,
@@ -754,7 +640,6 @@ internal static class ReportingPerformanceBaseline
         int MonitorCount,
         int SampleCount);
 
-    // ---------------------------------------------------------------- evidence
 
     private static string RenderEvidence(
         BaselineFixture fixture,

@@ -1,18 +1,6 @@
 @model StatusBadgeViewModel
 
-@*
-    A badge with added context carries it inside itself, behind an "i", rather than trailing a
-    line of small print underneath. A column of badges each with a caption below reads as a
-    ragged block; the context is secondary and belongs one interaction away.
 
-    Three routes to the same text, so no reader loses it:
-      - title       — the native tooltip, which works with no script at all. shell.js removes it
-                      when it takes over, or the browser would show both.
-      - .visually-hidden — assistive technology gets it inline, as it did before.
-      - data-badge-detail — shell.js reads this for the styled popup.
-
-    tabindex makes the badge focusable so the popup is reachable by keyboard, not only by hover.
-*@
 @{
     var pendingClass = Model.Pending ? " badge--pending" : null;
     var badgeClass = $"badge{pendingClass}";

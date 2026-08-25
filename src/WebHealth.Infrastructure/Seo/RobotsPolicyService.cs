@@ -8,11 +8,6 @@ using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Seo;
 
-/// <summary>
-/// The authorized write path for origin-level SEO policy (BR-E07, BR-E08). Without it the
-/// exception and sitemap fields would only be reachable by editing the database by hand, which is
-/// not a policy decision anyone could audit.
-/// </summary>
 internal sealed class RobotsPolicyService(
     ApplicationDbContext dbContext,
     IAuditTrailWriter auditTrail,
@@ -59,8 +54,6 @@ internal sealed class RobotsPolicyService(
             .SingleOrDefaultAsync(item => item.Origin == command.Origin, cancellationToken);
         if (snapshot is null)
         {
-            // Policy is set for an origin the registry already monitors; the refresh job creates
-            // the row. Accepting policy for an unknown origin would invent a target.
             return RegistryMutationResult.Failure(
                 RegistryMutationStatus.NotFound, "No monitored origin matches that value.");
         }
@@ -90,10 +83,6 @@ internal sealed class RobotsPolicyService(
         }
     }
 
-    /// <summary>
-    /// Clearing the reason clears the approval with it. An exception that outlived its reason
-    /// would be exactly the silent flag this design refuses to have.
-    /// </summary>
     private static void ApplyException(
         RobotsSnapshot snapshot,
         string? reason,
@@ -108,8 +97,6 @@ internal sealed class RobotsPolicyService(
             return;
         }
 
-        // Re-approving an unchanged reason keeps the original approval date: the decision did not
-        // change, so its timestamp should not move.
         if (snapshot.ExceptionReason != reason || snapshot.ExceptionApprovedAt is null)
         {
             snapshot.ExceptionApprovedByUserId = actorId;
@@ -127,8 +114,6 @@ internal sealed class RobotsPolicyService(
             return "The exception reason must be 500 characters or fewer.";
         }
 
-        // A required sitemap with no configured URL is legitimate: robots.txt may name one, and
-        // the refresh follows its Sitemap directives.
         if (string.IsNullOrWhiteSpace(command.ConfiguredSitemapUrl)) return null;
         var url = command.ConfiguredSitemapUrl.Trim();
         return Uri.TryCreate(url, UriKind.Absolute, out var parsed)

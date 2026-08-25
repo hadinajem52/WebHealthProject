@@ -5,10 +5,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// BR-L05. Concurrency bounds how many requests are in flight; the rate limit bounds how fast they
-/// start. A target host needs both, and only the second is tested here.
-/// </summary>
 public sealed class HostRequestRateLimiterTests
 {
     [Fact]

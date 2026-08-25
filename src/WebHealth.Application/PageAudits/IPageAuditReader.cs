@@ -1,12 +1,8 @@
-﻿using WebHealth.Application.Registry;
+using WebHealth.Application.Registry;
 using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.Application.PageAudits;
 
-/// <summary>
-/// One run, as a page reads it. The display score is derived from the raw one here rather than
-/// stored, so the number shown and the number compared can never drift apart.
-/// </summary>
 public sealed record PageAuditRunSummary(
     Guid RunId,
     Guid BatchId,
@@ -32,23 +28,14 @@ public sealed record PageAuditRunSummary(
 
     public bool IsActive => PageAuditRunStatuses.IsActive(Status);
 
-    /// <summary>
-    /// Whether this run produced a score worth reading. A run with failing audits qualifies; a run
-    /// that never reached the provider does not, and the two must not render alike.
-    /// </summary>
     public bool HasScore => PageAuditRunStatuses.IsScored(Status) && RawScore is not null;
 
-    /// <summary>The redirect the provider followed, or null when it audited what we asked for.</summary>
     public string? RedirectedTo =>
         FinalUrl is not null && !string.Equals(FinalUrl, RequestedUrl, StringComparison.Ordinal)
             ? FinalUrl
             : null;
 }
 
-/// <summary>
-/// How many audits of each status one run recorded. Manual and not-applicable are carried
-/// separately from passed, because a page cannot be given credit for a check nobody ran.
-/// </summary>
 public sealed record PageAuditItemCounts(
     int Failed,
     int Passed,
@@ -63,7 +50,6 @@ public sealed record PageAuditItemCounts(
     public int Total => Failed + Passed + Scored + Manual + NotApplicable + Informative + Error;
 }
 
-/// <summary>One normalized audit, ready to render. Provider text only, bounded at write time.</summary>
 public sealed record PageAuditItemView(
     string AuditId,
     string Status,
@@ -79,14 +65,6 @@ public sealed record PageAuditItemView(
     string? Explanation,
     string? ErrorMessage);
 
-/// <summary>
-/// How the current score compares with the one before it.
-/// </summary>
-/// <param name="Comparability">
-/// <c>LighthouseVersionChanged</c> when the two runs used different Lighthouse major versions. The
-/// delta is still shown, and still labelled: a major version can add, remove or redefine audits,
-/// so the number is a change in measurement as much as a change in the page.
-/// </param>
 public sealed record PageAuditComparison(
     Guid? CurrentRunId,
     Guid? PreviousRunId,
@@ -104,16 +82,6 @@ public sealed record PageAuditComparison(
         Comparability == PageAuditComparability.LighthouseVersionChanged;
 }
 
-/// <summary>
-/// One endpoint's page-audit state.
-/// </summary>
-/// <remarks>
-/// Configuration is a property of the endpoint, not of a form factor: one audit covers mobile and
-/// desktop together, and there is no way to switch one on without the other. Results are the other
-/// way round - the strategy names the one form factor whose run, audits and comparison are carried
-/// here, because a mobile page and a desktop page are measured separately and a reader looking at
-/// one is not asking about the other.
-/// </remarks>
 public sealed record PageAuditEndpointSummary(
     Guid EndpointId,
     string EndpointUrl,
@@ -146,19 +114,8 @@ public sealed record PageAuditCategorySummary(
     string Category,
     PageAuditRunSummary? LatestRun);
 
-/// <summary>
-/// The page-audit read surface. Every method takes the requester's access context and scopes to
-/// endpoints they may see, in the database. A reader that trusted a caller-supplied endpoint id
-/// would let any authenticated user read another client's audit history by guessing one — the id
-/// is a parameter, not a permission.
-/// </summary>
 public interface IPageAuditReader
 {
-    /// <summary>
-    /// One endpoint's page-audit state, with the strategy choosing which form factor's run and
-    /// audits to read. It selects a measurement, never a configuration: every form factor is
-    /// enabled, scheduled and run together.
-    /// </summary>
     Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
         string category,
@@ -181,10 +138,6 @@ public interface IPageAuditReader
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// One run's audits. Bounded by the reader rather than by the caller: a run holds a couple of
-    /// dozen SEO audits today, and the bound is what keeps that true if a category grows.
-    /// </summary>
     Task<IReadOnlyList<PageAuditItemView>> ListAuditItemsAsync(
         Guid runId,
         RegistryAccessContext access,

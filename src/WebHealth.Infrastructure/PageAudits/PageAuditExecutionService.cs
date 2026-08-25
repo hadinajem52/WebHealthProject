@@ -7,21 +7,6 @@ using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.PageAudits;
 
-/// <summary>
-/// Runs one audit: claims it, calls the provider, and records what came back.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The provider call happens between two short transactions and inside neither. A transaction held
-/// open across a ninety-second call to Google would hold its locks for ninety seconds, and the row
-/// it holds is the one the reconciliation sweep needs to read.
-/// </para>
-/// <para>
-/// Idempotency comes from the lease rather than from the job being delivered once. Hangfire
-/// promises at-least-once delivery, so the second delivery is a case to handle, not a bug to
-/// prevent: it finds a terminal run or a valid lease and returns having done nothing.
-/// </para>
-/// </remarks>
 public sealed class PageAuditExecutionService(
     ApplicationDbContext dbContext,
     IPageAuditProvider provider,
@@ -42,9 +27,6 @@ public sealed class PageAuditExecutionService(
             return PageAuditExecutionOutcome.NotClaimed(runId);
         }
 
-        // Re-checked after the claim, not before: enabling and authorization can change between
-        // the dispatcher queueing the run and a worker picking it up, and the request that
-        // actually leaves this process must be the one the current configuration permits.
         var ineligible = await FindIneligibilityAsync(claim, cancellationToken);
         if (ineligible is not null)
         {
@@ -69,11 +51,6 @@ public sealed class PageAuditExecutionService(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            // An adapter fault the provider did not name - a response shape its guards did not
-            // anticipate, say. Left to escape it would reach the job, leave the run Running with a
-            // lease, and be reclaimed by reconciliation for as long as the fault reproduces: an
-            // unbounded retry loop against somebody else's quota. Only the exception type is
-            // recorded, never its message, which is unbounded text from an unknown source.
             logger.LogError(
                 exception,
                 "PageAudit run faulted unexpectedly. PageAuditRunId={PageAuditRunId} "
@@ -87,11 +64,6 @@ public sealed class PageAuditExecutionService(
         }
     }
 
-    /// <summary>
-    /// Takes the run only when it is Queued, or Running with a claim that has expired. The update
-    /// is conditional in the database rather than checked in memory, so two workers racing here
-    /// produce one winner and one no-op rather than two audits.
-    /// </summary>
     private async Task<IReadOnlyList<PageAuditRun>?> ClaimAsync(
         Guid runId,
         CancellationToken cancellationToken)
@@ -109,10 +81,6 @@ public sealed class PageAuditExecutionService(
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        // The attempt ceiling is part of the claim, not only of the retry decision. Without it a
-        // run whose worker dies - or whose fault escapes before any decision is recorded - is
-        // reclaimed by reconciliation forever, and every reclaim is another request against
-        // somebody else's site.
         var claimed = await dbContext.PageAuditRuns
             .Where(run => (seed.BatchId == Guid.Empty
                     ? run.Id == runId
@@ -145,10 +113,6 @@ public sealed class PageAuditExecutionService(
         return runs;
     }
 
-    /// <summary>
-    /// Why this run must not be sent, or null. Covers the whole chain the dispatcher checked,
-    /// because a worker can pick the run up long after the dispatcher queued it.
-    /// </summary>
     private async Task<string?> FindIneligibilityAsync(
         IReadOnlyList<PageAuditRun> runs,
         CancellationToken cancellationToken)
@@ -175,10 +139,6 @@ public sealed class PageAuditExecutionService(
             return "The endpoint is no longer active, or its target authorization has lapsed.";
         }
 
-        // The snapshot is what makes the job un-steerable, but it also makes it stale. An endpoint
-        // edited from A to B between queueing and execution re-derives its authorization for B,
-        // so the check above passes while the request still carries A - a host nobody authorized.
-        // The snapshot is only trustworthy while it still is the endpoint's URL.
         if (!runs.All(run => string.Equals(current, run.RequestedUrl, StringComparison.Ordinal)))
         {
             return "The endpoint URL changed after this run was queued, so the audit it was "
@@ -309,20 +269,12 @@ public sealed class PageAuditExecutionService(
         ErrorMessage = PageAuditNormalization.BoundText(item.ErrorMessage, PageAuditTextBounds.ErrorMessage)
     };
 
-    /// <summary>
-    /// A transient failure with attempts left leaves the run alive and queued again. Anything else
-    /// ends it. The attempt count is the application's, not Hangfire's, so the two cannot disagree
-    /// about how many times we have already asked Google for this page.
-    /// </summary>
     private async Task<PageAuditExecutionOutcome> HandleProviderFailureAsync(
         IReadOnlyList<PageAuditRun> claims,
         PageAuditProviderException exception,
         CancellationToken cancellationToken)
     {
         var primary = claims[0];
-        // Cancellation is not a failure of the audit, and it is the one case where the token this
-        // method was handed is already cancelled. Writing the terminal row with it would cancel
-        // the write too, leaving the run Running until its lease expired.
         if (exception.FailureCategory == PageAuditFailureCategories.Cancelled)
         {
             return await FinishAsync(
@@ -369,10 +321,6 @@ public sealed class PageAuditExecutionService(
             primary.Id, PageAuditRunStatuses.Queued, exception.FailureCategory, delay);
     }
 
-    /// <summary>
-    /// Immediate, then a minute, then five. Spread far enough apart that a provider having a bad
-    /// minute gets one, and close enough together that a daily audit still lands the same day.
-    /// </summary>
     private static TimeSpan BackoffFor(int attemptCount) => attemptCount switch
     {
         <= 1 => TimeSpan.FromSeconds(60),

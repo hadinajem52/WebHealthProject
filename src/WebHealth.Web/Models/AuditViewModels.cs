@@ -23,10 +23,6 @@ public sealed class AuditIndexViewModel
 
     public required IReadOnlyList<string> EntityTypes { get; init; }
 
-    /// <summary>
-    /// Whether anything narrowed this search. A Clear control offered against an unfiltered trail
-    /// is an action with nothing to do, and reads as though a filter is applied when none is.
-    /// </summary>
     public bool HasFilters =>
         FromDate is not null
         || ToDate is not null
@@ -35,16 +31,8 @@ public sealed class AuditIndexViewModel
         || !string.IsNullOrWhiteSpace(Entity);
 }
 
-/// <summary>
-/// How a recorded event is described to a reader.
-/// </summary>
 public static class AuditEventDisplay
 {
-    /// <summary>
-    /// The stored outcome is a lowercase word, and every one of them rendered as the same neutral
-    /// tag. An audit trail is read to find the refusals, so a refusal must not look like a
-    /// success at a glance.
-    /// </summary>
     public static string OutcomeBadge(string? outcome) => outcome?.ToLowerInvariant() switch
     {
         "succeeded" => StatusBadges.Success,
@@ -52,18 +40,11 @@ public static class AuditEventDisplay
         _ => StatusBadges.Neutral
     };
 
-    /// <summary>Sentence case, because the stored value is a bare lowercase token.</summary>
     public static string OutcomeName(string? outcome) =>
         string.IsNullOrWhiteSpace(outcome)
             ? "Unknown"
             : char.ToUpperInvariant(outcome[0]) + outcome[1..];
 
-    /// <summary>
-    /// The verb half of an action key is stored as a run-together lowercase word (BR: the writer
-    /// lowercases the enum name, e.g. <c>FailureRecorded</c> becomes <c>failurerecorded</c>), so
-    /// the word boundary can't be recovered from casing. This maps the compound verbs back to a
-    /// spaced form; anything not listed is already a single word.
-    /// </summary>
     private static readonly Dictionary<string, string> CompoundVerbSpacing = new(StringComparer.Ordinal)
     {
         ["failurerecorded"] = "failure recorded",
@@ -76,17 +57,9 @@ public static class AuditEventDisplay
         ["scheduleresumed"] = "schedule resumed"
     };
 
-    /// <summary>
-    /// A dotted key is how the action is stored and correlated; the spaced form is how it reads.
-    /// Both are shown, so neither the reader nor a support request has to translate.
-    /// </summary>
     public static string ActionName(string action) =>
         string.Join(' ', action.Split('.').Select(part => CompoundVerbSpacing.GetValueOrDefault(part, part)));
 
-    /// <summary>
-    /// What opening the disclosure will show, said before it is opened. "View values" gave no
-    /// reason to open one row rather than another.
-    /// </summary>
     public static string DescribeValues(AuditEventSummary auditEvent)
     {
         ArgumentNullException.ThrowIfNull(auditEvent);

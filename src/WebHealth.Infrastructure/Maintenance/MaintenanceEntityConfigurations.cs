@@ -77,9 +77,6 @@ internal sealed class MaintenanceOccurrenceConfiguration : IEntityTypeConfigurat
         builder.ToTable("maintenance_occurrence", table => table.HasCheckConstraint(
             "ck_maintenance_occurrence_interval",
             "ends_at > starts_at"));
-        // BR-M05: the expander is keyed on (window, occurrence start), so re-running it cannot
-        // double-book a window. The end is a function of the start and the schedule duration and
-        // is deliberately not part of the key.
         builder.HasIndex(occurrence => new { occurrence.MaintenanceWindowId, occurrence.StartsAt })
             .IsUnique().HasDatabaseName("ux_maintenance_occurrence_window_start");
         builder.HasOne(occurrence => occurrence.MaintenanceWindow).WithMany(window => window.Occurrences)

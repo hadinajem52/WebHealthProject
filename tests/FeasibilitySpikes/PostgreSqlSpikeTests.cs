@@ -32,7 +32,6 @@ public sealed class PostgreSqlSpikeTests
         client.Create(Job.FromExpression(() => SpikeJob.Record("persisted")), new EnqueuedState("alpha"));
         client.Create(Job.FromExpression(() => SpikeJob.Record("isolated")), new EnqueuedState("beta"));
 
-        // Recreate storage before workers start to prove jobs survive process-style restart boundaries.
         var restartedStorage = CreateStorage();
         using (var alphaWorker = CreateWorker(restartedStorage, "alpha"))
         {

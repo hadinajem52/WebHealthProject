@@ -27,11 +27,6 @@ internal sealed class IncidentAutomationService(
         bool isMaintenance,
         DateTimeOffset now,
         CancellationToken cancellationToken,
-        // The SHA-256 fingerprint of the certificate this result observed, or null when the
-        // result is not a certificate observation. It is the one monitor-specific input this
-        // otherwise generic pipeline takes, because BR-C06 is the only rule where an incident's
-        // subject can be replaced rather than repaired. If a second such rule appears, this
-        // belongs behind a named supersession concept rather than a second raw parameter.
         string? observedCertificateFingerprint = null)
     {
         if (counterMode != HealthCounterMode.Count)
@@ -98,8 +93,6 @@ internal sealed class IncidentAutomationService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        // The engine already applied each issue's own confirmation count (BR-P03), so the
-        // threshold lives in exactly one place.
         foreach (var issueKey in healthDecision.ConfirmedIssueKeys)
         {
             var severity = observation.IssueSeverities.GetValueOrDefault(issueKey, IncidentSeverities.Critical);
@@ -129,19 +122,6 @@ internal sealed class IncidentAutomationService(
         }
     }
 
-    /// <summary>
-    /// BR-C06. A renewed certificate has a new fingerprint and therefore a new expiry issue key,
-    /// which leaves any incident opened for the previous certificate with nothing left to
-    /// observe. Resolving it here rather than waiting for a healthy result matters: a
-    /// certificate renewed into another warning band never produces a healthy result, and the
-    /// stale incident would stay open against a certificate that no longer exists.
-    /// <para>
-    /// The observation of the replacement is itself the confirmation. That is sound only because
-    /// a certificate monitor confirms in a single observation by design (increment 5.2): unlike
-    /// a flapping HTTP response, the certificate a host presents does not alternate between
-    /// checks, so a second day of waiting would add no evidence.
-    /// </para>
-    /// </summary>
     private async Task ApplyCertificateRenewalAsync(
         IncidentAutomationObservation observation,
         List<Incident> incidents,
@@ -156,8 +136,6 @@ internal sealed class IncidentAutomationService(
             .ToArray();
         foreach (var incident in superseded)
         {
-            // The timeline entry is written only once the resolution itself is going to happen,
-            // so an incident can never be left carrying a renewal event it did not act on.
             if (!IncidentLifecycleEngine.Evaluate(new(
                 incident.Status, IncidentLifecycleAction.ConfirmRecovery)).Succeeded)
             {
@@ -181,11 +159,6 @@ internal sealed class IncidentAutomationService(
         }
     }
 
-    /// <summary>
-    /// An incident is as severe as the finding that confirmed it (BR-C04). A confirmed issue
-    /// with no finding behind it came from a transport failure, which has no severity of its
-    /// own and is always critical.
-    /// </summary>
     private static string SelectSeverity(NormalizedCheckResult result, string issueKey) =>
         result.Findings
             .Where(finding => string.Equals(finding.IssueKey, issueKey, StringComparison.Ordinal))
@@ -386,13 +359,6 @@ internal sealed class IncidentAutomationService(
             cancellationToken);
     }
 
-    /// <summary>
-    /// A delayed Opened notification (see <see cref="PerformanceRules.OpenedNotificationDelay" />)
-    /// can still be sitting Pending when its incident resolves on its own. That delivery is worth
-    /// suppressing rather than sending: the incident is already over by the time anyone would read
-    /// the email. A delivery already Processing or Sent is left untouched — the dispatcher won the
-    /// race and the recovery email covers it either way.
-    /// </summary>
     private Task SuppressDelayedOpenedNotificationAsync(
         Guid incidentId,
         DateTimeOffset now,
@@ -421,9 +387,6 @@ internal sealed class IncidentAutomationService(
     {
         var before = IncidentLifecycleService.Snapshot(incident);
         incident.Version++;
-        // A certificate keeps one incident as it crosses expiry bands (its fingerprint, and so
-        // its issue key, does not change), so the incident escalates in place. It never
-        // de-escalates: an incident that reached critical stays critical until it resolves.
         var escalated = observedSeverity is not null
             && FindingSeverities.Rank(observedSeverity) > FindingSeverities.Rank(incident.Severity);
         if (escalated)

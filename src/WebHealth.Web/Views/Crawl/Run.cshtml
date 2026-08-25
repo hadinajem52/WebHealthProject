@@ -19,8 +19,7 @@
     };
 }
 
-@* The whole page is one run, so the poller replaces all of it: there is no control here whose
-   state a swap could discard. *@
+
 <div id="ajax-page"
      class="stack"
      data-ajax-region
@@ -29,9 +28,7 @@
      data-run-active="@(isRunning ? "true" : "false")"
      data-run-url="@Url.Action("Run", new { id = run.RunId, offset = Model.Offset })"
      data-run-lifetime="1860000">
-    @* No card title: the page heading already reads "Crawl run", and this run has no other
-       identity to show -- the summary carries an endpoint id, not its URL. The status and what
-       it means lead instead. *@
+    
     <section class="card" aria-labelledby="crawl-run-label">
         <div class="page-intro">
             <div>
@@ -120,8 +117,7 @@
                             <span>Covered whole scope</span>
                         </span>
                         <span class="detail-list__value">
-                            @* "No" is a verdict, and a crawl still walking the site has not
-                               earned one yet. *@
+                            
                             @if (isRunning)
                             {
                                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
@@ -154,7 +150,7 @@
                         </span>
                     </div>
                 </li>
-                @* Only a failed run has one, and it is the first thing its reader came for. *@
+                
                 @if (run.Status == CrawlRunStatuses.Failed)
                 {
                     <li>
@@ -171,9 +167,7 @@
         </div>
     </section>
 
-    @* A skipped URL is the crawl's account of what it chose not to fetch. Without it a run that
-       robots refused at the door reads as "nothing was examined" with no reason anywhere on the
-       page, which is the dead end this card exists to close. *@
+    
     @if (Model.Skips.Count > 0)
     {
         var skipped = Model.Skips.Sum(skip => skip.Count);
@@ -266,8 +260,7 @@
                                 <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
                                 <td data-label="Scope">@(link.IsInternal ? "Internal" : "External")</td>
                                 <td data-label="Status">
-                                    @* A bare status code says nothing to a reader who does not
-                                       know them; the classification behind it does. *@
+                                    
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                         StatusBadges.Danger,
                                         link.StatusCode?.ToString() ?? link.Classification,

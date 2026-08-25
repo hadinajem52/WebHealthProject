@@ -31,9 +31,6 @@ internal sealed class LogicalCheckFinalizationService(
         FinalizeLogicalCheck command,
         CancellationToken cancellationToken = default)
     {
-        // BR-E01/BR-E10 extraction depends only on the evidence in hand, so it runs before the
-        // transaction opens. Parsing an untrusted document while the logical-check row is locked
-        // would put arbitrary page size and complexity inside the most contended path there is.
         var seoExtraction = ExtractSeoValues(command.Evidence);
 
         await using var transaction = await BeginTransactionAsync(cancellationToken);
@@ -99,15 +96,10 @@ internal sealed class LogicalCheckFinalizationService(
             check, normalized, indeterminateIssueKeys, counterMode, now, cancellationToken);
         await incidentAutomation.ApplyAsync(
             check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken,
-            // BR-C06: the fingerprint just observed decides which expiry incidents still have a
-            // certificate behind them.
             (command.Evidence as SslCertificateEvidence)?.Result.Certificate?.Sha256Fingerprint);
         CompleteAttempt(attempt!, command.Evidence, now);
         CompleteWork(work, now);
 
-        // BR-C07: an urgent certificate check is created in this transaction so it commits with
-        // the availability result it came from. Preparing it after the commit would lose it for
-        // good whenever the worker died in between — the completed check is never re-executed.
         var urgentCertificateCheck = await urgentCertificateChecks.PrepareAfterTlsFailureAsync(
             check.EndpointMonitor.EndpointId, command.Evidence, now, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -115,8 +107,6 @@ internal sealed class LogicalCheckFinalizationService(
 
         if (urgentCertificateCheck is not null)
         {
-            // Best-effort hand-off. The work row is already committed, so reconciliation picks
-            // it up even if this never runs.
             await urgentCertificateChecks.EnqueueAsync(urgentCertificateCheck, cancellationToken);
         }
 
@@ -268,18 +258,11 @@ internal sealed class LogicalCheckFinalizationService(
             return LogicalCheckFinalizationStatus.PolicyMismatch;
         }
 
-        // A probe either observed a certificate or reported why it could not; reporting both,
-        // or neither, means the result did not come from a completed probe.
         return evidence.Result.Succeeded == (evidence.Result.Certificate is not null)
             ? null
             : LogicalCheckFinalizationStatus.InvalidTransportResult;
     }
 
-    /// <summary>
-    /// BR-E06: robots evidence belongs to the origin and is refreshed on its own schedule, so this
-    /// reads the stored snapshot. A check never fetches a second host before its own result can be
-    /// written, and an origin with no snapshot yet simply produces no robots findings.
-    /// </summary>
     private async Task<RobotsSnapshotFacts?> LoadRobotsFactsAsync(
         LogicalCheck check,
         CancellationToken cancellationToken)
@@ -287,9 +270,6 @@ internal sealed class LogicalCheckFinalizationService(
         if (MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType)) return null;
         var origin = RobotsRefreshService.OriginOf(check.EndpointMonitor.Endpoint.NormalizedUrl);
 
-        // An expired snapshot is not evidence. If the refresh is delayed or switched off, robots
-        // findings stop rather than continuing from a policy nobody has re-read — a cache that
-        // outlives its TTL on the read path is not a cache, it is stale data with a timestamp.
         var now = timeProvider.GetUtcNow();
         var snapshot = await dbContext.RobotsSnapshots.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Origin == origin && item.ExpiresAt > now, cancellationToken);
@@ -358,12 +338,6 @@ internal sealed class LogicalCheckFinalizationService(
             : [];
     }
 
-    /// <summary>
-    /// BR-P02. Thresholds come from the check's own configuration snapshot, never from the
-    /// monitor as it stands now, so a result is always judged against the thresholds that were
-    /// in force when it was measured. A snapshot that recorded no override falls back to the
-    /// documented defaults.
-    /// </summary>
     private static HttpResultPolicy CreatePolicy(
         CheckConfigurationSnapshot snapshot,
         IReadOnlyCollection<int> statuses,
@@ -378,12 +352,6 @@ internal sealed class LogicalCheckFinalizationService(
             snapshot.CriticalThresholdMs ?? ResponseTimeThresholds.Default.CriticalMs),
         Seo: seoPolicy);
 
-    /// <summary>
-    /// BR-E04, BR-E05, BR-E09. Read from the endpoint and its environment rather than from the
-    /// fingerprinted snapshot: SEO settings do not shape the request, and a finding is judged once
-    /// and then frozen. The reasoning is recorded in
-    /// docs/phase-6/SEO_Canonical_And_Indexing_Policy.md.
-    /// </summary>
     private SeoPolicy CreateSeoPolicy(LogicalCheck check)
     {
         var endpoint = check.EndpointMonitor.Endpoint;
@@ -392,8 +360,6 @@ internal sealed class LogicalCheckFinalizationService(
             endpoint.SeoIndexingExpectation,
             endpoint.SeoDescriptionRequired,
             endpoint.Environment.IsProduction,
-            // The agent the transport actually sends: a robots group naming this crawler must be
-            // the group that applies to it.
             httpOptions.UserAgent);
     }
 
@@ -555,9 +521,6 @@ internal sealed class LogicalCheckFinalizationService(
             MeasuredAt = normalized.MeasuredAt,
             MaintenanceOccurrenceId = maintenance?.OccurrenceId,
             IsMaintenance = maintenance is not null,
-            // Uptime is an availability measure (BR-U03, BR-U05). A certificate check says
-            // nothing about whether the site was reachable, so it never becomes an uptime
-            // sample even when it succeeds.
             CountsForUptime = !isSsl
                 && check.Source == LogicalCheckSources.Scheduled
                 && normalized.Outcome != HttpResultOutcomes.Cancelled
@@ -602,8 +565,6 @@ internal sealed class LogicalCheckFinalizationService(
                 Sha256Fingerprint = certificate.Sha256Fingerprint,
                 NotBefore = certificate.NotBefore,
                 NotAfter = certificate.NotAfter,
-                // The same instant the expiry finding was judged at (BR-C04), so the stored
-                // day count can never disagree with the severity that was raised from it.
                 DaysRemaining = CertificateExpiry.DaysRemaining(
                     certificate.NotAfter, normalized.MeasuredAt),
                 ValidationCategory = certificate.ValidationCategory.ToString(),
@@ -618,17 +579,6 @@ internal sealed class LogicalCheckFinalizationService(
         check.CompletedAt = completedAt;
     }
 
-    /// <summary>
-    /// BR-E01 and BR-E10. Reads the body this check already captured — no second fetch — and keeps
-    /// the extracted values only. Evidence that never produced a response still yields a decision,
-    /// so "not applicable" is recorded in the history rather than left as a gap. Certificate checks
-    /// have no page at all and are excluded by the caller.
-    /// <para>
-    /// The base for canonical resolution is the redacted final URL: the transport deliberately
-    /// never surfaces the query string, so an empty canonical href resolves without it. That is
-    /// the accepted cost of not carrying query strings — which can hold secrets — into storage.
-    /// </para>
-    /// </summary>
     private SeoExtraction? ExtractSeoValues(LogicalCheckTerminalEvidence evidence) => evidence switch
     {
         HttpTransportEvidence http => seoValueExtractor.Extract(new(

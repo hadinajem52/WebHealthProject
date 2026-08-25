@@ -11,20 +11,6 @@ using WebHealth.Web.Shell;
 
 namespace WebHealth.Web.Controllers;
 
-/// <summary>
-/// AC-08's view: an endpoint's crawl history, its broken links with the pages that contain them,
-/// and how the latest full-scope crawl compares to the one before it.
-/// <para>
-/// Reading is open to every persona that may read the registry. The endpoint and run ids in the
-/// query string are parameters, not permissions: the reader resolves both through the requester's
-/// visibility scope, so an id belonging to another client reads as empty rather than as data.
-/// </para>
-/// <para>
-/// Starting a crawl is different. It fetches many pages of a site this application does not own,
-/// so it needs the same permission a manual check needs and a service-level check on the endpoint
-/// itself. It is also the only trigger a crawl has: nothing else enqueues one.
-/// </para>
-/// </summary>
 [Authorize(Policy = AuthorizationPolicies.ReadRegistry)]
 public sealed class CrawlController(
     ICrawlReportReader crawlReader,
@@ -46,8 +32,6 @@ public sealed class CrawlController(
                 $"{endpoint.WebsiteName} · {endpoint.EnvironmentName} · {endpoint.DisplayUrl}"))
             .ToArray();
 
-        // Selecting nothing shows the picker rather than an arbitrary endpoint's history: the page
-        // should not imply that whichever endpoint sorted first is the one worth looking at.
         if (endpointId is not { } selected)
         {
             return View(new CrawlIndexViewModel(options, null, [], CrawlComparison.Empty));
@@ -56,9 +40,6 @@ public sealed class CrawlController(
         var runs = await crawlReader.ListRunsAsync(selected, RunsListed, access, cancellationToken);
         var comparison = await crawlReader.CompareLatestAsync(selected, access, cancellationToken);
 
-        // Offered only when this requester may test this endpoint, mirroring the authorization the
-        // action itself enforces - the button is a convenience, not the control. The block is kept
-        // so the page can say why the button is absent rather than leave the reader guessing.
         var block = await targetAuthorization.DescribeTestBlockAsync(selected, access, cancellationToken);
         var canRun = crawlRunner.CanQueue && block == EndpointTestBlock.None;
         var activeRun = runs
@@ -83,9 +64,6 @@ public sealed class CrawlController(
     {
         var access = GetAccess();
 
-        // The policy above says this user may test targets at all; the runner says they may test
-        // *this* one. Without the second check an endpoint id in a form post would be permission
-        // enough to make this application crawl a site.
         var result = await crawlRunner.QueueManualAsync(
             endpointId, access, checkExternalLinks, cancellationToken);
 
@@ -114,8 +92,6 @@ public sealed class CrawlController(
         var run = await crawlReader.FindRunAsync(id, access, cancellationToken);
         if (run is null)
         {
-            // Not found rather than forbidden: telling an unauthorized caller that the run exists
-            // is itself a disclosure.
             return this.NotFoundRecord("crawl run");
         }
 

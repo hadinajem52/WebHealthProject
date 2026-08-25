@@ -3,27 +3,11 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
-/// <summary>
-/// Decides whether the certificate chain is trusted, separately from whether the leaf is
-/// currently within its validity window.
-/// </summary>
 internal static class TlsChainTrust
 {
     private const X509ChainStatusFlags TimeValidity =
         X509ChainStatusFlags.NotTimeValid | X509ChainStatusFlags.CtlNotTimeValid;
 
-    /// <summary>
-    /// Time-validity failures are forgiven <em>on the leaf only</em>, because the leaf's own
-    /// expiry is reported as its own category and would otherwise also be labelled untrusted,
-    /// hiding the actionable cause. Every other element must be completely error-free: an
-    /// expired intermediate or root breaks the chain for real clients and must never be
-    /// reported as a valid certificate.
-    /// </summary>
-    /// <param name="elementStatuses">
-    /// Per-element status flags, leaf first — the order <see cref="X509Chain.ChainElements" />
-    /// uses. Aggregate <see cref="X509Chain.ChainStatus" /> cannot be used here because it does
-    /// not say which element a failure came from.
-    /// </param>
     public static bool Evaluate(SslPolicyErrors errors, IReadOnlyList<X509ChainStatusFlags> elementStatuses)
     {
         if (!errors.HasFlag(SslPolicyErrors.RemoteCertificateChainErrors))

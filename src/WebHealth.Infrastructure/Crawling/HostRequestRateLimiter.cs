@@ -1,20 +1,5 @@
 namespace WebHealth.Infrastructure.Crawling;
 
-/// <summary>
-/// BR-L05. Bounds how fast requests to one host may **start**, which is a different control from
-/// how many may be in flight. Concurrency alone lets two workers hammer a host as fast as it can
-/// answer; a rate limit alone lets an unbounded number pile up. A target host needs both.
-/// <para>
-/// Registered **process-wide**, not per run. A limiter owned by one run bounds only that run, so
-/// several concurrent crawls of the same host would each politely observe the configured rate and
-/// together exceed it by exactly the number of runs — which the target host experiences as the
-/// rate limit not working.
-/// </para>
-/// <para>
-/// Spacing is tracked as the next instant a request to that host may begin, advanced under a lock
-/// and then awaited outside it, so callers queue rather than contend.
-/// </para>
-/// </summary>
 internal sealed class HostRequestRateLimiter(TimeProvider timeProvider, double requestsPerSecondPerHost)
 {
     private readonly TimeSpan _interval = requestsPerSecondPerHost <= 0

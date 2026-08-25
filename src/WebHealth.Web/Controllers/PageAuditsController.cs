@@ -12,19 +12,6 @@ using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
-/// <remarks>
-/// <para>
-/// Reading is open to every persona that may read the registry. The endpoint and run ids in the
-/// query string are parameters, not permissions: the reader resolves both through the requester's
-/// visibility scope in the database, so an id belonging to another client reads as absent rather
-/// than as data.
-/// </para>
-/// <para>
-/// Running an audit is different. It asks Google to load a configured target, which is active
-/// testing of that target, so it needs the same permission a manual check needs and a
-/// service-level check on the endpoint itself.
-/// </para>
-/// </remarks>
 [Authorize(Policy = AuthorizationPolicies.ReadRegistry)]
 public sealed class PageAuditsController(
     IPageAuditReader pageAuditReader,
@@ -65,12 +52,8 @@ public sealed class PageAuditsController(
         var access = GetAccess();
         var selectedCategory = PageAuditCategories.Normalize(category);
 
-        // One request audits every form factor, so the strategy here only decides which of the
-        // two results the reader lands on afterwards.
         var selectedStrategy = PageAuditStrategies.Normalize(strategy);
 
-        // The policy above says this user may test targets at all; this says they may test *this*
-        // one. Without the second check an endpoint id in a form post would be permission enough.
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             var block = await targetAuthorization.DescribeTestBlockAsync(

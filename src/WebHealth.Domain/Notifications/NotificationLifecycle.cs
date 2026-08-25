@@ -37,12 +37,6 @@ public static class NotificationTransportOutcomes
     public const string PermanentFailure = "PermanentFailure";
 }
 
-/// <summary>
-/// Opening, reminder and escalation keys are deterministic so a duplicate write (retry, restart,
-/// competing sweep) collides with the unique (incident_id, source_kind, event_type, occurrence_key)
-/// index instead of creating a second notification. Recovery keys off the resolving incident_event
-/// so each confirmed recovery still gets its own notification even across recurrence.
-/// </summary>
 public static class NotificationOccurrenceKeys
 {
     public static string Opening(Guid incidentId) => $"v1|opening|{incidentId:N}";

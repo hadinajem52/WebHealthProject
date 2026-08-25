@@ -8,11 +8,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// The page-audit tables enforce their own contract. Every rule below is asserted against
-/// PostgreSQL rather than against the services, because a service is one caller and a constraint
-/// covers every caller — including a future one written by somebody who has not read this file.
-/// </summary>
 internal static class PageAuditSchemaAssertions
 {
     public static async Task VerifyAsync(
@@ -92,11 +87,6 @@ internal static class PageAuditSchemaAssertions
             "updated_at", "updated_by_user_id", "version");
     }
 
-    /// <summary>
-    /// The storage decision, asserted by name. No column can hold the provider's full response,
-    /// a screenshot, a trace, free-form audit details, or the API key — so none of them can be
-    /// retained by accident later, whatever a future writer intends.
-    /// </summary>
     private static async Task VerifyNoRawPayloadOrSecretColumnAsync(string connectionString)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -177,10 +167,6 @@ internal static class PageAuditSchemaAssertions
             PostgresErrorCodes.CheckViolation,
             "ck_page_audit_target_scheduling_requires_enabled");
 
-    /// <summary>
-    /// The rule that stops a dispatcher and a person pressing Run now from spending two API calls
-    /// on the same audit, and that makes a spurious re-enqueue harmless instead of duplicating work.
-    /// </summary>
     private static async Task VerifyOnlyOneActiveRunPerTargetAsync(
         string connectionString,
         Guid targetId,
@@ -192,9 +178,6 @@ internal static class PageAuditSchemaAssertions
 
         await ExecuteAsync(connection, transaction, RunInsert(Guid.NewGuid(), targetId, endpointId, "Queued"));
 
-        // A savepoint, because the rejection below aborts the transaction and every later
-        // statement in it would then fail with 25P02 rather than with the constraint it is
-        // testing. Rolling back to the savepoint leaves the Queued run and a usable transaction.
         await transaction.SaveAsync("duplicate_active_run");
         var duplicate = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteAsync(connection, transaction, RunInsert(Guid.NewGuid(), targetId, endpointId, "Running")));
@@ -202,8 +185,6 @@ internal static class PageAuditSchemaAssertions
         duplicate.ConstraintName.Should().Be("ux_page_audit_run_active");
         await transaction.RollbackAsync("duplicate_active_run");
 
-        // The index is partial, so a target may hold any number of finished runs. Without this the
-        // uniqueness rule would cap an endpoint's history at one row.
         await ExecuteAsync(connection, transaction, RunInsert(
             Guid.NewGuid(), targetId, endpointId, "Completed",
             extraColumns: ", finished_at, raw_score, lighthouse_version",
@@ -266,10 +247,6 @@ internal static class PageAuditSchemaAssertions
             PostgresErrorCodes.CheckViolation,
             "ck_page_audit_run_raw_score");
 
-    /// <summary>
-    /// One row per audit per run. A retried finalization has to update a run's items, never append
-    /// a second copy of every audit it already recorded.
-    /// </summary>
     private static async Task VerifyItemUniquePerRunAsync(
         ApplicationDbContext database,
         Guid targetId,
@@ -309,9 +286,6 @@ internal static class PageAuditSchemaAssertions
         await database.SaveChangesAsync();
         database.ChangeTracker.Clear();
 
-        // Added through the DbSet, not through run.Items: keys here are client-generated, so EF
-        // would attach an entity added to a loaded collection as an existing row and emit an
-        // UPDATE against an id that was never inserted.
         database.PageAuditItems.Add(new PageAuditItem
         {
             Id = Guid.NewGuid(),
@@ -356,8 +330,6 @@ internal static class PageAuditSchemaAssertions
         rejected.ConstraintName.Should().Be("ck_page_audit_item_scored_statuses_have_a_score");
         await transaction.RollbackAsync("scored_item_without_a_score");
 
-        // A manual audit legitimately carries no score, which is exactly why the rule above is
-        // scoped to the scored statuses rather than applied to every row.
         await ExecuteAsync(connection, transaction,
             $"""
             INSERT INTO web_health.page_audit_item

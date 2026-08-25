@@ -5,10 +5,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// Every reporting bound is applied here, server-side. These tests are the record that a
-/// hand-written request cannot widen the window, skip validation or page past the end.
-/// </summary>
 public sealed class ReportQueryNormalizerTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
@@ -27,8 +23,6 @@ public sealed class ReportQueryNormalizerTests
     [Fact]
     public void TheWindowIsResolvedToUtcWhateverOffsetTheRequestCarried()
     {
-        // BR-U04 is about instants, not about wall clocks: the same moment expressed in two
-        // offsets has to select the same samples.
         var utc = Normalize(new ReportQueryInput(
             WindowStart: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
             WindowEnd: new DateTimeOffset(2026, 8, 2, 0, 0, 0, TimeSpan.Zero))).Query!;
@@ -74,8 +68,6 @@ public sealed class ReportQueryNormalizerTests
     [InlineData(int.MinValue)]
     public void APageBelowOneIsClampedRatherThanRejected(int page)
     {
-        // A nonsensical page is a navigation slip, not an attack; clamping keeps the report
-        // usable while still refusing to compute a negative offset.
         Normalize(new ReportQueryInput(Page: page)).Query!.Page.Should().Be(1);
     }
 
@@ -90,13 +82,6 @@ public sealed class ReportQueryNormalizerTests
         Normalize(new ReportQueryInput(HealthStatus: status)).Query!.HealthStatus.Should().Be(status);
     }
 
-    /// <summary>
-    /// Disabled was previously rejected as "a registry state rather than a monitoring outcome".
-    /// That held while the dashboard never reported it — but a disabled monitor now reports
-    /// Disabled instead of the state it was in when checking stopped, so it is a bucket a reader
-    /// can see. A status that appears on the page and cannot be filtered for is the contradiction
-    /// this test now guards against.
-    /// </summary>
     [Fact]
     public void ADisabledMonitorCanBeFilteredForBecauseItIsReported()
     {
@@ -115,7 +100,6 @@ public sealed class ReportQueryNormalizerTests
     [Fact]
     public void BlankFilterValuesAreTreatedAsAbsentRatherThanInvalid()
     {
-        // Empty query-string parameters arrive as "" from a form that submits every field.
         var query = Normalize(new ReportQueryInput(HealthStatus: "  ", MonitorType: "")).Query!;
 
         query.HealthStatus.Should().BeNull();
@@ -138,8 +122,6 @@ public sealed class ReportQueryNormalizerTests
     [Fact]
     public void ExportingKeepsEveryFilterAndOnlyChangesTheSlice()
     {
-        // This is what keeps the export honest: it re-slices the screen's query rather than
-        // building its own.
         var query = Normalize(new ReportQueryInput(
             ClientId: Guid.NewGuid(),
             OwnerSubjectId: Guid.NewGuid(),
@@ -160,8 +142,6 @@ public sealed class ReportQueryNormalizerTests
     [Fact]
     public void ExportingAlwaysStartsAtTheFirstPage()
     {
-        // The export is the whole filtered set. Carrying the screen's page over would produce a
-        // file starting at row 5,001 that still looked like the complete answer.
         var query = Normalize(new ReportQueryInput(Page: 7)).Query!;
 
         query.Page.Should().Be(7);
@@ -182,8 +162,6 @@ public sealed class ReportQueryNormalizerTests
     [InlineData(ReportQueryNormalizer.MaximumMonitors + 1, ReportQueryNormalizer.MaximumMonitors)]
     public void RepagingCannotEscapeThePageSizeBound(int pageSize, int expected)
     {
-        // The filter object owns its invariants: a caller cannot produce a zero page size that
-        // would later divide by zero in the pagination arithmetic.
         Normalize(new ReportQueryInput()).Query!.WithPaging(1, pageSize).PageSize
             .Should().Be(expected);
     }

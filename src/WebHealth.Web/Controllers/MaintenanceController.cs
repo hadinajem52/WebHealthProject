@@ -159,9 +159,6 @@ public sealed class MaintenanceController(
         new(model.ScopeKind, model.ScopeId!.Value), ToUtc(model.StartsAtUtc), ToUtc(model.EndsAtUtc), model.TimezoneId,
         model.Reason, model.SuppressionPolicy, model.PauseEscalation, model.ContinueFailureCounter, ToRecurrence(model));
 
-    // The submitted pattern is passed through unchanged so an unsupported value is rejected by
-    // the application service rather than silently downgraded to a one-off window here. Only the
-    // fields that depend on the pattern are cleared.
     private static MaintenanceRecurrenceSpec ToRecurrence(MaintenanceWindowFormViewModel model) =>
         model.RecurrencePattern == MaintenanceRecurrencePatterns.None
             ? new(MaintenanceRecurrencePatterns.None, MaintenanceDayOfWeekMask.Empty, null)

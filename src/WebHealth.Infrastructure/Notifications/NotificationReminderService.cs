@@ -10,16 +10,6 @@ namespace WebHealth.Infrastructure.Notifications;
 
 public sealed record NotificationReminderSweepResult(int RemindersWritten, int EscalationsWritten);
 
-/// <summary>
-/// Sweeps unacknowledged critical incidents for the 60-minute reminder and the single 30-minute
-/// escalation level. Acknowledgement stops both automatically — an incident with
-/// AcknowledgedAt set no longer matches the candidate query, so nothing further is written for
-/// it. Each incident is written in its own transaction. Once a slot's notification has been
-/// sent, every later tick for that same incident matches the same deterministic occurrence key
-/// until the next boundary, so an existence check short-circuits the common case before it ever
-/// reaches the database's unique index; the unique-key catch stays only as the backstop for an
-/// actual race (a second sweep tick landing between the check and the insert).
-/// </summary>
 internal sealed class NotificationReminderService(
     ApplicationDbContext dbContext,
     IMaintenanceEvaluator maintenanceEvaluator,
@@ -45,8 +35,6 @@ internal sealed class NotificationReminderService(
                 candidate.EndpointMonitorId, now, cancellationToken);
             if (maintenance is not null)
             {
-                // BR-M03: escalation pauses during an active maintenance window by default; skip
-                // this tick rather than accumulating a reminder/escalation for paused time.
                 continue;
             }
 

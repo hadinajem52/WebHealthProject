@@ -1,4 +1,4 @@
-﻿using WebHealth.Application.Crawling;
+using WebHealth.Application.Crawling;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Seo;
@@ -7,16 +7,6 @@ using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// The SEO and broken-link views are real read surfaces, so the shell tests — which run with no
-/// database — stub their readers exactly as they already stub the dashboard's. These tests are
-/// about who may reach the page; what the page shows is covered by the database foundation gate.
-/// <para>
-/// The stubs deliberately return data for every caller. A stub that returned nothing could not tell
-/// "authorization refused this" apart from "there was nothing to show", which is precisely the
-/// distinction these tests exist to make.
-/// </para>
-/// </summary>
 internal sealed class EmptySeoReader : ISeoReader
 {
     public Task<SeoListPage> ListAsync(
@@ -29,11 +19,6 @@ internal sealed class EmptySeoReader : ISeoReader
 
 internal sealed class EmptyCrawlReportReader : ICrawlReportReader
 {
-    /// <summary>
-    /// An endpoint whose crawl is still going, kept apart from the endpoint the Run crawl button
-    /// tests select: a running crawl replaces that button with the in-progress link, so sharing
-    /// one endpoint would make those tests fail for a reason that has nothing to do with them.
-    /// </summary>
     public static Guid RunningEndpointId { get; } = Guid.Parse("2b7d4f10-0000-0000-0000-000000000030");
 
     public static Guid RunningRunId { get; } = Guid.Parse("2b7d4f10-0000-0000-0000-000000000031");
@@ -86,10 +71,6 @@ internal sealed class EmptyCrawlReportReader : ICrawlReportReader
         Task.FromResult(CrawlComparison.Empty);
 }
 
-/// <summary>
-/// The PageSpeed page's reader. It answers for every caller, so a refusal in these tests is
-/// authorization refusing the request rather than the page simply having nothing to render.
-/// </summary>
 internal sealed class EmptyPageAuditReader : IPageAuditReader
 {
     public Task<IReadOnlyList<PageAuditCategorySummary>?> GetLatestCategorySummariesAsync(
@@ -106,16 +87,6 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
 
     public static Guid QueuedRunId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000020");
     public static Guid CompletedRunId { get; } = Guid.Parse("6f1c9a20-0000-0000-0000-000000000021");
-    /// <summary>
-    /// A configured, enabled endpoint, so the page renders its whole surface — including the
-    /// Run now control, whose authorization is what several of these tests are about.
-    /// </summary>
-    /// <remarks>
-    /// A requested run id resolves to a run, as it does in production: the real reader returns no
-    /// run only when the id names nothing this endpoint owns, and the controller turns that into
-    /// Not Found. A stub that answered null for every id would make the redirect after Run now
-    /// look like a wrong address.
-    /// </remarks>
     public Task<PageAuditEndpointSummary?> GetEndpointSummaryAsync(
         Guid endpointId,
         string category,
@@ -286,7 +257,6 @@ internal sealed class EmptyPageAuditIncidentPolicyService : IPageAuditIncidentPo
         1);
 }
 
-/// <summary>Records what the controller asked for instead of opening a run.</summary>
 internal sealed class RecordingPageAuditRunner : IPageAuditRunner
 {
     public List<Guid> Requested { get; } = [];
@@ -304,14 +274,12 @@ internal sealed class RecordingPageAuditRunner : IPageAuditRunner
     }
 }
 
-/// <summary>Records what the controller asked for instead of opening a crawl.</summary>
 internal sealed class RecordingCrawlRunner : ICrawlRunner
 {
     public List<Guid> Requested { get; } = [];
 
     public bool CheckExternalLinks { get; private set; }
 
-    /// <summary>Settable so a test can render the page as an instance with crawling switched off.</summary>
     public bool CanQueue { get; set; } = true;
 
     public Task<CrawlManualResult> QueueManualAsync(
@@ -326,10 +294,6 @@ internal sealed class RecordingCrawlRunner : ICrawlRunner
     }
 }
 
-/// <summary>
-/// Authorizes every endpoint. The tests that matter here are the ones asserting a refusal, and a
-/// stub that refused everything would make those pass for the wrong reason.
-/// </summary>
 internal sealed class PermissiveTargetAuthorizationService : ITargetAuthorizationService
 {
     public Task<bool> CanTestEndpointAsync(

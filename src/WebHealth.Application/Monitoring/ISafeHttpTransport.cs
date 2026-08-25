@@ -53,21 +53,6 @@ public interface ISafeHttpRequestHopPolicy
 
 public sealed record SafeHttpRequestHopDecision(bool Allowed, string? RejectionReason = null);
 
-/// <summary>
-/// <c>Certificate</c> carries the leaf certificate negotiated for a successful HTTPS response.
-/// It is always a valid, trusted certificate, because a response cannot be produced otherwise;
-/// evidence about invalid certificates comes from <see cref="ISslCertificateProbe" />.
-/// <para>
-/// <c>TransferredLength</c> is the length the response advertised on the wire, before any
-/// content decoding (BR-P04). It is null when the response advertised none, which is why it is
-/// separate from <c>ResponseBytesRead</c> rather than replacing it.
-/// </para>
-/// <para>
-/// <c>ContentType</c> is the raw <c>Content-Type</c> header, parameters included, because both the
-/// media type and the charset are needed to decide whether a body may be parsed at all (BR-E01)
-/// and how to decode it. It is null when the response declared none.
-/// </para>
-/// </summary>
 public sealed record SafeHttpTransportResult(
     SafeHttpFailureKind? Failure,
     int? StatusCode,
@@ -88,11 +73,6 @@ public sealed record SafeHttpTransportResult(
     public bool Succeeded => Failure is null;
 }
 
-/// <summary>
-/// Best-effort per-phase timing for the final network attempt of a check. Any phase the
-/// attempt never reached (for example TLS on a plain HTTP target, or a phase lost to an
-/// execution-context correlation miss) is left null rather than reported as zero.
-/// </summary>
 public sealed record SafeHttpPhaseTiming(
     int? DnsDurationMs,
     int? ConnectDurationMs,

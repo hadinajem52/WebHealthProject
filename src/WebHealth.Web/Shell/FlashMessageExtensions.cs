@@ -3,18 +3,12 @@ using Microsoft.AspNetCore.Mvc.ViewFeatures;
 
 namespace WebHealth.Web.Shell;
 
-/// <summary>
-/// Stores flash messages in <see cref="ITempDataDictionary" /> so they survive a
-/// single redirect and are removed once read.
-/// </summary>
 public static class FlashMessageExtensions
 {
-    /// <summary>The temp-data key holding the serialized message list.</summary>
     public const string TempDataKey = "WebHealth.FlashMessages";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Queues a message for the next rendered response.</summary>
     public static void AddFlashMessage(this ITempDataDictionary tempData, FlashLevel level, string text)
     {
         ArgumentNullException.ThrowIfNull(tempData);
@@ -28,7 +22,6 @@ public static class FlashMessageExtensions
         tempData[TempDataKey] = JsonSerializer.Serialize(messages, SerializerOptions);
     }
 
-    /// <summary>Reads and removes the queued messages.</summary>
     public static IReadOnlyList<FlashMessage> ReadFlashMessages(this ITempDataDictionary tempData)
     {
         ArgumentNullException.ThrowIfNull(tempData);

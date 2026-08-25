@@ -220,16 +220,6 @@ internal sealed class WebsiteRegistryService(
         CancellationToken cancellationToken = default) =>
         ChangeStateAsync(command, access, WebsiteAuditAction.Restored, cancellationToken);
 
-    /// <summary>
-    /// The irreversible counterpart to <see cref="DeleteAsync" />, and the same two guards the
-    /// endpoint purge uses: Administrator only, and the website must already be archived.
-    /// </summary>
-    /// <remarks>
-    /// Archiving a website does not archive its endpoints, so this deletes live endpoints under
-    /// an archived website. That is the point of requiring the archive step - the website has
-    /// already been withdrawn from every active list, and the operator is confirming that
-    /// everything beneath it goes too.
-    /// </remarks>
     public async Task<RegistryMutationResult> PurgeAsync(
         RegistryVersionCommand command,
         RegistryAccessContext access,
@@ -242,8 +232,6 @@ internal sealed class WebsiteRegistryService(
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        // The row lock stands in for the concurrency token the change tracker would normally
-        // enforce: the cascade runs as set-based deletes rather than tracked saves.
         var website = await dbContext.Websites.FromSqlInterpolated($"""
             SELECT * FROM web_health.website WHERE id = {command.EntityId} FOR UPDATE
             """)
@@ -268,8 +256,6 @@ internal sealed class WebsiteRegistryService(
 
         var now = DateTimeOffset.UtcNow;
 
-        // Written before the cascade and deliberately outside it: audit_event references the
-        // website by identifier rather than by foreign key, so it outlives the row.
         var snapshot = ToAuditSnapshot(website);
         await auditTrail.RecordWebsiteMutationAsync(
             new AuditWriteContext(access.UserId, now), WebsiteAuditAction.Purged,

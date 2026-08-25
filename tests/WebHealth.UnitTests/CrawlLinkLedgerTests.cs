@@ -4,10 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-L07. A target is fetched once but may be linked from many pages, and the source page is what
-/// makes the report actionable (AC-08). Order of discovery and outcome must not change the result.
-/// </summary>
 public sealed class CrawlLinkLedgerTests
 {
     private static CrawlRequestObservation Ok => new(CrawlRequestOutcome.Responded, 200, 0);

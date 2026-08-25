@@ -34,13 +34,9 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
 
         builder.ConfigureServices(services =>
         {
-            // The shell renders the notification panel on every page. These tests run with no
-            // database, so the feed is stubbed rather than reaching for a DbContext.
             services.RemoveAll<INotificationFeedReader>();
             services.AddScoped<INotificationFeedReader, EmptyNotificationFeedReader>();
 
-            // The dashboard is a real read surface as of increment 5.6, so its readers are
-            // stubbed for the same reason: these tests exercise the shell, not the data.
             services.RemoveAll<IReportingReader>();
             services.AddScoped<IReportingReader, EmptyReportingReader>();
             services.RemoveAll<IRegistryReader>();
@@ -50,7 +46,6 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.RemoveAll<ITargetRegistryReader>();
             services.AddScoped<ITargetRegistryReader, EmptyTargetRegistryReader>();
 
-            // The Phase 6 views read through their own readers, stubbed here for the same reason.
             services.RemoveAll<ISeoReader>();
             services.AddScoped<ISeoReader, EmptySeoReader>();
             services.RemoveAll<ICrawlReportReader>();
@@ -87,14 +82,10 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.RemoveAll<ITeamAdministrationService>();
             services.AddScoped<ITeamAdministrationService, EmptyTeamAdministrationService>();
 
-            // The PageSpeed page decides whether to offer Run now, and the action itself checks
-            // the same thing. Both reach the database in production, so both are stubbed here.
             services.RemoveAll<IPageAuditRunner>();
             services.AddSingleton<RecordingPageAuditRunner>();
             services.AddScoped<IPageAuditRunner>(provider =>
                 provider.GetRequiredService<RecordingPageAuditRunner>());
-            // The Broken links page decides whether to offer Run crawl, and the action itself
-            // checks the same thing. Both reach the database in production, so both are stubbed.
             services.RemoveAll<ICrawlRunner>();
             services.AddSingleton<RecordingCrawlRunner>();
             services.AddScoped<ICrawlRunner>(provider =>

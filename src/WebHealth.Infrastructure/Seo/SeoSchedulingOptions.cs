@@ -10,11 +10,6 @@ public sealed class SeoSchedulingOptions
 
     public bool Enabled { get; init; }
 
-    /// <summary>
-    /// How long one origin's robots.txt is trusted. Long enough that fifty endpoints on a host
-    /// cost one fetch a day, short enough that a site newly blocked from search is noticed the
-    /// same day it happens.
-    /// </summary>
     public int RobotsTtlHours { get; init; } = 24;
 
     public int RefreshBatchSize { get; init; } = 25;

@@ -7,11 +7,6 @@ public sealed record ErrorViewModel(
     string CorrelationId,
     string? RetryUrl = null)
 {
-    /// <summary>
-    /// Whether to show the correlation reference. A 4xx tells the reader what to do next and
-    /// needs no reference; a 5xx is a fault they cannot act on, and the reference is the only
-    /// thing connecting what they saw to what was logged.
-    /// </summary>
     public bool ShowReference => StatusCode >= 500;
 
     public static ErrorViewModel Create(

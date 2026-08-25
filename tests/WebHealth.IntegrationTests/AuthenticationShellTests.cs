@@ -79,8 +79,6 @@ public sealed class AuthenticationShellTests(WebHealthWebApplicationFactory fact
     [Fact]
     public async Task ProtectedShell_ShowsIdentityAndPostOnlySignOut()
     {
-        // The dashboard behind "/" is a registry read surface, so reaching its shell needs an
-        // application role; this test is about the shell's identity block, not about the policy.
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/");

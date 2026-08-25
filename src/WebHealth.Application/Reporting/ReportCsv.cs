@@ -2,12 +2,6 @@ using System.Globalization;
 
 namespace WebHealth.Application.Reporting;
 
-/// <summary>
-/// Renders a <see cref="ReportExport" /> as CSV. It takes the rows the query layer produced and
-/// does nothing but format them: there is no second filter, no second sort and no second
-/// authorization check here, which is the mechanism behind AC-11. If this file ever grows a
-/// <c>Where</c>, the screen and the export have stopped being the same dataset.
-/// </summary>
 public static class ReportCsv
 {
     public static IReadOnlyList<string> Headers { get; } =
@@ -41,10 +35,6 @@ public static class ReportCsv
     public static byte[] Write(ReportExport export) =>
         CsvWriter.Write(Headers, export.Rows.Select(ToFields));
 
-    /// <summary>
-    /// A filename that states the window the file covers, so a downloaded export is still
-    /// self-describing once it is sitting in someone's downloads folder.
-    /// </summary>
     public static string FileName(ReportQuery query) => string.Format(
         CultureInfo.InvariantCulture,
         "webhealth-report-{0:yyyyMMdd}-{1:yyyyMMdd}.csv",
@@ -55,8 +45,6 @@ public static class ReportCsv
     [
         CsvField.Token(row.EndpointMonitorId.ToString()),
         CsvField.Token(row.EndpointId.ToString()),
-        // Client, website, environment, URL and owner are all names a user typed, so they are
-        // the fields the formula guard exists for.
         CsvField.Text(row.ClientName),
         CsvField.Text(row.WebsiteName),
         CsvField.Text(row.EnvironmentName),

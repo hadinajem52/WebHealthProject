@@ -2,10 +2,6 @@ using WebHealth.Application.Registry;
 
 namespace WebHealth.Web.Models;
 
-/// <summary>
-/// Turns the reason an endpoint cannot be tested into a sentence for the page that would
-/// otherwise just be missing its run button.
-/// </summary>
 public static class EndpointTestBlockDisplay
 {
     public static string? Describe(EndpointTestBlock block, string runLabel) => block switch

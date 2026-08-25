@@ -4,10 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-E01 applicability and the BR-E10 bounding rules, as written down in
-/// docs/phase-6/SEO_Value_Extraction.md.
-/// </summary>
 public sealed class SeoExtractionRuleTests
 {
     private static SeoApplicabilityInput Html(

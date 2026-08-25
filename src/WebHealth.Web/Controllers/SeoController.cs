@@ -10,12 +10,6 @@ using WebHealth.Web.Models;
 
 namespace WebHealth.Web.Controllers;
 
-/// <summary>
-/// AC-07's view. Read-only for every persona that may read the registry, because an SEO result is
-/// an observation about a site rather than an operational control — the policy that decides what a
-/// site *should* declare stays behind <see cref="AuthorizationPolicies.ManageRegistry" /> where
-/// 6.4 put it.
-/// </summary>
 [Authorize(Policy = AuthorizationPolicies.ReadRegistry)]
 public sealed class SeoController(ISeoReader seoReader) : Controller
 {
@@ -28,9 +22,6 @@ public sealed class SeoController(ISeoReader seoReader) : Controller
         int page = 1,
         CancellationToken cancellationToken = default)
     {
-        // Unrecognised filter values become no filter rather than an error: a stale bookmark should
-        // show the unfiltered list, not a failure. Anything that survives is passed to the reader,
-        // which applies it in the database.
         var normalizedApplicability = SeoApplicabilities.Applicable.Equals(applicability, StringComparison.Ordinal)
             || SeoApplicabilities.NotApplicable.Equals(applicability, StringComparison.Ordinal)
                 ? applicability

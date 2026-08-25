@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using WebHealth.IntegrationTests.Support;
@@ -13,11 +13,6 @@ namespace WebHealth.IntegrationTests;
 public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
-    /// <summary>
-    /// The dashboard is a registry read surface, so it states its policy at the boundary. A
-    /// signed-in account with no application role must be denied rather than shown an empty
-    /// dashboard, which would hide the authorization decision inside query behaviour.
-    /// </summary>
     [Fact]
     public async Task Dashboard_DeniesASignedInUserWithNoApplicationRole()
     {
@@ -45,17 +40,9 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.Contains("<footer", content, StringComparison.Ordinal);
         Assert.Contains("<h1 class=\"app-title\">Dashboard</h1>", content, StringComparison.Ordinal);
 
-        // A top-level page has no ancestor to climb to, so its one-item trail — which only
-        // repeated the <h1> directly above it — is not rendered. The trail itself is still
-        // covered on a page that has one; see ErrorPage_UsesTheSharedShellAndTheErrorStateComponent.
         Assert.DoesNotContain("aria-label=\"Breadcrumb\"", content, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The header search accepted text and was wired to nothing — no form, no handler, no
-    /// results. A control that invites input it can never answer is a false affordance, so it is
-    /// gone until search exists.
-    /// </summary>
     [Fact]
     public async Task Header_DoesNotOfferASearchControlThatCannotSearch()
     {
@@ -67,16 +54,6 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.DoesNotContain("type=\"search\"", content, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The dashboard leads with what is broken rather than with how to filter. The order is the
-    /// product decision under test: current state and incidents must precede endpoint detail and
-    /// the window figures in the served markup, not merely exist somewhere on the page.
-    /// </summary>
-    /// <remarks>
-    /// The headings are located by their rendered <c>h2</c>, not by the bare identifier. The
-    /// identifier also appears earlier in the document as the alert banner's fragment link, so
-    /// searching for the raw string finds the anchor and reports an order the page does not have.
-    /// </remarks>
     [Fact]
     public async Task Dashboard_PlacesCurrentStateAndIncidentsAheadOfEndpointAndWindowDetail()
     {
@@ -95,11 +72,6 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.True(totals > health, "Window figures must follow endpoint health.");
     }
 
-    /// <summary>
-    /// The eight-field filter is reachable from the action bar rather than occupying the first
-    /// screen. It is a popup built on the shell's shared menu contract, and — like the header
-    /// menus — its form is in the served markup so filtering never depends on JavaScript.
-    /// </summary>
     [Fact]
     public async Task Dashboard_OffersTheFilterAsAMenuWhoseFormIsStillServed()
     {
@@ -110,7 +82,6 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.Contains("data-shell-filters-toggle", content, StringComparison.Ordinal);
         Assert.Contains("data-shell-filters-menu", content, StringComparison.Ordinal);
 
-        // Every dimension the report query supports still has a control.
         foreach (var field in new[]
                  {
                      "ClientId", "WebsiteId", "EnvironmentId", "OwnerSubjectId",
@@ -121,18 +92,9 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         }
     }
 
-    /// <summary>
-    /// The position of a section heading in the served markup, located by its rendered element so
-    /// a fragment link carrying the same identifier cannot be mistaken for the section itself.
-    /// </summary>
     private static int HeadingPosition(string content, string headingId) =>
         content.IndexOf($"id=\"{headingId}\">", StringComparison.Ordinal);
 
-    /// <summary>
-    /// The window figures are a rate over a period and the status chips are the state right now.
-    /// They are named for what they are, so a reader is not left reconciling "Uptime 100%" with a
-    /// "Critical" badge beside it.
-    /// </summary>
     [Fact]
     public async Task Dashboard_NamesWindowFiguresApartFromCurrentState()
     {
@@ -146,11 +108,6 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.Contains("Warning-free responses", content, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The chart's accessible table stays in the served HTML. It is behind a disclosure so a
-    /// sighted reader is not shown every daily row twice, but a reader without script — or
-    /// without the vendored chart library — must still receive the numbers.
-    /// </summary>
     [Fact]
     public async Task Dashboard_ServesTheChartDataAsMarkupEvenThoughItIsCollapsed()
     {
@@ -158,8 +115,6 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
 
         var content = await client.GetStringAsync("/");
 
-        // Either the trend has rows and the disclosure carries them, or the window held no
-        // samples and the empty state says so. Both are correct; a silent chart-only page is not.
         var hasTable = content.Contains("chart-table", StringComparison.Ordinal);
         var hasEmptyState = content.Contains("No samples in this window", StringComparison.Ordinal);
         Assert.True(hasTable || hasEmptyState, "The trend data is neither tabulated nor explained.");
@@ -249,15 +204,6 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.Contains("No open incidents", content, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// BR-R01 previously required a `_FilterSummary` strip naming every applied filter, the
-    /// window and the read instant. The project owner removed that component from the whole
-    /// application on 2026-08-22; see docs/phase-5/Dashboard_Trends_And_Reports_Ui.md.
-    ///
-    /// What survives of the rule is the scope bar, which still names the selected filters and
-    /// how fresh the reading is. It states neither the filter labels nor the exact instant, so
-    /// this is a deliberately weaker assertion than the one it replaces.
-    /// </summary>
     [Fact]
     public async Task Dashboard_StillNamesItsScopeAndHowFreshTheReadingIs()
     {
@@ -291,12 +237,6 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         Assert.Contains("cannot be longer than", content, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// The Phase 2 accessibility box: status must not be carried by colour alone. The pill no
-    /// longer draws a silhouette beside its label — Figma node 1633:352 has none — so the label
-    /// itself is the cue, and a pill served with an empty label would leave the fill carrying
-    /// the meaning on its own.
-    /// </summary>
     [Fact]
     public async Task StatusBadges_NameTheirStatusRatherThanOnlyColouringIt()
     {
@@ -311,24 +251,9 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
             "A status pill was served with no label, leaving its fill as the only cue."));
     }
 
-    /// <summary>
-    /// A pill's visible text, whether it is written directly into the element or wrapped by the
-    /// <c>_StatusBadge</c> partial's label span.
-    /// <para>
-    /// The class list and the attributes are matched loosely on purpose. A pill carrying added
-    /// context renders as <c>badge badge--detailed</c> and brings <c>data-badge-detail</c>,
-    /// <c>title</c> and <c>tabindex</c> with it. Pinning the exact attribute string made this
-    /// assertion match nothing once that variant existed, which fails as "there are no pills on
-    /// this page" rather than as a breach of the rule it is actually guarding.
-    /// </para>
-    /// </summary>
     [GeneratedRegex("<span class=\"badge[^\"]*\"[^>]*?data-status=\"[a-z]+\"[^>]*>\\s*(?:<span class=\"badge__label\">)?([^<]*)")]
     private static partial Regex BadgeLabel();
 
-    /// <summary>
-    /// The chart is an enhancement. Its numbers are always available as a table, and the
-    /// library behind it is served by this application rather than fetched from a CDN.
-    /// </summary>
     [Fact]
     public async Task TrendChart_IsVendoredLocallyAndHasATableEquivalent()
     {

@@ -3,13 +3,8 @@ using WebHealth.Domain.Seo;
 
 namespace WebHealth.Application.Seo;
 
-/// <summary>
-/// BR-E05 and BR-E09 are the same question with the answer reversed, so they are one setting: two
-/// independent flags could contradict each other, and nothing would say which one won.
-/// </summary>
 public static class SeoIndexingExpectations
 {
-    /// <summary>Resolved from the environment: production must be indexable, non-production must not.</summary>
     public const string Default = "Default";
     public const string Indexable = "Indexable";
     public const string NoIndex = "NoIndex";
@@ -23,11 +18,6 @@ public static class SeoIndexingExpectations
     };
 }
 
-/// <summary>
-/// Rule keys for the SEO configuration rules. Separate keys mean separate issue keys, so a page
-/// with a wrong canonical and a page that is unreachable track and resolve as independent
-/// incidents (BR-I04) without any new plumbing.
-/// </summary>
 public static class SeoRules
 {
     public const string TitleMissing = "Seo.TitleMissing";
@@ -41,10 +31,6 @@ public static class SeoRules
     public const string IndexableUnexpected = "Seo.IndexableUnexpected";
 }
 
-/// <summary>
-/// The policy the endpoint carries, resolved at finalization. It is deliberately not part of the
-/// fingerprinted check snapshot — see docs/phase-6/SEO_Canonical_And_Indexing_Policy.md.
-/// </summary>
 public sealed record SeoPolicy(
     string ExpectedCanonicalHost,
     string IndexingExpectation,
@@ -52,20 +38,10 @@ public sealed record SeoPolicy(
     bool IsProduction,
     string RobotsUserAgent = SeoPolicy.DefaultRobotsUserAgent)
 {
-    /// <summary>
-    /// Only a fallback. The real value is the user agent the transport actually sends, because a
-    /// robots group is selected by matching that string — a group naming the configured agent must
-    /// be the group that applies.
-    /// </summary>
     public const string DefaultRobotsUserAgent = "webhealthmonitor";
 
     public string ResolvedExpectation => SeoIndexingExpectations.Resolve(IndexingExpectation, IsProduction);
 
-    /// <summary>
-    /// An unmet expectation on production is High; everywhere else it is a Warning. Nothing here is
-    /// Critical: a misconfigured page is not an unreachable one, and reserving Critical for
-    /// availability is what keeps the severity vocabulary worth reading.
-    /// </summary>
     public string EnvironmentSeverity => IsProduction ? FindingSeverities.High : FindingSeverities.Warning;
 }
 
@@ -78,15 +54,11 @@ public static class SeoRuleEvaluator
         ArgumentNullException.ThrowIfNull(extraction);
         ArgumentNullException.ThrowIfNull(policy);
 
-        // BR-E01: a non-applicable observation carries no facts to judge. Its recorded reason is
-        // the answer, not a finding.
         return extraction.IsApplicable ? [.. Rules(extraction, policy)] : [];
     }
 
     private static IEnumerable<NormalizedFinding> Rules(SeoExtraction extraction, SeoPolicy policy)
     {
-        // A body that hit the response cap may simply not contain the part that would have carried
-        // the value, so concluding "missing" from it would be a guess (6.2 section 3.2).
         var absenceIsEvidence = !extraction.DocumentTruncated;
 
         if (absenceIsEvidence && extraction.Title.Value is null)
@@ -119,18 +91,10 @@ public static class SeoRuleEvaluator
         }
     }
 
-    /// <summary>
-    /// BR-E04 governs canonicals that exist — absolute, valid, unique, expected host. It does not
-    /// require one, and raising a finding for every page without a canonical would fire across most
-    /// of a healthy site and teach operators to ignore SEO findings altogether.
-    /// </summary>
     private static IEnumerable<NormalizedFinding> CanonicalRules(SeoExtraction extraction, SeoPolicy policy)
     {
         if (extraction.CanonicalHref.Value is not { } authored)
         {
-            // A canonical element with an empty or whitespace href is not "no canonical": the page
-            // states a canonical and states nothing usable, which is the invalid case BR-E04 is
-            // about. Only a page with no canonical element at all is silent.
             if (extraction.CanonicalCount > 0)
             {
                 yield return Finding(SeoRules.CanonicalInvalid, SeoFailureCategories.Canonical,
@@ -192,11 +156,6 @@ public static class SeoRuleEvaluator
         }
     }
 
-    /// <summary>
-    /// The content is a comma-separated directive list, so it is read as tokens. A substring search
-    /// would match "noindexing"; it would also have to special-case "none", which is the shorthand
-    /// for "noindex, nofollow" and is the strongest directive a page can carry.
-    /// </summary>
     public static bool IsNoIndex(string? robotsMeta) =>
         robotsMeta is not null
         && robotsMeta.Split(DirectiveSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

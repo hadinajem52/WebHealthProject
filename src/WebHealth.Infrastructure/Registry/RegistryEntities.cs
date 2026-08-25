@@ -105,13 +105,10 @@ public sealed class Endpoint
     public Guid? HttpExceptionApprovedByUserId { get; set; }
     public DateTimeOffset? HttpExceptionApprovedAt { get; set; }
 
-    /// <summary>BR-E04: null means the endpoint's own host is the expected canonical host.</summary>
     public string? SeoExpectedCanonicalHost { get; set; }
 
-    /// <summary>BR-E05 and BR-E09 as one setting; Default resolves from the environment.</summary>
     public string SeoIndexingExpectation { get; set; } = SeoIndexingExpectations.Default;
 
-    /// <summary>BR-E03: the endpoint may disable the meta-description rule.</summary>
     public bool SeoDescriptionRequired { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public Guid CreatedByUserId { get; set; }
@@ -173,16 +170,8 @@ public sealed class EndpointMonitor
     public int? WarningThresholdMs { get; set; }
     public int? CriticalThresholdMs { get; set; }
 
-    /// <summary>
-    /// Whether this endpoint takes part in scheduled monitoring at all. When false the
-    /// endpoint is manual-only and <see cref="IsEnabled" /> is not meaningful.
-    /// </summary>
     public bool SchedulingEnabled { get; set; } = true;
 
-    /// <summary>
-    /// The pause switch used while <see cref="SchedulingEnabled" /> is true. Scheduled
-    /// dispatch requires both.
-    /// </summary>
     public bool IsEnabled { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public Guid CreatedByUserId { get; set; }

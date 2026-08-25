@@ -185,22 +185,14 @@ public sealed record EndpointAuditSnapshot(
     bool TargetAuthorizationChanged,
     int MonitorIntervalSeconds,
     bool HasIntervalOverride,
-    // BR-E03 to BR-E05: an SEO policy change alters what later checks are judged against, so it
-    // belongs in the audit trail like every other change to how a target is evaluated.
     string SeoIndexingExpectation,
     bool SeoDescriptionRequired,
     bool HasSeoCanonicalHostOverride,
-    // Enabling a page audit sends this endpoint's URL to Google and asks Google to load
-    // it. That is a disclosure decision, so who made it and when belongs in the trail.
     bool PageAuditEnabled,
     bool PageAuditSchedulingEnabled,
     bool IsDeleted,
     long Version);
 
-/// <summary>
-/// BR-E07 and BR-E08: the origin-level policy an operator sets. The approved exception is recorded
-/// with who approved it, which is the point of having an exception rather than a flag.
-/// </summary>
 public sealed record RobotsPolicyAuditSnapshot(
     string Origin,
     bool SitemapRequired,

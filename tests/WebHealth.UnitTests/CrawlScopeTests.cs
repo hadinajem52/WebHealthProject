@@ -4,7 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>BR-L01. Where a crawl may go, decided before it makes a single request.</summary>
 public sealed class CrawlScopeTests
 {
     private static CrawlUrl Url(string value) =>

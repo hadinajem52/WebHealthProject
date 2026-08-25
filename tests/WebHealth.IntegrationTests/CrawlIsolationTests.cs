@@ -9,11 +9,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// The isolation claim from docs/phase-6/Crawl_Execution_And_Isolation.md, proved rather than
-/// asserted by design intent. A crawl that starves availability monitoring would be a silent
-/// failure: checks would simply report late.
-/// </summary>
 public sealed class CrawlIsolationTests
 {
     [Fact]
@@ -47,8 +42,6 @@ public sealed class CrawlIsolationTests
         var transport = new SafeHttpTransportOptions();
         var crawl = new CrawlSchedulingOptions();
 
-        // The product, not the per-run figure: several runs each inside their own budget can still
-        // fill the shared one between them.
         (crawl.WorkerCount * crawl.RequestConcurrency).Should()
             .BeLessOrEqualTo(transport.GlobalConcurrency / 2,
                 "a saturated crawl must never hold the whole shared transport budget");
@@ -74,8 +67,6 @@ public sealed class CrawlIsolationTests
             return site;
         }).ToArray();
 
-        // One shared budget handed to three runs at once. Without it each run would hold its own
-        // capacity and the three together would exceed the crawler's share of the transport.
         var inFlight = 0;
         var peak = 0;
         var gate = new Lock();
@@ -122,11 +113,6 @@ public sealed class CrawlIsolationTests
             "otherwise this test would pass on a crawler that never ran anything in parallel");
     }
 
-    /// <summary>
-    /// The claim the plan says cannot be made by inspection: a crawl whose every request stalls for
-    /// far longer than a monitoring cadence does not make a concurrently scheduled check wait.
-    /// A shared worker pool or a shared request budget would fail this.
-    /// </summary>
     [Fact]
     public async Task ACrawlWhoseEveryRequestStalls_DoesNotDelayAConcurrentScheduledCheck()
     {
@@ -146,8 +132,6 @@ public sealed class CrawlIsolationTests
         var crawl = CrawlTestHarness.RunAsync(
             site, CrawlTestHarness.Request(), options, cancellationToken: stopCrawl.Token);
 
-        // Give the crawl time to fill its budget, then time a monitoring-shaped unit of work
-        // against the same process while it is saturated.
         await Task.Delay(150);
         var stopwatch = Stopwatch.StartNew();
         await SimulatedScheduledCheckAsync();
@@ -160,11 +144,6 @@ public sealed class CrawlIsolationTests
             "a saturated crawl must not push a scheduled check past its cadence");
     }
 
-    /// <summary>
-    /// Stands in for the work a scheduled check does while the crawl is running. It deliberately
-    /// does not go through the crawl's budget, which is exactly what the separate queue and the
-    /// capped request concurrency are there to guarantee.
-    /// </summary>
     private static async Task SimulatedScheduledCheckAsync()
     {
         var transport = new FakeSiteTransport().Page("https://monitored.test/", "<html></html>");

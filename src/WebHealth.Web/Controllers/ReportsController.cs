@@ -8,16 +8,6 @@ using WebHealth.Infrastructure.Identity;
 
 namespace WebHealth.Web.Controllers;
 
-/// <summary>
-/// The reporting entry points. Every action normalizes the request through the same
-/// <see cref="ReportQueryNormalizer" /> and then calls the same <see cref="IReportingReader" />,
-/// so the CSV a user downloads is produced from the filter they were looking at rather than from
-/// a second interpretation of the same query string (AC-11).
-/// </summary>
-/// <remarks>
-/// The dashboard views themselves arrive in increment 5.6. What exists here is the shared
-/// entry: the export, and the trend series the charts will read.
-/// </remarks>
 [Authorize(Policy = AuthorizationPolicies.ReadRegistry)]
 public sealed class ReportsController(IReportingReader reportingReader) : Controller
 {
@@ -34,8 +24,6 @@ public sealed class ReportsController(IReportingReader reportingReader) : Contro
 
         try
         {
-            // The reader re-slices the filter for export itself, so the file is the whole
-            // filtered set rather than whichever page the screen happened to be on.
             var export = await reportingReader.ExportAsync(query, GetAccess(), cancellationToken);
             return File(
                 ReportCsv.Write(export),
@@ -48,7 +36,6 @@ public sealed class ReportsController(IReportingReader reportingReader) : Contro
         }
     }
 
-    /// <summary>The daily series the trend charts read (BR-U06).</summary>
     [HttpGet]
     public async Task<IActionResult> Trend(
         ReportQueryInput filter,

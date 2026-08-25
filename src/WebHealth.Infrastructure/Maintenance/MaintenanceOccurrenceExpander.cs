@@ -7,11 +7,6 @@ using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Maintenance;
 
-/// <summary>
-/// BR-M05. Expansion is insert-only and keyed on (window, occurrence start), so a repeated run
-/// over the same horizon writes nothing and a horizon extension appends without touching history.
-/// Occurrence rows are immutable in the database, which makes that the only safe shape.
-/// </summary>
 internal sealed class MaintenanceOccurrenceExpander(
     ApplicationDbContext dbContext,
     MaintenanceSchedulingOptions options,
@@ -41,8 +36,6 @@ internal sealed class MaintenanceOccurrenceExpander(
         if (!MaintenanceScheduleExpansion.TryMaterialise(
             window, from, horizon, now, existingStarts, out var occurrences))
         {
-            // Fail closed: leaving the watermark where it is means the next tick retries once the
-            // timezone database is available again, instead of skipping the horizon permanently.
             logger.LogError(
                 "Maintenance window {MaintenanceWindowId} was not expanded: timezone {TimezoneId} is unavailable.",
                 window.Id, window.TimezoneId);
@@ -54,8 +47,6 @@ internal sealed class MaintenanceOccurrenceExpander(
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
-            // Guarded advance: a slower concurrent expander must not move the watermark backwards
-            // onto a shorter horizon it computed earlier.
             await dbContext.MaintenanceWindows
                 .Where(item => item.Id == window.Id
                     && (item.ExpandedThrough == null || item.ExpandedThrough < horizon))
@@ -65,8 +56,6 @@ internal sealed class MaintenanceOccurrenceExpander(
         }
         catch (DbUpdateException exception) when (IsDuplicateOccurrence(exception))
         {
-            // A concurrent expander already wrote this range. Nothing to reconcile: the rows it
-            // wrote are the rows this run computed, so the next tick advances the watermark.
             dbContext.ChangeTracker.Clear();
             return 0;
         }

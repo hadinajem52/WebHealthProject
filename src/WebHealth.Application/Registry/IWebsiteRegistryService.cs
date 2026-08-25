@@ -22,11 +22,6 @@ public interface IWebsiteRegistryService
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Permanently removes an archived website, every environment under it, and every endpoint
-    /// under those, with everything recorded about them. The audit trail is retained. There is
-    /// no restore.
-    /// </summary>
     Task<RegistryMutationResult> PurgeAsync(
         RegistryVersionCommand command,
         RegistryAccessContext access,

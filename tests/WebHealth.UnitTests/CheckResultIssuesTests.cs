@@ -5,10 +5,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// The confirmation engine and the incident automation both read issues through this one
-/// function, so what it produces decides both what gets counted and what gets an incident.
-/// </summary>
 public sealed class CheckResultIssuesTests
 {
     private static readonly DateTimeOffset MeasuredAt = new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
@@ -22,7 +18,6 @@ public sealed class CheckResultIssuesTests
     [Fact]
     public void ACancelledResult_ObservesNoIssues()
     {
-        // A cancelled check is not evidence of anything, so it must not advance a counter.
         Observe(HttpResultOutcomes.Cancelled, Finding("Http.ServerError", FindingSeverities.Critical))
             .Should().BeEmpty();
     }
@@ -30,7 +25,6 @@ public sealed class CheckResultIssuesTests
     [Fact]
     public void SlowResponse_CarriesItsOwnConfirmationCountAlongsideAvailability()
     {
-        // BR-P03 next to BR-I04: one result, two issues, two different confirmation counts.
         var issues = Observe(
             HttpResultOutcomes.Critical,
             Finding("Http.ServerError", FindingSeverities.Critical),
@@ -57,8 +51,6 @@ public sealed class CheckResultIssuesTests
     [Fact]
     public void AFailureWithNoFinding_StillObservesSomethingToCount()
     {
-        // An execution-terminal result has no finding. Observing nothing would make the
-        // failure invisible to confirmation.
         var issues = Observe(HttpResultOutcomes.Critical);
 
         issues.Should().ContainSingle().Which.Severity.Should().Be(FindingSeverities.Critical);

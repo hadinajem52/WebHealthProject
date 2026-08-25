@@ -10,11 +10,6 @@ using WebHealth.Infrastructure.Monitoring;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// A controlled mini-site the crawl execution tests drive, standing in for the real transport. It
-/// is the same shape as the fixture site Phase 0 planned: working, redirected and broken links, all
-/// answered without a network.
-/// </summary>
 internal sealed class FakeSiteTransport : ISafeHttpTransport
 {
     private readonly Dictionary<string, SiteResponse> _pages = new(StringComparer.Ordinal);
@@ -68,8 +63,6 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
             if (BeforeRespondAsync is not null) await BeforeRespondAsync(request.Url);
             cancellationToken.ThrowIfCancellationRequested();
 
-            // An unconfigured URL is a 404, which is what makes a link to a page the fixture never
-            // defined a broken link rather than a silent success.
             var response = _pages.GetValueOrDefault(request.Url, new SiteResponse(404));
             var finalUrl = response.FinalUrl ?? request.Url;
             if (response.RedirectCount > 0
@@ -112,7 +105,6 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
     }
 }
 
-/// <summary>Authorizes every host by default, so a test opts in to refusing one.</summary>
 internal sealed class FakeTargetAuthorizer(params string[] deniedHosts) : IMonitoringTargetAuthorizer
 {
     public Task<bool> IsAuthorizedAsync(
@@ -130,7 +122,6 @@ internal sealed class FakeRobotsReader(CrawlRobotsFacts? facts = null) : ICrawlR
         Task.FromResult(facts ?? CrawlRobotsFacts.Unknown);
 }
 
-/// <summary>Different robots facts per origin, for runs that span more than one seed origin.</summary>
 internal sealed class PerOriginRobotsReader(Dictionary<string, CrawlRobotsFacts> factsByOrigin)
     : ICrawlRobotsReader
 {

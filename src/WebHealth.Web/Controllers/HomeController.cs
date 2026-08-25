@@ -13,12 +13,6 @@ using WebHealth.Web.Ajax;
 
 namespace WebHealth.Web.Controllers;
 
-/// <summary>
-/// The dashboard is a read surface over the registry, so it carries the same policy every other
-/// read surface does. Relying on the authenticated-user fallback would let a signed-in account
-/// with no application role reach it and see an empty page instead of a denial, which hides the
-/// authorization decision inside query behaviour rather than stating it at the boundary.
-/// </summary>
 [Authorize(Policy = AuthorizationPolicies.ReadRegistry)]
 public class HomeController(
     IReportingReader reportingReader,
@@ -28,12 +22,6 @@ public class HomeController(
 {
     private const int ActiveIncidentPreviewCount = 8;
 
-    /// <summary>
-    /// Every card, the table, the chart and the incident list are read from one
-    /// <see cref="ReportQuery" /> through the shared reporting layer, so changing a filter
-    /// recomputes all of them consistently and none of them can quietly answer a different
-    /// question (BR-R01).
-    /// </summary>
     public async Task<IActionResult> Index(
         DashboardFilterViewModel filter,
         CancellationToken cancellationToken = default)
@@ -45,8 +33,6 @@ public class HomeController(
 
         if (normalized.Query is not { } query)
         {
-            // The filter is shown back with its errors rather than silently reset, so the
-            // reader can see which value was rejected.
             return View(EmptyDashboard(filter, options, asOf, normalized.Errors));
         }
 
@@ -55,8 +41,6 @@ public class HomeController(
             var dataset = await reportingReader.QueryAsync(query, access, cancellationToken);
             var certificates = await reportingReader.QueryCertificateExpiryAsync(query, access, cancellationToken);
             var diagnostics = await reportingReader.QueryDiagnosticsAsync(query, access, cancellationToken);
-            // The incident list comes from the same filtered selection as the incident count on
-            // the card above it, so the two can never describe different sets.
             var incidents = await reportingReader.QueryActiveIncidentsAsync(
                 query, access, ActiveIncidentPreviewCount, cancellationToken);
 
@@ -116,11 +100,6 @@ public class HomeController(
         await targetReader.ListAllEnvironmentsAsync(access, cancellationToken),
         await registryReader.ListOwnersAsync(cancellationToken: cancellationToken));
 
-    /// <summary>
-    /// BR-R01. The disclosure is built from the <em>query the reader served</em> rather than from
-    /// the submitted form, so what it names is what was actually applied — including a window the
-    /// server defaulted or bounded and a page it clamped.
-    /// </summary>
     private static FilterSummaryViewModel Describe(
         ReportQuery query,
         DateTimeOffset asOf,
@@ -167,10 +146,6 @@ public class HomeController(
         return new(
             asOf,
             filters,
-            // Stated as half-open, because that is what it is: a sample at the end instant
-            // belongs to the next period (BR-U04). The instants are passed through rather than
-            // formatted here: a sentence built in the controller cannot be re-rendered in the
-            // reader's time zone.
             new FilterSummaryWindow(query.WindowStart, query.WindowEnd),
             comparabilityWarning);
     }
@@ -200,7 +175,6 @@ public class HomeController(
         [],
         errors);
 
-    // Only the re-executed original path is offered as a retry target, and only
     private string? GetRetryUrl()
     {
         var originalPath = HttpContext.Features.Get<IStatusCodeReExecuteFeature>()?.OriginalPath

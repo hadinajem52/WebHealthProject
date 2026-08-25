@@ -6,11 +6,6 @@ using WebHealth.Application.Notifications;
 
 namespace WebHealth.Infrastructure.Notifications;
 
-/// <summary>
-/// Sends notification email over SMTP with STARTTLS. Invoked only from the dispatcher, never
-/// from a finalization transaction. Failures are classified so the dispatcher can retry a
-/// transient fault and stop retrying a rejected recipient.
-/// </summary>
 internal sealed class SmtpEmailTransport(
     SmtpEmailOptions options,
     ILogger<SmtpEmailTransport> logger) : IEmailTransport
@@ -40,14 +35,11 @@ internal sealed class SmtpEmailTransport(
         }
         catch (AuthenticationException exception)
         {
-            // Bad credentials will not fix themselves, so do not burn the retry budget.
             logger.LogError(exception, "SMTP authentication failed for host {SmtpHost}.", options.Host);
             return new(EmailTransportOutcome.PermanentFailure, "authentication failed");
         }
         catch (SmtpCommandException exception)
         {
-            // RFC 5321: 4xx is a temporary negative reply, 5xx is permanent. Comparing against a
-            // single code would retry permanent rejections such as 535 authentication failed.
             var permanent = (int)exception.StatusCode / 100 == 5;
             logger.LogError(
                 exception,
@@ -58,8 +50,6 @@ internal sealed class SmtpEmailTransport(
                 permanent ? EmailTransportOutcome.PermanentFailure : EmailTransportOutcome.TransientFailure,
                 $"smtp status {(int)exception.StatusCode}");
         }
-        // Shutdown is not a delivery failure: let it cancel so no attempt is recorded and the
-        // lease simply expires. Only MailKit's own timeout arrives here as a transient fault.
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;

@@ -1,13 +1,9 @@
-﻿using WebHealth.Application.PageAudits;
+using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Domain.PageAudits;
 
 namespace WebHealth.Web.Models;
 
-/// <summary>
-/// The endpoint picker, the form factor being read, the selected run, and the audits behind its
-/// score.
-/// </summary>
 public sealed record PageAuditIndexViewModel(
     IReadOnlyList<EndpointOption> Endpoints,
     Guid? SelectedEndpointId,
@@ -27,10 +23,6 @@ public sealed record PageAuditIndexViewModel(
             && item.NumericValue is not null)]
         : [];
 
-    /// <summary>
-    /// The audits grouped for display, in the order a reader needs them: what is wrong first,
-    /// then what a person still has to check, then everything that is fine.
-    /// </summary>
     public IReadOnlyList<PageAuditSection> Sections =>
     [
         new("Failed audits", PageAuditItemStatuses.Failed,
@@ -68,17 +60,8 @@ public sealed record PageAuditSection(
     string Description,
     IReadOnlyList<PageAuditItemView> Items);
 
-/// <summary>
-/// How a run and its score are described. The wording is deliberately careful in two places: the
-/// score is a Lighthouse technical audit rather than a ranking prediction, and a failed run is
-/// never rendered as a bad score.
-/// </summary>
 public static class PageAuditDisplay
 {
-    /// <summary>
-    /// Lighthouse's own reporting bands. They are the provider's, not ours, so a reader comparing
-    /// this page with a PageSpeed report sees the same colour for the same number.
-    /// </summary>
     public static string ScoreTone(int? score) => score switch
     {
         null => "neutral",
@@ -111,10 +94,6 @@ public static class PageAuditDisplay
         };
     }
 
-    /// <summary>
-    /// The form factor, as a person names it. The stored value is already the English word, so
-    /// this exists to keep the page from spelling one strategy differently in two places.
-    /// </summary>
     public static string DescribeStrategy(string strategy) => strategy switch
     {
         PageAuditStrategies.Desktop => "Desktop",
@@ -163,11 +142,6 @@ public static class PageAuditDisplay
         return $"{item.NumericValue.Value / 1000:0.0} s";
     }
 
-    /// <summary>
-    /// Why a run produced no score, in words an operator can act on. The stored diagnostic is
-    /// shown beside this rather than instead of it: the category says what kind of problem it is,
-    /// and the diagnostic says what the provider actually reported.
-    /// </summary>
     public static string DescribeFailure(string? failureCategory) => failureCategory switch
     {
         PageAuditFailureCategories.ProviderRateLimited =>
@@ -194,12 +168,6 @@ public static class PageAuditDisplay
         _ => "The audit failed for an unrecognised reason."
     };
 
-    /// <summary>
-    /// A delta only means something between two runs of the same tool version. Across a major
-    /// version Lighthouse can add, remove or redefine audits, so the number is a change in
-    /// measurement as much as a change in the page, and the page says so rather than implying a
-    /// regression the site did not cause.
-    /// </summary>
     public static string DescribeComparison(PageAuditComparison comparison)
     {
         ArgumentNullException.ThrowIfNull(comparison);

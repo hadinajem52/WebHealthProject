@@ -180,8 +180,6 @@ internal sealed class TargetRegistryReader(
             rows.Select(row => row.Id).ToArray(), access, cancellationToken);
         var endpointIds = rows.Select(row => row.Id).ToArray();
 
-        // The availability monitor is the one that carries the schedule; a certificate monitor
-        // follows it and would otherwise vote twice on the same endpoint.
         var schedules = await dbContext.EndpointMonitors.AsNoTracking()
             .Where(monitor => monitor.DeletedAt == null
                 && monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType
@@ -232,13 +230,9 @@ internal sealed class TargetRegistryReader(
             .SingleOrDefaultAsync(cancellationToken);
         if (endpoint is null)
         {
-            // Not visible to this caller, which is different from having no certificate.
             return null;
         }
 
-        // Not Applicable is decided by the URL scheme (BR-C01), not by whether a monitor row
-        // happens to exist: an HTTPS endpoint whose monitor is missing is a gap to show as
-        // awaiting a check, not an endpoint without certificates.
         if (!RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl))
         {
             return CertificateStatus.NotApplicable;
@@ -285,10 +279,6 @@ internal sealed class TargetRegistryReader(
             SelectExpirySeverity(latest.ValidationCategory, latest.DaysRemaining)));
     }
 
-    /// <summary>
-    /// BR-C04, re-derived from the stored day count so the page and the check that produced it
-    /// can never show different severities for the same observation.
-    /// </summary>
     private static CertificateExpirySeverity SelectExpirySeverity(
         string validationCategory,
         int daysRemaining) =>
@@ -408,8 +398,6 @@ internal sealed class TargetRegistryReader(
                     .OrderByDescending(evidence => evidence.EffectiveFrom)
                     .Select(evidence => evidence.ExpiresAt).FirstOrDefault(),
                 endpoint.Version,
-                // The listed cadence is the availability monitor's; an endpoint may also carry
-                // a certificate monitor with its own fixed daily schedule.
                 endpoint.Monitors
                     .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
                     .Select(monitor => monitor.MonitorType).Single(),

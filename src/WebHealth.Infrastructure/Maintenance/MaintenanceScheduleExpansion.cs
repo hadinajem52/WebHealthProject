@@ -2,10 +2,6 @@ using WebHealth.Domain.Maintenance;
 
 namespace WebHealth.Infrastructure.Maintenance;
 
-/// <summary>
-/// Bridges a stored window's schedule specification to the pure domain expansion, so window
-/// creation and the recurring expander materialise occurrences through exactly one code path.
-/// </summary>
 internal static class MaintenanceScheduleExpansion
 {
     public static MaintenanceSchedule ToSchedule(MaintenanceWindow window) => new(
@@ -29,11 +25,6 @@ internal static class MaintenanceScheduleExpansion
         }
     }
 
-    /// <summary>
-    /// Returns false when the window's timezone cannot be resolved on this host. The caller must
-    /// treat that as an expansion failure rather than an empty expansion: a missing timezone is
-    /// recoverable, and silently reporting "no occurrences" would leave the period unsuppressed.
-    /// </summary>
     public static bool TryMaterialise(
         MaintenanceWindow window,
         DateTimeOffset fromUtc,

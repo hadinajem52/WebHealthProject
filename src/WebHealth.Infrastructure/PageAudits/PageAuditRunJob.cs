@@ -5,21 +5,6 @@ using WebHealth.Application.PageAudits;
 
 namespace WebHealth.Infrastructure.PageAudits;
 
-/// <summary>
-/// The page-audit queue's only job, and the sole occupant of its own Hangfire server.
-/// </summary>
-/// <remarks>
-/// <para>
-/// It takes a run id and nothing else. Everything the audit needs — the URL, the strategy, the
-/// locale — was snapshotted onto the run when it was opened, so no caller can hand this job a
-/// different URL than the one the configuration approved.
-/// </para>
-/// <para>
-/// <c>AutomaticRetry(Attempts = 0)</c> because the application counts attempts itself, in
-/// <c>attempt_count</c>. Two retry mechanisms would disagree about how many times we have already
-/// asked Google to load somebody's page, and Hangfire's count is not the one stored beside the run.
-/// </para>
-/// </remarks>
 public sealed class PageAuditRunJob(
     PageAuditExecutionService executionService,
     IPageAuditQueue queue)
@@ -36,7 +21,6 @@ public sealed class PageAuditRunJob(
     }
 }
 
-/// <summary>The recurring dispatcher and the reconciliation sweep, on the same isolated queue.</summary>
 public sealed class PageAuditDispatchJob(PageAuditSchedulingService schedulingService)
 {
     [Queue(PageAuditQueueNames.PageAudits)]
@@ -58,10 +42,6 @@ internal sealed class HangfirePageAuditQueue(IBackgroundJobClient backgroundJobs
             job => job.ExecuteAsync(runId, CancellationToken.None), delay);
 }
 
-/// <summary>
-/// Used when the feature is switched off. It throws rather than doing nothing: a run row committed
-/// with no way to reach a worker would sit Queued forever, looking like work in progress.
-/// </summary>
 internal sealed class DisabledPageAuditQueue : IPageAuditQueue
 {
     public void Enqueue(Guid runId) => throw Unavailable();
@@ -83,8 +63,6 @@ public static class PageAuditSchedulingApplicationBuilderExtensions
             return app;
         }
 
-        // Every fifteen minutes rather than hourly: the dispatcher also runs the reconciliation
-        // sweep, and a run whose job was lost should not wait an hour to be noticed.
         app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<PageAuditDispatchJob>(
             "page-audit-dispatch",
             PageAuditQueueNames.PageAudits,

@@ -2,12 +2,6 @@ using System.Globalization;
 
 namespace WebHealth.Domain.Normalization;
 
-/// <summary>
-/// Trims and parses the address, normalizes the domain to IDNA ASCII, and preserves local-part
-/// case. A configured case-insensitive local-part policy for known company/demo mailboxes is
-/// deferred until a real deployment needs it; the version is stored regardless so that addition
-/// does not silently rewrite delivery identity.
-/// </summary>
 public static class RecipientNormalizer
 {
     public const short Version = 1;

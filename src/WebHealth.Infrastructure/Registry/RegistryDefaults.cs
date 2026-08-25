@@ -20,15 +20,9 @@ internal static class RegistryDefaults
     public const string PageAuditMonitorType = PageAuditMonitorIdentity.MonitorType;
     public const int HttpTimeoutSeconds = 30;
 
-    /// <summary>BR-C07: SSL certificates are checked once a day by default.</summary>
     public const int SslIntervalSeconds = 24 * 60 * 60;
     public const int SslTimeoutSeconds = 15;
 
-    /// <summary>
-    /// A certificate problem is a single confirmed observation: unlike a flapping HTTP
-    /// response, an expired or untrusted certificate does not resolve itself between daily
-    /// checks, and waiting a second day to confirm would waste a day of the expiry window.
-    /// </summary>
     public const int SslFailureConfirmationCount = 1;
     public const int SslRecoveryConfirmationCount = 1;
     public const int PageAuditIntervalSeconds = 24 * 60 * 60;
@@ -40,7 +34,6 @@ internal static class RegistryDefaults
     public static int GetHttpIntervalSeconds(bool isProduction) =>
         MonitorCadence.GetDefaultIntervalSeconds(isProduction);
 
-    /// <summary>BR-C01: only HTTPS endpoints have a certificate to monitor.</summary>
     public static bool RequiresSslMonitor(string normalizedUrl) =>
         normalizedUrl.StartsWith(Uri.UriSchemeHttps + "://", StringComparison.Ordinal);
 

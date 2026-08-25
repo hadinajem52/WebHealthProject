@@ -1,14 +1,9 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using WebHealth.Domain.Crawling;
 using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-L03 and BR-L04, as written down in docs/phase-6/Crawl_Scope_And_URL_Identity.md. The
-/// canonical crawl URL is the revisit key, so each of these is a statement about whether the
-/// crawler terminates or whether it silently misses pages.
-/// </summary>
 public sealed class CrawlUrlNormalizerTests
 {
     private static string? Canonical(string url, CrawlUrlOptions? options = null) =>

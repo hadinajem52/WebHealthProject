@@ -135,10 +135,6 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
         return errors;
     }
 
-    /// <summary>
-    /// BR-M05. The recurrence is the anchor occurrence's local wall-clock time repeated, so a
-    /// weekly recurrence that excludes the anchor's own day would contradict its declared start.
-    /// </summary>
     private static IEnumerable<ValidationError> ValidateRecurrence(CreateMaintenanceWindow command)
     {
         var recurrence = command.Recurrence;
@@ -221,11 +217,6 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
         _ => Task.FromResult(false)
     };
 
-    /// <summary>
-    /// Builds the window from its schedule specification and materialises the first horizon of
-    /// occurrences in the same transaction, so a window suppresses from the moment it is created
-    /// rather than from the next expansion tick.
-    /// </summary>
     private static MaintenanceWindow CreateWindow(CreateMaintenanceWindow command, Guid userId, DateTimeOffset now, int horizonDays)
     {
         var duration = command.EndsAt - command.StartsAt;
@@ -254,12 +245,8 @@ internal sealed class MaintenanceWindowService(ApplicationDbContext dbContext, I
         };
         window.Targets.Add(CreateTarget(command.Scope));
 
-        // A one-off or already-started window must still materialise its declared occurrence, so
-        // the horizon is never allowed to fall before the anchor.
         var horizon = MaxOf(now.AddDays(horizonDays), startsAt.AddTicks(1));
         if (MaintenanceRecurrencePatterns.IsRecurring(window.RecurrencePattern)) window.ExpandedThrough = horizon;
-        // ValidateAsync has already resolved the timezone through the same lookup, so materialisation
-        // cannot fail here; a window is never persisted without the occurrences it declares.
         MaintenanceScheduleExpansion.TryMaterialise(
             window, startsAt, horizon, now, new HashSet<DateTimeOffset>(), out var occurrences);
         foreach (var occurrence in occurrences)

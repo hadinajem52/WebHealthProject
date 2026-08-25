@@ -14,8 +14,7 @@
     {
         @await Html.PartialAsync("_ValidationSummary")
     }
-    @* No card title here: the page heading already reads "Audit history". This card is the
-       control that scopes the trail below it, so it carries the explanation and the filters. *@
+    
     <section class="card" aria-labelledby="audit-scope-label">
         <p class="card__subtitle" id="audit-scope-label">
             Append-only evidence of security, administration and assignment actions. Entries are
@@ -67,8 +66,7 @@
                     @await Html.PartialAsync("_Icon", "filter")
                     <span>Apply filters</span>
                 </button>
-                @* Offered only when something is applied: a Clear control on an unfiltered trail
-                   is an action with nothing to do. *@
+                
                 @if (Model.HasFilters)
                 {
                     <a class="button button--secondary" asp-action="Index" data-ajax-link data-ajax-target="#ajax-page">
@@ -83,8 +81,7 @@
     @if (result.Events.Count == 0)
     {
         <section class="card">
-            @* Two different facts, and they need different words: the filters excluded
-               everything, or nothing audited has happened yet. *@
+            
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 Model.HasFilters
                     ? "No audit events match these filters"
@@ -101,8 +98,7 @@
             <div class="page-intro">
                 <div>
                     <h3 class="card__title" id="audit-results-heading">Recorded events</h3>
-                    @* The total across every page, which is what the reader is selecting from.
-                       Anything derived from this page's rows would read as a total and be wrong. *@
+                    
                     <p class="card__status" data-status="neutral">
                         @await Html.PartialAsync("_Icon", "audit")
                         <span>@result.TotalCount event@(result.TotalCount == 1 ? null : "s")</span>
@@ -141,10 +137,7 @@
                                     <span class="data-table__secondary code">@auditEvent.EntityIdentifier</span>
                                 </td>
 
-                                @* Moved ahead of the values column and given a real status style.
-                                   Every outcome used to render as the same neutral tag, so a
-                                   refusal looked exactly like a success -- in the one table read
-                                   specifically to find refusals. *@
+                                
                                 <td data-label="Outcome">
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                         AuditEventDisplay.OutcomeBadge(auditEvent.Outcome),
@@ -158,9 +151,7 @@
                                     }
                                     else
                                     {
-                                        @* The summary says what is inside before it is opened.
-                                           "View values" gave no reason to open one row over
-                                           another, so every row had to be opened to find out. *@
+                                        
                                         <details class="audit-changes">
                                             <summary>@AuditEventDisplay.DescribeValues(auditEvent)</summary>
                                             @if (auditEvent.BeforeValues.Count > 0)

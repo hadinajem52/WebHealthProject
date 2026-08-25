@@ -21,8 +21,6 @@ public sealed class TlsCertificateEvaluatorTests
     [InlineData(1)]
     public void Classify_TreatsBothEndsOfTheValidityWindowAsInclusive(int endOffsetTicks)
     {
-        // RFC 5280 includes both bounds: a certificate is valid at exactly notBefore and at
-        // exactly notAfter, and only becomes invalid one tick outside the window.
         var atStart = endOffsetTicks == 0 ? NotBefore : NotBefore.AddTicks(-1);
         var atEnd = endOffsetTicks == 0 ? NotAfter : NotAfter.AddTicks(1);
 
@@ -35,8 +33,6 @@ public sealed class TlsCertificateEvaluatorTests
     [Fact]
     public void Classify_ReportsExpiryAheadOfTrustAndHostnameProblems()
     {
-        // An expired certificate almost always also reports chain errors. Reporting it as
-        // untrusted would hide the cause the operator has to act on.
         Classify(NotAfter.AddDays(1), hostnameMatched: false, chainTrusted: false)
             .Should().Be(TlsValidationCategory.Expired);
     }

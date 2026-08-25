@@ -18,8 +18,6 @@ public sealed class TargetAuthorizationTrackingTests
         endpoint.TargetAuthorizations.Add(evidence);
         context.ChangeTracker.DetectChanges();
 
-        // A store-generated key convention would make this Modified, saving the new
-        // evidence as an UPDATE that matches no row and fails the concurrency check.
         Assert.Equal(EntityState.Added, context.Entry(evidence).State);
     }
 

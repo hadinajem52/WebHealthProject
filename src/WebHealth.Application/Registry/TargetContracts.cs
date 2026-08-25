@@ -77,23 +77,14 @@ public sealed record RegistryEndpointItem(
     long Version,
     EndpointMonitoringMode MonitoringMode);
 
-/// <summary>
-/// How an endpoint is monitored, as three distinct states rather than a monitored/not flag. A
-/// manual-only target is not a paused one: nobody paused it, and telling an operator it is paused
-/// invites them to look for a resume button that does not apply.
-/// </summary>
 public enum EndpointMonitoringMode
 {
-    /// <summary>The endpoint or one of its owning records is disabled.</summary>
     Disabled,
 
-    /// <summary>Scheduled checks are configured and running.</summary>
     Scheduled,
 
-    /// <summary>Scheduled checks are configured but paused. Manual runs still work.</summary>
     Paused,
 
-    /// <summary>No schedule was ever configured; the target runs on demand only.</summary>
     ManualOnly
 }
 
@@ -137,10 +128,6 @@ public sealed record EndpointDetails(
     bool PageAuditSchedulingEnabled = false,
     int PageAuditIntervalHours = 24);
 
-/// <summary>
-/// What the UI shows for an endpoint's certificate. <paramref name="IsMonitored" /> false means
-/// Not Applicable rather than Unknown: an HTTP endpoint has nothing to inspect.
-/// </summary>
 public sealed record CertificateStatus(
     bool IsMonitored,
     CertificateObservationItem? Latest)
@@ -161,12 +148,6 @@ public sealed record CertificateObservationItem(
     bool ChainTrusted,
     string? SubjectAlternativeNames,
     DateTimeOffset ObservedAt,
-    /// <summary>
-    /// The BR-C04 expiry band for this observation, derived from the day count that was stored
-    /// with it rather than from the current clock, so the page shows the same severity the
-    /// check itself raised. <c>None</c> for a certificate that is not valid today: its
-    /// validation category is the thing to report, not how soon it would have expired.
-    /// </summary>
     CertificateExpirySeverity ExpirySeverity);
 
 public sealed record CreateEnvironment(

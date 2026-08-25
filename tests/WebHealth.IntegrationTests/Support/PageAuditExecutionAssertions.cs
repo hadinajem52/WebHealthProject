@@ -10,15 +10,6 @@ using WebHealth.Domain.Incidents;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// The scheduling, lease and finalization rules against a real database.
-/// </summary>
-/// <remarks>
-/// Time is moved by updating the row rather than by freezing a clock. A frozen
-/// <c>TimeProvider</c> beside fixtures created from the real one produces rows that violate
-/// <c>updated_at &gt;= created_at</c>, which is a failure about the fixture rather than about the
-/// rule under test.
-/// </remarks>
 internal static class PageAuditExecutionAssertions
 {
     public static async Task VerifyAsync(
@@ -331,7 +322,6 @@ internal static class PageAuditExecutionAssertions
         run.AttemptCount.Should().Be(0);
         run.FinishedAt.Should().BeNull();
 
-        // Snapshotted at dispatch, so the job receives a run id and nothing a caller could change.
         run.RequestedUrl.Should().Be(endpointUrl);
         run.Strategy.Should().Be(PageAuditStrategies.Mobile);
         run.Locale.Should().Be("en-US");
@@ -341,10 +331,6 @@ internal static class PageAuditExecutionAssertions
         return run.Id;
     }
 
-    /// <summary>
-    /// The cadence advances even though no run was opened, so a target does not accumulate a
-    /// backlog of missed slots to fire the moment the run in flight finishes.
-    /// </summary>
     private static async Task VerifyASecondDispatchDoesNotOvertakeTheRunInFlightAsync(
         ApplicationDbContext database,
         PageAuditSchedulingService scheduling,
@@ -371,10 +357,6 @@ internal static class PageAuditExecutionAssertions
             .SingleAsync(run => run.Id == runId)).Status.Should().Be(PageAuditRunStatuses.Queued);
     }
 
-    /// <summary>
-    /// A page that fails every audit is a successful measurement of a bad page. Recording that as
-    /// a failed run would lose the score and report a working provider as broken.
-    /// </summary>
     private static async Task VerifyAFailingAuditStillCompletesTheRunAsync(
         ApplicationDbContext database,
         PageAuditExecutionService execution,
@@ -414,10 +396,6 @@ internal static class PageAuditExecutionAssertions
             .Should().Be(PageAuditItemStatuses.NotApplicable);
     }
 
-    /// <summary>
-    /// Hangfire promises at-least-once delivery, so a second delivery is a case to handle rather
-    /// than a bug to prevent. It must cost nothing: no second call to Google, no duplicated items.
-    /// </summary>
     private static async Task VerifyADuplicateDeliveryCostsNoSecondApiCallAsync(
         PageAuditExecutionService execution,
         ScriptedPageAuditProvider provider,
@@ -442,7 +420,6 @@ internal static class PageAuditExecutionAssertions
     {
         var runId = await OpenQueuedRunAsync(database, targetId, endpointId, endpointUrl);
 
-        // A worker that took the run and died: Running, with a claim that has since expired.
         await ExecuteSqlAsync(connectionString,
             $"""
             UPDATE web_health.page_audit_run
@@ -462,10 +439,6 @@ internal static class PageAuditExecutionAssertions
         await CloseRunAsync(connectionString, runId);
     }
 
-    /// <summary>
-    /// A transient failure keeps the run alive and asks for it again; the attempt budget is the
-    /// application's own, so it cannot disagree with how many times we have already asked Google.
-    /// </summary>
     private static async Task VerifyATransientFailureRetriesThenGivesUpAsync(
         ApplicationDbContext database,
         PageAuditExecutionService execution,
@@ -495,8 +468,6 @@ internal static class PageAuditExecutionAssertions
         second.ShouldRetry.Should().BeTrue();
         second.RetryAfter.Should().Be(TimeSpan.FromMinutes(5));
 
-        // The third attempt is the last the budget allows, so it ends the run rather than asking
-        // for a fourth.
         var third = await execution.ExecuteAsync(runId);
         third.Status.Should().Be(PageAuditRunStatuses.Failed);
         third.ShouldRetry.Should().BeFalse();
@@ -509,10 +480,6 @@ internal static class PageAuditExecutionAssertions
         failed.SafeDiagnostic.Should().NotBeNullOrWhiteSpace();
     }
 
-    /// <summary>
-    /// A provider failure must not manufacture audit rows. A Lighthouse runtime error means the
-    /// page was never measured, and inventing failing audits would blame the site for it.
-    /// </summary>
     private static async Task VerifyAProviderFailureLeavesNoInventedAuditsAsync(
         ApplicationDbContext database,
         PageAuditExecutionService execution,
@@ -537,11 +504,6 @@ internal static class PageAuditExecutionAssertions
             .Should().Be(0);
     }
 
-    /// <summary>
-    /// The enqueue-after-commit window: a run committed whose job never arrived. Reconciliation
-    /// re-enqueues the same run rather than opening a second one, because the execution service
-    /// already claims by lease and a duplicate <em>run</em> would be a second API call.
-    /// </summary>
     private static async Task VerifyReconciliationReEnqueuesRatherThanOpeningASecondRunAsync(
         string connectionString,
         ApplicationDbContext database,
@@ -570,12 +532,6 @@ internal static class PageAuditExecutionAssertions
         await CloseRunAsync(connectionString, runId);
     }
 
-    /// <summary>
-    /// The snapshot makes the job un-steerable, and also makes it stale. An endpoint edited
-    /// between queueing and execution re-derives its authorization for the new URL, so the
-    /// eligibility check passes while the request still carries the old one - a host nobody
-    /// authorized. The run must refuse rather than send it.
-    /// </summary>
     private static async Task VerifyAStaleUrlIsNeverSentAsync(
         string connectionString,
         ApplicationDbContext database,
@@ -601,11 +557,6 @@ internal static class PageAuditExecutionAssertions
         run.SafeDiagnostic.Should().Contain("changed after this run was queued");
     }
 
-    /// <summary>
-    /// A run with no attempts left can never be claimed again. Reconciliation therefore retires it
-    /// instead of re-enqueueing work no worker will do - otherwise its target's single active-run
-    /// slot is held against every later audit, forever.
-    /// </summary>
     private static async Task VerifyASpentAttemptBudgetStopsReclaimAsync(
         string connectionString,
         ApplicationDbContext database,
@@ -619,8 +570,6 @@ internal static class PageAuditExecutionAssertions
     {
         var runId = await OpenQueuedRunAsync(database, targetId, endpointId, endpointUrl);
 
-        // A worker that died after spending the whole budget: Running, lease expired, no attempts
-        // left. Before the ceiling was part of the claim this was reclaimed indefinitely.
         await ExecuteSqlAsync(connectionString,
             $"""
             UPDATE web_health.page_audit_run
@@ -676,11 +625,6 @@ internal static class PageAuditExecutionAssertions
         return runId;
     }
 
-    /// <summary>
-    /// Closes the stage's own run so the next step starts from an empty active slot. The partial
-    /// unique index allows one live run per target, and a stage that left one open would fail the
-    /// next step with a uniqueness error rather than the rule it was testing.
-    /// </summary>
     private static Task CloseRunAsync(string connectionString, Guid runId) =>
         ExecuteSqlAsync(connectionString,
             $"""
@@ -699,7 +643,6 @@ internal static class PageAuditExecutionAssertions
     }
 }
 
-/// <summary>A provider that answers however the stage tells it to, and counts its calls.</summary>
 internal sealed class ScriptedPageAuditProvider : IPageAuditProvider
 {
     private PageAuditProviderResult? _result;
@@ -737,10 +680,6 @@ internal sealed class ScriptedPageAuditProvider : IPageAuditProvider
             request.Categories.ToDictionary(category => category, _ => result)));
     }
 
-    /// <summary>
-    /// One passed, one failed, one manual and one not-applicable audit — the four cases the
-    /// counts on the page have to keep apart.
-    /// </summary>
     public static PageAuditProviderResult MixedResult() => new(
         PageAuditProviders.PageSpeedInsights,
         "https://page-audit-exec.example.com/status",
@@ -764,7 +703,6 @@ internal sealed class ScriptedPageAuditProvider : IPageAuditProvider
         null);
 }
 
-/// <summary>Records what was queued instead of reaching Hangfire.</summary>
 internal sealed class RecordingPageAuditQueue : IPageAuditQueue
 {
     public List<Guid> Enqueued { get; } = [];

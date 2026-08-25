@@ -100,7 +100,6 @@ public sealed class ChecksController(
     public async Task<IActionResult> History(Guid id, int page = 1, CancellationToken cancellationToken = default)
     {
         var result = await checkHistoryReader.ListForEndpointAsync(id, GetAccess(), page, cancellationToken);
-        // BR-R01: the page states which endpoint it is scoped to and when it was read.
         return result is null
             ? this.NotFoundRecord("endpoint")
             : View(new CheckHistoryViewModel(

@@ -10,8 +10,7 @@
 }
 
 <div id="ajax-page" class="stack" data-ajax-region>
-    @* No card title here: the page heading already reads "Incidents". This card is the control
-       that scopes the list below it, so it carries only the explanation and the filters. *@
+    
     <section class="card" aria-labelledby="incidents-scope-label">
         <p class="card__subtitle" id="incidents-scope-label">
             Confirmed availability issues across your assigned targets. An incident opens only
@@ -50,8 +49,7 @@
                     @await Html.PartialAsync("_Icon", "filter")
                     <span>Apply filters</span>
                 </button>
-                @* Offered only when something is applied: a Clear control on an unfiltered list
-                   is an action with nothing to do. *@
+                
                 @if (Model.HasFilters)
                 {
                     <a class="button button--secondary" asp-action="Index" data-ajax-link data-ajax-target="#ajax-page">
@@ -66,8 +64,7 @@
     @if (listPage.Items.Count == 0)
     {
         <section class="card">
-            @* An empty list means two different things, and they need different words: nothing
-               matched what you asked for, or nothing has gone wrong at all. *@
+            
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 Model.HasFilters
                     ? "No incidents match these filters"
@@ -84,8 +81,7 @@
             <div class="page-intro">
                 <div>
                     <h3 class="card__title" id="incidents-results-heading">Confirmed incidents</h3>
-                    @* The total across every page, which is what the reader is selecting from.
-                       Anything derived from this page's rows would read as a total and be wrong. *@
+                    
                     <p class="card__status" data-status="neutral">
                         @await Html.PartialAsync("_Icon", "incidents")
                         <span>@listPage.TotalCount incident@(listPage.TotalCount == 1 ? null : "s")</span>
@@ -132,9 +128,7 @@
                                     <span class="data-table__secondary">@item.ClientName / @item.WebsiteName / @item.EnvironmentName</span>
                                 </td>
 
-                                @* The issue key was a native title tooltip on the cell, which is
-                                   invisible until hovered and unreachable by keyboard. It is an
-                                   identifier a reader may need to quote, so it is shown. *@
+                                
                                 <td data-label="Issue">
                                     <span class="data-table__primary">@IssueDisplay.Describe(item.IssueKey)</span>
                                     <span class="data-table__secondary">@item.IssueKey</span>
@@ -146,9 +140,7 @@
                                         item.Severity))
                                 </td>
 
-                                @* Status, its label and the two facts that qualify it, in one
-                                   badge each. Loose secondary lines under a badge are what made
-                                   these rows read as unaligned blocks rather than a table. *@
+                                
                                 <td data-label="Status">
                                     <span class="badge-set">
                                         @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(

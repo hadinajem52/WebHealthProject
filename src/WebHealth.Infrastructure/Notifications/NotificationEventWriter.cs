@@ -7,12 +7,6 @@ using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Notifications;
 
-/// <summary>
-/// Resolves recipients and writes one notification_event plus its notification_delivery rows.
-/// Always runs inside the caller's existing transaction (finalization for Opened/Recovered, the
-/// reminder/escalation sweep's own short transaction otherwise) — it never sends anything itself;
-/// SMTP delivery is the separate dispatcher's job, kept outside this write.
-/// </summary>
 internal sealed class NotificationEventWriter(ApplicationDbContext dbContext)
 {
     public async Task<NotificationEvent> WriteAsync(

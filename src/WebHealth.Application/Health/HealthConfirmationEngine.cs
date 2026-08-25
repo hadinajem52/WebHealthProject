@@ -25,12 +25,6 @@ public sealed record HealthIssueCounter(
     int ConsecutiveFailures,
     int ConsecutiveRecoveries);
 
-/// <summary>
-/// One issue the current result observed, with the two things that decide what it does: how
-/// severe it is, and how many consecutive samples it needs before it counts as confirmed.
-/// The confirmation count is per issue rather than per monitor because BR-P03 gives slow
-/// response its own three-breach rule while availability keeps the monitor's own.
-/// </summary>
 public sealed record ObservedIssue(
     string IssueKey,
     string Severity,
@@ -49,12 +43,6 @@ public sealed record HealthConfirmationDecision(
     IReadOnlyList<HealthIssueCounter> Issues,
     IReadOnlyList<string> ConfirmedIssueKeys,
     IReadOnlyList<string> RecoveryStartedIssueKeys,
-    /// <summary>
-    /// Issues this result did <em>not</em> observe and which have now passed for long enough to
-    /// count as recovered. Reported separately from <see cref="ConfirmedStatus" /> because
-    /// recovery is per issue: an availability failure can clear while a page-size warning on the
-    /// same endpoint persists, and the availability incident has to be allowed to resolve.
-    /// </summary>
     IReadOnlyList<string> RecoveredIssueKeys,
     string? ConfirmedStatus,
     HealthTransition Transition);
@@ -80,12 +68,6 @@ public static class HealthConfirmationEngine
             : HealthCounterMode.Count;
     }
 
-    /// <summary>
-    /// The confirmed endpoint status a finding severity implies. <c>High</c> lands on
-    /// <c>Warning</c> for the same reason it produces a warning outcome: the endpoint status is
-    /// an availability signal, and a certificate expiring in fifteen days does not make the
-    /// site unreachable.
-    /// </summary>
     public static string ToHealthStatus(string severity) =>
         severity == FindingSeverities.Critical
             ? EndpointHealthStatuses.Critical
@@ -155,16 +137,9 @@ public static class HealthConfirmationEngine
                 ? IncrementFailure(issueKey, current.GetValueOrDefault(issueKey))
                 : indeterminate.Contains(issueKey)
                     ? current[issueKey]
-                    // An issue this result did not observe is passing, even though some other issue
-                    // on the same endpoint failed. Its recovery counter therefore advances here too
-                    // — otherwise a lingering page-size warning would hold an unrelated availability
-                    // incident open indefinitely, because the endpoint never produces a wholly
-                    // healthy result again.
                     : IncrementRecovery(issueKey, current.GetValueOrDefault(issueKey), wasUnhealthy))
             .ToArray();
 
-        // An issue confirms on its own count (BR-P03), so a slow-response issue needing three
-        // breaches and an availability issue needing two advance independently on one result.
         var confirmed = issues
             .Where(issue => observed.TryGetValue(issue.IssueKey, out var observation)
                 && issue.ConsecutiveFailures >= observation.FailureConfirmationCount)
@@ -213,11 +188,6 @@ public static class HealthConfirmationEngine
             .Select(issue => issue.IssueKey)
             .ToArray();
 
-    /// <summary>
-    /// Warning and Critical are both "confirmed unhealthy" states, so recovery counting starts
-    /// from either. Unknown is not: an endpoint that has never reported has nothing to recover
-    /// from, and its first pass is an initial reading rather than a recovery.
-    /// </summary>
     private static bool IsUnhealthy(string status) =>
         status is EndpointHealthStatuses.Warning or EndpointHealthStatuses.Critical;
 

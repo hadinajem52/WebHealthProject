@@ -1,10 +1,4 @@
-/*
- * Application shell enhancement.
- *
- * Loaded in the document head so the "js" marker is applied before first paint.
- * Everything the script controls has server-rendered behavior without it: the
- * navigation stays in the document flow and every link is a normal request.
- */
+
 (function () {
     'use strict';
 
@@ -56,9 +50,9 @@
         return true;
     }
 
-    // An irreversible action asks once before it runs. The prompt is an
-    // enhancement rather than the guard: the server refuses the same request
-    // when the caller lacks the role or the endpoint is not archived.
+
+
+
     function setUpConfirmedSubmission() {
         if (!beginInitialization(document.documentElement)) {
             return;
@@ -75,10 +69,10 @@
         });
     }
 
-    // Reveals a password so it can be checked before submitting. The type swap is
-    // the whole mechanism; aria-pressed carries the state for assistive technology
-    // and drives the icon through CSS, so there is one source of truth rather than
-    // three things to keep in step.
+
+
+
+
     function setUpPasswordReveal(toggle) {
         if (!beginInitialization(toggle)) {
             return;
@@ -101,25 +95,25 @@
             var revealed = toggle.getAttribute('aria-pressed') === 'true';
             apply(!revealed);
 
-            // Focus returns to the value being checked, with the caret at the end.
-            // Without this the caret jumps to the start on some browsers after a
-            // type change, which silently corrupts the next keystroke.
+
+
+
             var caret = input.value.length;
             input.focus();
             if (input.setSelectionRange) {
                 try {
                     input.setSelectionRange(caret, caret);
                 } catch (error) {
-                    // A browser that refuses selection on this input type is not a
-                    // reason to leave the password revealed.
+
+
                 }
             }
         });
 
-        // Re-masked on submit. The page normally reloads, but a failed validation
-        // re-render or a back-navigation restore can bring a revealed field back,
-        // and a password left on screen is the one outcome this control must not
-        // cause.
+
+
+
+
         var form = input.form;
         if (form) {
             form.addEventListener('submit', function () {
@@ -128,10 +122,10 @@
         }
     }
 
-    // A badge's added context, shown on hover and on focus. The element is positioned against
-    // the viewport rather than the badge, because the badges live inside table containers that
-    // scroll horizontally, and anything absolutely positioned inside one of those is clipped by
-    // it. One shared element is reused for every badge; there is only ever one visible.
+
+
+
+
     var badgeTooltip = null;
     var openBadge = null;
     var badgeListenersReady = false;
@@ -251,10 +245,10 @@
         var wideViewport = window.matchMedia(WIDE_VIEWPORT);
         var isOpen = false;
 
-        // The narrow-viewport drawer overlays the page, so it is announced as a
-        // modal dialog and the rest of the application is made inert while it is
-        // open. Both are removed on close, leaving the wide layout as a plain
-        // navigation landmark.
+
+
+
+
         function setModalState(active) {
             if (active) {
                 sidebar.setAttribute('role', 'dialog');
@@ -352,7 +346,7 @@
             }
         });
 
-        // Leaving the narrow layout removes the drawer, so reset its state.
+
         var onViewportChange = function (event) {
             if (event.matches) {
                 close(false);
@@ -393,9 +387,9 @@
         });
     }
 
-    // A non-modal popup: it closes on Escape, on a click outside it, and as soon as
-    // focus leaves it, so it never traps the user. Shared by the account, settings and
-    // notification menus in the header, and by the dashboard filter.
+
+
+
     function setUpPopupMenu(container, toggle, menu) {
         if (!beginInitialization(container)) {
             return;
@@ -463,17 +457,7 @@
         }, { signal: listenerController.signal });
     }
 
-    /*
-     * Time zone display.
-     *
-     * The server renders every instant as <time datetime="{iso}">…  UTC</time>. The stored value
-     * is UTC and stays UTC; this only decides which zone the reader sees, so it is a browser
-     * preference held in localStorage rather than anything sent back.
-     *
-     * The ISO attribute is the source of truth for the conversion. Reparsing the rendered text
-     * would mean turning a display string back into a moment, which breaks the first time a
-     * format changes.
-     */
+
     var TIMEZONE_STORAGE_KEY = 'webhealth.display-timezone';
     var UTC_ZONE = 'utc';
     var LOCAL_ZONE = 'local';
@@ -483,8 +467,8 @@
             var stored = window.localStorage.getItem(TIMEZONE_STORAGE_KEY);
             return stored === UTC_ZONE || stored === LOCAL_ZONE ? stored : null;
         } catch (error) {
-            // Private browsing and blocked storage both throw here. The preference is a
-            // convenience, so losing it must not take the page down with it.
+
+
             return null;
         }
     }
@@ -493,7 +477,7 @@
         try {
             window.localStorage.setItem(TIMEZONE_STORAGE_KEY, zone);
         } catch (error) {
-            // Ignored for the same reason.
+
         }
     }
 
@@ -501,8 +485,8 @@
         return value < 10 ? '0' + value : String(value);
     }
 
-    // The zone's own short name, taken from the formatter rather than assumed, so a zone that
-    // shifts for daylight saving is labelled correctly for the instant being shown.
+
+
     function zoneAbbreviation(date) {
         try {
             var parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' })
@@ -513,7 +497,7 @@
                 }
             }
         } catch (error) {
-            // Fall through to the offset below.
+
         }
 
         var offsetMinutes = -date.getTimezoneOffset();
@@ -563,8 +547,8 @@
                 ? formatUtc(date, withSeconds)
                 : formatLocal(date, withSeconds);
 
-            // The other reading stays available on hover, so a reader comparing against a log
-            // or a notification never has to convert by hand.
+
+
             element.title = zone === UTC_ZONE
                 ? formatLocal(date, withSeconds)
                 : formatUtc(date, withSeconds);
@@ -585,7 +569,7 @@
                     zoneNameLabel.textContent = resolved.replace(/_/g, ' ');
                 }
             } catch (error) {
-                // The default wording already describes it well enough.
+
             }
         }
 
@@ -623,7 +607,7 @@
                     flash.remove();
                 }
             } catch (error) {
-                // Dismissal still works for this page when storage is unavailable.
+
             }
         });
 
@@ -653,14 +637,14 @@
                 try {
                     window.localStorage.setItem(persistentKey, 'dismissed');
                 } catch (error) {
-                    // Dismissal still works for this page when storage is unavailable.
+
                 }
             }
 
             flash.remove();
 
-            // The dismissed button held focus, so hand it somewhere predictable
-            // rather than letting it fall back to the document body.
+
+
             var remaining = container.querySelector('[data-shell-flash-dismiss]');
             if (remaining) {
                 remaining.focus();
@@ -680,10 +664,10 @@
         });
     }
 
-    // The monitoring interval only governs the scheduled cadence, so it is shown
-    // as inactive while scheduled checks are off. It stays readonly rather than
-    // disabled: a disabled input is not submitted, which would silently clear a
-    // stored override on the next save.
+
+
+
+
     function setUpIntervalAvailability(toggle, field, input) {
         if (!beginInitialization(toggle)) {
             return;
@@ -700,9 +684,9 @@
         sync();
     }
 
-    // Fields that only apply while a switch above them is on. Dimming is all this does: the
-    // inputs stay editable and keep submitting. Disabling them would drop values the reader had
-    // already typed, and the rule about when they apply belongs to the server either way.
+
+
+
     function setUpDependentFields(toggle) {
         if (!beginInitialization(toggle)) {
             return;
@@ -760,8 +744,8 @@
             setUpPopupMenu(notifications, notificationsToggle, notificationsMenu);
         }
 
-        // The dashboard filter uses the same popup contract as the header menus, so its open,
-        // Escape, click-away and focus-out behaviour cannot drift from theirs.
+
+
         var filters = first(root, '[data-shell-filters]');
         var filtersToggle = first(root, '[data-shell-filters-toggle]');
         var filtersMenu = first(root, '[data-shell-filters-menu]');
@@ -770,8 +754,8 @@
             setUpPopupMenu(filters, filtersToggle, filtersMenu);
         }
 
-        // Page-level dropdowns declare themselves, so a page can carry several of
-        // them without the script naming each one.
+
+
         elements(root, '[data-shell-menu]').forEach(function (container) {
             var menuToggle = container.querySelector('[data-shell-menu-toggle]');
             var menuPanel = container.querySelector('[data-shell-menu-panel]');
@@ -817,8 +801,8 @@
 
         setUpConfirmedSubmission();
 
-        // A failed submission re-renders the page; move focus to the summary so
-        // keyboard and screen-reader users start at the reported problem.
+
+
         var validationSummary = first(root, '[data-shell-validation-summary]');
         if (validationSummary) {
             validationSummary.focus();

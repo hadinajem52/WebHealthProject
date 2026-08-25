@@ -4,10 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-L02 as it now stands: a run that asks for an override gets it, on any target. The gate is
-/// still the only place that decides, so a run that does not ask still obeys robots.
-/// </summary>
 public sealed class CrawlRobotsGateTests
 {
     private const string Agent = "webhealthmonitor/1.0";

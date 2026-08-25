@@ -28,13 +28,9 @@ internal sealed class SslUrgentCheckScheduler(
             return null;
         }
 
-        // Serialise the cooldown decision for this endpoint. Without the row lock two
-        // concurrent TLS failures can both read "no recent urgent check" and both insert one,
-        // which is exactly the queue storm the cooldown exists to prevent.
         var monitorId = await LockCertificateMonitorAsync(endpointId, cancellationToken);
         if (monitorId is null)
         {
-            // HTTP-only, paused, or retired: nothing to re-check.
             return null;
         }
 
@@ -96,11 +92,6 @@ internal sealed class SslUrgentCheckScheduler(
             request.LogicalCheckId);
     }
 
-    /// <summary>
-    /// Takes the row lock on the endpoint's certificate monitor. The caller already holds the
-    /// availability monitor's lock, and certificate checks never take the availability lock, so
-    /// the ordering here cannot form a cycle.
-    /// </summary>
     private async Task<Guid?> LockCertificateMonitorAsync(
         Guid endpointId,
         CancellationToken cancellationToken)
@@ -123,10 +114,6 @@ internal sealed class SslUrgentCheckScheduler(
         return await command.ExecuteScalarAsync(cancellationToken) as Guid?;
     }
 
-    /// <summary>
-    /// Only an availability check can trigger this. A failing certificate check must never
-    /// request another certificate check, or a permanently broken host would re-queue itself.
-    /// </summary>
     private static bool IsTlsFailure(LogicalCheckTerminalEvidence evidence) =>
         evidence is HttpTransportEvidence { Result.Failure: SafeHttpFailureKind.Tls };
 }

@@ -6,11 +6,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// Phase 6 increment 6.8. Every role's **direct** request to the SEO and broken-link views, made
-/// against the real routes rather than against a synthetic policy endpoint — a navigation entry
-/// that hides a link is a usability choice, and only the request itself proves the server refuses.
-/// </summary>
 public sealed class PhaseSixViewAuthorizationTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
@@ -59,10 +54,6 @@ public sealed class PhaseSixViewAuthorizationTests(WebHealthWebApplicationFactor
         response.Headers.Location!.OriginalString.Should().StartWith("/Account/Login");
     }
 
-    /// <summary>
-    /// A run the requester may not see is <c>404</c>, not <c>403</c>. Answering "forbidden" would
-    /// confirm that the run exists, which is itself a disclosure about another client's data.
-    /// </summary>
     [Theory]
     [MemberData(nameof(EveryRole))]
     public async Task CrawlRun_OutsideVisibility_IsNotFoundRatherThanForbidden(string role)
@@ -74,11 +65,6 @@ public sealed class PhaseSixViewAuthorizationTests(WebHealthWebApplicationFactor
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
-    /// <summary>
-    /// The filters are applied by the reader, so a hand-written query string cannot widen what is
-    /// returned — an unrecognised value is treated as no filter rather than rejected or passed
-    /// through to the database.
-    /// </summary>
     [Theory]
     [InlineData("/Seo?applicability=Everything")]
     [InlineData("/Seo?environment=Staging%20AND%201%3D1")]

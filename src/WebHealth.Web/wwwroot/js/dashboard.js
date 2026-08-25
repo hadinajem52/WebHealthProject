@@ -1,24 +1,9 @@
-/*
- * Dashboard trend charts.
- *
- * Two single-axis charts rather than one dual-axis chart. Uptime percentage and response latency
- * share a date range and nothing else, and drawing them against two scales in one frame invites
- * a reader to see a correlation between them that the data does not assert.
- *
- * The charts are an enhancement, never the only route to the data. Both canvases are hidden from
- * assistive technology outright and the same numbers are always rendered in a plain table in the
- * served HTML, so a reader without script, without the vendored library, or using a screen reader
- * loses nothing. That is also why every failure here is silent — a broken canvas must not take
- * the page down with it.
- *
- * Chart.js is vendored under wwwroot/lib, matching how bootstrap and jquery are carried. No CDN
- * is used, so the page has no third-party origin to reach at render time.
- */
+
 (function () {
     'use strict';
 
-    // BR-P02's defaults, mirrored from ResponseTimeThresholds.Default. An endpoint may override
-    // them, so these are drawn and labelled as the defaults rather than as this view's budget.
+
+
     var DEFAULT_WARNING_MS = 1500;
     var DEFAULT_CRITICAL_MS = 3000;
     var charts = [];
@@ -37,12 +22,7 @@
         return value ? value.trim() : fallback;
     }
 
-    /*
-     * A day the reader has no sample for is not a value, and it is not zero either. Chart.js
-     * treats null as a gap once spanGaps is off, which is what missing monitoring data should
-     * look like: absent. The previous chart joined straight across those days, drawing a
-     * confident line through hours nothing was measured.
-     */
+
     function values(series, key) {
         return series.map(function (point) {
             var value = point[key];
@@ -50,10 +30,7 @@
         });
     }
 
-    /*
-     * A horizontal reference line, drawn under the data so it never obscures a point. Registered
-     * per chart rather than globally so a chart without thresholds is unaffected.
-     */
+
     function thresholdPlugin(lines) {
         return {
             id: 'thresholds',
@@ -132,8 +109,8 @@
 
         var labels = series.map(function (point) { return point.day; });
 
-        // Reduced motion is a stated preference, not a hint: the charts draw in their final
-        // position rather than animating into it.
+
+
         var prefersReducedMotion = window.matchMedia
             && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -173,8 +150,8 @@
                             data: values(series, 'p50'),
                             borderColor: cssValue('--status-warning-text', '#c05621'),
                             backgroundColor: 'transparent',
-                            // Each series keeps its own dash pattern and point shape, so they
-                            // stay distinguishable without relying on their colours.
+
+
                             borderDash: [2, 3],
                             pointStyle: 'triangle',
                             tension: 0.25,

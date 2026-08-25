@@ -13,11 +13,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// The provider adapter against recorded responses and a fake handler. Nothing here reaches
-/// Google: the fixtures are the contract, and a live call would make the suite depend on somebody
-/// else's uptime, quota and current audit set.
-/// </summary>
 public sealed class PageSpeedInsightsProviderTests
 {
     private const string TestCredential = "test-key-must-never-be-logged";
@@ -106,10 +101,6 @@ public sealed class PageSpeedInsightsProviderTests
         result.Categories.Values.Select(category => category.LighthouseVersion).Distinct().Should().ContainSingle();
     }
 
-    /// <summary>
-    /// Membership comes from the category's auditRefs. The fixture carries an audit belonging to
-    /// another category, and counting it would attribute it to a score it took no part in.
-    /// </summary>
     [Fact]
     public async Task RunAsync_TakesOnlyTheAuditsTheSeoCategoryReferences()
     {
@@ -223,10 +214,6 @@ public sealed class PageSpeedInsightsProviderTests
         failure.FailureCategory.Should().Be(PageAuditFailureCategories.ProviderContractInvalid);
     }
 
-    /// <summary>
-    /// A referenced audit that is absent is a broken contract, not something to skip: dropping it
-    /// would leave the score with a gap nothing explains.
-    /// </summary>
     [Fact]
     public async Task RunAsync_RefusesAResponseMissingAnAuditTheCategoryReferences()
     {
@@ -276,10 +263,6 @@ public sealed class PageSpeedInsightsProviderTests
         failure.RetryAfter.Should().Be(TimeSpan.FromSeconds(45));
     }
 
-    /// <summary>
-    /// An hour-long Retry-After would occupy the single audit worker doing nothing, so it is
-    /// ignored rather than obeyed and the ordinary backoff applies instead.
-    /// </summary>
     [Fact]
     public async Task RunAsync_IgnoresARetryAfterTooLongToWaitOn()
     {
@@ -373,10 +356,6 @@ public sealed class PageSpeedInsightsProviderTests
         handler.Requests.Should().BeEmpty("an anonymous call would spend somebody else's quota");
     }
 
-    /// <summary>
-    /// The request asks for the SEO category, a strategy and a locale explicitly. Omitting the
-    /// category would silently audit Performance, which is this API's default.
-    /// </summary>
     [Fact]
     public async Task RunAsync_AsksForTheSeoCategoryStrategyAndLocaleExplicitly()
     {
@@ -400,11 +379,6 @@ public sealed class PageSpeedInsightsProviderTests
         handler.Requests.Single().RequestUri!.Query.Should().Contain("strategy=desktop");
     }
 
-    /// <summary>
-    /// Encoded exactly once. Eligibility now refuses a target carrying a query at all, so this is
-    /// defence in depth on the layer below: even handed one, the builder cannot let the target's
-    /// parameters displace ours, and the one they would most easily displace is the category.
-    /// </summary>
     [Fact]
     public async Task RunAsync_EscapesATargetUrlCarryingItsOwnQueryExactlyOnce()
     {
@@ -437,10 +411,6 @@ public sealed class PageSpeedInsightsProviderTests
         uri.AbsolutePath.Should().Be("/pagespeedonline/v5/runPagespeed");
     }
 
-    /// <summary>
-    /// The key travels in the query string because this API accepts it no other way. Everything
-    /// else follows from that: it must never reach a log, an exception or a diagnostic.
-    /// </summary>
     [Fact]
     public async Task RunAsync_NeverWritesTheApiKeyOrTheRequestUriToTheLog()
     {
@@ -469,11 +439,6 @@ public sealed class PageSpeedInsightsProviderTests
             "the provider's own error body is never read back into a diagnostic");
     }
 
-    /// <summary>
-    /// A valid JSON array is not an object, and TryGetProperty throws rather than returning false
-    /// on one. Left unguarded it escaped this adapter as an exception no caller expected, and the
-    /// run was then reclaimed by reconciliation for as long as the fault reproduced.
-    /// </summary>
     [Theory]
     [InlineData("[1,2,3]")]
     [InlineData("\"a string\"")]
@@ -489,11 +454,6 @@ public sealed class PageSpeedInsightsProviderTests
         failure.FailureCategory.Should().Be(PageAuditFailureCategories.ProviderContractInvalid);
     }
 
-    /// <summary>
-    /// A transport exception can name the request URI, and the request URI carries the key. It is
-    /// not attached as an inner exception, so nothing that later calls ToString - a background job
-    /// record, for one - can recover that text.
-    /// </summary>
     [Fact]
     public async Task RunAsync_CarriesNoInnerExceptionFromTheTransport()
     {
@@ -578,7 +538,6 @@ public sealed class PageSpeedInsightsProviderTests
         }
     }
 
-    /// <summary>Fails the way a DNS or connection fault does, with the URI in its message.</summary>
     private sealed class ThrowingHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
@@ -614,8 +573,6 @@ public sealed class PageSpeedInsightsProviderTests
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            // The formatted message and the structured values both, because a property carrying
-            // the key would reach a log sink even when the message template does not name it.
             Lines.Add(formatter(state, exception));
             if (state is IReadOnlyList<KeyValuePair<string, object?>> values)
             {

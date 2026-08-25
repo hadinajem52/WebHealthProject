@@ -2,10 +2,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace WebHealth.Web.Shell;
 
-/// <summary>
-/// Canonical breadcrumb entries for the section roots and registry hierarchy.
-/// Views compose chains from these so one label always resolves to one destination.
-/// </summary>
 public static class Breadcrumbs
 {
     public static BreadcrumbItem Registry(IUrlHelper url) =>
@@ -32,10 +28,6 @@ public static class Breadcrumbs
     public static BreadcrumbItem Endpoint(IUrlHelper url, Guid endpointId, string displayUrl) =>
         new(displayUrl, url.Action("Endpoint", "Targets", new { id = endpointId }));
 
-    /// <summary>
-    /// The administration group has no landing page of its own, so it resolves to
-    /// the first item the sidebar lists under it.
-    /// </summary>
     public static BreadcrumbItem Administration(IUrlHelper url) =>
         new("Administration", url.Action("Users", "Administration"));
 }

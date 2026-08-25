@@ -280,8 +280,6 @@ public sealed class RegistryController(
     [Authorize(Policy = AuthorizationPolicies.Administration), HttpPost]
     public async Task<IActionResult> PurgeWebsite(Guid id, long version, CancellationToken cancellationToken)
     {
-        // Unlike the other lifecycle actions this cannot fall back to the website's own page,
-        // which no longer exists once the purge succeeds.
         var result = await websiteService.PurgeAsync(new(id, version), GetAccess(), cancellationToken);
         if (result.Status == RegistryMutationStatus.NotFound)
         {

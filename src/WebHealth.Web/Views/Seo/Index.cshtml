@@ -12,8 +12,7 @@
 }
 
 <div id="ajax-page" class="stack" data-ajax-region>
-    @* No card title here: the page heading already reads "SEO". This card is the control that
-       scopes the list below it, so it carries only the explanation and the filters. *@
+    
     <section class="card" aria-labelledby="seo-scope-label">
         <p class="card__subtitle" id="seo-scope-label">
             Title, description, canonical and indexing values read from the last successful
@@ -84,9 +83,7 @@
             <div class="page-intro">
                 <div>
                     <h3 class="card__title" id="seo-results-heading">Observations</h3>
-                    @* The count is the total across every page, which is what the reader is
-                       selecting from. Anything derived from listPage.Items would describe this
-                       page only, and reading as a total would be wrong. *@
+                    
                     <p class="card__status" data-status="neutral">
                         @await Html.PartialAsync("_Icon", "seo")
                         <span>@listPage.TotalCount endpoint@(listPage.TotalCount == 1 ? null : "s") observed</span>
@@ -127,9 +124,7 @@
                                 }
                                 else
                                 {
-                                    @* Value and length are two facts, not one string. Gluing
-                                       "(42 chars)" onto the title made a measurement compete with
-                                       the content it measures. *@
+                                    
                                     <td data-label="Title">
                                         <span class="data-table__primary">@(string.IsNullOrEmpty(item.Title) ? "—" : item.Title)</span>
                                         @if (!string.IsNullOrEmpty(item.Title))
@@ -172,9 +167,7 @@
                                         <span class="badge-set">
                                             @foreach (var group in item.FindingGroups)
                                             {
-                                                @* The rules for this group only. FindingGroups is derived from
-                                                   FindingRuleKeys by the same SeoFindingGroups.Of, so grouping
-                                                   here cannot disagree with the count on the badge. *@
+                                                
                                                 var groupRules = string.Join("; ", item.FindingRuleKeys
                                                     .Where(key => SeoFindingGroups.Of(key) == group.Group)
                                                     .Select(IssueDisplay.DescribeRule));

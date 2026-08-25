@@ -39,11 +39,6 @@ public interface IIncidentLifecycleService
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Moves every resolved and closed incident the caller can manage out of the working list and
-    /// into the archive. Nothing is deleted: the rows, their timelines and their evidence stay,
-    /// and reopening an archived incident brings it back on its own.
-    /// </summary>
     Task<IncidentArchiveResult> ArchiveResolvedAsync(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
@@ -89,10 +84,6 @@ public sealed record IncidentMutationResult(
         params IEnumerable<ValidationError> errors) => new(status, null, errors.ToArray());
 }
 
-/// <summary>
-/// How many incidents an archive sweep moved. A sweep that matched nothing succeeded: there was
-/// simply nothing resolved to file away, which is not an error the reader has to act on.
-/// </summary>
 public sealed record IncidentArchiveResult(
     IncidentMutationStatus Status,
     int ArchivedCount,

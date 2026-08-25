@@ -4,10 +4,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// Pausing a monitor must stop scheduled dispatch without blocking on-demand runs.
-/// The predicates are evaluated in memory here so the split stays covered without a database.
-/// </summary>
 public sealed class MonitoringEligibilityTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 18, 9, 0, 0, TimeSpan.Zero);

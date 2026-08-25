@@ -39,7 +39,6 @@ internal sealed class LogicalCheckExecutionService(
         }
 
         EnsureExecutable(check, command.DurableWorkId);
-        // A paused monitor stops the cadence, so only scheduled work re-checks it here.
         var isEligible = check.Source == LogicalCheckSources.Scheduled
             ? await eligibilityService.IsEndpointEligibleAsync(
                 check.EndpointMonitor.EndpointId, cancellationToken)
@@ -119,17 +118,10 @@ internal sealed class LogicalCheckExecutionService(
             cancellationToken.ThrowIfCancellationRequested();
         }
 
-        // A TLS-related failure also triggers an urgent certificate check (BR-C07); that is
-        // created inside the finalization transaction so it shares this result's fate.
         return await FinalizeAsync(
             claim, attempt.Id, command.DurableWorkId, evidence, isFinalAttempt, cancellationToken);
     }
 
-    /// <summary>
-    /// The observation each monitor type makes is the only part of execution that differs.
-    /// Leasing, attempt accounting, retries and finalization are shared, so an SSL check gets
-    /// the same idempotency and recovery guarantees as an availability check.
-    /// </summary>
     private async Task<LogicalCheckTerminalEvidence> ObserveAsync(
         LogicalCheck check,
         CancellationToken cancellationToken)

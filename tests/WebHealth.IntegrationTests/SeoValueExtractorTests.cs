@@ -7,10 +7,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// BR-E01, BR-E02, BR-E03, BR-E10 against the real parser. No database and no network: the
-/// extractor is handed the bytes a check already read.
-/// </summary>
 public sealed class SeoValueExtractorTests
 {
     private const string Marker = "SECRET-BODY-MARKER-8f3a1c";
@@ -122,12 +118,6 @@ public sealed class SeoValueExtractorTests
         extraction.MetaDescription.Value.Should().Be("unquoted", "unquoted attribute values are still values");
     }
 
-    /// <summary>
-    /// An unclosed title is RCDATA: a browser reads everything after it as title text rather than
-    /// as markup, and so does this. Getting this wrong in the other direction — treating the
-    /// swallowed meta as a real element — is exactly the failure a pattern-matching extractor
-    /// would produce.
-    /// </summary>
     [Fact]
     public void Extract_TreatsAnUnclosedTitleAsTextTheWayABrowserWould()
     {
@@ -143,11 +133,6 @@ public sealed class SeoValueExtractorTests
         extraction.MetaDescription.Should().Be(SeoValue.None);
     }
 
-    /// <summary>
-    /// 0x93/0x94 are windows-1252 smart quotes with no Latin-1 or UTF-8 meaning, so this passes
-    /// only if the declared charset is genuinely honoured. The sniffing fallback decodes them as
-    /// replacement characters, which is what makes them the right bytes to test with.
-    /// </summary>
     [Fact]
     public void Extract_IgnoresHeadLikeElementsFoundInTheBody()
     {
@@ -170,7 +155,6 @@ public sealed class SeoValueExtractorTests
     [Fact]
     public void Extract_ResolvesTheCanonicalFromTheFullAuthoredHrefNotATruncatedOne()
     {
-        // Longer than the stored bound, so resolving after bounding would name a different path.
         var path = new string('p', SeoValueLimits.CanonicalHref);
         var extraction = Extract($"""<html><head><link rel="canonical" href="/{path}"></head></html>""");
 
@@ -192,8 +176,6 @@ public sealed class SeoValueExtractorTests
     [Fact]
     public void Extract_RecordsAFailedParseAsADecisionRatherThanThrowing()
     {
-        // Deeply nested markup is the shape that makes a tree builder give up; whatever the parser
-        // does with it, finalization must survive with a recorded reason.
         var extraction = Extract(string.Concat(Enumerable.Repeat("<div>", 5000)));
 
         extraction.Should().NotBeNull();
@@ -203,10 +185,6 @@ public sealed class SeoValueExtractorTests
         }
     }
 
-    /// <summary>
-    /// Robots directives are cumulative. A page whose first tag says index and whose second says
-    /// noindex is noindex, so reading only the first would call it indexable.
-    /// </summary>
     [Fact]
     public void Extract_CombinesEveryRobotsMetaDirective()
     {
@@ -301,11 +279,6 @@ public sealed class SeoValueExtractorTests
         extraction.MetaDescription.Length.Should().Be(description.Length);
     }
 
-    /// <summary>
-    /// BR-E10, asserted as absence. The document body, its scripts, its comments and its text all
-    /// carry a distinctive marker; nothing the extractor returns may contain it, because the only
-    /// values it is allowed to keep are the four extracted ones.
-    /// </summary>
     [Fact]
     public void Extract_ReturnsNothingThatContainsTheDocument()
     {
@@ -337,10 +310,6 @@ public sealed class SeoValueExtractorTests
         extraction.Title.Value.Should().Be("Title", "and the values it does keep are still correct");
     }
 
-    /// <summary>
-    /// The contract itself must offer no way to carry markup out of extraction: a future caller
-    /// cannot persist or log a document through a member that does not exist.
-    /// </summary>
     [Fact]
     public void SeoExtraction_ExposesOnlyExtractedValues() =>
         typeof(SeoExtraction).GetProperties().Select(property => property.Name)

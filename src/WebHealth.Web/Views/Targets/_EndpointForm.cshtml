@@ -3,15 +3,7 @@
 @model EndpointFormViewModel
 @using WebHealth.Application.Registry
 
-@*
-    Six decisions, in the order they are actually made: what this endpoint is, whether we are
-    entitled to test it, how it is watched, what it should look like to a search engine, whether
-    Google may load it, and -- for production only -- why it may be plain HTTP.
 
-    Before, all twenty controls were one flat column with a paragraph of hint text under each.
-    Nothing said which fields were required, which applied only while a switch was on, or which
-    ones send data to a third party. Everything was equally loud, so nothing was read.
-*@
 
 <fieldset class="form-section">
     <legend class="form-section__title">Endpoint</legend>
@@ -51,8 +43,7 @@
     </div>
 </fieldset>
 
-@* Second, because it decides whether anything below it may run at all. It was near the bottom,
-   under the thresholds, where it read as paperwork rather than as the gate it is. *@
+
 <fieldset class="form-section">
     <legend class="form-section__title">Permission to test this target</legend>
     <p class="form-section__hint">
@@ -124,8 +115,7 @@
             </span>
         </div>
 
-        @* Dimmed with the switch above, because an interval means nothing while nothing is
-           scheduled -- but still editable, so the value survives being turned off and on. *@
+        
         <div class="form-dependent" data-shell-interval-field
              data-inactive="@((!Model.SchedulingEnabled).ToString().ToLowerInvariant())">
             <div class="form-field">
@@ -148,8 +138,7 @@
             </div>
         </div>
 
-        @* Two numbers that are only valid together, so they sit together. Apart, the rule that
-           binds them was a sentence under each one and read as two separate rules. *@
+        
         <div class="form-grid form-grid--two">
             <div class="form-field">
                 <label asp-for="WarningThresholdMsOverride">
@@ -211,7 +200,7 @@
             <span asp-validation-for="SeoExpectedCanonicalHost"></span>
         </div>
 
-        @* Was a bare checkbox among switches. One kind of boolean per form. *@
+        
         <div class="switch-block">
             <label class="switch-field">
                 <input asp-for="SeoDescriptionRequired" type="checkbox" aria-describedby="seo-description-hint" />
@@ -233,8 +222,7 @@
     </p>
 
     <div class="form-section__body">
-        @* This one sends the URL to a third party, so it is a notice rather than a hint: it has
-           to be readable before the switch is touched, not after. *@
+        
         <p class="form-notice">
             @await Html.PartialAsync("_Icon", "warning")
             <span>

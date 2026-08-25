@@ -19,11 +19,6 @@ using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// Increment 5.5's evidence, against a real PostgreSQL cluster because the parts that can go
-/// wrong are the parts PostgreSQL evaluates: <c>percentile_cont</c>, the <c>[start, end)</c>
-/// window predicate, and the eligibility filters behind uptime.
-/// </summary>
 internal static class ReportingQueryCoreAssertions
 {
     private static readonly DateTimeOffset WindowStart = new(2026, 7, 1, 0, 0, 0, TimeSpan.Zero);
@@ -55,11 +50,6 @@ internal static class ReportingQueryCoreAssertions
         await VerifyVisibilityIsAppliedToBothSurfacesAsync(services, database, reader, fixture);
     }
 
-    /// <summary>
-    /// BR-U01–BR-U03. The denominator is what the finalizer marked eligible: manual runs,
-    /// maintenance-suppressed runs, cancelled runs and certificate results are excluded, and the
-    /// excluded count is reported so the exclusion is visible rather than silent.
-    /// </summary>
     private static async Task VerifyUptimeCountsOnlyEligibleSamplesAsync(
         IReportingReader reader,
         RegistryAccessContext access,
@@ -69,24 +59,17 @@ internal static class ReportingQueryCoreAssertions
         var rows = await ReadEveryScreenPageAsync(reader, query, access);
         var row = rows.Single(candidate => candidate.EndpointMonitorId == fixture.HttpMonitorId);
 
-        // Seeded: 6 eligible (4 healthy, 1 warning, 1 critical) and 2 ineligible.
         row.Uptime.EligibleSamples.Should().Be(6);
         row.Uptime.HealthySamples.Should().Be(4);
         row.Uptime.WarningSamples.Should().Be(1);
         row.Uptime.DownSamples.Should().Be(1);
         row.Uptime.ExcludedSamples.Should().Be(2);
 
-        // BR-U01: uptime is every eligible sample where the endpoint answered, so the warning
-        // sample counts as up. CleanPercentage is the stricter figure beside it — eligible
-        // samples with nothing to report at all — and the gap between the two is the point: this
-        // endpoint is 83% up and 67% clean, which no single number can say.
         row.Uptime.Percentage.Should().BeApproximately(83.3333, 0.001);
         row.Uptime.CleanPercentage.Should().BeApproximately(66.6667, 0.001);
         (row.Uptime.HealthySamples + row.Uptime.WarningSamples + row.Uptime.DownSamples)
             .Should().Be(row.Uptime.EligibleSamples, "every eligible sample lands in exactly one category");
 
-        // A certificate monitor never contributes an availability sample, so its row is present
-        // with nothing to report rather than absent or zero-per-cent.
         var certificateRow = rows.Single(candidate =>
             candidate.EndpointMonitorId == fixture.SslMonitorId);
         certificateRow.Uptime.EligibleSamples.Should().Be(0);
@@ -94,10 +77,6 @@ internal static class ReportingQueryCoreAssertions
         certificateRow.Uptime.ExcludedSamples.Should().BeGreaterThan(0);
     }
 
-    /// <summary>
-    /// BR-U04: a sample measured exactly at the window's end belongs to the next period. The
-    /// seed puts one sample on each boundary instant so both sides of the rule are proven.
-    /// </summary>
     private static async Task VerifyWindowIsHalfOpenAsync(
         IReportingReader reader,
         RegistryAccessContext access,
@@ -106,8 +85,6 @@ internal static class ReportingQueryCoreAssertions
         var rows = await ReadEveryScreenPageAsync(reader, Query(fixture, monitorType: null), access);
         var row = rows.Single(candidate => candidate.EndpointMonitorId == fixture.HttpMonitorId);
 
-        // The boundary sample at WindowStart is counted; the one at WindowEnd is not. Shifting
-        // the window one week later must pick up exactly that excluded sample.
         var nextPeriod = await ReadEveryScreenPageAsync(
             reader,
             Query(fixture, monitorType: null, start: WindowEnd, end: WindowEnd.AddDays(7)),
@@ -119,11 +96,6 @@ internal static class ReportingQueryCoreAssertions
         nextRow.LastMeasuredAt.Should().Be(WindowEnd);
     }
 
-    /// <summary>
-    /// BR-U05. The seeded durations are 100, 200, 300, 400 and 1,800 ms across samples that
-    /// answered — the 1,800 ms one being the warning sample, whose duration is a real
-    /// measurement — plus a 15,000 ms timeout that must stay out of the ordering entirely.
-    /// </summary>
     private static async Task VerifyPercentilesUseSuccessfulSamplesOnlyAsync(
         IReportingReader reader,
         RegistryAccessContext access,
@@ -134,13 +106,9 @@ internal static class ReportingQueryCoreAssertions
 
         row.ResponseTimes.MeasuredSamples.Should().Be(5);
 
-        // percentile_cont over [100, 200, 300, 400, 1800]: the median is the middle value, and
-        // P95 interpolates between the top two rather than snapping to 1,800 the way
-        // percentile_disc would.
         row.ResponseTimes.P50Ms.Should().Be(300);
         row.ResponseTimes.P95Ms.Should().BeApproximately(1_520, 0.001);
 
-        // The 15,000 ms timeout is the proof: had it entered the ordering, P95 would sit near it.
         row.ResponseTimes.P95Ms.Should().BeLessThan(15_000);
     }
 
@@ -162,25 +130,17 @@ internal static class ReportingQueryCoreAssertions
             point.Day >= DateOnly.FromDateTime(WindowStart.UtcDateTime)
             && point.Day < DateOnly.FromDateTime(WindowEnd.UtcDateTime));
 
-        // The trend and the card above it must use the same sample categories: the day holding
-        // the 15,000 ms timeout must not report it as a percentile either.
         var timeoutDay = dataset.Trend.Single(point =>
             point.Day == DateOnly.FromDateTime(WindowStart.AddDays(5).UtcDateTime));
         timeoutDay.UpSamples.Should().Be(0);
         timeoutDay.P95Ms.Should().BeNull("the only sample that day was a failed exchange");
     }
 
-    /// <summary>
-    /// The list and the count are two renderings of one selection. Reading the list through a
-    /// separate filter is how a dashboard ends up showing a count for one dataset and rows from
-    /// another.
-    /// </summary>
     private static async Task VerifyIncidentListAndCountDescribeOneSelectionAsync(
         IReportingReader reader,
         RegistryAccessContext access,
         ReportingFixture fixture)
     {
-        // A filter that selects nothing must yield no incidents, whatever is open elsewhere.
         var elsewhere = Query(fixture, monitorType: null, clientId: Guid.NewGuid());
         (await reader.QueryActiveIncidentsAsync(elsewhere, access, 10)).Should().BeEmpty();
         (await reader.QueryAsync(elsewhere, access)).Summary.ActiveIncidentCount.Should().Be(0);
@@ -194,10 +154,6 @@ internal static class ReportingQueryCoreAssertions
             .Should().OnlyContain(status => IncidentStatuses.Active.Contains(status));
     }
 
-    /// <summary>
-    /// A page beyond the end serves the last page and says so. Returning the requested page
-    /// would render "page 999,999 of 2" with pagination links that go nowhere.
-    /// </summary>
     private static async Task VerifyAPageBeyondTheEndReportsThePageItServedAsync(
         IReportingReader reader,
         RegistryAccessContext access,
@@ -210,12 +166,6 @@ internal static class ReportingQueryCoreAssertions
         dataset.Rows.Should().NotBeEmpty();
     }
 
-    /// <summary>
-    /// AC-11, as a direct record-identity comparison. For every filter combination the screen's
-    /// rows are parsed back out of the CSV and compared field by field. There is no assertion
-    /// here about "similar" datasets: the identifiers, the counts and the percentiles all have
-    /// to match, because both came from one query.
-    /// </summary>
     private static async Task VerifyScreenAndCsvSelectTheSameRecordsAsync(
         ServiceProvider services,
         RegistryAccessContext access,
@@ -226,22 +176,15 @@ internal static class ReportingQueryCoreAssertions
         {
             var screenRows = await ReadEveryScreenPageAsync(reader, query, access);
 
-            // The export re-slices the caller's filter itself, so this deliberately hands it a
-            // query still sitting on the screen's page: an export that honoured that page would
-            // produce a different file from the same filter.
             var export = await reader.ExportAsync(query, access);
 
             export.Query.Page.Should().Be(1);
             export.TotalCount.Should().Be(screenRows.Count);
 
-            // ReportRow is a record, so this is structural equality across every field —
-            // identifiers, counts, uptime and both percentiles — in order.
             export.Rows.Should().Equal(
                 screenRows,
                 "the screen and the export are one query at two page sizes");
 
-            // And the bytes a recipient actually opens carry exactly those records, read back
-            // the way a spreadsheet would read them rather than trusted as written.
             var csvRows = ParseCsv(ReportCsv.Write(export));
             csvRows.Should().HaveCount(screenRows.Count);
             csvRows.Select(row => row[0])
@@ -252,19 +195,12 @@ internal static class ReportingQueryCoreAssertions
             Interlocked.Increment(ref covered);
         });
 
-        // A guard on the guard: an empty combination set would make every assertion above
-        // vacuous while still passing.
         covered.Should().BeGreaterThan(50);
     }
 
     private static string Rendered(double? value) =>
         value?.ToString("0.####", CultureInfo.InvariantCulture) ?? string.Empty;
 
-    /// <summary>
-    /// A caller who cannot see an endpoint must not be able to reach it through either surface.
-    /// Testing the export separately matters: an export that skipped the visibility scope would
-    /// be a data-disclosure route that no screen assertion would ever catch.
-    /// </summary>
     private static async Task VerifyVisibilityIsAppliedToBothSurfacesAsync(
         ServiceProvider services,
         ApplicationDbContext database,
@@ -290,10 +226,6 @@ internal static class ReportingQueryCoreAssertions
         (await reader.QueryCertificateExpiryAsync(query, unprivileged))
             .NeedingAttention.Should().BeEmpty("the certificate card applies the same visibility scope");
 
-        // A scoped reader's selection carries extra grant subqueries that global access never
-        // produces, and each filter changes the shape again. Every surface is exercised under
-        // every status and monitor-type combination so that a selection which only composes for
-        // an administrator cannot pass as working.
         await ForEachReaderAsync(services, EveryScopedFilter(fixture), async (scopedReader, scopedQuery) =>
         {
             (await scopedReader.QueryAsync(scopedQuery, unprivileged)).Rows.Should().BeEmpty();
@@ -404,11 +336,6 @@ internal static class ReportingQueryCoreAssertions
         return normalized.Query!;
     }
 
-    /// <summary>
-    /// A minimal RFC 4180 reader. It exists so the comparison is against the bytes actually
-    /// written rather than against the object they were written from — the export is only
-    /// verified if something reads it back the way a recipient would.
-    /// </summary>
     private static IReadOnlyList<IReadOnlyList<string>> ParseCsv(byte[] bytes)
     {
         var text = new UTF8Encoding(false).GetString(
@@ -462,7 +389,6 @@ internal static class ReportingQueryCoreAssertions
             }
         }
 
-        // The header row is not a record.
         return rows.Skip(1).ToArray();
     }
 
@@ -472,8 +398,6 @@ internal static class ReportingQueryCoreAssertions
         RegistryAccessContext access)
     {
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
-        // Ordered, and matched to what endpoint creation will accept: an unordered First leaves the
-        // fixture's client — and so everything scoped to it below — to the query planner.
         var environment = await database.Environments.AsNoTracking()
             .Include(candidate => candidate.Website)
             .Where(candidate => candidate.DeletedAt == null
@@ -497,7 +421,6 @@ internal static class ReportingQueryCoreAssertions
         var sslMonitorId = monitors
             .Single(monitor => monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType).Id;
 
-        // Eligible availability samples, including one on each window boundary (BR-U04).
         await AddResultAsync(database, httpMonitorId, WindowStart, "Healthy", 100, countsForUptime: true);
         await AddResultAsync(database, httpMonitorId, WindowStart.AddDays(1), "Healthy", 200, true);
         await AddResultAsync(database, httpMonitorId, WindowStart.AddDays(2), "Healthy", 300, true);
@@ -506,17 +429,11 @@ internal static class ReportingQueryCoreAssertions
         await AddResultAsync(database, httpMonitorId, WindowStart.AddDays(5), "Critical", 15_000, true);
         await AddResultAsync(database, httpMonitorId, WindowEnd, "Healthy", 120, true);
 
-        // Ineligible samples: a manual run and a maintenance-suppressed run.
         await AddResultAsync(database, httpMonitorId, WindowStart.AddDays(1).AddHours(1), "Healthy", 90, false);
         await AddResultAsync(database, httpMonitorId, WindowStart.AddDays(2).AddHours(1), "Critical", 9_000, false);
 
-        // A certificate result, which is never an availability sample.
         await AddResultAsync(database, sslMonitorId, WindowStart.AddDays(1), "Healthy", 40, false);
 
-        // The active-incident selection is exercised against an incident this fixture owns.
-        // VerifyReminderEscalationSweepBoundariesAsync closes every active incident in the
-        // database before this runs, so anything still open here would be residue from an
-        // earlier stage rather than something this test arranged.
         var ownerSubjectId = await database.OwnerSubjects.AsNoTracking()
             .OrderBy(subject => subject.Id)
             .Select(subject => subject.Id)
@@ -561,8 +478,6 @@ internal static class ReportingQueryCoreAssertions
             EndpointMonitorId = endpointMonitorId,
             Source = LogicalCheckSources.Scheduled,
             ScheduledFor = measuredAt,
-            // A scheduled check needs a cadence key, and it is unique per monitor: the
-            // measurement instant is exactly the slot identity the scheduler would have used.
             CadenceKey = measuredAt.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
             State = LogicalCheckStates.Completed,
             PolicyFingerprint = monitor.ConfigurationFingerprint,
@@ -595,9 +510,6 @@ internal static class ReportingQueryCoreAssertions
             LogicalCheckId = check.Id,
             EndpointMonitorId = endpointMonitorId,
             Outcome = outcome,
-            // A Warning is up-but-imperfect, so it carries a category UptimeParticipation treats
-            // as non-availability. Giving it ServerError would make the reader count it as
-            // downtime, which is the opposite of what this fixture exists to show.
             FailureCategory = outcome switch
             {
                 "Healthy" => null,

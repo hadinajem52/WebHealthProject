@@ -10,11 +10,9 @@
         new BreadcrumbItem("Add endpoint"));
 }
 
-@* No card title: the page heading already reads "Add endpoint". *@
+
 <section class="card form-card" aria-labelledby="create-endpoint-label">
-    @* Says where the endpoint lands and what filling this form actually creates. The reader
-       arrived from one of five breadcrumb levels and should not have to read them back to know
-       which environment they are adding to. *@
+    
     <p class="card__subtitle" id="create-endpoint-label">
         Adds an endpoint to <strong>@Model.WebsiteName / @Model.EnvironmentName</strong> and
         creates its HTTP availability policy. Only the URL is required &mdash; everything else has

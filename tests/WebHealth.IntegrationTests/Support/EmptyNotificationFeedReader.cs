@@ -2,10 +2,6 @@ using WebHealth.Application.Notifications;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// Stands in for the notification feed in tests that run without a database, so shell and
-/// authorization coverage does not depend on notification storage.
-/// </summary>
 internal sealed class EmptyNotificationFeedReader : INotificationFeedReader
 {
     public Task<NotificationFeed> GetForRecipientAsync(

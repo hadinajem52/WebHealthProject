@@ -7,33 +7,15 @@ using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Crawling;
 
-/// <summary>
-/// Reads crawl runs and compares them. Every filter is a predicate on
-/// <c>crawl_link_result</c> itself — <c>run_id</c> and <c>classification</c> are columns on the
-/// high-volume row, so <c>ix_crawl_link_result_run_classification</c> serves them without a join
-/// back to the run. That is the Phase 5 lesson applied rather than restated.
-/// <para>
-/// Visibility is composed **into** every query that returns data rather than checked before it. A
-/// check followed by a separate unscoped read is an authorization guarantee that depends on the two
-/// happening close together; a single scoped query cannot come apart.
-/// </para>
-/// </summary>
 internal sealed class CrawlReportReader(
     ApplicationDbContext dbContext,
     RegistryVisibility visibility,
     TimeProvider timeProvider) : ICrawlReportReader
 {
-    /// <summary>A run listing is a page of history, never the whole table.</summary>
     public const int MaxRunsListed = 100;
 
-    /// <summary>A page of a run's broken links. The bound is the reader's, not the caller's.</summary>
     public const int MaxBrokenLinksListed = 500;
 
-    /// <summary>
-    /// Rows shown per comparison bucket. The bucket's count is exact and computed in the database;
-    /// only what is rendered is capped, so a large crawl cannot turn one page request into an
-    /// unbounded response.
-    /// </summary>
     public const int ComparisonSampleSize = 25;
 
     public async Task<IReadOnlyList<CrawlRunSummary>> ListRunsAsync(
@@ -71,8 +53,6 @@ internal sealed class CrawlReportReader(
             .Where(link => link.RunId == runId && link.SkipReason != null)
             .GroupBy(link => link.SkipReason!)
             .Select(group => new { SkipReason = group.Key, Count = group.Count() })
-            // Count first so the reason that governed the run leads, then the reason itself: two
-            // reasons with the same count must not swap places between two reads of one run.
             .OrderByDescending(summary => summary.Count)
             .ThenBy(summary => summary.SkipReason)
             .Select(summary => new CrawlSkipSummary(summary.SkipReason, summary.Count))
@@ -83,22 +63,6 @@ internal sealed class CrawlReportReader(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        // Only **full-scope** runs take part. A run that stopped on any budget — cancelled, page
-        // limit, duration limit — covered part of the site, so every link it never reached would
-        // surface as resolved. A partial crawl manufacturing good news is the one failure this
-        // comparison must not have, and a page limit produces it just as readily as a cancellation.
-        //
-        // The page count carries the same weight as the stop reason. A run refused at every door
-        // exhausts its frontier without fetching anything, so it passes the stop-reason test while
-        // having examined nothing; as a baseline it reports every previously broken link as
-        // resolved. This mirrors CrawlRunSummary.CoveredWholeScope, which cannot be used directly
-        // because the predicate has to translate to SQL.
-        //
-        // A drained frontier is not evidence on its own either. A page whose body was cut short,
-        // whose markup would not parse, or that robots kept the crawler out of contributes no
-        // links, so the pairs it used to carry are simply absent from the run -- and absence is
-        // exactly what this comparison reads as resolved. Such a run records that its coverage was
-        // limited and is refused as a baseline here.
         var runs = await VisibleRuns(access)
             .Where(run => run.EndpointId == endpointId
                 && run.Status == CrawlRunStatuses.Completed
@@ -118,9 +82,6 @@ internal sealed class CrawlReportReader(
 
         if (runs.Length == 1)
         {
-            // A first crawl has nothing to compare against. Every broken link is reported as new,
-            // and the null previous run is what lets a reader tell that from a run that introduced
-            // them.
             return new(
                 runs[0],
                 null,
@@ -132,9 +93,6 @@ internal sealed class CrawlReportReader(
 
         var previousBroken = BrokenLinksOf(links, runs[1]);
 
-        // The set difference is done by the database, not in memory. Loading both runs' links to
-        // subtract them here would be unbounded, and bounding *that* would silently drop links —
-        // which, on the previous run's side, reads as a link that was fixed.
         var newlyBroken = currentBroken.Where(link => !previousBroken.Any(before =>
             ((before.SourceUrlHash == null && link.SourceUrlHash == null)
                 || (before.SourceUrlHash != null && link.SourceUrlHash != null
@@ -151,10 +109,6 @@ internal sealed class CrawlReportReader(
                     && now.SourceUrlHash == link.SourceUrlHash))
             && now.TargetUrlHash == link.TargetUrlHash));
 
-        // A previously broken link that is no longer broken is only resolved if the current run
-        // actually established that. A timeout, a block, a skip or an unreached target says nothing
-        // about whether the link works — treating those as resolved would close findings on the
-        // strength of evidence the crawl never gathered.
         var indeterminate = CrawlLinkClassifications.Indeterminate;
         var unproven = links.Where(link => link.RunId == runs[0]
             && indeterminate.Contains(link.Classification));
@@ -188,12 +142,6 @@ internal sealed class CrawlReportReader(
             await Project(Ordered(links).Take(ComparisonSampleSize))
                 .ToArrayAsync(cancellationToken));
 
-    /// <summary>
-    /// Runs whose endpoint the requester may see. Deleted endpoints are excluded, matching the
-    /// registry and the SEO view: an endpoint removed from the registry should not keep answering
-    /// through a different surface, and one definition of "visible endpoint" across the read
-    /// surfaces is what stops them drifting apart.
-    /// </summary>
     private IQueryable<CrawlRun> VisibleRuns(RegistryAccessContext access)
     {
         ArgumentNullException.ThrowIfNull(access);
@@ -207,10 +155,6 @@ internal sealed class CrawlReportReader(
             .Where(run => visibleEndpointIds.Contains(run.EndpointId));
     }
 
-    /// <summary>
-    /// Link results whose run the requester may see, as one query. Every read of link rows starts
-    /// here, so no entry point can return data through a scope it only checked separately.
-    /// </summary>
     private IQueryable<CrawlLinkResult> VisibleLinks(RegistryAccessContext access)
     {
         var visibleRunIds = VisibleRuns(access).Select(run => run.Id);
@@ -222,12 +166,6 @@ internal sealed class CrawlReportReader(
         links.Where(link => link.RunId == runId
             && link.Classification == CrawlLinkClassifications.Broken);
 
-    /// <summary>
-    /// Ordering belongs on the row, not on the projection: ordering by a member of a constructed
-    /// <see cref="CrawlBrokenLink"/> is not translatable, so the sample would have to be paged in
-    /// memory. Applied before <see cref="Project"/> it stays a database ORDER BY, which is what
-    /// makes a bucket sample and a link page stable rather than planner-dependent.
-    /// </summary>
     private static IOrderedQueryable<CrawlLinkResult> Ordered(IQueryable<CrawlLinkResult> links) =>
         links.OrderBy(link => link.TargetUrl)
             .ThenBy(link => link.SourceUrl)

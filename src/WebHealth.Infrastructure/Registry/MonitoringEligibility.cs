@@ -6,11 +6,6 @@ namespace WebHealth.Infrastructure.Registry;
 
 internal static class MonitoringEligibility
 {
-    /// <summary>
-    /// Endpoints a check may run against at all: registered, enabled up the whole
-    /// ownership chain, and covered by current target-authorization evidence.
-    /// A paused monitor still satisfies this, so manual runs survive a pause.
-    /// </summary>
     public static IQueryable<Endpoint> ApplyTestable(IQueryable<Endpoint> endpoints, DateTimeOffset now) =>
         endpoints.Where(endpoint =>
             endpoint.DeletedAt == null
@@ -29,10 +24,6 @@ internal static class MonitoringEligibility
                 && evidence.NormalizedHost == endpoint.NormalizedHost
                 && evidence.Port == endpoint.EffectivePort));
 
-    /// <summary>
-    /// The same conditions <see cref="ApplyTestable" /> filters on, read one by one so a caller
-    /// can name the one that failed. Keep the two in step.
-    /// </summary>
     public static IQueryable<EndpointTestReadiness> ProjectTestReadiness(
         IQueryable<Endpoint> endpoints,
         DateTimeOffset now) =>
@@ -49,10 +40,6 @@ internal static class MonitoringEligibility
                 && evidence.NormalizedHost == endpoint.NormalizedHost
                 && evidence.Port == endpoint.EffectivePort)));
 
-    /// <summary>
-    /// Endpoints the scheduler may dispatch: testable, and with an active monitor
-    /// cadence. Pausing a monitor removes an endpoint from this set only.
-    /// </summary>
     public static IQueryable<Endpoint> Apply(IQueryable<Endpoint> endpoints, DateTimeOffset now) =>
         ApplyTestable(endpoints, now)
             .Where(endpoint => endpoint.Monitors.Any(monitor =>

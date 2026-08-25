@@ -5,10 +5,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-P02's override half: an endpoint may replace the documented response-time budget, and
-/// the values it may replace it with are constrained so the resulting bands stay reachable.
-/// </summary>
 public sealed class ResponseThresholdOverrideTests
 {
     [Fact]
@@ -36,8 +32,6 @@ public sealed class ResponseThresholdOverrideTests
     [InlineData(null, 1_200)]
     public void OneSubmittedValueWithoutTheOther_IsRejected(int? warning, int? critical)
     {
-        // Half an override would leave a warning threshold that can sit above an unchanged
-        // critical one, producing a band nothing can fall into.
         ResponseThresholdOverride.Decide(warning, critical).Error.Should().NotBeNullOrWhiteSpace();
     }
 
@@ -59,8 +53,6 @@ public sealed class ResponseThresholdOverrideTests
     [Fact]
     public void EqualThresholds_AreAllowed()
     {
-        // Warning and critical at the same value collapses the warning band, which is a
-        // deliberate "treat any breach as critical" choice rather than a mistake.
         ResponseThresholdOverride.Decide(2_000, 2_000).Error.Should().BeNull();
     }
 

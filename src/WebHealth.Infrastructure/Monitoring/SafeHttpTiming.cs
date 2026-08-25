@@ -3,14 +3,6 @@ using System.Net.Http;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
-/// <summary>
-/// Mutable per-attempt sink that <see cref="SafeHttpConnectionFactory"/> writes DNS, connect,
-/// and TLS phase durations into. One instance is created per network attempt (including each
-/// redirect hop) and attached to that attempt's <see cref="HttpRequestMessage.Options"/>, which
-/// both <c>ConnectCallback</c> and <c>PlaintextStreamFilter</c> receive back via
-/// <see cref="System.Net.Http.SocketsHttpHandler"/>'s per-attempt context — the correlated hook
-/// this needs, unlike a handler-wide callback with no request context.
-/// </summary>
 internal sealed class SafeHttpTimingCollector
 {
     public int? DnsDurationMs { get; set; }

@@ -103,17 +103,6 @@ public sealed class CheckResult
 {
     public Guid LogicalCheckId { get; set; }
 
-    /// <summary>
-    /// The monitor this sample belongs to, carried on the sample itself.
-    /// </summary>
-    /// <remarks>
-    /// Every reporting aggregate selects by monitor and by measurement window. Those two
-    /// predicates used to live on different tables, so no index could serve them together and
-    /// each aggregate degenerated into a full scan of both tables joined by hash. The composite
-    /// foreign key to <c>logical_check (id, endpoint_monitor_id)</c> means this value can never
-    /// disagree with the check it belongs to - the same guard <c>certificate_observation</c>,
-    /// <c>endpoint_health</c> and <c>execution_lease</c> already use.
-    /// </remarks>
     public Guid EndpointMonitorId { get; set; }
     public required string Outcome { get; set; }
     public string? FailureCategory { get; set; }
@@ -140,10 +129,6 @@ public sealed class CheckResult
     public ICollection<Finding> Findings { get; } = [];
 }
 
-/// <summary>
-/// One certificate inspection, keyed to the logical check that produced it. Holds public
-/// certificate facts only (BR-C02): no private key material and no encoded certificate bytes.
-/// </summary>
 public sealed class CertificateObservation
 {
     public Guid LogicalCheckId { get; set; }

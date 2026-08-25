@@ -6,10 +6,6 @@ namespace WebHealth.Infrastructure.Seo;
 
 internal sealed class RobotsSnapshotConfiguration : IEntityTypeConfiguration<RobotsSnapshot>
 {
-    /// <summary>
-    /// The same bound the fetch uses. Storing less than was fetched would mean judging a
-    /// policy from a prefix of it, which is how a blocked site gets reported as crawlable.
-    /// </summary>
     public const int MaxContentLength = RobotsRefreshService.MaxRobotsBytes;
 
     public void Configure(EntityTypeBuilder<RobotsSnapshot> builder)
@@ -20,8 +16,6 @@ internal sealed class RobotsSnapshotConfiguration : IEntityTypeConfiguration<Rob
                 "ck_robots_snapshot_status",
                 "status IN ('Fetched', 'NotFound', 'Unavailable')");
 
-            // Only a fetched origin has text. A 404 is a valid answer meaning "no restrictions",
-            // and it must not be storable as an empty document that reads the same as an empty file.
             table.HasCheckConstraint(
                 "ck_robots_snapshot_content",
                 "(status = 'Fetched') OR (content IS NULL)");
@@ -44,10 +38,9 @@ internal sealed class RobotsSnapshotConfiguration : IEntityTypeConfiguration<Rob
         builder.Property(snapshot => snapshot.Content).HasMaxLength(MaxContentLength);
         builder.Property(snapshot => snapshot.ConfiguredSitemapUrl).HasMaxLength(2048);
         builder.Property(snapshot => snapshot.CheckedSitemapUrl).HasMaxLength(2048);
-        builder.Property(snapshot => snapshot.ExceptionReason).HasMaxLength(500);
+        builder.Property(snapshot => snapshot.ExceptionReason).HasMaxLength(500);
         builder.Property(snapshot => snapshot.Version).IsConcurrencyToken();
 
-        // The refresh job selects origins whose snapshot has expired, so that is the index.
         builder.HasIndex(snapshot => snapshot.ExpiresAt);
         builder.HasOne<ApplicationUser>().WithMany()
             .HasForeignKey(snapshot => snapshot.ExceptionApprovedByUserId)

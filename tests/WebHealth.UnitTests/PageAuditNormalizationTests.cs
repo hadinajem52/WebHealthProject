@@ -4,11 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// Every display mode Lighthouse can send has a deliberate meaning here. The mapping is the whole
-/// feature's honesty: a manual audit shown as a failure would invent a problem the page does not
-/// have, and a numeric audit shown as a pass would invent a threshold Lighthouse never published.
-/// </summary>
 public sealed class PageAuditNormalizationTests
 {
     private static string Classify(string? mode, decimal? score = null, string? errorMessage = null) =>

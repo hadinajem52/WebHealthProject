@@ -1,11 +1,5 @@
 namespace WebHealth.Web.Shell;
 
-/// <summary>
-/// The primary navigation defined in <c>docs/phase-0/UI_Direction.md</c> section 4.
-/// Entries without a destination are rendered as planned and are not links.
-/// Navigation visibility mirrors server-side role policies for usability but
-/// never replaces authorization on the destination.
-/// </summary>
 public static class ShellNavigation
 {
     private static readonly NavigationSection[] SectionList =
@@ -27,10 +21,6 @@ public static class ShellNavigation
                 "Index",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"])
         ]),
-        // The three audit surfaces answer the same question — what a crawl of the site found —
-        // so they group under one heading rather than competing with Dashboard and Incidents for
-        // top-level attention. Each carries its own glyph: they previously shared the bar-chart
-        // icon, which left the sidebar with three entries that looked identical.
         new("Audits",
         [
             new NavigationItem(
@@ -60,6 +50,5 @@ public static class ShellNavigation
         ])
     ];
 
-    /// <summary>Gets the navigation groups in render order.</summary>
     public static IReadOnlyList<NavigationSection> Sections => SectionList;
 }

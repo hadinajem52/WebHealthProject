@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -12,15 +12,6 @@ using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.PageAudits;
 
-/// <summary>
-/// Decides which audits to ask for and opens the runs that record them.
-/// </summary>
-/// <remarks>
-/// The run row is committed before the job is enqueued, never the other way round. A job that
-/// arrived before its row existed would find nothing to do and disappear; a row with no job is
-/// visible, and <see cref="ReconcileAsync" /> can find it. The failure that survives is the one
-/// that leaves evidence.
-/// </remarks>
 public sealed class PageAuditSchedulingService(
     ApplicationDbContext dbContext,
     IPageAuditQueue queue,
@@ -36,11 +27,6 @@ public sealed class PageAuditSchedulingService(
         return EnqueueAll(runIds);
     }
 
-    /// <summary>
-    /// Picks up runs whose job never arrived or whose worker died. It re-enqueues the same run id
-    /// rather than opening a second run: the execution service claims by lease, so a duplicate
-    /// delivery is already harmless, and a duplicate <em>run</em> would be a second API call.
-    /// </summary>
     public async Task<int> ReconcileAsync(CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -58,9 +44,6 @@ public sealed class PageAuditSchedulingService(
             .Select(run => new { run.Id, run.BatchId, run.AttemptCount })
             .ToArrayAsync(cancellationToken);
 
-        // A run that has spent its attempts can never be claimed again, so re-enqueueing it would
-        // queue work no worker will do while its target's active-run index refuses every new run.
-        // Retiring it is what lets the next scheduled audit open at all.
         var exhaustedBatchIds = recoverable
             .Where(run => run.AttemptCount >= options.MaximumAttempts)
             .Select(run => run.BatchId)
@@ -103,11 +86,6 @@ public sealed class PageAuditSchedulingService(
         return EnqueueAll(runIds);
     }
 
-    /// <summary>
-    /// Opens the runs somebody asked for by hand: one per enabled form factor. A strategy already
-    /// in flight is left alone rather than failing the request, because the person wants a fresh
-    /// score and a run about to produce one satisfies that better than an error does.
-    /// </summary>
     public async Task<PageAuditManualResult> QueueManualAsync(
         Guid endpointId,
         RegistryAccessContext access,
@@ -116,8 +94,6 @@ public sealed class PageAuditSchedulingService(
         ArgumentNullException.ThrowIfNull(access);
         var now = timeProvider.GetUtcNow();
 
-        // Enforced here rather than trusted from the caller. Asking Google to load a page is
-        // active testing of that target, and this method is the only door to it.
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             return PageAuditManualResult.NotTestable(
@@ -197,11 +173,6 @@ public sealed class PageAuditSchedulingService(
         }
         catch (Exception exception)
         {
-            // Runs are committed before they are enqueued so a lost job leaves evidence rather
-            // than nothing. That bargain assumes a worker exists to lose the job. With scheduling
-            // off there is no queue and no reconciliation sweep, so a committed run would sit
-            // Queued forever and its target's active-run index would refuse every later request.
-            // Retiring them here keeps the failure to the one request that caused it.
             foreach (var runId in opened.Select(run => run.RunId))
             {
                 await RetireUnreachableRunAsync(runId, cancellationToken);
@@ -222,14 +193,6 @@ public sealed class PageAuditSchedulingService(
         return PageAuditManualResult.Opened(opened.Count, alreadyRunning);
     }
 
-    /// <summary>
-    /// Commits one form factor's run, or reports that one is already in flight for it.
-    /// </summary>
-    /// <remarks>
-    /// Saved per target rather than as one batch. A batch that violated the partial unique index
-    /// on a single strategy would roll back the strategies that had nothing wrong with them, so a
-    /// mobile audit already running would silently cost the reader their desktop one.
-    /// </remarks>
     private async Task<Guid?> OpenManualRunAsync(
         PageAuditTarget target,
         Guid batchId,
@@ -251,9 +214,6 @@ public sealed class PageAuditSchedulingService(
         }
         catch (DbUpdateException)
         {
-            // The partial unique index caught a request that raced the dispatcher. The other run
-            // is doing exactly what this one would have, so it is the answer rather than an error.
-            // Anything else is a real failure and is rethrown.
             dbContext.ChangeTracker.Clear();
             if (await FindActiveRunAsync(target.Id, cancellationToken) is null)
             {
@@ -311,16 +271,12 @@ public sealed class PageAuditSchedulingService(
             Guid? representative = null;
             foreach (var target in targetGroup)
             {
-                // The cadence advances whether or not a run is opened. A target that is ineligible
-                // today must not accumulate a backlog of missed slots to fire the moment it is fixed.
                 target.NextDueAt = MonitorCadence.GetFirstSlotAfter(
                     target.ScheduleAnchor, target.IntervalSeconds, now);
                 target.UpdatedAt = now;
 
                 if (activeTargetIds.Contains(target.Id))
                 {
-                    // The previous run has not finished. Skipping the slot is the honest behaviour:
-                    // the audit is already in flight, and a second one would spend quota to overtake it.
                     continue;
                 }
 
@@ -366,8 +322,6 @@ public sealed class PageAuditSchedulingService(
             InitiatedByUserId = requestedByUserId,
             Status = PageAuditRunStatuses.Queued,
 
-            // Snapshotted here, so the job receives a run id and nothing else. A job that took a
-            // URL would be a job that could be handed a different one.
             RequestedUrl = requestedUrl,
             Provider = target.Provider,
             Category = target.Category,
@@ -380,10 +334,6 @@ public sealed class PageAuditSchedulingService(
         return runId;
     }
 
-    /// <summary>
-    /// Closes a run that was committed but could never be handed to a worker, so it does not hold
-    /// its target's single active-run slot against every later request.
-    /// </summary>
     private async Task RetireUnreachableRunAsync(Guid runId, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
@@ -420,10 +370,6 @@ public sealed class PageAuditSchedulingService(
         return runIds.Count;
     }
 
-    /// <summary>
-    /// <c>SKIP LOCKED</c> so two dispatchers running at once divide the work rather than block on
-    /// each other, and neither hands the same target to two workers.
-    /// </summary>
     private async Task<IReadOnlyList<Guid>> ClaimDueTargetIdsAsync(
         DateTimeOffset now,
         int limit,

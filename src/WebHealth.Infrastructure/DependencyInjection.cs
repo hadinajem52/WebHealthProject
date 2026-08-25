@@ -80,19 +80,9 @@ public static class DependencyInjection
         {
             ValidateSmtpOptions(smtpOptions);
             services.AddSingleton(smtpOptions);
-            // Registered before the recording fallback below, which uses TryAdd.
             services.AddSingleton<IEmailTransport, SmtpEmailTransport>();
         }
 
-        // A factory as well as the scoped context. A DbContext is not thread-safe, and the crawler
-        // is the one place in this application that runs several requests at once: its workers and
-        // the transport's own authorization check would otherwise share the request's single
-        // context and fail with "a second operation was started on this context instance", taking
-        // the run down with them. Everything on that concurrent path takes its context from the
-        // factory and owns it for exactly one operation.
-        //
-        // The scoped context is built from the factory rather than registered separately, so there
-        // is one options object and one place the connection string is read.
         services.AddDbContextFactory<ApplicationDbContext>(options =>
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -164,8 +154,6 @@ public static class DependencyInjection
         services.AddScoped<RobotsRefreshJob>();
         services.AddSingleton<IHtmlLinkExtractor, HtmlLinkExtractor>();
 
-        // Both are singletons on purpose. A budget or a rate limit that each run observes on its
-        // own bounds nothing about what several concurrent runs do together.
         services.AddSingleton<CrawlRequestBudget>();
         services.AddSingleton(provider => new HostRequestRateLimiter(
             provider.GetRequiredService<TimeProvider>(),
@@ -178,12 +166,6 @@ public static class DependencyInjection
         services.AddScoped<CrawlQueuedRunReader>();
         services.AddScoped<CrawlRunJob>();
         services.AddScoped<CrawlReconciliationJob>();
-        // Only when a crawl worker exists. HangfireCrawlRunQueue needs IBackgroundJobClient, which
-        // is registered only when some feature enables Hangfire at all; registering it
-        // unconditionally makes resolving ICrawlRunner throw on an instance with everything off,
-        // and that failure would take the whole Broken links page with it rather than just the
-        // button. CrawlRunner takes the queue as an optional dependency and refuses to open a run
-        // without one.
         if (crawlOptions.Enabled)
         {
             services.AddScoped<ICrawlRunQueue, HangfireCrawlRunQueue>();
@@ -226,13 +208,6 @@ public static class DependencyInjection
                     $"ConnectionStrings:{DatabaseConnectionName} is not configured.");
             }
 
-            // How often an idle worker asks the database whether anything is waiting. Every
-            // server polls on this interval whether or not there is work, so it is the floor on
-            // background database traffic: three servers at one second was measured at twenty
-            // three transactions per second against an otherwise idle instance, which is load a
-            // developer's machine pays for continuously and which competes with the request the
-            // person is actually waiting for. Configurable because the right answer differs by
-            // environment — a demo wants work picked up promptly, a workstation does not.
             var queuePollInterval = configuration.GetValue<TimeSpan?>(
                 "Hangfire:QueuePollInterval") ?? TimeSpan.FromSeconds(5);
             if (queuePollInterval < TimeSpan.FromSeconds(1)
@@ -250,10 +225,6 @@ public static class DependencyInjection
                         PrepareSchemaIfNecessary = false,
                         QueuePollInterval = queuePollInterval
                     }));
-            // Built before the server is registered rather than inside the callback: Hangfire
-            // refuses a server with no queues, and with only an isolated-queue feature switched on
-            // this shared server has none to serve. Deciding here means it is simply not
-            // registered, instead of throwing at startup.
             var sharedQueues = new List<string>();
             if (schedulingOptions.Enabled)
             {
@@ -284,10 +255,6 @@ public static class DependencyInjection
                 });
             }
 
-            // A second server, serving only the crawl queue. Listing the crawl queue on the server
-            // above would not isolate anything: Hangfire's queue order decides what a *free* worker
-            // picks up next, it does not reserve workers, so long crawls would still starve the
-            // monitoring queue. A separate pool is the only arrangement that reserves capacity.
             if (crawlOptions.Enabled)
             {
                 services.AddHangfireServer(options =>
@@ -298,10 +265,6 @@ public static class DependencyInjection
                 });
             }
 
-            // A third server, serving only the page-audit queue, for the same reason the crawl
-            // queue has its own: a PageSpeed call can take ninety seconds, and Hangfire's queue
-            // order decides what a free worker picks up next rather than reserving any worker.
-            // Only a separate pool keeps a long third-party call away from scheduled checks.
             if (pageAuditOptions.Enabled)
             {
                 services.AddHangfireServer(options =>
@@ -362,18 +325,10 @@ public static class DependencyInjection
                     serviceProvider.GetRequiredService<SafeHttpConcurrencyLimiter>(),
                     safeHttpOptions));
 
-        // A dedicated client on a fixed Google origin. Deliberately not SafeHttpTransport: that
-        // exists to contact user-configured targets under DNS and SSRF rules because the URL comes
-        // from a user, and here the URL is one constant host with the monitored URL as a query
-        // value. Redirects are off — this API does not redirect, and following one would be
-        // following it with the API key still attached.
         services.AddHttpClient(PageSpeedInsightsOptions.ClientName, client =>
             {
                 client.BaseAddress = new Uri(PageSpeedInsightsProvider.ServiceOrigin);
 
-                // The provider applies its own timeout through a linked token, so it can tell a
-                // timeout apart from a cancellation. A second one here would surface as an
-                // ambiguous TaskCanceledException instead.
                 client.Timeout = Timeout.InfiniteTimeSpan;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(safeHttpOptions.UserAgentHeader);
             })
@@ -383,11 +338,6 @@ public static class DependencyInjection
                 AutomaticDecompression = System.Net.DecompressionMethods.All
             })
 
-            // The factory's own handlers log every request URI, and this client's URI carries the
-            // API key in its query. .NET redacts query strings by default, but that default is a
-            // process-wide switch somebody else can turn off - and a key must not depend on a
-            // setting this feature does not own. Removing the logging handlers means there is no
-            // request-URI log line to redact in the first place.
             .RemoveAllLoggers();
 
         services.AddHealthChecks()
@@ -409,18 +359,6 @@ public static class DependencyInjection
         }
     }
 
-    /// <summary>
-    /// The crawler's request budget is capped at half the transport's global concurrency. The cap
-    /// is on <c>WorkerCount * RequestConcurrency</c>, not on <c>RequestConcurrency</c> alone: a
-    /// worker pool of eight, each run staying within its own budget, would together fill every
-    /// shared HTTP slot and block scheduled checks at the transport — which is exactly the
-    /// starvation the separate queue exists to prevent, arriving by a different route.
-    /// <para>
-    /// <see cref="CrawlRequestBudget" /> enforces the same ceiling at runtime. This check exists so
-    /// a configuration that could never respect it is refused at startup rather than silently
-    /// queueing behind a semaphore.
-    /// </para>
-    /// </summary>
     private static void ValidateCrawlOptions(
         CrawlSchedulingOptions options,
         SafeHttpTransportOptions transportOptions)
@@ -444,10 +382,6 @@ public static class DependencyInjection
         }
     }
 
-    /// <summary>
-    /// BR-L09 asks for a contact identifier, so a configured one has to be reachable rather than
-    /// decorative. It is optional; what is refused is a value that could not be acted on.
-    /// </summary>
     private static void ValidateContact(SafeHttpTransportOptions options)
     {
         if (options.Contact is null) return;
@@ -463,11 +397,6 @@ public static class DependencyInjection
         }
     }
 
-    /// <summary>
-    /// Refuses a configuration that could not work rather than letting it fail one run at a time.
-    /// The API key is required only when scheduling is on: with the feature off the key is
-    /// absent by design, and demanding one would make the disabled default unstartable.
-    /// </summary>
     private static void ValidatePageAuditOptions(
         PageAuditSchedulingOptions options,
         PageSpeedInsightsOptions providerOptions)

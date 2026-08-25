@@ -293,16 +293,6 @@ internal sealed class EndpointRegistryService(
     public Task<RegistryMutationResult> RestoreAsync(RegistryVersionCommand command, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
         ChangeStateAsync(command, access, EndpointAuditAction.Restored, cancellationToken);
 
-    /// <summary>
-    /// The irreversible counterpart to <see cref="DeleteAsync" />. Archiving hides an endpoint
-    /// and keeps its history; this removes both.
-    /// </summary>
-    /// <remarks>
-    /// It is Administrator-only and it refuses an endpoint that is not already archived. Those
-    /// two guards are what make the archive step a deliberate pause rather than a formality: an
-    /// endpoint cannot go from monitored to gone in one request, and archiving has already
-    /// stopped its monitors, so nothing can enqueue new work for it while the cascade runs.
-    /// </remarks>
     public async Task<RegistryMutationResult> PurgeAsync(
         RegistryVersionCommand command,
         RegistryAccessContext access,
@@ -315,9 +305,6 @@ internal sealed class EndpointRegistryService(
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        // The row lock stands in for the concurrency token the change tracker would normally
-        // enforce: the cascade runs as set-based deletes rather than tracked saves, so the
-        // version has to be compared against a row nobody else can move underneath it.
         var endpoint = await dbContext.Endpoints.FromSqlInterpolated($"""
             SELECT * FROM web_health.endpoint WHERE id = {command.EntityId} FOR UPDATE
             """)
@@ -343,12 +330,6 @@ internal sealed class EndpointRegistryService(
 
         var now = DateTimeOffset.UtcNow;
 
-        // Written before the cascade, and deliberately outside it: audit_event references the
-        // endpoint by identifier rather than by foreign key, so it outlives the row and stays
-        // the only remaining record that this endpoint existed.
-        // The page-audit configuration is read rather than changed here: these actions
-        // change the endpoint's state, not what it is configured to audit, and the snapshot
-        // has to show what was true at the time either way.
         var pageAuditState = await PageAuditConfiguration.ReadAsync(
             dbContext, endpoint.Id, cancellationToken);
         var snapshot = ToAudit(endpoint, false, false, false, now, pageAuditState);
@@ -416,23 +397,15 @@ internal sealed class EndpointRegistryService(
         var action = scheduleEnabled
             ? EndpointAuditAction.ScheduleResumed
             : EndpointAuditAction.SchedulePaused;
-        // The page-audit configuration is read rather than changed here: these actions
-        // change the endpoint's state, not what it is configured to audit, and the snapshot
-        // has to show what was true at the time either way.
         var pageAuditState = await PageAuditConfiguration.ReadAsync(
             dbContext, endpoint.Id, cancellationToken);
         var before = ToAudit(endpoint, false, false, false, now, pageAuditState);
 
-        // Pausing an endpoint pauses every monitor on it, certificate checks included: a
-        // "paused" endpoint that still raised SSL incidents would not be paused at all.
         foreach (var active in endpoint.Monitors.Where(candidate => candidate.DeletedAt == null))
         {
             active.IsEnabled = scheduleEnabled;
             if (scheduleEnabled)
             {
-                // Rejoin the cadence grid rather than firing every slot missed while paused, and
-                // check straight away if a slot was missed. The dispatcher never advances a paused
-                // monitor, so its due time is exactly where the pause left it.
                 active.NextDueAt = MonitorCadence.GetResumeDueAt(active.NextDueAt, now);
             }
 
@@ -484,9 +457,6 @@ internal sealed class EndpointRegistryService(
 
         dbContext.Entry(endpoint).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var now = DateTimeOffset.UtcNow;
-        // The page-audit configuration is read rather than changed here: these actions
-        // change the endpoint's state, not what it is configured to audit, and the snapshot
-        // has to show what was true at the time either way.
         var pageAuditState = await PageAuditConfiguration.ReadAsync(
             dbContext, endpoint.Id, cancellationToken);
         var before = ToAudit(endpoint, false, false, false, now, pageAuditState);
@@ -600,10 +570,6 @@ internal sealed class EndpointRegistryService(
             Version = 1
         };
 
-    /// <summary>
-    /// BR-E04: an empty override means "the endpoint's own host", which is stored as null rather
-    /// than as an empty string so the default has exactly one representation.
-    /// </summary>
     private static string? NormalizeExpectedHost(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 
@@ -653,9 +619,6 @@ internal sealed class EndpointRegistryService(
             TimeoutSeconds = RegistryDefaults.HttpTimeoutSeconds,
             FailureConfirmationCount = 2,
             RecoveryConfirmationCount = 2,
-            // BR-P02: the resolved value is stored rather than left null, so a result's
-            // configuration snapshot records the threshold it was judged against even if the
-            // documented default changes later.
             WarningThresholdMs = thresholds.WarningMs,
             CriticalThresholdMs = thresholds.CriticalMs,
             SchedulingEnabled = schedulingEnabled,
@@ -673,12 +636,6 @@ internal sealed class EndpointRegistryService(
             candidate.DeletedAt == null
             && candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
 
-    /// <summary>
-    /// The audit snapshot describes the availability monitor whatever its lifecycle state.
-    /// Deleting an endpoint retires its monitors before the "after" snapshot is taken, so
-    /// requiring a live one here would throw on exactly the mutation being recorded. A live
-    /// monitor still wins when there is one.
-    /// </summary>
     private static EndpointMonitor AuditedAvailabilityMonitor(Endpoint endpoint) =>
         endpoint.Monitors
             .Where(candidate => candidate.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
@@ -686,11 +643,6 @@ internal sealed class EndpointRegistryService(
             .ThenByDescending(candidate => candidate.CreatedAt)
             .First();
 
-    /// <summary>
-    /// BR-C01: the certificate monitor exists exactly while the endpoint is HTTPS. Switching an
-    /// endpoint to HTTP retires its certificate monitor instead of leaving one that can never
-    /// observe anything, and switching back to HTTPS creates a fresh one.
-    /// </summary>
     private void ApplySslMonitorPresence(
         Endpoint endpoint,
         bool isProduction,
@@ -704,10 +656,6 @@ internal sealed class EndpointRegistryService(
             && candidate.MonitorType == RegistryDefaults.SslCertificateMonitorType);
         var required = RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl);
 
-        // A different host or port is a different certificate. Keeping the same monitor would
-        // leave the previous host's observations attached to it, so the endpoint page would
-        // show the old certificate until the next daily check, and fingerprint-keyed
-        // deduplication would compare two unrelated TLS identities.
         if (existing is not null && (!required || tlsIdentityChanged))
         {
             Retire(existing, actorId, now);
@@ -716,10 +664,6 @@ internal sealed class EndpointRegistryService(
 
         if (required && existing is null)
         {
-            // Added through the set rather than the navigation: the key is client-generated, so a
-            // monitor discovered only as a new member of a loaded collection is attached as an
-            // existing row and saved as an UPDATE against an id that was never inserted. Creation
-            // registers its monitors the same way for the same reason.
             dbContext.EndpointMonitors.Add(
                 CreateSslMonitor(endpoint, isProduction, schedulingEnabled, actorId, now));
         }
@@ -743,8 +687,6 @@ internal sealed class EndpointRegistryService(
         Guid actorId,
         DateTimeOffset now)
     {
-        // The certificate cadence is fixed by BR-C07 and is not affected by the endpoint's
-        // availability interval override.
         if (monitor.SchedulingEnabled != schedulingEnabled)
         {
             monitor.SchedulingEnabled = schedulingEnabled;
@@ -963,9 +905,6 @@ internal sealed class EndpointRegistryService(
             }
             else if (action == EndpointAuditAction.Restored)
             {
-                // Restoring reconciles against the endpoint's current URL rather than
-                // resurrecting every monitor it ever had. A certificate monitor retired because
-                // the endpoint moved to HTTP must stay retired.
                 if (monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType
                     && !requiresSslMonitor)
                 {
@@ -986,8 +925,6 @@ internal sealed class EndpointRegistryService(
                 monitor.DeletedAt == null
                 && monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType))
         {
-            // An HTTPS endpoint archived before certificate monitoring existed, or one whose
-            // certificate monitor was retired for a different URL, gets one on restore.
             var availability = endpoint.Monitors.FirstOrDefault(monitor =>
                 monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
             endpoint.Monitors.Add(CreateSslMonitor(

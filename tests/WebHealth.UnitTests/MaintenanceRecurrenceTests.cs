@@ -4,21 +4,13 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-M05. The daylight-saving rules under test are the ones written down in
-/// docs/phase-6/Recurring_Maintenance_Occurrences.md: a nominal local start inside a spring-forward
-/// gap shifts forward by the gap, an autumn-back ambiguous start resolves to the earlier of its two
-/// instants, and either way exactly one occurrence exists for the transition day.
-/// </summary>
 public sealed class MaintenanceRecurrenceTests
 {
     private static readonly TimeZoneInfo Berlin = TimeZoneInfo.FindSystemTimeZoneById("Europe/Berlin");
     private static readonly TimeSpan HalfHour = TimeSpan.FromMinutes(30);
 
-    // 2026-03-29: 02:00 local jumps to 03:00 (+01:00 -> +02:00). 02:30 does not exist.
     private static readonly DateTime SpringForwardDay = new(2026, 3, 29);
 
-    // 2026-10-25: 03:00 local falls back to 02:00 (+02:00 -> +01:00). 02:30 happens twice.
     private static readonly DateTime AutumnBackDay = new(2026, 10, 25);
 
     [Fact]
@@ -116,7 +108,7 @@ public sealed class MaintenanceRecurrenceTests
     [Fact]
     public void Expand_WeeklyEmitsOnlySelectedDays()
     {
-        var anchor = new DateTimeOffset(2026, 6, 1, 9, 0, 0, TimeSpan.Zero); // Monday
+        var anchor = new DateTimeOffset(2026, 6, 1, 9, 0, 0, TimeSpan.Zero);
         var mask = MaintenanceDayOfWeekMask.Of(DayOfWeek.Monday) | MaintenanceDayOfWeekMask.Of(DayOfWeek.Thursday);
         var schedule = new MaintenanceSchedule(anchor, TimeSpan.FromHours(1),
             MaintenanceRecurrencePatterns.Weekly, mask, null);
@@ -169,7 +161,6 @@ public sealed class MaintenanceRecurrenceTests
     [Fact]
     public void Canonicalize_MovesAnAmbiguousAnchorOntoTheInstantExpansionWillProduce()
     {
-        // 02:30 at the standard (+01:00) offset is the second pass of the ambiguous hour.
         var declaredSecondPass = new DateTimeOffset(2026, 10, 25, 1, 30, 0, TimeSpan.Zero);
 
         var canonical = MaintenanceRecurrence.Canonicalize(declaredSecondPass, Berlin);

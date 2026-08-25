@@ -174,10 +174,6 @@ public sealed class AuditTrailWriter(ApplicationDbContext dbContext) : IAuditTra
         where TSnapshot : class =>
         RecordAsync(context, action, entityType, entityId.ToString(), before, after, cancellationToken);
 
-    /// <summary>
-    /// The identifier overload: an origin is a string key rather than a surrogate id, and the
-    /// audit trail records what the entity is actually keyed by.
-    /// </summary>
     private async Task RecordAsync<TSnapshot>(
         AuditWriteContext context,
         string action,

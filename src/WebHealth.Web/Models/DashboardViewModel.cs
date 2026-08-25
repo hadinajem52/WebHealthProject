@@ -4,15 +4,6 @@ using WebHealth.Application.Reporting;
 
 namespace WebHealth.Web.Models;
 
-/// <summary>
-/// The dashboard filter, bound from the query string so a filtered dashboard is a shareable URL
-/// and the CSV export can be reached with the identical query.
-/// </summary>
-/// <remarks>
-/// It carries every dimension <see cref="ReportQuery" /> supports. A filter the query layer
-/// applies but the primary screen cannot express would leave part of the shared contract
-/// unreachable — and would make the export link unable to represent what the user is looking at.
-/// </remarks>
 public sealed class DashboardFilterViewModel
 {
     [Display(Name = "Client")]
@@ -52,10 +43,6 @@ public sealed class DashboardFilterViewModel
         WindowEnd is { } end ? new DateTimeOffset(end.Date, TimeSpan.Zero) : null,
         Page);
 
-    /// <summary>
-    /// The same filter as route values, so the export link and the pager cannot drift from what
-    /// the page is showing. Every dimension is here for the same reason it is on the form.
-    /// </summary>
     public Dictionary<string, string?> ToRouteValues() => new()
     {
         ["ClientId"] = ClientId?.ToString(),
@@ -69,7 +56,6 @@ public sealed class DashboardFilterViewModel
     };
 }
 
-/// <summary>The lookup lists the filter's selects are populated from.</summary>
 public sealed record DashboardFilterOptions(
     IReadOnlyList<ClientListItem> Clients,
     IReadOnlyList<WebsiteListItem> Websites,

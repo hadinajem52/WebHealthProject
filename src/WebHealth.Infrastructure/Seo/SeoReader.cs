@@ -7,21 +7,11 @@ using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Seo;
 
-/// <summary>
-/// AC-07's read surface. Every filter is a predicate the database applies, and the visibility scope
-/// is applied first — a view that fetched broadly and trimmed afterwards would already have read
-/// rows the requester is not entitled to, which is a disclosure whether or not they are rendered.
-/// </summary>
 internal sealed class SeoReader(
     ApplicationDbContext dbContext,
     RegistryVisibility visibility,
     TimeProvider timeProvider) : ISeoReader
 {
-    /// <summary>
-    /// Every SEO rule key is namespaced, so "does this page have SEO problems" is answered from the
-    /// findings the rules already produced rather than by re-deriving the rules here. Re-deriving
-    /// would let this list and the incident it links to disagree about the same page.
-    /// </summary>
     private const string SeoRuleKeyPrefix = "Seo.";
 
     public async Task<SeoListPage> ListAsync(
@@ -55,9 +45,6 @@ internal sealed class SeoReader(
         var observations = dbContext.SeoObservations.AsNoTracking()
             .Where(observation => visibleEndpointIds.Contains(observation.EndpointMonitor.EndpointId));
 
-        // One row per endpoint: the observation with no newer sibling. An SEO view listing every
-        // historical observation would show the same page a hundred times and bury the current
-        // state, which is the only state anyone acts on.
         var latest = observations.Where(observation => !observations.Any(newer =>
             newer.EndpointMonitor.EndpointId == observation.EndpointMonitor.EndpointId
             && (newer.ObservedAt > observation.ObservedAt
@@ -78,10 +65,6 @@ internal sealed class SeoReader(
 
         if (SeoFindingGroups.IsSelectable(query.Subject))
         {
-            // Expressed as the subject's rule keys rather than as a call to SeoFindingGroups.Of:
-            // the grouping is a method, so the database cannot run it, and applying it in memory
-            // would mean reading every row before narrowing it. An unrecognised subject is ignored
-            // here rather than matching nothing, matching how the other filters degrade.
             var subjectRuleKeys = SeoFindingGroups.RuleKeysFor(query.Subject);
             latest = latest.Where(observation =>
                 observation.LogicalCheck.Result!.Findings.Any(finding =>
@@ -116,9 +99,6 @@ internal sealed class SeoReader(
                 observation.CanonicalCount,
                 observation.RobotsMeta,
                 observation.PolicyIndexingExpectation ?? SeoIndexingExpectations.Default,
-                // The rule keys themselves, not a total: §11.2 asks this report for robots and
-                // sitemap findings by name, and every SEO rule shares the "Seo." prefix, so a
-                // count cannot tell a blocked origin from a missing meta description.
                 observation.LogicalCheck.Result!.Findings
                     .Where(finding => finding.RuleKey.StartsWith(SeoRuleKeyPrefix))
                     .Select(finding => finding.RuleKey)

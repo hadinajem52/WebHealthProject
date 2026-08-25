@@ -150,8 +150,6 @@ internal sealed class IncidentLifecycleService(
                 && (incident.Status == IncidentStatuses.Resolved || incident.Status == IncidentStatuses.Closed))
             .ToListAsync(cancellationToken);
 
-        // The sweep takes no version from the caller, so a row someone else changed between the
-        // read and the write is caught here rather than by a version check. Nothing commits.
         try
         {
             foreach (var incident in incidents)

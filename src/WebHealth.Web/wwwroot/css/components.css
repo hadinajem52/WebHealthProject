@@ -1,4 +1,4 @@
-﻿.card {
+.card {
     padding: 1.3125rem;
     border-radius: var(--radius-card);
     background-color: var(--surface-raised);
@@ -510,9 +510,7 @@ code,
     vertical-align: middle;
 }
 
-/* Column headers read the same as .detail-list__head, so a table and a fact list on the
-   same page share one visual language: small, light, uppercase, closed by the single
-   heavier rule in the table. Row separators below stay --border-subtle. */
+
 .data-table thead th {
     padding-bottom: var(--space-2);
     border-bottom: 1px solid var(--border-strong);
@@ -816,12 +814,7 @@ code,
     max-width: 48rem;
 }
 
-/* Two fields that are one decision -- a warning threshold and its critical counterpart, a
-   permission and its expiry. Side by side they read as the pair they are; stacked, the rule that
-   binds them has to be repeated under each.
 
-   Both this class and its modifier were written in the endpoint and maintenance forms and never
-   defined anywhere, so every "two-column" row in this application has always been one column. */
 .form-grid {
     display: grid;
     gap: var(--space-5);
@@ -834,10 +827,7 @@ code,
     }
 }
 
-/* Form sections. A configuration form is a set of decisions about different things -- what the
-   endpoint is, whether we may test it, how often, what SEO shape it should have. As one flat
-   column of twenty controls it asks the reader to hold all of them at once and gives no way to
-   tell where one decision ends and the next begins. */
+
 .form-section {
     display: block;
     margin: 0;
@@ -851,8 +841,7 @@ code,
     border-top: 1px solid var(--border-subtle);
 }
 
-/* A legend, not a heading: it names the group for assistive technology as well as the eye. It
-   sits outside the flex body below so no browser has to lay a legend out as a flex item. */
+
 .form-section__title {
     padding: 0;
     color: var(--text-primary);
@@ -875,17 +864,14 @@ code,
     gap: var(--space-5);
 }
 
-/* A switch and the sentence that explains it are one control, not a control followed by a stray
-   paragraph. Grouping them also gives the hint an id the input can point at. */
+
 .switch-block {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
 }
 
-/* Fields that only apply while the switch above them is on. Dimming is all this does: the
-   inputs stay editable and keep submitting, because the server owns that rule and a form that
-   silently dropped a value would be worse than one that shows it greyed. */
+
 .form-dependent {
     display: flex;
     flex-direction: column;
@@ -897,9 +883,7 @@ code,
     opacity: 0.55;
 }
 
-/* Reserved for what the reader must read before choosing: this control sends their URL to a
-   third party, or waives a production safety rule. An ordinary hint under an ordinary switch
-   does not carry that, because every other field has one too. */
+
 .form-notice {
     display: flex;
     padding: var(--space-3);
@@ -919,7 +903,7 @@ code,
     color: var(--status-warning-text);
 }
 
-/* Which fields must be filled, said rather than left to be discovered on submit. */
+
 .form-field__required {
     margin-left: var(--space-2);
     color: var(--text-secondary);
@@ -1303,37 +1287,20 @@ code,
     gap: var(--space-3);
 }
 
-/* A select that carries a long label -- "Client - Environment - https://..." -- needs more
-   room than the 26rem cap the shared rule sets, or every option truncates. Capped short of the
-   row so a second action still fits beside it rather than being pushed onto its own line.
 
-   The basis is a fixed length rather than auto because a select sizes itself from the option
-   currently showing. With an auto basis the field is one width holding a full endpoint label
-   and a much narrower one holding "Select an endpoint", so the row relaid itself out -- and the
-   buttons moved -- every time the reader changed the selection.
-
-   Both selectors are doubled up because the generic .filter-inline .form-field rule below
-   carries the same specificity and comes later, so it won every declaration this rule set. */
 .filter-inline.filter-inline--wide .form-field {
     flex: 0 1 32rem;
     width: 32rem;
     max-width: 100%;
 }
 
-/* Long labels are clipped rather than widening the control. */
+
 .filter-inline.filter-inline--wide .form-field select {
     width: 100%;
     text-overflow: ellipsis;
 }
 
-/* The picker and the action that uses it share one row, but a GET form and a POST form cannot
-   be the same element. Each form is a flex item in the row, and the inner one lays its field
-   and submit out the same way the row does.
 
-   flex: 0 1 auto keeps the group at its content width. Letting it grow would stretch it across
-   the row and strand the button that follows it against the far edge. nowrap keeps the submit
-   beside its own field: wrapping dropped it under the select and left the action after the group
-   stranded at the far right of the row. */
 .filter-inline__group {
     display: flex;
     min-width: 0;
@@ -1355,17 +1322,13 @@ code,
     height: 3.125rem;
 }
 
-/* The row shrinks the field, never the action. Without this the button was a flex item free to
-   shrink under its own label, and "Show crawls" broke onto two lines inside a fixed-height
-   button as soon as the field beside it wanted the room. */
+
 .filter-inline .button {
     flex: 0 0 auto;
     white-space: nowrap;
 }
 
-/* The form factor switch on the PageSpeed page. One control rather than a list of links,
-   because mobile and desktop are the same measurement of the same page and a reader compares
-   them by flicking between them. */
+
 .segmented {
     display: inline-flex;
     flex-wrap: wrap;
@@ -1391,8 +1354,7 @@ code,
     color: var(--text-primary);
 }
 
-/* aria-current is what makes an option the selected one, so the style hangs off it rather than
-   off a second class the markup could forget to keep in step with it. */
+
 .segmented__option[aria-current="page"] {
     background-color: var(--surface-raised);
     box-shadow: var(--shadow-card);
@@ -1829,8 +1791,7 @@ code,
 
     .data-table tr {
         padding: var(--space-3) 0;
-        /* A gradient is not a valid <color>, so the shorthand dropped this declaration
-           entirely and stacked-card rows rendered with no separator at all. */
+
         border-bottom: 1px solid var(--border-subtle);
     }
 
@@ -2170,9 +2131,7 @@ code,
     }
 }
 
-/* Several badges in one table cell. Was .finding-groups, named for the one page that had it;
-   the rule was never about findings, and a second page needing it should not mean a second
-   copy of four lines. */
+
 .badge-set {
     display: flex;
     flex-wrap: wrap;
@@ -2180,9 +2139,7 @@ code,
     gap: var(--space-1);
 }
 
-/* Detail list — the two-column "Subject / STATUS" card body from the Purity
-   endpoint design: an icon-led label on the left, a badge or plain value on the
-   right, with the shared gradient hairline between rows. */
+
 .detail-list {
     margin-top: var(--space-6);
 }
@@ -2195,8 +2152,7 @@ code,
     grid-template-columns: minmax(0, 1fr) minmax(0, 19rem);
 }
 
-/* The one deliberately heavier rule on the list: it closes the column header and
-   opens the rows. Every separator below it is lighter, so the hierarchy reads. */
+
 .detail-list__head {
     padding-bottom: var(--space-2);
     border-bottom: 1px solid var(--border-strong);
@@ -2220,10 +2176,7 @@ code,
     position: relative;
 }
 
-/* Row separators are a flat #E2E8F0 stroke, matching the Figma, and deliberately not
-   --divider-line: that gradient is the card divider and peaks mid-span, which reads as
-   a heavier line on some rows. Only between rows -- the first row is closed off by the
-   header rule above, which is the single heavier line in the list. */
+
 .detail-list__items > li + li::before {
     position: absolute;
     top: 0;
@@ -2269,11 +2222,22 @@ code,
     color: var(--text-primary);
     font-size: var(--font-size-sm);
     font-weight: 400;
-    /* A length, not a ratio: it inherits as 20px into the smaller __note text too, so
-       every line box in the row is a whole number of pixels and each separator lands on
-       the same subpixel phase. A unitless 1.4 would give 19.6px here and 16.8px there. */
+
     line-height: 20px;
     overflow-wrap: anywhere;
+}
+
+
+.detail-list__value a {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-decoration-color: var(--border-strong);
+    text-underline-offset: 0.2em;
+}
+
+.detail-list__value a:hover,
+.detail-list__value a:focus-visible {
+    text-decoration-color: currentColor;
 }
 
 .detail-list__note {
@@ -2281,8 +2245,7 @@ code,
     font-size: var(--font-size-xs);
 }
 
-/* The card eyebrow that sits under the title: a green check-circle followed by
-   the name of what the list below reports on. */
+
 .card__status {
     display: flex;
     align-items: center;
@@ -2301,8 +2264,7 @@ code,
     color: var(--color-green-300);
 }
 
-/* Not every card eyebrow reports a pass/fail state -- a history or index card just
-   names what the list below is. Neutral keeps the app's icon teal. */
+
 .card__status[data-status="neutral"] svg {
     color: var(--color-teal-300);
 }
@@ -2320,7 +2282,7 @@ code,
     color: var(--status-danger);
 }
 
-/* Square icon-only button, matching the 45x39 tile in the design. */
+
 .button--icon {
     justify-content: center;
     padding-right: var(--space-3);
@@ -2333,8 +2295,7 @@ code,
     margin-left: -0.125rem;
 }
 
-/* Dropdown that shares the popup contract with the header and filter menus, so
-   its open, Escape, click-away and focus-out behaviour cannot drift from theirs. */
+
 .action-menu {
     position: relative;
 }
@@ -2422,10 +2383,7 @@ code,
     }
 }
 
-/* Audit disclosure -- a collapsible group of Lighthouse audits.
-   The title leads and the count follows it: the count is how many, which only means
-   something once you know what of. A red "2" before the words reads as an error badge
-   rather than as a tally. */
+
 .disclosure {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-tile);
@@ -2442,7 +2400,7 @@ code,
     list-style: none;
 }
 
-/* Both spellings are needed: WebKit still uses the pseudo-element, everyone else ::marker. */
+
 .disclosure__summary::-webkit-details-marker {
     display: none;
 }
@@ -2492,10 +2450,7 @@ code,
     line-height: 18px;
 }
 
-/* Audit rows. The audit name and its explanation belong together in one column: the
-   explanation is a sentence about the name, and splitting them across two table cells
-   forced a narrow name column that wrapped every title. The measured value is the only
-   thing that scans vertically, so it is the only thing given its own column. */
+
 .audit-list {
     padding: 0;
     margin: var(--space-3) 0 0;
@@ -2657,8 +2612,7 @@ code,
     }
 }
 
-/* A badge carrying added context. The "i" sits after the label so the label still reads
-   first, and the whole badge is the hover/focus target rather than the icon alone. */
+
 .badge--detailed {
     cursor: help;
     gap: 0.25rem;
@@ -2680,8 +2634,7 @@ code,
     opacity: 1;
 }
 
-/* Positioned by shell.js against the viewport, not the badge, so a table with its own
-   scroll container cannot clip it. */
+
 .badge-tooltip {
     position: fixed;
     z-index: 100;
@@ -2702,10 +2655,7 @@ code,
     display: none;
 }
 
-/* Filter bar -- fields, switches and actions on one wrapping line.
-   The grid it replaces gave the actions a full-width row of their own
-   (grid-column: 1 / -1), which left a band of empty card between the last field and the
-   submit button and pushed the button as far from the fields as the card allowed. */
+
 .filter-bar {
     display: flex;
     flex-wrap: wrap;
@@ -2726,14 +2676,7 @@ code,
     height: 2.75rem;
 }
 
-/* A select renders its text below its own padding-top rather than centring it in the box, so a
-   shorter control that keeps the padding meant for a taller one sits low. These are 2.75rem
-   where the full-size fields are 3.125rem, and they inherited the 0.75rem padding, which put
-   every filter dropdown on the site about 3px below centre.
 
-   The padding is derived rather than guessed: half of whatever the box has left once the line
-   box and the two borders are taken out. Change the height or the line height and it still
-   centres. */
 .filter-bar .form-field input,
 .filter-bar .form-field select {
     padding-top: calc((2.75rem - 1.5rem - 2px) / 2);
@@ -2741,8 +2684,7 @@ code,
     line-height: 1.5rem;
 }
 
-/* A switch has no label above it, so bottom alignment would sit it on the baseline of the
-   select rather than level with the middle of the control. */
+
 .filter-bar__switch {
     padding-bottom: 0.8125rem;
 }

@@ -14,13 +14,6 @@ namespace WebHealth.Infrastructure.Notifications;
 
 public sealed record NotificationDispatchResult(int Claimed, int Sent);
 
-/// <summary>
-/// Claims due (Pending/RetryScheduled with an elapsed next_attempt_at) and stale-leased
-/// (Processing past its lease) deliveries in one query, so a single recurring tick is both the
-/// normal dispatcher and the restart/crash reconciliation pass — there is nothing left mid-flight
-/// for a separate reconciler to find. Each claimed delivery is sent and updated in its own short
-/// transaction, entirely outside the finalization transaction that created it.
-/// </summary>
 internal sealed class NotificationDispatchService(
     ApplicationDbContext dbContext,
     IEmailTransport emailTransport,
@@ -30,12 +23,6 @@ internal sealed class NotificationDispatchService(
 {
     public async Task<NotificationDispatchResult> DispatchDueAsync(CancellationToken cancellationToken = default)
     {
-        // Guards against a stale-entity trap if this instance is ever invoked more than once on
-        // the same scope: without this, a tracked NotificationDelivery from a prior call would be
-        // returned by SendAsync's identity-resolved query instead of the row's true current state
-        // (which a raw SQL claim in ClaimDueDeliveriesAsync may have just changed), and EF's
-        // snapshot-based change detection would then silently drop state/lease columns from the
-        // next UPDATE because they compare equal to the stale baseline.
         dbContext.ChangeTracker.Clear();
         var now = timeProvider.GetUtcNow();
         var leaseOwner = Guid.NewGuid().ToString("N");
@@ -110,8 +97,6 @@ internal sealed class NotificationDispatchService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        // Read untracked: the message only needs a snapshot, and leaving nothing tracked keeps
-        // the write below working from the row's true current state.
         var source = await dbContext.NotificationDeliveries.AsNoTracking()
             .Include(candidate => candidate.NotificationEvent).ThenInclude(notificationEvent => notificationEvent.Incident)
                 .ThenInclude(incident => incident.EndpointMonitor).ThenInclude(monitor => monitor.Endpoint)
@@ -130,13 +115,9 @@ internal sealed class NotificationDispatchService(
         var ownerDisplayName = await ResolveOwnerDisplayNameAsync(source.NotificationEvent.Incident.OwnerSubject, cancellationToken);
         var message = BuildMessage(source, ownerDisplayName);
 
-        // SMTP is a network round trip with a multi-second timeout, so it runs with no
-        // transaction and no connection held. The lease is what protects the row meanwhile.
         var result = await emailTransport.SendAsync(message, cancellationToken);
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        // Re-read under the lease: if it expired and another worker claimed the row while the
-        // send was in flight, that worker now owns the outcome and this one must not write.
         var delivery = await dbContext.NotificationDeliveries.SingleOrDefaultAsync(
             candidate => candidate.Id == deliveryId && candidate.LeaseOwner == leaseOwner,
             cancellationToken);

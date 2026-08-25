@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -50,11 +50,6 @@ namespace WebHealth.IntegrationTests.Support;
 
 internal static class DatabaseFoundationAssertions
 {
-    /// <summary>
-    /// Spacing for fixture checks. It is allocated here rather than passed in by each caller: a
-    /// hand-picked number is a namespace every stage has to share, and one that grew past the
-    /// window its base allowed silently dated a check into the future.
-    /// </summary>
     private static int fixtureSequence;
 
     private static readonly string[] ExpectedMigrations =
@@ -148,14 +143,6 @@ internal static class DatabaseFoundationAssertions
         ,"page_audit_incident_policy"
     ];
 
-    // The tables added by the three Phase 4 migrations (HealthMaintenanceAndIncidents,
-    // IncidentLifecycle's table-shape is a superset of the same tables, DurableNotifications) —
-    // used to compute the expected table set at the Phase 3 boundary checkpoint.
-    /// <summary>
-    /// Every table created after the Phase 3 boundary, which is what the upgrade check migrates
-    /// back down to. Each phase that adds a table adds it here, or the down-level schema
-    /// comparison starts expecting a table that migration never created.
-    /// </summary>
     private static readonly string[] TablesAddedAfterPhaseThree =
     [
         "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
@@ -168,7 +155,6 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] ExpectedEntityTypeNames =
     [
-        // Identity entities
         "IdentityRoleClaim`1",
         "IdentityUserClaim`1",
         "IdentityUserLogin`1",
@@ -176,12 +162,10 @@ internal static class DatabaseFoundationAssertions
         "IdentityUserToken`1",
         "ApplicationRole",
         "ApplicationUser",
-        // Administration
         "OwnerSubject",
         "Team",
         "TeamMember",
         "AuditEvent",
-        // Registry
         "Client",
         "Website",
         "Tag",
@@ -192,7 +176,6 @@ internal static class DatabaseFoundationAssertions
         "TargetAuthorizationEvidence",
         "EndpointMonitor",
         "PolicyProfile",
-        // Monitoring
         "EndpointHealth",
         "IssueState",
         "CertificateObservation",
@@ -204,23 +187,18 @@ internal static class DatabaseFoundationAssertions
         "Finding",
         "LogicalCheck",
         "RedirectHop",
-        // Incidents
         "Incident",
         "IncidentEvent",
         "IncidentEvidence",
-        // Maintenance
         "MaintenanceOccurrence",
         "MaintenanceTarget",
         "MaintenanceWindow",
-        // Notifications
         "NotificationAttempt",
         "NotificationDelivery",
         "NotificationEvent",
         "NotificationReadMarker",
-        // SEO
         "SeoObservation",
         "RobotsSnapshot",
-        // Crawler
         "CrawlRun",
         "PageAuditTarget",
         "PageAuditRun",
@@ -244,8 +222,6 @@ internal static class DatabaseFoundationAssertions
 
         (await context.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         (await context.Database.GetAppliedMigrationsAsync()).Should().BeEquivalentTo(ExpectedMigrations);
-        // IEntityType.Name is namespace-qualified; the inventory above is written as CLR type
-        // names, which is what makes an unexpected entity type readable in a failure message.
         var entityTypeNames = context.Model.GetEntityTypes().Select(e => e.ClrType.Name).ToList();
         entityTypeNames.Should().BeEquivalentTo(ExpectedEntityTypeNames);
 
@@ -284,19 +260,11 @@ internal static class DatabaseFoundationAssertions
         await VerifyUpgradePathsAsync(connectionString);
     }
 
-    /// <summary>
-    /// Certificate monitors follow the endpoint's scheme (BR-C01), and the fingerprint written
-    /// by the migration's SQL backfill has to be byte-identical to the one the application
-    /// computes — dispatch rejects any check whose stored fingerprint does not recompute, so a
-    /// mismatch would silently disable every backfilled certificate monitor.
-    /// </summary>
     private static async Task VerifySslCertificateMonitoringAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["ConnectionStrings:WebHealth"] = connectionString,
-            // BR-C07's urgent re-check is gated on scheduling being enabled, and the option
-            // defaults to off, so the recheck below never queues anything without this.
             ["Monitoring:Scheduling:Enabled"] = "true"
         }).Build();
         await using var services = new ServiceCollection().AddLogging()
@@ -306,9 +274,6 @@ internal static class DatabaseFoundationAssertions
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
-        // An unordered First is whatever row the planner hands back, and the plaintext endpoint
-        // below is rejected in a production environment for want of an HTTP exception reason, so
-        // this stage passed or failed from one run to the next on row order alone.
         var environmentId = await database.Environments
             .Where(candidate => candidate.DeletedAt == null
                 && candidate.IsActive
@@ -348,12 +313,6 @@ internal static class DatabaseFoundationAssertions
             database, endpointService, access, httpsEndpointId, sslMonitor.Id);
     }
 
-    /// <summary>
-    /// A different host or port is a different certificate, so the monitor is retired and
-    /// replaced rather than inheriting the previous host's observations. This also proves the
-    /// retire and the replacement can be written in one save without tripping the partial
-    /// unique index on (endpoint_id, monitor_type) for live monitors.
-    /// </summary>
     private static async Task VerifyCertificateMonitorFollowsTlsIdentityAsync(
         ApplicationDbContext database,
         IEndpointRegistryService endpointService,
@@ -382,8 +341,6 @@ internal static class DatabaseFoundationAssertions
         replacement.ConfigurationFingerprint.Should().Be(
             RegistryDefaults.CreateSslFingerprint("https://renamed-certificates.test/status", false));
 
-        // A same-identity edit keeps the monitor, so certificate history is not reset by an
-        // unrelated change.
         database.ChangeTracker.Clear();
         endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
         (await endpointService.UpdateAsync(
@@ -399,16 +356,12 @@ internal static class DatabaseFoundationAssertions
             .Should().Be(1);
     }
 
-    /// <summary>
-    /// BR-C07: a TLS-related availability failure queues an out-of-band certificate check, but
-    /// a flapping host must not be able to queue one per failed check.
-    /// </summary>
     private static async Task VerifyUrgentCertificateRecheckAsync(
-        AsyncServiceScope scope,
-        ApplicationDbContext database,
-        Guid sslMonitorId,
-        Guid endpointId,
-        string url)
+            AsyncServiceScope scope,
+            ApplicationDbContext database,
+            Guid sslMonitorId,
+            Guid endpointId,
+            string url)
     {
         var scheduler = scope.ServiceProvider.GetRequiredService<ISslUrgentCheckScheduler>();
         var request = new SafeHttpTransportRequest(endpointId, url, true);
@@ -432,7 +385,6 @@ internal static class DatabaseFoundationAssertions
             check.EndpointMonitorId == sslMonitorId && check.Source == LogicalCheckSources.Urgent))
             .Should().Be(1);
 
-        // A non-TLS failure is not evidence about the certificate.
         (await PrepareUrgentAsync(
             database, scheduler, endpointId,
             new HttpTransportEvidence(request, TransportFailure(SafeHttpFailureKind.Timeout))))
@@ -442,15 +394,11 @@ internal static class DatabaseFoundationAssertions
             .Should().Be(1);
     }
 
-    /// <summary>
-    /// The scheduler writes into its caller's transaction, so the test supplies one exactly as
-    /// finalization does.
-    /// </summary>
     private static async Task<UrgentCertificateCheck?> PrepareUrgentAsync(
-        ApplicationDbContext database,
-        ISslUrgentCheckScheduler scheduler,
-        Guid endpointId,
-        LogicalCheckTerminalEvidence evidence)
+            ApplicationDbContext database,
+            ISslUrgentCheckScheduler scheduler,
+            Guid endpointId,
+            LogicalCheckTerminalEvidence evidence)
     {
         await using var transaction = await database.Database.BeginTransactionAsync();
         var prepared = await scheduler.PrepareAfterTlsFailureAsync(
@@ -498,34 +446,15 @@ internal static class DatabaseFoundationAssertions
         var storedFingerprint = reader.GetString(2);
         var migrationFingerprint = reader.GetString(3);
 
-        // All three must agree: what the application stored, what the migration's SQL would
-        // compute for the same endpoint, and what the fingerprint function produces today.
         var applicationFingerprint = RegistryDefaults.CreateSslFingerprint(normalizedUrl, isProduction);
         storedFingerprint.Should().Be(applicationFingerprint);
         migrationFingerprint.Should().Be(applicationFingerprint);
     }
 
-    /// <summary>
-    /// These scenarios were written when an endpoint had exactly one monitor. HTTPS endpoints
-    /// now also carry a certificate monitor, so each query states the availability intent it
-    /// always had rather than relying on there being only one monitor to find.
-    /// </summary>
     private static IQueryable<EndpointMonitor> AvailabilityMonitors(ApplicationDbContext database) =>
-        database.EndpointMonitors.Where(monitor =>
-            monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
+            database.EndpointMonitors.Where(monitor =>
+                monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
 
-    /// <summary>
-    /// An availability monitor the calling stage owns, found by the URL it names rather than by
-    /// position. Picking an existing monitor by ordinal couples a stage to whatever every earlier
-    /// stage happened to leave on it — a held lease, issue state, an open incident — and silently
-    /// selects a different monitor as soon as the surrounding fixtures shift. The endpoint is
-    /// plain HTTP in a non-production environment so it carries no certificate monitor to retire
-    /// and raises no HTTPS-required finding.
-    /// </summary>
-    /// <summary>
-    /// The same owned fixture for a stage that drives its own <see cref="ApplicationDbContext"/>
-    /// instances rather than resolving one from a scope, as the concurrency stages do.
-    /// </summary>
     private static async Task<Guid> CreateOwnedMonitorIdAsync(string connectionString, string url)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -630,7 +559,6 @@ internal static class DatabaseFoundationAssertions
             .SingleAsync(candidate => candidate.Id == endpointId);
         endpoint.NormalizedUrl.Should().Be("https://example.test/Health?q=A");
         endpoint.NormalizedUrlHash.Should().HaveCount(32);
-        // An HTTPS endpoint carries both an availability monitor and a certificate monitor.
         endpoint.Monitors.Select(candidate => candidate.MonitorType).Should()
             .BeEquivalentTo(["HttpAvailability", "SslCertificate"]);
         var monitor = endpoint.Monitors.Single(candidate =>
@@ -1440,7 +1368,6 @@ internal static class DatabaseFoundationAssertions
         (await database.LogicalChecks.AsNoTracking().SingleAsync(check => check.Id == exhaustedCheck.Id))
             .State.Should().Be(LogicalCheckStates.Completed);
 
-        // A stray duplicate job (e.g. from reconciliation racing the terminal finalize) must be a safe no-op.
         (await exhaustedExecution.ExecuteAsync(new(
             exhaustedCheck.Id, exhaustedWork.Id, "job-exhaust-4", "worker-a")))
             .Should().Be(LogicalCheckExecutionStatus.AlreadyCompleted);
@@ -1523,8 +1450,6 @@ internal static class DatabaseFoundationAssertions
             && evidence.LogicalCheckId == confirmedFailure);
         incident.Events.Should().Contain(eventRecord => eventRecord.EventType == IncidentEventTypes.Opened);
 
-        // AC-03 / item 7: exactly one opening notification_event, with exactly one delivery, was
-        // written by the automatic pipeline — no duplicates from the two failure-confirmation steps.
         var openedNotification = await database.NotificationEvents.AsNoTracking()
             .Include(notificationEvent => notificationEvent.Deliveries)
             .SingleAsync(notificationEvent => notificationEvent.IncidentId == incident.Id
@@ -1548,8 +1473,6 @@ internal static class DatabaseFoundationAssertions
             evidence.EvidenceType == IncidentEvidenceTypes.Recovery
             && evidence.EvidenceRole == "RecoveryStarted");
 
-        // Item 5's "no recovery notification after only one passing check": the first pass must
-        // not have created a Recovered notification_event yet.
         (await database.NotificationEvents.AnyAsync(notificationEvent =>
             notificationEvent.IncidentId == incident.Id
             && notificationEvent.EventType == NotificationEventTypes.Recovered)).Should().BeFalse();
@@ -1572,19 +1495,12 @@ internal static class DatabaseFoundationAssertions
         (await database.AuditEvents.AnyAsync(audit => audit.EntityIdentifier == incident.Id.ToString()
             && audit.Action == "incident.resolved")).Should().BeTrue();
 
-        // AC-04 / item 7: exactly one recovery notification_event, with exactly one delivery —
-        // confirmed only on the second consecutive pass, never duplicated by the earlier pass.
         var recoveredNotification = await database.NotificationEvents.AsNoTracking()
             .Include(notificationEvent => notificationEvent.Deliveries)
             .SingleAsync(notificationEvent => notificationEvent.IncidentId == incident.Id
                 && notificationEvent.EventType == NotificationEventTypes.Recovered);
         recoveredNotification.Deliveries.Should().ContainSingle();
 
-        // Item 19: every automatic state-changing action (Opened, RecoveryStarted, Resolved — one
-        // per call into IncidentAutomationService, each of which writes exactly one audit_event
-        // alongside its timeline event(s)) has a matching audit_event with actor and timestamp.
-        // Evidence-trail entries (EvidenceRecorded) are supplementary detail on the same audit
-        // write, not separate auditable actions, so the two counts are not expected to match 1:1.
         var automaticTimelineEventTypes = await database.IncidentEvents.AsNoTracking()
             .Where(eventRecord => eventRecord.IncidentId == incident.Id)
             .Select(eventRecord => eventRecord.EventType)
@@ -1600,9 +1516,6 @@ internal static class DatabaseFoundationAssertions
             ["incident.opened", "incident.recoverystarted", "incident.resolved"]);
         automaticAuditActions.Should().OnlyContain(audit => audit.OccurredAt != default);
 
-        // This test never dispatches its notification deliveries — mark them Sent directly so
-        // they cannot be batch-claimed by a later test's own NotificationDispatchService.DispatchDueAsync()
-        // call (which claims any due delivery system-wide, with no per-test/incident scoping).
         await database.NotificationDeliveries
             .Where(delivery => delivery.NotificationEvent.IncidentId == incident.Id)
             .ExecuteUpdateAsync(setters => setters
@@ -1611,14 +1524,6 @@ internal static class DatabaseFoundationAssertions
                 .SetProperty(delivery => delivery.SentAt, clock.GetUtcNow()));
     }
 
-    /// <summary>
-    /// Items 3 and 8: duplicate delivery of the same background job is modeled as two concurrent
-    /// FinalizeAsync calls sharing the same lease claim/attempt/work IDs — exactly what a stray
-    /// Hangfire retry or duplicate dispatch produces. The confirming (second) failure is finalized
-    /// twice at once; the check-level lock already proves one Finalized/one AlreadyFinalized, and
-    /// this extends that same race to prove it also yields exactly one incident, one Opened
-    /// timeline event and one Opened notification — not two.
-    /// </summary>
     private static async Task VerifyCompetingFinalizationOpensExactlyOneIncidentAsync(string connectionString)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
@@ -1705,8 +1610,6 @@ internal static class DatabaseFoundationAssertions
             && notificationEvent.EventType == NotificationEventTypes.Opened))
             .Should().Be(1);
 
-        // Leaves nothing open/unacknowledged behind for the reminder/escalation sweep test to
-        // accidentally pick up — that test asserts exact system-wide counts.
         await AcknowledgeAndResolveAsync(database, openedIncident.Id);
     }
 
@@ -1749,17 +1652,6 @@ internal static class DatabaseFoundationAssertions
             Task.FromResult(true);
     }
 
-    /// <summary>
-    /// Item 4: two structurally different failure categories on the same monitor produce two
-    /// separate incident rows, each keeping its own stable issue key, rather than one incident
-    /// being reused or the second write colliding with the first. Confirmed sequentially (the
-    /// first is resolved before the second opens) because the two categories otherwise reset each
-    /// other's confirmation counters — see HealthConfirmationEngine.EvaluateFailure, which zeroes
-    /// any tracked issue key not observed by the current check. The active-incident uniqueness
-    /// index (VerifyDuplicateActiveIncidentRejectedAsync) already proves the constraint is scoped
-    /// per issue key, not per monitor, so together these show distinct keys neither merge nor
-    /// collide even though this test does not hold them open at the same instant.
-    /// </summary>
     private static async Task VerifyDistinctIssueKeysCreateDistinctIncidentsAsync(string connectionString)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
@@ -1800,9 +1692,6 @@ internal static class DatabaseFoundationAssertions
         clientErrorIncident.Id.Should().NotBe(serverErrorIncident.Id);
         clientErrorIncident.IssueKey.Should().NotBe(serverErrorIncident.IssueKey);
 
-        // Leaves nothing open/unacknowledged behind for the reminder/escalation sweep test. Uses
-        // the same clock this incident was opened with — it was advanced ahead of real time, and
-        // TimeProvider.System would otherwise resolve it before its own OpenedAt.
         await AcknowledgeAndResolveAsync(database, clientErrorIncident.Id, clock);
     }
 
@@ -1844,9 +1733,6 @@ internal static class DatabaseFoundationAssertions
             check.ConfigurationSnapshot.MaxRedirects,
             check.ConfigurationSnapshot.MaxResponseBodyBytes,
             check.ConfigurationSnapshot.TimeoutSeconds);
-        // Finalization rejects evidence that read fewer bytes off the wire than it kept, so the
-        // read count has to follow the body rather than sit at the two bytes the default "ok"
-        // response happens to be.
         var body = htmlBody is null ? "ok"u8.ToArray() : Encoding.UTF8.GetBytes(htmlBody);
         var result = new SafeHttpTransportResult(
             null,
@@ -2003,7 +1889,6 @@ internal static class DatabaseFoundationAssertions
             NullLogger<LogicalCheckExecutionService>.Instance);
     }
 
-    /// <summary>These availability-path assertions never reach the certificate probe.</summary>
     private sealed class UnusedSslCertificateProbe : ISslCertificateProbe
     {
         public Task<SslCertificateProbeResult> ProbeAsync(
@@ -2045,16 +1930,6 @@ internal static class DatabaseFoundationAssertions
         TimeProvider? timeProvider = null)
     {
         var sequence = Interlocked.Increment(ref fixtureSequence);
-        // The sequence only has to space fixtures apart, but it is added to the base, so the base
-        // has to sit far enough back that a two-digit sequence cannot carry createdAt past the
-        // caller's clock — durable_work's updated_at >= created_at check rejects that. It also has
-        // to stay recent enough to fall inside the maintenance windows these fixtures open five
-        // minutes back. Reading the caller's clock rather than the system one keeps the comparison
-        // against a single time source when a frozen TimeProvider has drifted behind real time.
-        // Milliseconds, so the spacing orders fixtures apart without the count being able to walk
-        // createdAt up to the caller's clock: seconds gave this a ceiling of two minutes' worth of
-        // checks, and crossing it dated a check into the future where durable_work's
-        // updated_at >= created_at check rejected it.
         var createdAt = (timeProvider ?? TimeProvider.System).GetUtcNow()
             .AddMinutes(-2).AddMilliseconds(sequence);
         var check = new LogicalCheck
@@ -2341,9 +2216,6 @@ internal static class DatabaseFoundationAssertions
         var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
-            // Production, because the snapshot below takes its interval from the environment
-            // default and the assertion on it is the production one. Ordered by creation so the
-            // stage keeps its monitor as fixtures are added around it.
             .Where(candidate => candidate.DeletedAt == null
                 && candidate.Endpoint.Environment.IsProduction
                 && eligibleEndpointIds.Contains(candidate.EndpointId))
@@ -2399,7 +2271,6 @@ internal static class DatabaseFoundationAssertions
         var checksBeforeDisabledDispatch = await database.LogicalChecks.CountAsync(
             check => check.EndpointMonitorId == monitor.Id);
         (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
-        // Claimed-but-ineligible monitors still advance cadence so they aren't re-claimed every tick.
         (await AvailabilityMonitors(database).AsNoTracking()
             .Where(candidate => candidate.Id == monitor.Id)
             .Select(candidate => candidate.NextDueAt)
@@ -2640,19 +2511,15 @@ internal static class DatabaseFoundationAssertions
         unownedResult.Succeeded.Should().BeTrue(string.Join(" ", unownedResult.Errors));
         var unownedEndpointId = unownedResult.EntityId!.Value;
 
-        // An HTTPS endpoint owns a certificate monitor as well since SslCertificateMonitoring, so
-        // the availability monitor has to be selected rather than assumed to be the only one.
         var ownedMonitor = await AvailabilityMonitors(database).AsNoTracking()
             .SingleAsync(candidate => candidate.EndpointId == ownedEndpointId);
         var nextDueBeforeAnyRun = ownedMonitor.NextDueAt;
 
-        // Administrator and Operations can run now regardless of ownership.
         var adminRun = await manualCheckService.RunNowAsync(ownedEndpointId, administratorAccess);
         adminRun.Status.Should().Be(ManualCheckStatus.Queued);
         var adminUnownedRun = await manualCheckService.RunNowAsync(unownedEndpointId, administratorAccess);
         adminUnownedRun.Status.Should().Be(ManualCheckStatus.Queued);
 
-        // Developer/Support can run now only for an assigned target with active testing evidence.
         var developerOwnedRun = await manualCheckService.RunNowAsync(ownedEndpointId, developerAccess);
         developerOwnedRun.Status.Should().Be(ManualCheckStatus.Queued);
         var certificateRun = await manualCheckService.RunCertificateNowAsync(ownedEndpointId, developerAccess);
@@ -2660,19 +2527,16 @@ internal static class DatabaseFoundationAssertions
         (await manualCheckService.RunNowAsync(unownedEndpointId, developerAccess)).Status
             .Should().Be(ManualCheckStatus.Forbidden);
 
-        // Viewer is always denied, regardless of ownership.
         (await manualCheckService.RunNowAsync(ownedEndpointId, viewerAccess)).Status
             .Should().Be(ManualCheckStatus.Forbidden);
         (await manualCheckService.RunNowAsync(unownedEndpointId, viewerAccess)).Status
             .Should().Be(ManualCheckStatus.Forbidden);
 
-        // Scheduled cadence is never touched by a manual run.
         (await database.EndpointMonitors.AsNoTracking()
             .Where(candidate => candidate.Id == ownedMonitor.Id)
             .Select(candidate => candidate.NextDueAt)
             .SingleAsync()).Should().Be(nextDueBeforeAnyRun);
 
-        // Source, initiator, and queueing shape.
         var manualCheckId = developerOwnedRun.LogicalCheckId!.Value;
         var manualCheck = await database.LogicalChecks.AsNoTracking()
             .SingleAsync(check => check.Id == manualCheckId);
@@ -2694,7 +2558,6 @@ internal static class DatabaseFoundationAssertions
             .Select(check => check.EndpointMonitor.MonitorType)
             .SingleAsync()).Should().Be(RegistryDefaults.SslCertificateMonitorType);
 
-        // Executing the manual check completes it without counting toward uptime.
         var manualTransport = new RecordingSafeHttpTransport(Success);
         var manualExecution = CreateExecutionService(database, manualTransport, true);
         (await manualExecution.ExecuteAsync(new(manualCheckId, manualWork.Id, "job-manual", "worker-a")))
@@ -2752,7 +2615,6 @@ internal static class DatabaseFoundationAssertions
         database.IncidentEvidence.AddRange(acknowledgedEvidence, reassignedEvidence);
         await database.SaveChangesAsync();
 
-        // History and check detail are assignment-filtered exactly like the endpoint they belong to.
         (await historyReader.ListForEndpointAsync(ownedEndpointId, viewerAccess)).Should().BeNull();
         var historyPage = await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess);
         historyPage.Should().NotBeNull();
@@ -2787,10 +2649,6 @@ internal static class DatabaseFoundationAssertions
         latestCheck.Should().NotBeNull();
         latestCheck!.KnownIncidents.Should().BeEmpty();
 
-        // This stage owns the two incidents it seeded and must not leave them for a later stage
-        // to inherit. incident_evidence is immutable to ordinary callers, and the endpoint purge
-        // is the one exemption, so the teardown opens the same exemption. SET LOCAL scopes it to
-        // this transaction, which is what keeps an ordinary delete against the table impossible.
         await using (var evidenceCleanup = await database.Database.BeginTransactionAsync())
         {
             await database.Database.ExecuteSqlRawAsync("SET LOCAL web_health.endpoint_purge = 'on'");
@@ -2800,7 +2658,6 @@ internal static class DatabaseFoundationAssertions
             await evidenceCleanup.CommitAsync();
         }
 
-        // Pagination clamps out-of-range requests instead of overflowing or returning nonsense.
         (await historyReader.ListForEndpointAsync(ownedEndpointId, administratorAccess, page: 0))!
             .Page.Should().Be(1);
         var clampedToLastPage = await historyReader.ListForEndpointAsync(
@@ -2808,8 +2665,6 @@ internal static class DatabaseFoundationAssertions
         clampedToLastPage!.Page.Should().Be(1);
         clampedToLastPage.Items.Should().HaveCount(3);
 
-        // The enqueue acknowledgement must never regress a durable work row that a racing worker
-        // has already advanced past Dispatching, on a separate connection, before Enqueue returns.
         foreach (var racedState in new[] { DurableWorkStates.Processing, DurableWorkStates.Completed })
         {
             queue.OnEnqueue = (_, workId) =>
@@ -2832,9 +2687,6 @@ internal static class DatabaseFoundationAssertions
                 .SingleAsync()).Should().Be(racedState);
         }
 
-        // Archived endpoints follow the same visibility rule as the rest of the registry: hidden
-        // from non-managers, still reachable by Administrator/Operations. This must be last, since
-        // it removes ownedEndpointId from developer/viewer visibility for anything that follows.
         var ownedEndpointVersion = await database.Endpoints.AsNoTracking()
             .Where(candidate => candidate.Id == ownedEndpointId)
             .Select(candidate => candidate.Version)
@@ -2859,9 +2711,6 @@ internal static class DatabaseFoundationAssertions
             .BuildServiceProvider();
         await using var scope = services.CreateAsyncScope();
 
-        // IManualCheckService (and anything depending on it) must still activate when no Hangfire
-        // queue is configured - the DI graph must not break registry pages that have nothing to do
-        // with manual checks just because scheduling is administratively disabled.
         var manualCheckService = scope.ServiceProvider.GetRequiredService<IManualCheckService>();
         var targetReader = scope.ServiceProvider.GetRequiredService<ITargetRegistryReader>();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -2913,8 +2762,6 @@ internal static class DatabaseFoundationAssertions
             VerifyPhaseOneUpgradeAndRepeatabilityAsync(phaseOne));
     }
 
-    /// <summary>Item 22: migrating from the exact Phase 3 boundary applies the three Phase 4
-    /// migrations cleanly on top of a database that already has real Phase 3 data in it.</summary>
     private static async Task VerifyPhaseThreeToPhaseFourUpgradeAsync(string upgradeConnectionString)
     {
         await using var services = BuildUpgradeServices(upgradeConnectionString);
@@ -2933,13 +2780,6 @@ internal static class DatabaseFoundationAssertions
         upgradedState.Tables.Should().BeEquivalentTo(ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
     }
 
-    /// <summary>
-    /// Each upgrade check gets its own database in the same cluster. Walking the shared one
-    /// backwards would require every intervening migration to reverse the data the features
-    /// wrote — mapping severities and failure categories the older schema cannot express, and
-    /// deleting the incidents that reference retired monitors — so the check would be asserting
-    /// on the reversal rather than on the upgrade it exists to cover.
-    /// </summary>
     private static async Task<string> CreateUpgradeDatabaseAsync(string connectionString, string suffix)
     {
         var target = $"{new NpgsqlConnectionStringBuilder(connectionString).Database}_{suffix}";
@@ -2968,13 +2808,6 @@ internal static class DatabaseFoundationAssertions
             }).Build())
             .BuildServiceProvider();
 
-    /// <summary>
-    /// Item 21: the Phase 2 migration derives a monitor's cadence anchor from its creation time,
-    /// so the check needs a monitor that predates the migration. It is created at head through the
-    /// registry so every column the current model requires is filled in, then the database is
-    /// walked back to the Phase 1 boundary — which is safe here because this database holds no
-    /// incident, certificate or SEO rows for the intervening down migrations to reverse.
-    /// </summary>
     private static async Task VerifyPhaseTwoUpgradeAsync(string upgradeConnectionString)
     {
         await using var services = BuildUpgradeServices(upgradeConnectionString);
@@ -3015,8 +2848,6 @@ internal static class DatabaseFoundationAssertions
 
         var client = await clientService.CreateAsync(new("Upgrade Client", ownerSubjectId, null), access);
         client.Succeeded.Should().BeTrue(string.Join(" ", client.Errors));
-        // Created disabled: a website cannot be enabled until it has an active environment, and
-        // the environment below is what this fixture is building up to.
         var website = await websiteService.CreateAsync(
             new(client.EntityId!.Value, "Upgrade Website", ownerSubjectId, null, false, []), access);
         website.Succeeded.Should().BeTrue(string.Join(" ", website.Errors));
@@ -3024,8 +2855,6 @@ internal static class DatabaseFoundationAssertions
             new(website.EntityId!.Value, "Staging", EnvironmentTypes.Staging, null, true), access);
         environment.Succeeded.Should().BeTrue(string.Join(" ", environment.Errors));
 
-        // Plain HTTP in a non-production environment: no certificate monitor to retire on the way
-        // down and no production HTTP exception to approve.
         var endpoint = await endpointService.CreateAsync(
             new(environment.EntityId!.Value, "http://upgrade.test/status", null, true, null,
                 TargetAuthorizationKinds.Owned, "Upgrade fixture owned by the project.", null),
@@ -3202,11 +3031,6 @@ internal static class DatabaseFoundationAssertions
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var transaction = await connection.BeginTransactionAsync();
-        // Since SslCertificateMonitoring, an HTTPS endpoint already owns a live certificate
-        // monitor, and ix_endpoint_monitor_endpoint_id_monitor_type would reject this row on
-        // INSERT before the deferred policy trigger under test could run at COMMIT. That partial
-        // index covers live monitors only, so the row is written already soft-deleted: it is the
-        // type-versus-policy pairing that must be rejected here, not uniqueness.
         const string sql = """
             INSERT INTO web_health.endpoint_monitor
                 (id, endpoint_id, policy_profile_id, monitor_type, bounded_overrides, configuration_fingerprint,
@@ -3235,8 +3059,6 @@ internal static class DatabaseFoundationAssertions
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // The earliest monitor overall may now be a certificate monitor, which never produces
-        // logical checks of the kind this assertion needs (SslCertificateMonitoring).
         var monitor = await AvailabilityMonitors(database)
             .OrderBy(candidate => candidate.CreatedAt).FirstAsync();
         var otherMonitorId = await database.EndpointMonitors
@@ -3342,9 +3164,6 @@ internal static class DatabaseFoundationAssertions
             .Should().Be(IncidentMutationStatus.ValidationFailed);
         (await lifecycle.StartProgressAsync(new(incidentId, 1), developerAccess)).Succeeded.Should().BeTrue();
 
-        // Role/assignment matrix: Viewer is read-only and an unassigned Developer/Support user
-        // has no claim on this incident's owner subject — both must be rejected, and rejection
-        // must not consume the optimistic-concurrency version (the next call still uses version 2).
         var viewerAccess = new RegistryAccessContext(Guid.NewGuid(), [ApplicationRoles.Viewer]);
         (await lifecycle.AcknowledgeAsync(new(incidentId, 2), viewerAccess)).Status
             .Should().Be(IncidentMutationStatus.Forbidden);
@@ -3368,8 +3187,6 @@ internal static class DatabaseFoundationAssertions
         (await lifecycle.AddNoteAsync(new(incidentId, 5, "Reopened for controlled verification."), developerAccess))
             .Succeeded.Should().BeTrue();
         var reassignedOwnerId = await database.OwnerSubjects
-            // Deterministic and still assignable: earlier stages disable users and teams, and
-            // reassignment rejects an owner whose user or team is no longer enabled.
             .Where(subject => subject.Id != ownerSubjectId
                 && ((subject.UserId != null
                         && database.Users.Any(user => user.Id == subject.UserId && !user.IsDisabled))
@@ -3548,15 +3365,9 @@ internal static class DatabaseFoundationAssertions
             .SingleAsync(attempt => attempt.NotificationDeliveryId == delivery.Id);
         sentAttempt.TransportOutcome.Should().Be(NotificationTransportOutcomes.Sent);
 
-        // Item 20: the persisted transport-response text must never carry the recipient address
-        // or any other sensitive value, regardless of what a real transport might return.
         sentAttempt.SafeResponse.Should().NotContain("@");
         sentAttempt.SafeResponse.Should().NotContain(delivery.NormalizedRecipient);
 
-        // Item 10: a delivery left mid-dispatch by a crashed worker (Processing, lease expired)
-        // must be reclaimed by the next tick and sent exactly once — no duplicate attempt, no
-        // permanent loss. The claim query unions this case with ordinary due deliveries, so a
-        // second DispatchDueAsync call is the entire restart-reconciliation mechanism.
         var (staleIncident, staleEvent) = await CreateOpenIncidentAsync(
             database, monitor.Id, ownerSubjectId, $"v1|HttpAvailability|notification-stale-lease|{Guid.NewGuid():N}", now);
         await writer.WriteAsync(
@@ -3613,21 +3424,11 @@ internal static class DatabaseFoundationAssertions
 
         await VerifyTransientFailureRetriesThenFailsPermanentlyAsync(connectionString, database, monitor.Id, ownerSubjectId);
 
-        // These incidents stay Open/Critical/unacknowledged by design (that's what each assertion
-        // above needed); leaving them that way would make them look like unacknowledged critical
-        // incidents to the reminder/escalation sweep test that runs later and asserts exact
-        // system-wide counts, so close them out here rather than leaking test-fixture state.
         await AcknowledgeAndResolveAsync(database, incident.Id);
         await AcknowledgeAndResolveAsync(database, staleIncident.Id);
         await AcknowledgeAndResolveAsync(database, maintenanceIncident.Id);
     }
 
-    /// <summary>
-    /// Items 11, 12 and 14. The candidate pool assumes no other Critical/active/unacknowledged
-    /// incidents exist system-wide at the moment this runs — every earlier test that leaves one
-    /// behind acknowledges/resolves it before returning (see AcknowledgeAndResolveAsync), so this
-    /// can assert exact counts without an unrelated incident's own timer crossing a boundary too.
-    /// </summary>
     private static async Task VerifyReminderEscalationSweepBoundariesAsync(string connectionString)
     {
         var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
@@ -3647,13 +3448,6 @@ internal static class DatabaseFoundationAssertions
 
         var monitor = await CreateOwnedMonitorAsync(scope, database, "http://reminder-escalation.test/status");
 
-        // Earlier finalize calls run against production/HTTP monitors incidentally accumulate an
-        // unrelated "Http.HttpsRequired" issue-state counter alongside whichever issue key each
-        // test intended to exercise (RequiresHttpsFinding fires for every successful transport
-        // result on a production endpoint whose final destination isn't HTTPS). That can silently
-        // open its own incident that no earlier test's targeted cleanup ever touches. This sweep
-        // is the last thing that runs before the exact-count assertions below, so it closes out
-        // every straggler regardless of source rather than chasing each origin individually.
         await CloseAllActiveIncidentsAsync(database);
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var developer = await database.Users.SingleAsync(user => user.Email == "registry-developer@example.test");
@@ -3669,8 +3463,6 @@ internal static class DatabaseFoundationAssertions
 
         (await reminderService.SweepAsync()).Should().Be(new NotificationReminderSweepResult(0, 0));
 
-        // Item 14: an active maintenance window pauses both, even once the incident is well past
-        // the escalation boundary.
         clock.Advance(TimeSpan.FromMinutes(31));
         var maintenanceWindow = await maintenanceService.CreateAsync(new(
             new(MaintenanceScopeKind.Monitor, monitor.Id),
@@ -3687,8 +3479,6 @@ internal static class DatabaseFoundationAssertions
         (await maintenanceService.CancelAsync(new(maintenanceWindow.MaintenanceWindowId!.Value, 1), administratorAccess))
             .Succeeded.Should().BeTrue();
 
-        // Item 11 (escalation boundary): 31 minutes unacknowledged crosses the 30-minute escalation
-        // delay but not the 60-minute reminder interval.
         var escalationResult = await reminderService.SweepAsync();
         escalationResult.EscalationsWritten.Should().Be(1);
         escalationResult.RemindersWritten.Should().Be(0);
@@ -3696,11 +3486,8 @@ internal static class DatabaseFoundationAssertions
             notificationEvent.IncidentId == incident.Id && notificationEvent.EventType == NotificationEventTypes.Escalated))
             .Should().Be(1);
 
-        // Same elapsed time again: the deterministic single-level occurrence key makes a second
-        // escalation attempt an idempotent no-op, not a duplicate.
         (await reminderService.SweepAsync()).EscalationsWritten.Should().Be(0);
 
-        // Item 11 (reminder boundary): advancing past 60 minutes total fires exactly one reminder.
         clock.Advance(TimeSpan.FromMinutes(30));
         var reminderResult = await reminderService.SweepAsync();
         reminderResult.RemindersWritten.Should().Be(1);
@@ -3708,7 +3495,6 @@ internal static class DatabaseFoundationAssertions
             notificationEvent.IncidentId == incident.Id && notificationEvent.EventType == NotificationEventTypes.Reminder))
             .Should().Be(1);
 
-        // Item 12: acknowledging stops both, permanently, regardless of how much further time passes.
         var trackedIncident = await database.Incidents.SingleAsync(candidate => candidate.Id == incident.Id);
         (await lifecycle.AcknowledgeAsync(new(incident.Id, trackedIncident.Version), developerAccess))
             .Succeeded.Should().BeTrue();
@@ -3716,16 +3502,6 @@ internal static class DatabaseFoundationAssertions
         (await reminderService.SweepAsync()).Should().Be(new NotificationReminderSweepResult(0, 0));
     }
 
-    /// <summary>
-    /// Item 13 (retention half): a check finalized during an active maintenance window is marked
-    /// and kept, not dropped, through the real FinalizeAsync pipeline — not a hand-built row.
-    /// </summary>
-    /// <summary>
-    /// BR-M05 and the AC-09 regression. Expansion is keyed on (window, occurrence start): running
-    /// it twice over one horizon writes nothing, extending the horizon appends only later
-    /// occurrences and rewrites no history, and a failure inside a materialised recurring
-    /// occurrence is retained and suppressed exactly as a one-off window's is.
-    /// </summary>
     private static async Task VerifyRecurringMaintenanceExpansionAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -3740,8 +3516,6 @@ internal static class DatabaseFoundationAssertions
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
         var access = new RegistryAccessContext(administrator.Id, [ApplicationRoles.Administrator]);
-        // Ordered so the environment this stage builds on is the same one every run: an unordered
-        // First leaves production-ness, and everything keyed off it, to the query planner.
         var environmentId = await database.Environments
             .Where(candidate => candidate.DeletedAt == null)
             .OrderBy(candidate => candidate.CreatedAt)
@@ -3760,10 +3534,6 @@ internal static class DatabaseFoundationAssertions
 
         const int horizonDays = 90;
         var options = new MaintenanceSchedulingOptions { HorizonDays = horizonDays, BatchSize = 25 };
-        // timestamptz keeps microseconds while a .NET tick is 100 nanoseconds, so a clock started
-        // on an unrounded UtcNow produces timestamps that come back from the round-trip a digit
-        // short, failing the comparisons below on every run except the one in ten that happens to
-        // land on a whole microsecond. Truncating once here keeps every value derived from it exact.
         var startedAt = DateTimeOffset.UtcNow;
         var clock = new MutableTimeProvider(new DateTimeOffset(
             startedAt.Ticks - (startedAt.Ticks % TimeSpan.TicksPerMicrosecond),
@@ -3782,12 +3552,7 @@ internal static class DatabaseFoundationAssertions
         created.Succeeded.Should().BeTrue(string.Join(" ", created.Errors));
         var windowId = created.MaintenanceWindowId!.Value;
 
-        // Creation materialises the whole first horizon in its own transaction, so the window
-        // suppresses immediately rather than from the next expansion tick.
         var initialStarts = await OccurrenceStartsAsync(database, windowId);
-        // One per local day across the horizon. The last one can fall an hour past the horizon
-        // when the range crosses a daylight-saving transition, which is the wall-clock rule
-        // working, so the count is the horizon or one more.
         initialStarts.Should().HaveCountGreaterThanOrEqualTo(horizonDays)
             .And.HaveCountLessThanOrEqualTo(horizonDays + 1);
         initialStarts[0].Should().Be(anchor.ToUniversalTime());
@@ -3801,7 +3566,6 @@ internal static class DatabaseFoundationAssertions
         database.ChangeTracker.Clear();
         (await OccurrenceStartsAsync(database, windowId)).Should().Equal(initialStarts);
 
-        // AC-09 regression against a materialised recurring occurrence.
         var activeOccurrence = await maintenanceEvaluator.FindActiveAsync(monitor.Id, clock.GetUtcNow());
         activeOccurrence.Should().NotBeNull();
         activeOccurrence!.SuppressionPolicy.Should().Be(MaintenanceSuppressionPolicies.SuppressAll);
@@ -3815,7 +3579,6 @@ internal static class DatabaseFoundationAssertions
         (await database.IssueStates.AnyAsync(state => state.EndpointMonitorId == monitor.Id)).Should().BeFalse();
         (await database.Incidents.AnyAsync(incident => incident.EndpointMonitorId == monitor.Id)).Should().BeFalse();
 
-        // Extending the horizon appends only later occurrences and rewrites no history.
         clock.Advance(TimeSpan.FromDays(10));
         database.ChangeTracker.Clear();
         var appended = await expander.ExpandWindowAsync(windowId);
@@ -3865,19 +3628,6 @@ internal static class DatabaseFoundationAssertions
         exception.ConstraintName.Should().Be("ux_maintenance_occurrence_window_start");
     }
 
-    /// <summary>
-    /// Phase 6 increment 6.7. The crawl schema owns its own endpoint fixture rather than reusing
-    /// one an earlier stage created, so nothing it asserts depends on what ran before it.
-    /// </summary>
-
-    /// <summary>
-    /// Archiving an endpoint hides it; purging one removes it. This stage seeds a row in every
-    /// table that can reference an endpoint, purges it, and asserts each of them is empty
-    /// afterwards. Every foreign key here is RESTRICT, so a table the cascade forgot does not
-    /// leave a dangling reference - it aborts the purge with 23503, which is what makes an
-    /// inventory-shaped assertion the right one: the stage fails whether the cascade misses a
-    /// table or unwinds them in the wrong order.
-    /// </summary>
     private static async Task VerifyEndpointPurgeRemovesEveryReferenceAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -3899,8 +3649,6 @@ internal static class DatabaseFoundationAssertions
         var ownerSubjectId = await database.OwnerSubjects
             .Where(owner => owner.UserId == administrator.Id).Select(owner => owner.Id).SingleAsync();
 
-        // HTTPS so the endpoint owns both monitor kinds: the certificate monitor carries the
-        // certificate observation and the still-held lease seeded below.
         var monitor = await CreateOwnedMonitorAsync(
             scope, database, "https://endpoint-purge.test/status");
         var endpointId = monitor.EndpointId;
@@ -3926,8 +3674,6 @@ internal static class DatabaseFoundationAssertions
             IsLoop = false
         });
 
-        // A lease is what an interrupted worker leaves behind, so the purge has to survive one
-        // rather than assume every check reached a clean finalization.
         var certificateCheckId = Guid.NewGuid();
         var certificateCheckCreatedAt = now.AddMinutes(-3);
         var certificateCheck = new LogicalCheck
@@ -4009,7 +3755,6 @@ internal static class DatabaseFoundationAssertions
             CapturedAt = now
         });
 
-        // A recurrence chain, so the self-reference the cascade has to detach is really present.
         var previousIncident = new Incident
         {
             Id = Guid.NewGuid(),
@@ -4201,9 +3946,6 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         database.ChangeTracker.Clear();
 
-        // BR-E06 keeps one robots policy per origin, shared by every endpoint on the host, so a
-        // purge may only take it once it has taken the last of them. A second endpoint on the
-        // same origin is what makes both halves of that rule observable.
         var neighbour = await CreateOwnedMonitorAsync(
             scope, database, "https://endpoint-purge.test/second");
         database.RobotsSnapshots.Add(new RobotsSnapshot
@@ -4241,15 +3983,12 @@ internal static class DatabaseFoundationAssertions
         seeded.Should().OnlyContain(entry => entry.Value > 0,
             "the purge assertion is only evidence if every table it clears held a row first");
 
-        // The purge is the only caller exempt from the evidence-immutability triggers, and the
-        // exemption is what makes an ordinary delete against these tables still impossible.
         await VerifyEvidenceDeleteRejectedAsync(
             connectionString, "incident_event", openedEvent.Id, "incident_event rows are immutable");
         await VerifyEvidenceDeleteRejectedAsync(
             connectionString, "check_configuration_snapshot", checkId,
             "check_configuration_snapshot rows are immutable", "logical_check_id");
 
-        // The archive step is a precondition, not a formality: purging a live endpoint is refused.
         var live = await database.Endpoints.AsNoTracking()
             .SingleAsync(candidate => candidate.Id == endpointId);
         (await endpointService.PurgeAsync(new(endpointId, live.Version), administratorAccess))
@@ -4263,7 +4002,6 @@ internal static class DatabaseFoundationAssertions
             .Where(candidate => candidate.Id == endpointId)
             .Select(candidate => candidate.Version).SingleAsync();
 
-        // Managing the registry is not enough. A purge is irreversible, so it is Administrator-only.
         (await endpointService.PurgeAsync(new(endpointId, archivedVersion), operationsAccess))
             .Status.Should().Be(RegistryMutationStatus.Forbidden);
         (await endpointService.PurgeAsync(new(endpointId, archivedVersion - 1), administratorAccess))
@@ -4278,16 +4016,12 @@ internal static class DatabaseFoundationAssertions
             "a purged endpoint leaves nothing behind for the dashboard, SEO, incident, crawl or "
             + "notification surfaces to read");
 
-        // The audit trail is keyed by identifier rather than by foreign key, so it outlives the
-        // endpoint and stays the only remaining evidence that it ever existed.
         (await database.AuditEvents.AsNoTracking().CountAsync(item =>
             item.EntityType == "endpoint"
             && item.EntityIdentifier == endpointId.ToString()
             && item.Action == "endpoint.purged"))
             .Should().Be(1);
 
-        // The neighbour still holds the origin, so its robots policy is not the purged endpoint's
-        // to take with it.
         (await database.RobotsSnapshots.AsNoTracking()
             .CountAsync(snapshot => snapshot.Host == "endpoint-purge.test"))
             .Should().Be(1, "an origin shared with a surviving endpoint keeps its robots policy");
@@ -4306,32 +4040,22 @@ internal static class DatabaseFoundationAssertions
         neighbourPurged.Succeeded.Should().BeTrue(string.Join(" ", neighbourPurged.Errors));
         database.ChangeTracker.Clear();
 
-        // Nothing sits on the origin now. Leaving the policy would hand a future endpoint on this
-        // host a cached decision - an approved robots exception included - that nobody granted it.
         (await database.RobotsSnapshots.AsNoTracking()
             .CountAsync(snapshot => snapshot.Host == "endpoint-purge.test"))
             .Should().Be(0, "the last endpoint on an origin takes its robots policy with it");
 
-        // The rule is scoped to the host that was emptied. Asserted against an origin this stage
-        // seeded rather than a total count: no other stage creates a robots snapshot, so a total
-        // count here only ever described this stage's own rows.
         (await database.RobotsSnapshots.AsNoTracking()
             .CountAsync(snapshot => snapshot.Host == "endpoint-purge-bystander.test"))
             .Should().Be(1, "purging one origin leaves every other origin's policy in place");
         queryWarnings.Count.Should().Be(0);
     }
 
-    /// <summary>
-    /// A delete against an evidence table outside an endpoint purge is still rejected. The purge
-    /// opens its exemption with <c>SET LOCAL</c>, so a connection that never set it - which is
-    /// every other caller - sees the trigger unchanged.
-    /// </summary>
     private static async Task VerifyEvidenceDeleteRejectedAsync(
-        string connectionString,
-        string table,
-        Guid id,
-        string expectedMessage,
-        string keyColumn = "id")
+            string connectionString,
+            string table,
+            Guid id,
+            string expectedMessage,
+            string keyColumn = "id")
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -4344,15 +4068,10 @@ internal static class DatabaseFoundationAssertions
         rejection.MessageText.Should().Be(expectedMessage);
     }
 
-    /// <summary>
-    /// Every table that can reach an endpoint, counted by name. Returned as a map rather than
-    /// asserted one call at a time so a missed table reads as a named non-zero entry instead of
-    /// as a bare false.
-    /// </summary>
     private static async Task<Dictionary<string, int>> CountEndpointReferencesAsync(
-        ApplicationDbContext database,
-        Guid endpointId,
-        Guid maintenanceWindowId)
+            ApplicationDbContext database,
+            Guid endpointId,
+            Guid maintenanceWindowId)
     {
         var monitors = database.EndpointMonitors
             .Where(monitor => monitor.EndpointId == endpointId).Select(monitor => monitor.Id);
@@ -4405,20 +4124,6 @@ internal static class DatabaseFoundationAssertions
         };
     }
 
-    /// <summary>
-    /// The page-audit tables enforce their own contract, on their own fixture endpoint. The
-    /// stage owns the endpoint it seeds so nothing it inserts has to be cleaned up, and so no
-    /// later stage inherits an active run this one left open.
-    /// </summary>
-    /// <summary>
-    /// The scheduling, lease, retry and finalization rules, on this stage's own endpoint and its
-    /// own audit target. The provider and the queue are replaced so nothing here reaches Google or
-    /// Hangfire; everything else - the database, the services, the constraints - is real.
-    /// </summary>
-    /// <summary>
-    /// The read model, on its own endpoint so the scored runs it seeds cannot disturb the
-    /// execution stage's lease and retry assertions.
-    /// </summary>
     private static async Task VerifyPageAuditReadModelAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -4450,24 +4155,17 @@ internal static class DatabaseFoundationAssertions
         {
             ["ConnectionStrings:WebHealth"] = connectionString,
 
-            // The dispatcher refuses to open runs with no key configured, which is the correct
-            // production behaviour and would make this stage assert nothing.
             ["PageAudits:PageSpeedInsights:ApiKey"] = "stage-key"
         }).Build();
 
         var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration);
 
-        // Registered after AddInfrastructure so these win: the real provider would call Google,
-        // and the disabled queue throws because scheduling is off in this configuration.
         services.AddSingleton<IPageAuditProvider>(provider);
         services.AddSingleton<IPageAuditQueue>(queue);
         await using var built = services.BuildServiceProvider();
         await using var scope = built.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // A public-looking host on purpose. The .test suffix every other fixture uses is refused
-        // by PageAuditEligibility, because a name reserved for testing never resolves publicly and
-        // sending one to Google would disclose an internal hostname for nothing.
         const string url = "https://page-audit-exec.example.com/status";
         var monitor = await CreateOwnedMonitorAsync(scope, database, url);
         var otherMonitor = await CreateOwnedMonitorAsync(
@@ -4519,20 +4217,12 @@ internal static class DatabaseFoundationAssertions
             scope, database, "http://crawl-schema.test/status");
         await CrawlSchemaAssertions.VerifyAsync(connectionString, schemaMonitor.EndpointId);
 
-        // A separate endpoint for the comparison: it asserts an endpoint's whole run history, and
-        // sharing the schema fixture would mix the rejected and plan-evidence runs into it.
         var comparisonMonitor = await CreateOwnedMonitorAsync(
             scope, database, "http://crawl-comparison.test/status");
         await CrawlSchemaAssertions.VerifyComparisonAsync(
             connectionString, comparisonMonitor.EndpointId);
     }
 
-    /// <summary>
-    /// BR-E01 and BR-E10. The applicability contract is enforced by the database, not only by the
-    /// extractor: a NotApplicable row records why and carries no extracted values, an Applicable
-    /// row carries no reason, and a stored value can never claim to be longer than it is. There is
-    /// no column that could hold the document at all, which is asserted here by name.
-    /// </summary>
     private static async Task VerifySeoObservationContractAsync(string connectionString)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -4655,13 +4345,6 @@ internal static class DatabaseFoundationAssertions
                 .SetProperty(delivery => delivery.SentAt, clock.GetUtcNow()));
     }
 
-    /// <summary>
-    /// BR-E10 asserted as absence at the boundary that matters: after a real check finalises a
-    /// document whose body, comments, scripts and unrelated metadata all carry a distinctive
-    /// marker, no stored column of the SEO observation, the check result, its findings, or the
-    /// audit trail may contain it. The extracted values are still there, which is the point —
-    /// values are kept, the document is not.
-    /// </summary>
     private static async Task VerifySeoDocumentIsNeverRetainedAsync(string connectionString)
     {
         const string marker = "SECRET-DOCUMENT-MARKER-4b91e7";
@@ -4699,13 +4382,8 @@ internal static class DatabaseFoundationAssertions
         observation.CanonicalAbsoluteUrl.Should().Be("https://example.test/canonical");
         observation.RobotsMeta.Should().Be("index, follow");
 
-        // Every text column of every table that could plausibly carry it, including columns added
-        // later: the absence claim must not quietly stop covering a new column.
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
-        // The marker is interpolated rather than bound: a DO block is an opaque string to the
-        // server, so a parameter placeholder inside it is never substituted and reads back as an
-        // operator applied to a missing column.
         await using var command = new NpgsqlCommand(
             $"""
             DO $$
@@ -4799,8 +4477,6 @@ internal static class DatabaseFoundationAssertions
         result.MaintenanceOccurrenceId.Should().NotBeNull();
         result.CountsForUptime.Should().BeFalse();
 
-        // BR-M04 default: the failure-confirmation counter resets during maintenance, so this
-        // single failure neither creates an issue_state row nor opens an incident.
         (await database.IssueStates.AnyAsync(state => state.EndpointMonitorId == monitor.Id)).Should().BeFalse();
         (await database.Incidents.AnyAsync(incident => incident.EndpointMonitorId == monitor.Id)).Should().BeFalse();
 
@@ -4847,9 +4523,6 @@ internal static class DatabaseFoundationAssertions
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
-        // Same (incident_id, source_kind, event_type, occurrence_key) as the row already written
-        // for this incident, and otherwise a fully valid row (real incident_event_id) — isolates
-        // the uniqueness index from the field-group check constraint exercised below.
         const string duplicateSql = """
             INSERT INTO web_health.notification_event
                 (id, incident_event_id, incident_id, source_kind, event_type, occurrence_key,
@@ -4868,8 +4541,6 @@ internal static class DatabaseFoundationAssertions
             duplicateException.ConstraintName.Should().Be("ux_notification_event_occurrence");
         }
 
-        // source_kind = 'IncidentEvent' requires a non-null incident_event_id; a null one must be
-        // rejected by the field-group check constraint, independent of the uniqueness index above.
         const string missingLinkSql = """
             INSERT INTO web_health.notification_event
                 (id, incident_event_id, incident_id, source_kind, event_type, occurrence_key,
@@ -4944,9 +4615,6 @@ internal static class DatabaseFoundationAssertions
         (await failingDatabase.NotificationAttempts.AsNoTracking()
             .CountAsync(attempt => attempt.NotificationDeliveryId == deliveryId)).Should().Be(maxAttempts);
 
-        // Item 9: dispatch runs in its own transaction, entirely outside the one that opened the
-        // incident. A permanently-failed SMTP delivery must leave the incident row completely
-        // untouched — same Version, same Status, no rollback of already-committed state.
         var incidentAfterPermanentFailure = await failingDatabase.Incidents.AsNoTracking()
             .SingleAsync(candidate => candidate.Id == incident.Id);
         incidentAfterPermanentFailure.Version.Should().Be(incident.Version);
@@ -6155,11 +5823,6 @@ internal static class DatabaseFoundationAssertions
 
         public bool FailNext { get; set; }
 
-        /// <summary>
-        /// Invoked synchronously inside Enqueue, before this method returns, so a test can simulate
-        /// a worker racing ahead of the caller's own enqueue-acknowledgement step (e.g. advancing the
-        /// durable work row to Processing or Completed via a separate connection).
-        /// </summary>
         public Action<Guid, Guid>? OnEnqueue { get; set; }
 
         public IReadOnlyList<(Guid LogicalCheckId, Guid DurableWorkId)> Jobs => jobs.ToArray();

@@ -10,8 +10,7 @@
     var anyInFlight = history.Items.Any(item => item.State != LogicalCheckStates.Completed);
 }
 
-@* A check that has not completed yet is still being worked on, so the list refreshes itself
-   until every row on this page has an outcome. *@
+
 <div id="ajax-page"
      class="stack"
      data-ajax-region

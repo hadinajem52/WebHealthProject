@@ -252,9 +252,6 @@ internal sealed class TargetAuthorizationEvidenceConfiguration : IEntityTypeConf
                 "ck_target_authorization_expiry",
                 "expires_at IS NULL OR expires_at > effective_from");
         });
-        // Keys are assigned in application code. Without this, the Guid key convention is
-        // store-generated, so evidence added to a tracked endpoint is detected as an
-        // existing row and saved as an UPDATE that matches nothing.
         builder.Property(evidence => evidence.Id).ValueGeneratedNever();
         builder.Property(evidence => evidence.AuthorizationKind).HasMaxLength(30).IsRequired();
         builder.Property(evidence => evidence.EvidenceReference).HasMaxLength(500).IsRequired();

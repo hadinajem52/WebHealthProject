@@ -34,9 +34,7 @@
      class="stack"
      data-ajax-region
      data-run-scope="#page-audit-results">
-    @* No card title here: the page heading already reads "PageSpeed", and repeating it
-       immediately below is a second first-level label for the same thing. The card is the
-       control that scopes the page, so the control leads and the explanation follows it. *@
+    
     <section class="card" aria-labelledby="pagespeed-scope-label">
         <p class="card__subtitle" id="pagespeed-scope-label">
             Google PageSpeed Insights runs Lighthouse against a public page and returns a
@@ -46,9 +44,7 @@
 
         <div class="filter-inline filter-inline--wide">
             <form method="get" class="filter-inline__group" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push" data-page-audits-selection>
-                @* The form factor rides along as a hidden field rather than a second control: the
-                   switch below already chooses it, and a select that could disagree with that
-                   switch would make the same page reachable two ways. *@
+                
                 <input type="hidden" name="strategy" value="@Model.SelectedStrategy" />
                 <input type="hidden" name="category" value="@Model.SelectedCategory" />
                 <div class="form-field">
@@ -67,10 +63,7 @@
                 </button>
             </form>
 
-            @* The selection has to be one the picker actually lists. An endpointId in the query
-               string that resolves to nothing leaves the select showing its placeholder, and a
-               Run now button beside a picker reading "Select an endpoint" offers to audit
-               something the page cannot name. *@
+            
             @if (Model.SelectedEndpointId is { } runTarget
                 && Model.CanRunNow
                 && Model.Endpoints.Any(option => option.Id == runTarget))
@@ -103,8 +96,7 @@
             }
         </div>
 
-        @* A missing Run now button reads as a defect unless the page says what is missing. The
-           auditing-off case already has its own empty state below, so it is not repeated here. *@
+        
         @if (Model.SelectedEndpointId is { } blockedTarget
             && !Model.CanRunNow
             && summary?.IsEnabled == true
@@ -124,9 +116,7 @@
 
         @if (Model.SelectedEndpointId is not null)
         {
-            @* Links rather than a client-side toggle, because the form factor is part of the
-               address: each is a separate measurement of the page with its own runs and its own
-               history, so switching has to be shareable and has to survive a reload. *@
+            
             <nav class="segmented" aria-label="Form factor">
                 @foreach (var strategy in PageAuditStrategies.All)
                 {

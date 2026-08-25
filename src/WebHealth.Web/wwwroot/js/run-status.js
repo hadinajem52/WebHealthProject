@@ -15,9 +15,9 @@
         run: refresh
     });
 
-    // A refusal is an answer: a run that was deleted, is no longer visible, or that this session
-    // may no longer read will answer the same way however often it is asked. Only a request that
-    // never got an answer, or one the server could not answer this time, is worth repeating.
+
+
+
     function isRetryable(status) {
         return status === 0 || status === 429 || status >= 500;
     }

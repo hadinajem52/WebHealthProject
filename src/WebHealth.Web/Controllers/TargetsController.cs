@@ -218,8 +218,6 @@ public sealed class TargetsController(
             TargetAuthorizationExpiresAt = endpoint.TargetAuthorizationExpiresAt,
             SchedulingEnabled = endpoint.SchedulingEnabled,
             IntervalMinutesOverride = endpoint.IntervalMinutesOverride,
-            // Only a real override is echoed back, so re-saving an unchanged form does not
-            // freeze today's default into the endpoint as an explicit choice.
             WarningThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.WarningThresholdMs : null,
             CriticalThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.CriticalThresholdMs : null,
             SeoExpectedCanonicalHost = endpoint.SeoExpectedCanonicalHost,

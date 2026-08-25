@@ -1,9 +1,5 @@
 namespace WebHealth.Domain.Crawling;
 
-/// <summary>
-/// One source-target pair with the target's observed result. The source is null for a seed, which
-/// no page linked to.
-/// </summary>
 public sealed record CrawlEdge(
     string? SourceUrl,
     string TargetUrl,
@@ -14,22 +10,6 @@ public sealed record CrawlEdge(
     string? SkipReason,
     int? DurationMs);
 
-/// <summary>
-/// BR-L07. A target is fetched once, but it may be linked from many pages, and "which page contains
-/// the broken link" is what makes the report actionable. This ledger holds the two apart: it
-/// collects the sources that point at each target and emits one result per distinct source-target
-/// pair once that target's outcome is known.
-/// <para>
-/// Order does not matter. A source discovered after its target was fetched emits immediately; a
-/// target fetched after several sources pointed at it emits one result for each. Pairs are
-/// deduplicated, so a page linking to the same broken URL five times contributes one result and one
-/// affected page.
-/// </para>
-/// <para>
-/// Not thread-safe by design: it is pure bookkeeping, and the execution loop that owns it already
-/// holds a lock over the frontier it advances in the same step.
-/// </para>
-/// </summary>
 public sealed class CrawlLinkLedger
 {
     private readonly Dictionary<string, Resolution> _resolved = new(StringComparer.Ordinal);
@@ -40,10 +20,6 @@ public sealed class CrawlLinkLedger
         string Classification, int? StatusCode, int RedirectCount, string? FinalUrl,
         string? SkipReason, int? DurationMs);
 
-    /// <summary>
-    /// Records that <paramref name="sourceUrl" /> links to <paramref name="targetUrl" />, and
-    /// returns the edge if the target's outcome is already known.
-    /// </summary>
     public IReadOnlyList<CrawlEdge> RecordDiscovery(string? sourceUrl, string targetUrl)
     {
         ArgumentNullException.ThrowIfNull(targetUrl);
@@ -59,7 +35,6 @@ public sealed class CrawlLinkLedger
             : [];
     }
 
-    /// <summary>Records what happened to a target that was requested.</summary>
     public IReadOnlyList<CrawlEdge> RecordOutcome(
         string targetUrl,
         CrawlRequestObservation observation,
@@ -76,18 +51,12 @@ public sealed class CrawlLinkLedger
             durationMs));
     }
 
-    /// <summary>Records a target that was deliberately never requested, with the reason.</summary>
     public IReadOnlyList<CrawlEdge> RecordSkip(string targetUrl, string skipReason)
     {
         ArgumentNullException.ThrowIfNull(skipReason);
         return Resolve(targetUrl, new(CrawlLinkClassifications.Skipped, null, 0, null, skipReason, null));
     }
 
-    /// <summary>
-    /// Every target that was discovered but never resolved, as <c>Unknown</c>. Called once when a
-    /// run stops for any reason, including cancellation: a target the run never reached must be
-    /// visible as unreached rather than disappearing from the report.
-    /// </summary>
     public IReadOnlyList<CrawlEdge> Flush()
     {
         var edges = new List<CrawlEdge>();
@@ -104,9 +73,6 @@ public sealed class CrawlLinkLedger
     {
         ArgumentNullException.ThrowIfNull(targetUrl);
 
-        // The first resolution wins. A target is requested once, so a second outcome would be a
-        // redirect hop or a retry arriving late, and letting it overwrite would rewrite results
-        // already handed to the sink.
         if (!_resolved.TryAdd(targetUrl, resolution)) return [];
 
         return Emit(

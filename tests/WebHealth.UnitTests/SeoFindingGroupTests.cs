@@ -5,11 +5,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// §11.2 asks the SEO Configuration report for "title, description, canonical, indexing, robots
-/// and sitemap findings". Every SEO rule key shares the "Seo." prefix, so the report can only name
-/// those six subjects if the grouping below is right.
-/// </summary>
 public sealed class SeoFindingGroupTests
 {
     [Theory]
@@ -29,11 +24,6 @@ public sealed class SeoFindingGroupTests
     public void EveryRule_ReportsTheSubjectItIsAbout(string ruleKey, string expected) =>
         SeoFindingGroups.Of(ruleKey).Should().Be(expected);
 
-    /// <summary>
-    /// The sitemap is its own subject rather than part of robots. It is discovered through a
-    /// robots directive, but a missing sitemap and a robots.txt that disallows the whole origin
-    /// are not the same problem and do not carry the same urgency.
-    /// </summary>
     [Fact]
     public void SitemapIsNotFiledUnderRobots() =>
         SeoFindingGroups.Of(RobotsRules.SitemapMissing).Should().NotBe(SeoFindingGroups.Robots);
@@ -50,17 +40,12 @@ public sealed class SeoFindingGroupTests
     public void AnUnknownRuleStillGroups() =>
         SeoFindingGroups.Of("Seo.SomethingAddedLater").Should().Be(SeoFindingGroups.Other);
 
-    /// <summary>
-    /// The list item derives its count from the findings it holds, so the badge and the rules
-    /// behind it cannot drift apart.
-    /// </summary>
     [Fact]
     public void ListItem_GroupsFindings_AndLeadsWithTheSiteWideOnes()
     {
         var item = Item([SeoRules.TitleMissing, RobotsRules.BlocksSite, SeoRules.CanonicalInvalid]);
 
         item.OpenFindingCount.Should().Be(3);
-        // A robots.txt blocking the origin outranks a page-level detail, so it is listed first.
         item.FindingGroups.Select(group => group.Group).Should()
             .Equal([SeoFindingGroups.Robots, SeoFindingGroups.Canonical, SeoFindingGroups.Title]);
         item.FindingGroups.Should().OnlyContain(group => group.Count == 1);
@@ -84,11 +69,6 @@ public sealed class SeoFindingGroupTests
         item.FindingGroups.Should().BeEmpty();
     }
 
-    /// <summary>
-    /// The reader filters by rule key because a database cannot run <see cref="SeoFindingGroups.Of" />.
-    /// That leaves two paths through the same mapping, and a subject whose keys disagreed with its
-    /// description would filter to rows the page then labels as something else.
-    /// </summary>
     [Theory]
     [MemberData(nameof(SelectableSubjects))]
     public void FilteringKeysAndDescribedGroupAgree(string subject)
@@ -103,10 +83,6 @@ public sealed class SeoFindingGroupTests
     public void EverySelectableSubjectIsRecognised() =>
         SeoFindingGroups.Selectable.Should().OnlyContain(subject => SeoFindingGroups.IsSelectable(subject));
 
-    /// <summary>
-    /// "SEO" is the fallback for a rule added later, and its membership cannot be enumerated.
-    /// Offering it as a filter would promise a query with no rule keys behind it.
-    /// </summary>
     [Fact]
     public void TheFallbackGroupIsNotOfferedAsAFilter()
     {

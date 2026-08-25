@@ -35,23 +35,11 @@ public static class HttpFailureCategories
     public const string TargetIneligible = "TargetIneligible";
     public const string Protocol = "Protocol";
 
-    /// <summary>BR-P02: total response time breached its configured threshold.</summary>
     public const string SlowResponse = "SlowResponse";
 
-    /// <summary>BR-P04: the page exceeded its size threshold.</summary>
     public const string PageTooLarge = "PageTooLarge";
 }
 
-/// <summary>
-/// Failure categories for the SEO configuration rules (BR-E02 to BR-E05, BR-E09). They are
-/// separate from the availability categories so a report can tell a misconfigured page from an
-/// unreachable one at a glance, without reading rule keys.
-/// </summary>
-/// <summary>
-/// A finding's observed and expected values are stored in bounded columns, and both can be built
-/// from remote input — a canonical href, a robots pattern. Bounding them here rather than at the
-/// column keeps a hostile value from failing the save and rolling back the whole check result.
-/// </summary>
 public static class FindingValues
 {
     public const int MaxLength = 500;
@@ -71,31 +59,8 @@ public static class SeoFailureCategories
     public static IReadOnlyList<string> All => [Title, Description, Canonical, Indexing, Robots];
 }
 
-/// <summary>
-/// Which failure categories mean the site was <em>unavailable</em>, as opposed to reachable but
-/// misconfigured or slow.
-/// <para>
-/// BR-U01 measures healthy <em>availability</em> samples over eligible <em>availability</em>
-/// samples, and that word is the whole rule: uptime answers "could a visitor load the page", not
-/// "was every rule satisfied". A production <c>Disallow: /</c> is critical under BR-E07 and must
-/// keep raising an incident and driving endpoint health - but the server answering 200 while it
-/// happens is up, and reporting it as downtime makes the headline figure describe SEO compliance
-/// instead of availability.
-/// </para>
-/// <para>
-/// The set below is the exception list rather than the availability list, so a newly added
-/// availability category counts against uptime by default. That is the safe direction to fail:
-/// a new transport failure silently ignored would overstate uptime, while a new advisory
-/// category wrongly counted is visible the moment anyone reads the number.
-/// </para>
-/// </summary>
 public static class UptimeParticipation
 {
-    /// <summary>
-    /// Categories that describe the page rather than the connection. Slow and oversized
-    /// responses sit here because the endpoint did answer; a response so slow that nothing came
-    /// back is a <see cref="HttpFailureCategories.Timeout" />, which is not on this list.
-    /// </summary>
     public static IReadOnlyList<string> NonAvailabilityCategories =>
     [
         .. SeoFailureCategories.All,
@@ -103,20 +68,11 @@ public static class UptimeParticipation
         HttpFailureCategories.PageTooLarge
     ];
 
-    /// <summary>
-    /// Whether a result's category leaves the endpoint counting as reachable. A result with no
-    /// category at all passed everything and is available by definition.
-    /// </summary>
     public static bool IsAvailable(string? failureCategory) =>
         failureCategory is null
         || NonAvailabilityCategories.Contains(failureCategory, StringComparer.Ordinal);
 }
 
-/// <summary>
-/// The severity a finding reports. These are aliases of <see cref="IncidentSeverities" />
-/// rather than a parallel set: a finding severity is carried straight onto the incident it
-/// confirms, so the two vocabularies have to be the same one.
-/// </summary>
 public static class FindingSeverities
 {
     public const string Warning = IncidentSeverities.Warning;
@@ -129,69 +85,34 @@ public static class FindingSeverities
 
     public static string Max(string first, string second) => IncidentSeverities.Max(first, second);
 
-    /// <summary>
-    /// Collapses a finding severity onto the three-state result outcome. <see cref="High" />
-    /// maps to a <c>Warning</c> outcome deliberately: the outcome is the availability signal,
-    /// and a certificate that expires in 15 days says nothing about the site being reachable
-    /// today. The escalated urgency is carried by the finding and its incident instead.
-    /// </summary>
     public static string ToOutcome(string severity) =>
         severity == Critical ? HttpResultOutcomes.Critical : HttpResultOutcomes.Warning;
 }
 
-/// <summary>
-/// Rule keys for the performance rules (BR-P02, BR-P04). They are deliberately separate rule
-/// keys — and therefore separate issue keys — from the availability rules, so a slow endpoint
-/// and an unreachable endpoint track as independent incidents (BR-I04).
-/// </summary>
 public static class PerformanceRules
 {
     public const string SlowResponse = "Http.SlowResponse";
     public const string PageTooLarge = "Http.PageTooLarge";
 
-    /// <summary>
-    /// BR-P03: three consecutive breaches before a slow-response incident opens, so one
-    /// isolated slow sample never raises anything.
-    /// </summary>
     public const int SlowResponseConfirmationCount = 3;
 
-    /// <summary>
-    /// A slow-response incident still opens immediately (so it is visible in history right
-    /// away), but its Opened email is held for this long before the incident is judged worth
-    /// notifying about. A response time that recovers on its own within this window never
-    /// reaches the user's inbox; one that is still open when the delay elapses notifies as usual.
-    /// </summary>
     public static readonly TimeSpan OpenedNotificationDelay = TimeSpan.FromMinutes(15);
 
-    /// <summary>
-    /// The confirmation count a finding needs before it can open an incident. Slow response
-    /// carries its own BR-P03 minimum; every other rule uses the monitor's own confirmation
-    /// policy. The monitor's count still wins when it is the stricter of the two, because an
-    /// operator who asked for five confirmations did not ask for three.
-    /// </summary>
     public static int SelectFailureConfirmationCount(string ruleKey, int monitorConfirmationCount) =>
         ruleKey == SlowResponse
             ? Math.Max(monitorConfirmationCount, SlowResponseConfirmationCount)
             : monitorConfirmationCount;
 
-    /// <summary>Whether an incident's issue key is the slow-response rule's, for the Opened-notification delay above.</summary>
     public static bool IsSlowResponseIssueKey(string issueKey) =>
         issueKey == HttpIssueIdentity.Create(SlowResponse);
 }
 
-/// <summary>
-/// How a stored page size was measured (BR-P04). The label travels with the value so a report
-/// never compares a compressed wire length against a decoded one without saying so.
-/// </summary>
 public static class PageLengthSources
 {
-    /// <summary>The response advertised a Content-Length: bytes as transferred, compression included.</summary>
     public const string TransferredContentLength = "TransferredContentLength";
 
-    /// <summary>No Content-Length was advertised: decoded bytes actually read.</summary>
     public const string MeasuredDecoded = "MeasuredDecoded";
 
-    /// <summary>The body hit the read cap, so the value is a lower bound, not a measurement.</summary>
     public const string BoundedDecoded = "BoundedDecoded";
 }
 
@@ -205,11 +126,6 @@ public sealed record HttpResultPolicy(
     long PageSizeWarningBytes = PerformanceEvaluation.DefaultPageSizeWarningBytes,
     SeoPolicy? Seo = null)
 {
-    /// <summary>
-    /// The thresholds this result is judged against. They come from the check's configuration
-    /// snapshot, so re-reading a stored result never re-judges it against a threshold that was
-    /// changed afterwards (BR-P02).
-    /// </summary>
     public ResponseTimeThresholds EffectiveResponseTime => ResponseTime ?? ResponseTimeThresholds.Default;
 
     public static HttpResultPolicy Default { get; } = new(
@@ -285,14 +201,6 @@ public static class HttpResultNormalizer
             input.Transport.Timing);
     }
 
-    /// <summary>
-    /// The page size this result is judged on (BR-P04), together with the label that says how
-    /// it was obtained. The transferred length is preferred where the response advertised one,
-    /// because that is what a visitor actually downloads; the decoded byte count is the
-    /// fallback. Both values are stored either way — the label only says which one the rule
-    /// used, so a report never has to guess whether a stored number is compressed. A failed
-    /// exchange produced no page at all, so it has no length rather than a length of zero.
-    /// </summary>
     private static PageLengthMeasurement? MeasurePageLength(SafeHttpTransportResult transport)
     {
         if (transport.Failure is not null)
@@ -344,8 +252,6 @@ public static class HttpResultNormalizer
                 $"<={input.Policy.MaxResponseBodyBytes} decoded bytes");
         }
 
-        // BR-E02 to BR-E05 and BR-E09 ride the same finding path as every other rule, so SEO
-        // incidents deduplicate, escalate and resolve without any machinery of their own.
         if (input.Policy.Seo is { } seoPolicy)
         {
             if (input.Seo is { } seo)
@@ -356,8 +262,6 @@ public static class HttpResultNormalizer
                 }
             }
 
-            // BR-E06 to BR-E08 read the origin's stored snapshot; the refresh that produced it
-            // runs on its own schedule so a check never waits on a second host.
             foreach (var finding in RobotsRuleEvaluator.Evaluate(
                 input.Robots, seoPolicy.RobotsUserAgent,
                 new Uri(input.Request.Url, UriKind.Absolute).AbsolutePath, seoPolicy))
@@ -392,14 +296,6 @@ public static class HttpResultNormalizer
         }
     }
 
-    /// <summary>
-    /// BR-P02. Raised for every exchange that produced a response, including one that failed a
-    /// rule: a server error that also took four seconds is two separate facts, and they track
-    /// as two separate issues (BR-I04). An exchange that produced no response is a different
-    /// matter and is excluded before this runs — a timeout's duration is its budget, not a
-    /// measured response time, and reporting it as one would put the timeout into the
-    /// percentiles that BR-U05 keeps it out of.
-    /// </summary>
     private static NormalizedFinding? EvaluateResponseTime(int totalDurationMs, HttpResultPolicy policy)
     {
         var thresholds = policy.EffectiveResponseTime;
@@ -422,13 +318,6 @@ public static class HttpResultNormalizer
                 : FindingSeverities.Warning);
     }
 
-    /// <summary>
-    /// BR-P04. A body that hit the read cap without advertising its length has no measurement
-    /// to judge — only a lower bound — and <c>ResponseTooLarge</c> already reports it, so no
-    /// page-size finding is raised for it. A truncated body that <em>did</em> advertise a
-    /// length is judged normally: the advertised value is exact whether or not the read was cut
-    /// short, and an oversized page is exactly what it describes.
-    /// </summary>
     private static NormalizedFinding? EvaluatePageSize(
         PageLengthMeasurement? length,
         HttpResultPolicy policy)
@@ -533,8 +422,6 @@ public static class HttpResultNormalizer
             (FindingSeverities.Warning, HttpFailureCategories.HttpsRequired) => 300,
             (FindingSeverities.Warning, HttpFailureCategories.SlowResponse) => 250,
             (FindingSeverities.Warning, HttpFailureCategories.PageTooLarge) => 240,
-            // A misconfigured page ranks below every availability signal: the category on the
-            // result should say "unreachable" whenever the check was also unreachable.
             (FindingSeverities.Warning, SeoFailureCategories.Robots) => 160,
             (FindingSeverities.Warning, SeoFailureCategories.Canonical) => 150,
             (FindingSeverities.Warning, SeoFailureCategories.Indexing) => 140,

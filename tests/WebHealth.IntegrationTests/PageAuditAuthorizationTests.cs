@@ -8,11 +8,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// Who may read the PageSpeed page and who may ask Google to audit an endpoint, made against the
-/// real routes rather than a synthetic policy endpoint. Hiding the Run now button is a usability
-/// choice; only the request itself proves the server refuses.
-/// </summary>
 public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
@@ -76,10 +71,6 @@ public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory f
         response.Headers.Location!.OriginalString.Should().StartWith("/Account/Login");
     }
 
-    /// <summary>
-    /// An endpoint id that is not a Guid is a parameter the page ignores, not an error: the
-    /// selection simply does not resolve and the picker is shown.
-    /// </summary>
     [Fact]
     public async Task UnparseableEndpointId_ShowsThePickerRatherThanFailing()
     {
@@ -90,10 +81,6 @@ public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory f
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
-    /// <summary>
-    /// Asking Google to load a page is active testing of that target, so it needs the same
-    /// permission a manual check needs. A Viewer may read every score and start none.
-    /// </summary>
     [Fact]
     public async Task RunNow_IsRefusedToAViewer()
     {
@@ -108,10 +95,6 @@ public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory f
         runner.Requested.Should().BeEmpty("the refusal happens before any run is opened");
     }
 
-    /// <summary>
-    /// Asserted on what the action did rather than on the redirect: the test client follows
-    /// redirects, so a status assertion here would only prove the page it landed on renders.
-    /// </summary>
     [Theory]
     [InlineData(ApplicationRoles.Administrator)]
     [InlineData(ApplicationRoles.Operations)]
@@ -130,11 +113,6 @@ public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory f
         runner.Requested.Should().ContainSingle().Which.Should().Be(Endpoint);
     }
 
-    /// <summary>
-    /// A run id naming nothing this endpoint owns is a wrong address, not an endpoint with no
-    /// history. Rendering "no audit has run yet" would answer a different question and would read
-    /// as though the run had been deleted.
-    /// </summary>
     [Fact]
     public async Task ARunIdThatResolvesToNothing_IsNotFound()
     {
@@ -170,11 +148,6 @@ public sealed class PageAuditAuthorizationTests(WebHealthWebApplicationFactory f
             HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed);
     }
 
-    /// <summary>
-    /// Posts with a valid anti-forgery token, taken from the page that hosts the form. Requesting
-    /// the page first is what a browser does, and it is the only way to obtain the pair of tokens
-    /// the framework validates.
-    /// </summary>
     private static async Task<HttpResponseMessage> PostRunNowAsync(HttpClient client, Guid endpointId)
     {
         using var page = await client.GetAsync($"/PageAudits?endpointId={endpointId}");

@@ -4,7 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>BR-L06. One classification per link, from facts the transport already reports.</summary>
 public sealed class CrawlLinkClassifierTests
 {
     private static string Classify(

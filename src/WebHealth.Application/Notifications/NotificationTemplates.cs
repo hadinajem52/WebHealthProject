@@ -2,10 +2,6 @@ using System.Globalization;
 
 namespace WebHealth.Application.Notifications;
 
-/// <summary>
-/// Every field here is bounded, allow-listed data already safe to display (names, normalized
-/// identifiers, timestamps) — never raw diagnostics, HTML, or response bodies.
-/// </summary>
 public sealed record NotificationTemplateData(
     Guid IncidentId,
     string EndpointDisplayUrl,

@@ -1,10 +1,6 @@
 @model string
 
-@*
-    The mark on a history row's rail. It repeats the outcome the row's own badge already names,
-    so it is decorative to a screen reader and hidden from one; what it adds is a shape a reader
-    can follow down the column without reading a single label.
-*@
+
 <span class="history-cell__mark" data-status="@Model" aria-hidden="true">
     @await Html.PartialAsync("_Icon", StatusBadges.Icon(Model))
 </span>

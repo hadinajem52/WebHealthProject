@@ -6,12 +6,6 @@ using WebHealth.Web.Models;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// The dashboard is now a real read surface, so the shell tests — which run with no database —
-/// stub the readers behind it exactly as they already stub the notification feed. These tests
-/// are about the shell's landmarks, encoding and asset references; the dashboard's data is
-/// covered by the reporting query core's own evidence against a real cluster.
-/// </summary>
 internal static class EmptyDashboard
 {
     public static ReportQuery Query(DateTimeOffset asOf) =>
@@ -160,12 +154,6 @@ internal sealed class EmptyTargetRegistryReader : ITargetRegistryReader
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<EndpointListItem>>([]);
 
-    /// <summary>
-    /// The one endpoint the Broken links and PageSpeed tests select. It has to be listed, not
-    /// merely selectable: those pages only offer their Run control for an endpoint their own
-    /// picker names, so against an empty list the page would correctly render no button and the
-    /// tests asserting the button would fail for a reason that has nothing to do with them.
-    /// </summary>
     public static RegistryEndpointItem Endpoint { get; } = new(
         Guid.Parse("6f1c9a20-0000-0000-0000-000000000001"),
         Guid.Parse("6f1c9a20-0000-0000-0000-000000000002"),

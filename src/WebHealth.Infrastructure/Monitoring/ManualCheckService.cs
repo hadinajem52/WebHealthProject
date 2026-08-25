@@ -49,7 +49,6 @@ internal sealed class ManualCheckService(
 
         var now = timeProvider.GetUtcNow();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        // A paused monitor still runs on demand; pausing stops the cadence only.
         var monitor = await dbContext.EndpointMonitors
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.MonitorType == monitorType
@@ -61,10 +60,6 @@ internal sealed class ManualCheckService(
             return ManualCheckResult.MonitorNotAvailable();
         }
 
-        // Re-verify authorization immediately before persisting the request, inside the same
-        // transaction as the monitor read. This narrows (does not eliminate) the window between
-        // the initial check above and commit during which an assignment, evidence grant, or the
-        // endpoint itself could be revoked/disabled.
         if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -103,8 +98,6 @@ internal sealed class ManualCheckService(
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        // The transaction commit above is this operation's success boundary: the check is durably
-        // queued from here on, regardless of what happens next (including caller cancellation).
         await DurableWorkEnqueueAcknowledgement.TryEnqueueAsync(
             dbContext, logicalCheckQueue, timeProvider, logger, logicalCheckId, durableWorkId);
 

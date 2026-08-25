@@ -4,10 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-L03 and BR-L05. These are the rules that decide whether a crawl terminates, so they are
-/// driven all the way to their limits here rather than against a live site.
-/// </summary>
 public sealed class CrawlFrontierTests
 {
     private static CrawlUrl Url(string value) =>

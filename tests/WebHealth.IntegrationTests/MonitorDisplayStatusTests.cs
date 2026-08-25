@@ -8,16 +8,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// The dashboard needs the same status rule in three query shapes: the row, the status filter and
-/// the health totals. Entity Framework cannot compose one stored expression inside another, so the
-/// rule is written more than once — and a change made to one form but not the others would let the
-/// page contradict itself, showing a monitor in a status its own filter excludes.
-/// <para>
-/// The expressions are compiled and run in memory here, so the agreement is checked without a
-/// database.
-/// </para>
-/// </summary>
 public sealed class MonitorDisplayStatusTests
 {
     public static TheoryData<bool, bool, string?> Combinations()
@@ -25,9 +15,6 @@ public sealed class MonitorDisplayStatusTests
         var data = new TheoryData<bool, bool, string?>();
         foreach (var monitorEnabled in new[] { true, false })
         {
-            // Both switches, because either one being off means nothing is being checked. The
-            // endpoint dimension is the one that used to be missing here, which is exactly why
-            // the rule could read the monitor alone without a test noticing.
             foreach (var endpointEnabled in new[] { true, false })
             {
                 foreach (var status in new string?[]
@@ -57,11 +44,6 @@ public sealed class MonitorDisplayStatusTests
             .Should().Be(MonitorDisplayStatus.Of(monitorEnabled, endpointEnabled, confirmedStatus));
     }
 
-    /// <summary>
-    /// The filter must select exactly the monitors the row would show in that status — no more,
-    /// because a monitor would then appear under a status it is not in, and no fewer, because
-    /// filtering for a status that is on screen would hide it.
-    /// </summary>
     [Theory]
     [MemberData(nameof(Combinations))]
     public void FilterSelectsExactlyWhatTheProjectionReports(
@@ -85,10 +67,6 @@ public sealed class MonitorDisplayStatusTests
         }
     }
 
-    /// <summary>
-    /// The point of the change: a disabled monitor is never reported as the state it was in when
-    /// checking stopped, whatever that state was.
-    /// </summary>
     [Theory]
     [InlineData(EndpointHealthStatuses.Healthy)]
     [InlineData(EndpointHealthStatuses.Warning)]
@@ -99,11 +77,6 @@ public sealed class MonitorDisplayStatusTests
             Monitor(monitorEnabled: false, endpointEnabled: true, lastConfirmed))
             .Should().Be(EndpointHealthStatuses.Disabled);
 
-    /// <summary>
-    /// Disabling the endpoint stops dispatch just as surely as pausing the monitor does -
-    /// <c>MonitoringEligibility</c> requires both - so the dashboard must not keep reporting the
-    /// last confirmed state of an endpoint somebody switched off.
-    /// </summary>
     [Theory]
     [InlineData(EndpointHealthStatuses.Healthy)]
     [InlineData(EndpointHealthStatuses.Warning)]
@@ -120,7 +93,6 @@ public sealed class MonitorDisplayStatusTests
             Monitor(monitorEnabled: true, endpointEnabled: true, null))
             .Should().Be(EndpointHealthStatuses.Unknown);
 
-    // Only the three fields the rule reads matter; the rest are required members of the entities.
     private static EndpointMonitor Monitor(bool monitorEnabled, bool endpointEnabled, string? confirmedStatus) => new()
     {
         Id = Guid.NewGuid(),

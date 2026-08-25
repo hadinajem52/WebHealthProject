@@ -11,8 +11,6 @@
     var incidentStatus = StatusBadges.ForIncidentStatus(incident.Status);
     var severityStatus = StatusBadges.ForSeverity(incident.Severity);
 
-    // Each flag reproduces exactly the condition the form was rendered under before, so
-    // moving the controls into a menu and a separate card cannot widen what anyone can do.
     var canAcknowledge = incident.CanManage && incident.Status == "Open";
     var canStartProgress = incident.CanManage && incident.Status == "Acknowledged";
     var canCloseIncident = incident.CanManage && incident.Status == "Resolved";

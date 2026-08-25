@@ -4,10 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-E06 and BR-E07 parsing, as written down in docs/phase-6/Robots_And_Sitemap.md. Everything
-/// here is a pure function of text and a path.
-/// </summary>
 public sealed class RobotsTxtParserTests
 {
     private const string Agent = "webhealthmonitor/1.0";
@@ -255,8 +251,6 @@ public sealed class RobotsTxtParserTests
     [Fact]
     public void Matches_DoesNotBlowUpOnAPatternDesignedToBacktrack()
     {
-        // A pattern like this is exponential for a naive regex translation; the two-pointer
-        // matcher is not, which is the reason it exists.
         var pattern = "/" + string.Concat(Enumerable.Repeat("a*", 40)) + "b$";
         var path = "/" + new string('a', 400);
 

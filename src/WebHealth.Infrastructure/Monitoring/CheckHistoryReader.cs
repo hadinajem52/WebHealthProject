@@ -100,8 +100,6 @@ internal sealed class CheckHistoryReader(
             })
             .ToArrayAsync(cancellationToken);
 
-        // BR-P05: only completed results carry a measurement context, so a still-running check
-        // neither claims comparability nor breaks it.
         var comparability = PerformanceComparability.Evaluate(items
             .Where(row => row.Item.MonitorSource is not null)
             .Select(row => new PerformanceSampleContext(

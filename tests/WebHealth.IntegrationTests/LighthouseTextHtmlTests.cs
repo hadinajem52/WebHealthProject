@@ -5,12 +5,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// Google's audit descriptions arrive over an outbound HTTP call, so they are untrusted input
-/// that this application renders as markup. These tests pin both halves of that: the markdown
-/// subset Lighthouse actually uses is rendered, and nothing else in the string can become markup
-/// or an executable URL.
-/// </summary>
 public sealed class LighthouseTextHtmlTests
 {
     private static string Render(string? value)
@@ -58,11 +52,6 @@ public sealed class LighthouseTextHtmlTests
             + ". Really.");
     }
 
-    /// <summary>
-    /// The reason this renderer exists at all is that it emits raw markup. Anything that is not
-    /// one of the two recognised constructs has to come out encoded, or a description containing
-    /// a tag would become that tag.
-    /// </summary>
     [Fact]
     public void Markup_InThePlainText_IsEncoded()
     {
@@ -97,10 +86,6 @@ public sealed class LighthouseTextHtmlTests
         html.Should().Contain("Click me");
     }
 
-    /// <summary>
-    /// A refused target is still shown, so a reader can see what the provider returned instead of
-    /// a sentence with a hole where the link should have been.
-    /// </summary>
     [Fact]
     public void RefusedTarget_IsStillVisibleAsText()
     {

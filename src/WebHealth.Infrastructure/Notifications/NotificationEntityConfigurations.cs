@@ -76,7 +76,6 @@ internal sealed class NotificationDeliveryConfiguration : IEntityTypeConfigurati
             delivery.NormalizedRecipient
         }).IsUnique().HasDatabaseName("ux_notification_delivery_recipient");
         builder.HasIndex(delivery => new { delivery.State, delivery.NextAttemptAt });
-        // The in-app feed filters by recipient, which the event-leading unique index cannot serve.
         builder.HasIndex(delivery => delivery.NormalizedRecipient)
             .HasDatabaseName("ix_notification_delivery_normalized_recipient");
         builder.HasOne(delivery => delivery.NotificationEvent).WithMany(notificationEvent => notificationEvent.Deliveries)
@@ -113,8 +112,6 @@ internal sealed class NotificationReadMarkerConfiguration : IEntityTypeConfigura
         builder.ToTable("notification_read_marker");
         builder.HasKey(marker => marker.UserId);
         builder.Property(marker => marker.UserId).ValueGeneratedNever();
-        // Not a concurrency token: writes go through an atomic upsert, so there is no
-        // read-modify-write window for a token to guard.
         builder.Property(marker => marker.Version);
         builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(marker => marker.UserId)
             .OnDelete(DeleteBehavior.Restrict)

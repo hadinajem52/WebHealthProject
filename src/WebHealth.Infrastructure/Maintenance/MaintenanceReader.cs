@@ -8,8 +8,6 @@ internal sealed class MaintenanceReader(ApplicationDbContext dbContext, TimeProv
 {
     public async Task<IReadOnlyList<MaintenanceWindowListItem>> ListAsync(CancellationToken cancellationToken = default)
     {
-        // The window carries its schedule specification, so the list never loads a recurring
-        // window's materialised occurrences; only the next one ahead of now is read.
         var now = timeProvider.GetUtcNow();
         var windows = await dbContext.MaintenanceWindows.AsNoTracking().Include(item => item.Targets)
             .OrderByDescending(item => item.CreatedAt)

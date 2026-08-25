@@ -2,53 +2,212 @@
 @{
     ViewData.SetTitle(Model.Client.Name);
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Clients(Url), new BreadcrumbItem(Model.Client.Name));
+
+    var client = Model.Client;
+    var clientTone = client.IsDeleted ? StatusBadges.Danger
+        : client.IsActive ? StatusBadges.Success
+        : StatusBadges.Warning;
+    var clientState = client.IsDeleted ? "Archived"
+        : client.IsActive ? "Active"
+        : "Disabled";
+    var websites = client.Websites;
 }
-<div id="ajax-page" data-ajax-region>
-<section class="card">
-    <div class="page-intro">
-        <div><h2 class="card__title">@Model.Client.Name</h2><p class="card__subtitle">Owned by @Model.Client.OwnerName · Version @Model.Client.Version</p></div>
-        @if (Model.CanManage && !Model.Client.IsDeleted)
-        {
+
+<div id="ajax-page" class="stack" data-ajax-region>
+    <section class="card" aria-labelledby="client-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="client-heading">@client.Name</h2>
+                
+                <p class="card__status" data-status="@clientTone">
+                    @await Html.PartialAsync("_Icon", StatusBadges.Icon(clientTone))
+                    <span>Client &middot; @clientState</span>
+                </p>
+            </div>
+
             <div class="form-actions">
-                <a class="button button--secondary" asp-action="CreateWebsite" asp-route-clientId="@Model.Client.Id">
-                    @await Html.PartialAsync("_Icon", "plus")
-                    <span>Add website</span>
-                </a>
-                <a class="button button--primary" asp-action="EditClient" asp-route-id="@Model.Client.Id">
-                    @await Html.PartialAsync("_Icon", "pencil")
-                    <span>Edit client</span>
-                </a>
+                @if (Model.CanManage && !client.IsDeleted)
+                {
+                    <a class="button button--secondary" asp-action="CreateWebsite" asp-route-clientId="@client.Id">
+                        @await Html.PartialAsync("_Icon", "plus")
+                        <span>Add website</span>
+                    </a>
+
+                    <a class="button button--primary" asp-action="EditClient" asp-route-id="@client.Id">
+                        @await Html.PartialAsync("_Icon", "pencil")
+                        <span>Edit client</span>
+                    </a>
+                }
+
+                
+                @if (Model.CanManage)
+                {
+                    <div class="action-menu" data-shell-menu data-open="false">
+                        <button type="button"
+                                class="button button--secondary"
+                                data-shell-menu-toggle
+                                aria-controls="client-actions-menu"
+                                aria-expanded="false"
+                                aria-haspopup="true">
+                            @await Html.PartialAsync("_Icon", "settings")
+                            <span>Actions</span>
+                            <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        </button>
+
+                        <div class="action-menu__panel" id="client-actions-menu" data-shell-menu-panel>
+                            @if (client.IsDeleted)
+                            {
+                                <form asp-action="RestoreClient" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                    <input type="hidden" name="id" value="@client.Id" />
+                                    <input type="hidden" name="version" value="@client.Version" />
+                                    <button class="action-menu__item" type="submit"
+                                            title="Restore returns this client in a disabled state.">
+                                        @await Html.PartialAsync("_Icon", "restore")
+                                        <span>Restore client</span>
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                @if (client.IsActive)
+                                {
+                                    <form asp-action="DisableClient" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                        <input type="hidden" name="id" value="@client.Id" />
+                                        <input type="hidden" name="version" value="@client.Version" />
+                                        <button class="action-menu__item" type="submit">
+                                            @await Html.PartialAsync("_Icon", "power")
+                                            <span>Disable client</span>
+                                        </button>
+                                    </form>
+                                }
+
+                                <hr class="action-menu__separator" />
+                                <form asp-action="DeleteClient" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                    <input type="hidden" name="id" value="@client.Id" />
+                                    <input type="hidden" name="version" value="@client.Version" />
+                                    <button class="action-menu__item action-menu__item--danger" type="submit"
+                                            title="Archiving is a soft delete: history and audit evidence are retained.">
+                                        @await Html.PartialAsync("_Icon", "archive")
+                                        <span>Archive client</span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
+            </div>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "person")</span>
+                            <span>Owner</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <span>@client.OwnerName</span>
+                            <span class="detail-list__note">Answerable for every website under this client</span>
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "registry")</span>
+                            <span>Websites</span>
+                        </span>
+                        <span class="detail-list__value">@websites.Count</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "audit")</span>
+                            <span>Notes</span>
+                        </span>
+                        <span class="detail-list__value">@(client.Notes ?? "No notes")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "key")</span>
+                            <span>Version</span>
+                        </span>
+                        <span class="detail-list__value">@client.Version</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="client-websites-heading">
+        <div class="page-intro">
+            <div>
+                <h3 class="card__title" id="client-websites-heading">Websites</h3>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "registry")
+                    <span>@websites.Count website@(websites.Count == 1 ? null : "s") &middot; only those within your access scope</span>
+                </p>
+            </div>
+        </div>
+
+        @if (websites.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                "No accessible websites",
+                "Either this client has none yet, or the ones it has are outside what your role can see.",
+                "registry"))
+        }
+        else
+        {
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table">
+                    <caption class="visually-hidden">Websites belonging to this client</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Website</th>
+                            <th scope="col">Owner</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var website in websites)
+                        {
+                            var websiteTone = website.IsDeleted ? StatusBadges.Danger
+                                : website.IsEnabled ? StatusBadges.Success
+                                : StatusBadges.Warning;
+                            <tr>
+                                <td data-label="Website">
+                                    <span class="data-table__primary">@website.Name</span>
+                                    <span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span>
+                                </td>
+                                <td data-label="Owner">@website.OwnerName</td>
+                                <td data-label="Status">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        websiteTone,
+                                        website.IsDeleted ? "Archived" : website.IsEnabled ? "Enabled" : "Disabled",
+                                        website.IsDeleted
+                                            ? "Archived: its history and audit evidence are kept, and nothing under it is checked."
+                                            : website.IsEnabled
+                                                ? null
+                                                : "Disabled: it stays in the registry, and nothing under it is checked."))
+                                </td>
+                                <td class="data-table__action" data-label="Details">
+                                    <a asp-action="Website" asp-route-id="@website.Id">View</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
         }
-    </div>
-    <dl class="registry-facts">
-        <div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Client.IsDeleted ? "danger" : Model.Client.IsActive ? "success" : "warning")">@(Model.Client.IsDeleted ? "Deleted" : Model.Client.IsActive ? "Active" : "Disabled")</span></dd></div>
-        <div><dt>Owner</dt><dd>@Model.Client.OwnerName</dd></div>
-        <div><dt>Notes</dt><dd>@(Model.Client.Notes ?? "No notes")</dd></div>
-    </dl>
-    @if (Model.CanManage)
-    {
-        <div class="registry-lifecycle">
-            @if (Model.Client.IsDeleted)
-            {
-                <form asp-action="RestoreClient" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--primary" type="submit">Restore client</button></form>
-            }
-            else
-            {
-                @if (Model.Client.IsActive){<form asp-action="DisableClient" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--secondary" type="submit">Disable client</button></form>}
-                <form asp-action="DeleteClient" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Client.Id" /><input type="hidden" name="version" value="@Model.Client.Version" /><button class="button button--danger" type="submit">Archive client</button></form>
-            }
-        </div>
-    }
-</section>
-<section class="card">
-    <div class="page-intro"><div><h2 class="card__title">Websites</h2><p class="card__subtitle">Only child websites within your access scope are included.</p></div></div>
-    @if (Model.Client.Websites.Count == 0){<p class="card__subtitle">No accessible websites.</p>}
-    else
-    {
-        <div class="table-scroll"><table class="data-table"><thead><tr><th>Website</th><th>Owner</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        @foreach (var website in Model.Client.Websites){<tr><td data-label="Website"><span class="data-table__primary">@website.Name</span><span class="data-table__secondary">@(website.TechnologyCms ?? "Technology not set")</span></td><td data-label="Owner">@website.OwnerName</td><td data-label="Status"><span class="badge" data-status="@(website.IsDeleted ? "danger" : website.IsEnabled ? "success" : "warning")">@(website.IsDeleted ? "Deleted" : website.IsEnabled ? "Enabled" : "Disabled")</span></td><td class="data-table__action" data-label="Actions"><a asp-action="Website" asp-route-id="@website.Id">Details</a></td></tr>}
-        </tbody></table></div>
-    }
-</section>
+    </section>
 </div>

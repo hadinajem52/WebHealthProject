@@ -8,16 +8,6 @@ using WebHealth.Domain.Normalization;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
-/// <summary>
-/// Opens a TLS connection purely to observe the certificate, then tears it down.
-///
-/// The validation callback records the presented certificate and its policy errors and always
-/// returns <c>false</c>. That is deliberate and is the only way to satisfy BR-C03 — reporting
-/// expired, not-yet-valid, hostname-mismatched and untrusted certificates requires seeing a
-/// certificate the platform rejects — without ever accepting one (BR-Q04). Because the
-/// callback always fails the handshake, no session key is ever used and no application data is
-/// sent or received on a probe connection.
-/// </summary>
 internal sealed class SslCertificateProbe(
     IMonitoringDnsResolver resolver,
     IDestinationAddressPolicy addressPolicy,
@@ -42,8 +32,6 @@ internal sealed class SslCertificateProbe(
         var target = new Uri(normalized.NormalizedUrl!, UriKind.Absolute);
         if (target.Scheme != Uri.UriSchemeHttps)
         {
-            // BR-C01: HTTP-only endpoints have no certificate to inspect and are reported as
-            // Not Applicable rather than probed.
             return Failure(SslProbeFailureKind.NotHttps, stopwatch);
         }
 
@@ -80,10 +68,6 @@ internal sealed class SslCertificateProbe(
             }
             catch (Exception exception) when (IsHandshakeFailure(exception, timeout))
             {
-                // Every probe ends here: the callback rejects the certificate by design, and a
-                // target that refuses or drops the handshake fails here too. The connection
-                // itself already succeeded, so what happened next is handshake evidence —
-                // useful when a certificate was captured, and a failure when none was.
             }
 
             var observation = TlsCertificateReader.TryRead(
@@ -123,12 +107,6 @@ internal sealed class SslCertificateProbe(
         }
     }
 
-    /// <summary>
-    /// A failure after the socket is connected belongs to the handshake, whatever type the
-    /// platform surfaces it as — a refused handshake arrives as an authentication error on one
-    /// platform and as a dropped stream on another. Cancellation and timeout keep their own
-    /// meaning and are re-thrown to the outer handlers.
-    /// </summary>
     private static bool IsHandshakeFailure(Exception exception, CancellationTokenSource timeout) =>
         exception is AuthenticationException or IOException or SocketException
         && !timeout.IsCancellationRequested;
@@ -152,7 +130,6 @@ internal sealed class SslCertificateProbe(
             HostnameMatched = !errors.HasFlag(SslPolicyErrors.RemoteCertificateNameMismatch);
             ChainTrusted = TlsChainTrust.Evaluate(errors, TlsChainTrust.ReadElementStatuses(chain));
 
-            // Never accept. The handshake fails here, every time, on purpose.
             return false;
         }
     }

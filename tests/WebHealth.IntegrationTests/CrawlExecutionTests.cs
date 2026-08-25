@@ -7,10 +7,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// AC-08 and BR-L01 to BR-L10 against the real execution loop, the real link extractor and a
-/// controlled mini-site. No database and no network.
-/// </summary>
 public sealed class CrawlExecutionTests
 {
     private const string Seed = CrawlTestHarness.Seed;
@@ -19,10 +15,6 @@ public sealed class CrawlExecutionTests
 
     private const string Blocking = "User-agent: *\nDisallow: /private";
 
-    /// <summary>
-    /// A drained frontier is not evidence that the site was covered. These are the runs whose
-    /// missing links would otherwise read as fixed the next time a comparison is drawn.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_ReportsCoverageAsLimitedWhenAPageCouldNotBeRead()
     {
@@ -54,10 +46,6 @@ public sealed class CrawlExecutionTests
             "the disallowed URL may be a page, and its links are missing rather than merely unchecked");
     }
 
-    /// <summary>
-    /// The flag has to stay off for an ordinary run, or every comparison is refused and the
-    /// feature reports nothing at all.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_LeavesCoverageUnlimitedForARunThatReadEveryPage()
     {
@@ -73,11 +61,6 @@ public sealed class CrawlExecutionTests
             "an unchecked external link is recorded and classified, not missing");
     }
 
-    /// <summary>
-    /// The transport resolves a redirect chain internally, so the document a crawl parses can come
-    /// from a different URL than the one it asked for. Resolving that document's relative hrefs
-    /// against the requested URL invents targets the page never contained.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_ResolvesLinksAgainstTheUrlTheDocumentCameFrom()
     {
@@ -99,10 +82,6 @@ public sealed class CrawlExecutionTests
                 "that target exists only if the redirect is ignored");
     }
 
-    /// <summary>
-    /// The links recorded for a redirected page are recorded under the document that contains
-    /// them, so the report names a page a reader can open and find the link on.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_AttributesLinksToTheRedirectedDocument()
     {
@@ -122,11 +101,6 @@ public sealed class CrawlExecutionTests
             .Which.SourceUrl.Should().Be("https://site.test/docs/page");
     }
 
-    /// <summary>
-    /// An internal URL redirecting off-site hands back a document outside this crawl's scope. Its
-    /// links are not ours to inspect, and following them expands the crawl onto a site nobody put
-    /// in its scope.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_DoesNotFollowLinksOfADocumentThatRedirectedOutOfScope()
     {
@@ -147,10 +121,6 @@ public sealed class CrawlExecutionTests
         site.Requested.Should().NotContain("https://elsewhere.test/secret");
     }
 
-    /// <summary>
-    /// Robots was consulted for the URL that was requested. A redirect lands on a path that policy
-    /// may cover differently, and the document arrives without that having been checked.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_DoesNotFollowADocumentRobotsDisallowsAtItsFinalUrl()
     {
@@ -171,11 +141,6 @@ public sealed class CrawlExecutionTests
             .NotContain("https://site.test/private/deeper");
     }
 
-    /// <summary>
-    /// A crawl swallows the exception that stopped it, by design: whatever it had already found
-    /// must survive. Swallowing it without recording it is the part that left a reader with a red
-    /// Failed badge and nowhere to go.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_RecordsWhyAFailedRunFailed()
     {
@@ -469,8 +434,6 @@ public sealed class CrawlExecutionTests
             .Status("https://site.test/b", 404)
             .Page("https://site.test/c", CrawlTestHarness.LinkTo());
 
-        // Cancel once the seed and its first child have been answered, so the run stops with real
-        // findings already in hand and real work still queued.
         site.BeforeRespondAsync = url =>
         {
             if (site.Requested.Count >= 3) cancellation.Cancel();
@@ -486,8 +449,6 @@ public sealed class CrawlExecutionTests
         sink.Links.Should().NotBeEmpty("cancellation preserves what the run already found");
         sink.Links.Should().Contain(link => link.TargetUrl == Seed);
 
-        // Nothing that was queued may simply disappear: an unreached target is Unknown, never
-        // absent and never healthy.
         sink.Links.Select(link => link.TargetUrl).Should().Contain("https://site.test/c");
         sink.Links.Should().OnlyContain(link => link.Classification != CrawlLinkClassifications.Skipped
             || link.SkipReason != null);
@@ -573,11 +534,6 @@ public sealed class CrawlExecutionTests
         site.Requested.Should().NotContain("https://site.test/should-not-be-read");
     }
 
-    /// <summary>
-    /// The override now reaches every origin a run is allowed to touch, not only one that carried
-    /// an approval. What still keeps a run off a host is scope and target authorization, and both
-    /// are checked before robots is ever consulted.
-    /// </summary>
     [Fact]
     public async Task ExecuteAsync_AppliesTheOverrideToEveryOriginInScope()
     {
@@ -663,7 +619,6 @@ public sealed class CrawlExecutionTests
             ["https://other.test"] = new(true, Blocking, false)
         });
 
-        // The scope reaches both hosts, and neither needs an exception of its own.
         var request = CrawlTestHarness.Request("https://approved.test/") with
         {
             RequestRobotsOverride = true,

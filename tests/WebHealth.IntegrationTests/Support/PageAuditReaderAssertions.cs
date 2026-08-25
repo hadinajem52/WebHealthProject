@@ -1,4 +1,4 @@
-﻿using FluentAssertions;
+using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
@@ -9,15 +9,6 @@ using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// What the PageSpeed page reads: the selected run, the audits behind it, the counts that keep
-/// manual and not-applicable apart from passed, and the comparison against the run before it.
-/// </summary>
-/// <remarks>
-/// The stage seeds its own completed runs rather than driving the executor again. It is asserting
-/// the read model, and building each fixture score directly is what lets it state the exact delta
-/// and version pairing each case is about.
-/// </remarks>
 internal static class PageAuditReaderAssertions
 {
     public static async Task VerifyAsync(
@@ -72,10 +63,6 @@ internal static class PageAuditReaderAssertions
         return targetId;
     }
 
-    /// <summary>
-    /// Configured and enabled, with no score. The page has to tell that apart from a disabled
-    /// endpoint, because one is waiting for a first audit and the other never asked for any.
-    /// </summary>
     private static async Task VerifyAnUnauditedEndpointReadsAsConfiguredButUnmeasuredAsync(
         IPageAuditReader reader,
         RegistryAccessContext access,
@@ -117,10 +104,6 @@ internal static class PageAuditReaderAssertions
         return runId;
     }
 
-    /// <summary>
-    /// The counts are what the page shows above the audit sections, and they must never fold a
-    /// manual or not-applicable audit into the passed total: neither is a check the page passed.
-    /// </summary>
     private static async Task VerifyCountsKeepEveryAuditStatusApartAsync(
         ApplicationDbContext database,
         IPageAuditReader reader,
@@ -178,11 +161,6 @@ internal static class PageAuditReaderAssertions
         summary.Comparison.SpansAVersionChange.Should().BeFalse();
     }
 
-    /// <summary>
-    /// A major-version change can add, remove or redefine audits, so the delta is still shown and
-    /// still labelled. Hiding it would lose real information; presenting it silently would report
-    /// a change in the tool as a change in the page.
-    /// </summary>
     private static async Task VerifyAMajorVersionChangeIsLabelledAsync(
         ApplicationDbContext database,
         IPageAuditReader reader,
@@ -205,10 +183,6 @@ internal static class PageAuditReaderAssertions
         summary.Comparison.SpansAVersionChange.Should().BeTrue();
     }
 
-    /// <summary>
-    /// A failed run has no score. Treating its absence as a change would report a Google outage
-    /// as a collapse in the page's SEO, which is the one reading this feature must never produce.
-    /// </summary>
     private static async Task VerifyAFailedRunIsNotComparedAsync(
         ApplicationDbContext database,
         IPageAuditReader reader,
@@ -249,8 +223,6 @@ internal static class PageAuditReaderAssertions
         summary.Comparison.Should().Be(PageAuditComparison.None,
             "a run with no score is not one side of a comparison");
 
-        // Selecting the last scored run explicitly still compares, so a failure does not hide the
-        // history behind it.
         var lastScored = await database.PageAuditRuns.AsNoTracking()
             .Where(run => run.PageAuditTargetId == targetId && run.RawScore != null)
             .OrderByDescending(run => run.FinishedAt)
@@ -262,11 +234,6 @@ internal static class PageAuditReaderAssertions
         selected!.Comparison.PreviousRunId.Should().NotBeNull();
     }
 
-    /// <summary>
-    /// Mobile and desktop are two measurements of the same page, not two views of one result.
-    /// Reading either must never pick up the other's runs: a desktop score shown under mobile
-    /// would report a form factor the page never audited that way.
-    /// </summary>
     private static async Task VerifyTheTwoFormFactorsReadApartAsync(
         ApplicationDbContext database,
         IPageAuditReader reader,
@@ -302,19 +269,11 @@ internal static class PageAuditReaderAssertions
             "one desktop run has been recorded, against several mobile ones")
             .Which.Strategy.Should().Be(PageAuditStrategies.Desktop);
 
-        // The score a reading carries is its own form factor's. A desktop number surfacing while
-        // mobile is selected would attribute one page's measurement to the other.
         desktop.LatestRun!.Score.Should().Be(64);
         mobile.LatestRun!.Score.Should().BeNull(
             "the newest mobile run is the failed one, which produced no score of its own");
     }
 
-    /// <summary>
-    /// Auditing is one setting on the endpoint. A form factor whose own target row is missing -
-    /// a database that has not applied the desktop migration yet - must still read as configured
-    /// and enabled, because the alternative tells an operator to switch on something that is
-    /// already on.
-    /// </summary>
     private static async Task VerifyConfigurationIsEndpointLevelAsync(
         ApplicationDbContext database,
         IPageAuditReader reader,
@@ -417,11 +376,6 @@ internal static class PageAuditReaderAssertions
         accessibility.LatestRun.Should().BeNull();
     }
 
-    /// <summary>
-    /// Visibility is composed into the query, so an endpoint the requester may not see reads as
-    /// absent. The controller turns that into Not Found; answering Forbidden would confirm it
-    /// exists, which is itself a disclosure.
-    /// </summary>
     private static async Task VerifyAnotherClientsEndpointIsNotReadableAsync(
         ApplicationDbContext database,
         IPageAuditReader reader,
@@ -486,9 +440,6 @@ internal static class PageAuditReaderAssertions
         Guid runId,
         IReadOnlyList<(string AuditId, string Status, decimal? Score, double Weight)> items)
     {
-        // Added through the DbSet rather than through a loaded navigation collection: keys here
-        // are client-generated, so EF would attach an entity added to a collection as an existing
-        // row and emit an UPDATE against an id that was never inserted.
         foreach (var (auditId, status, score, weight) in items)
         {
             database.PageAuditItems.Add(new PageAuditItem

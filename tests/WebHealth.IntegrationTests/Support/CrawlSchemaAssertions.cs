@@ -14,17 +14,8 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests.Support;
 
-/// <summary>
-/// Phase 6 increment 6.7. The crawl schema's contract, the source-target uniqueness BR-L07 depends
-/// on, the status/stop-reason pairing that keeps BR-L10 true in the database rather than by
-/// convention, and the plan evidence that the reporting index is actually the one PostgreSQL uses.
-/// </summary>
 internal static class CrawlSchemaAssertions
 {
-    /// <summary>
-    /// Enough rows that a sequential scan is not simply the cheapest plan. A plan assertion against
-    /// a table of ten rows proves nothing: PostgreSQL would scan it regardless of any index.
-    /// </summary>
     private const int PlanEvidenceRuns = 12;
     private const int PlanEvidenceLinksPerRun = 400;
 
@@ -113,16 +104,6 @@ internal static class CrawlSchemaAssertions
         await DeleteRunsAsync(connectionString, runId);
     }
 
-    /// <summary>
-    /// The other half of retiring a run: the worker the sweep gave up on may still be alive.
-    /// <para>
-    /// Hangfire redelivers a job whose process died — <c>AutomaticRetry(0)</c> governs a job that
-    /// failed, not one whose worker vanished — so without a claim a second delivery would fetch the
-    /// whole site again and then write Completed over the row reconciliation had already closed.
-    /// Both halves are asserted here because either one alone still leaves a run whose recorded
-    /// history contradicts what happened.
-    /// </para>
-    /// </summary>
     private static async Task VerifyExecutionClaimFencesARetiredRunAsync(
         string connectionString,
         Guid endpointId)
@@ -162,12 +143,6 @@ internal static class CrawlSchemaAssertions
         await DeleteRunsAsync(connectionString, runId);
     }
 
-    /// <summary>
-    /// A crawl records its outcome from inside its own job, so a process that dies mid-run leaves
-    /// the row Running for ever: the page goes on reporting a crawl in progress, and the endpoint's
-    /// active-run index refuses every later request. The sweep is what closes it, and it must not
-    /// close a run that is merely slow.
-    /// </summary>
     private static async Task VerifyAbandonedRunsAreRetiredAsync(
         string connectionString,
         Guid endpointId)
@@ -179,8 +154,6 @@ internal static class CrawlSchemaAssertions
         await using var services = new ServiceCollection().AddLogging()
             .AddInfrastructure(configuration).BuildServiceProvider();
 
-        // Well past MaxDuration plus the sweep's margin, so the run is abandoned by any reading of
-        // the clock rather than by a boundary this test would have to keep in step with.
         var abandoned = await InsertRunningRunAsync(connectionString, endpointId, TimeSpan.FromHours(6));
         await RetireAbandonedRunsAsync(services);
         var retired = await ReadRunAsync(connectionString, abandoned);
@@ -193,8 +166,6 @@ internal static class CrawlSchemaAssertions
         retired.FailureReason.Should().NotBeNullOrWhiteSpace(
             "the reader is owed why the run was closed without an outcome of its own");
 
-        // Only possible because the row above is no longer Running: ux_crawl_run_active permits one
-        // active run per endpoint, which is precisely what an abandoned run holds hostage.
         var live = await InsertRunningRunAsync(connectionString, endpointId, TimeSpan.Zero);
         await RetireAbandonedRunsAsync(services);
         (await ReadRunAsync(connectionString, live)).Status.Should().Be(CrawlRunStatuses.Running,
@@ -254,10 +225,6 @@ internal static class CrawlSchemaAssertions
             "is_internal", "depth", "duration_ms", "recorded_at");
     }
 
-    /// <summary>
-    /// BR-L10 in the database. A cancelled run can never be stored as complete, whatever a future
-    /// caller does — a partial crawl reported as a clean completed run is worse than no crawl.
-    /// </summary>
     private static async Task VerifyRunStatusContractAsync(string connectionString, Guid endpointId)
     {
         await RunInsertRejectedAsync(connectionString, endpointId,
@@ -270,8 +237,6 @@ internal static class CrawlSchemaAssertions
             "Finished", CrawlStopReasons.FrontierExhausted,
             "ck_crawl_run_status");
 
-        // A terminal run carries a finish time and a running one does not, so an interrupted
-        // process cannot leave a run that reads as ended.
         await RunInsertRejectedAsync(connectionString, endpointId,
             CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
             "ck_crawl_run_finished_when_terminal", finished: false);
@@ -287,11 +252,6 @@ internal static class CrawlSchemaAssertions
             "ck_crawl_run_override", overrideGranted: false, refusedBecause: null);
     }
 
-    /// <summary>
-    /// BR-L07. One result per source-target pair per run, enforced by the index rather than by the
-    /// writer. The seed case is the one worth spelling out: its source is null, and a default
-    /// unique index treats every null as distinct, which would let one seed be stored repeatedly.
-    /// </summary>
     private static async Task VerifySourceTargetUniquenessAsync(string connectionString, Guid endpointId)
     {
         var runId = await InsertRunAsync(connectionString, endpointId);
@@ -302,8 +262,6 @@ internal static class CrawlSchemaAssertions
         duplicate.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
         duplicate.ConstraintName.Should().Be("ux_crawl_link_result_pair");
 
-        // A different source pointing at the same target is a different pair and is allowed: that
-        // is what makes "which pages contain this broken link" answerable.
         await InsertLinkAsync(connectionString, runId, "https://pairs.test/b", "https://pairs.test/gone");
 
         await InsertLinkAsync(connectionString, runId, null, "https://pairs.test/");
@@ -312,18 +270,10 @@ internal static class CrawlSchemaAssertions
         duplicateSeed.ConstraintName.Should().Be("ux_crawl_link_result_pair",
             "NULLS NOT DISTINCT is what stops one seed being stored twice");
 
-        // The same pair in a different run is a different row: runs are compared, not merged.
         var otherRun = await InsertRunAsync(connectionString, endpointId);
         await InsertLinkAsync(connectionString, otherRun, "https://pairs.test/a", "https://pairs.test/gone");
     }
 
-    /// <summary>
-    /// At most one crawl in flight per endpoint, enforced by <c>ux_crawl_run_active</c> rather
-    /// than by the read that precedes the insert. Two people pressing Run crawl at the same moment
-    /// both see no active run, and a crawl is the one operation here that fetches a whole site
-    /// this application does not own — doing that twice at once is what the limits in this phase
-    /// exist to prevent.
-    /// </summary>
     private static async Task VerifyOneActiveRunPerEndpointAsync(string connectionString, Guid endpointId)
     {
         var first = await InsertRunningRunAsync(connectionString, endpointId);
@@ -333,17 +283,11 @@ internal static class CrawlSchemaAssertions
         second.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
         second.ConstraintName.Should().Be("ux_crawl_run_active");
 
-        // The index is partial: finished runs do not hold the slot, or an endpoint could be
-        // crawled exactly once and never again.
         await CloseRunAsync(connectionString, first);
         var third = await InsertRunningRunAsync(connectionString, endpointId);
         await CloseRunAsync(connectionString, third);
     }
 
-    /// <summary>
-    /// A result can never outlive the run that explains it, which is also what makes the Phase 7
-    /// retention rule expressible as "delete the run".
-    /// </summary>
     private static async Task VerifyResultsCascadeWithTheirRunAsync(string connectionString, Guid endpointId)
     {
         var runId = await InsertRunAsync(connectionString, endpointId);
@@ -364,19 +308,10 @@ internal static class CrawlSchemaAssertions
         (await count.ExecuteScalarAsync()).Should().Be(0L);
     }
 
-    /// <summary>
-    /// The decision from docs/phase-6/Crawl_Schema_And_Comparison.md, verified rather than assumed:
-    /// the broken-link filter is served by <c>ix_crawl_link_result_run_classification</c> on the
-    /// result row, with no join back to <c>crawl_run</c>. Captured before the 6.8 views are written,
-    /// which is the whole point — Phase 5 lost time to finding this out afterwards.
-    /// </summary>
     private static async Task VerifyReportingIndexServesTheFilterAsync(
         string connectionString,
         Guid endpointId)
     {
-        // The run the plan is captured against is the one seeding just created. Re-deriving it from
-        // a stored seed string would make the assertion depend on how a fixture serialises itself,
-        // which is how it silently found no row at all.
         var runId = await SeedPlanEvidenceAsync(connectionString, endpointId);
 
         await using var connection = new NpgsqlConnection(connectionString);
@@ -400,7 +335,6 @@ internal static class CrawlSchemaAssertions
             $"a sequential scan here is the Phase 5 shape repeating. Plan was:\n{plan}");
     }
 
-    /// <summary>Seeds the plan fixture and returns the id of the last run it created.</summary>
     private static async Task<Guid> SeedPlanEvidenceAsync(string connectionString, Guid endpointId)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -411,8 +345,6 @@ internal static class CrawlSchemaAssertions
         {
             runId = await InsertRunAsync(connectionString, endpointId, seedPrefix: "https://plan.test");
 
-            // One statement per run rather than per row: this is fixture volume, and a round trip
-            // per row would add minutes to a gate that has to stay fast enough to be run.
             await using var command = new NpgsqlCommand(
                 """
                 INSERT INTO web_health.crawl_link_result
@@ -586,9 +518,6 @@ internal static class CrawlSchemaAssertions
         command.Parameters.AddWithValue("stop_reason", stopReason);
         command.Parameters.AddWithValue("granted", overrideGranted);
         command.Parameters.AddWithValue("refused", (object?)refusedBecause ?? DBNull.Value);
-        // finished_at has to come from the server clock like started_at does. A client timestamp is
-        // captured before the statement reaches the server, so it lands before now() and violates
-        // ck_crawl_run_finished_after_started as well, letting PostgreSQL report either constraint.
         command.Parameters.AddWithValue("finished", finished);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
@@ -596,10 +525,6 @@ internal static class CrawlSchemaAssertions
         exception.ConstraintName.Should().Be(expectedConstraint);
     }
 
-    /// <summary>
-    /// The sink and the reader against the real schema: results written per link survive the run
-    /// that wrote them (BR-L10), and two runs bucket into new, continuing and resolved.
-    /// </summary>
     public static async Task VerifyComparisonAsync(string connectionString, Guid endpointId)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -659,20 +584,12 @@ internal static class CrawlSchemaAssertions
         await VerifyRunStartIsReplayableAsync(services, endpointId);
     }
 
-    /// <summary>
-    /// The comparison counts every link but renders a bounded sample. Loading both runs in full to
-    /// subtract them in memory would make one page request an unbounded read; truncating the *set*
-    /// instead of the display would be worse, because a previous run cut short reports its missing
-    /// links as resolved.
-    /// </summary>
     private static async Task VerifyComparisonIsBoundedAsync(IServiceProvider services, Guid endpointId)
     {
         var oversize = CrawlReportReader.ComparisonSampleSize + 12;
         var previousRun = Guid.CreateVersion7();
         var currentRun = Guid.CreateVersion7();
 
-        // Every link is broken in the current run and healthy in the previous one, so they all land
-        // in a single bucket and the bound is what limits the response rather than the data.
         await WriteRunAsync(services, endpointId, previousRun, CrawlStopReasons.FrontierExhausted,
             [.. Enumerable.Range(0, oversize).Select(index =>
                 ("https://bulk.test/source", $"https://bulk.test/target-{index}",
@@ -693,12 +610,6 @@ internal static class CrawlSchemaAssertions
         comparison.New.HasMore.Should().BeTrue();
     }
 
-    /// <summary>
-    /// The reader scopes by visibility, not by the id it was handed. A viewer with no grants must
-    /// read another client's runs as absent — an endpoint id in a URL is a parameter, not a
-    /// permission, and the shell tests can only prove the route is reachable, not that the query
-    /// is scoped.
-    /// </summary>
     private static async Task VerifyRunsAreInvisibleWithoutAccessAsync(
         IServiceProvider services,
         Guid endpointId,
@@ -707,7 +618,6 @@ internal static class CrawlSchemaAssertions
         await using var scope = services.CreateAsyncScope();
         var reader = scope.ServiceProvider.GetRequiredService<ICrawlReportReader>();
 
-        // A viewer with no access grants at all: authenticated, entitled to nothing.
         var strangerAccess = new RegistryAccessContext(Guid.CreateVersion7(), [ApplicationRoles.Viewer]);
 
         (await reader.ListRunsAsync(endpointId, 10, strangerAccess)).Should().BeEmpty(
@@ -716,24 +626,15 @@ internal static class CrawlSchemaAssertions
         (await reader.ListBrokenLinksAsync(knownRunId, 100, strangerAccess)).Should().BeEmpty();
         (await reader.CompareLatestAsync(endpointId, strangerAccess)).CurrentRunId.Should().BeNull();
 
-        // The same reader with a real administrator still sees them, so the assertion above is
-        // about the scope rather than about an empty database.
         var administrator = await AdministratorAccessAsync(scope);
         (await reader.ListRunsAsync(endpointId, 10, administrator)).Should().NotBeEmpty();
         (await reader.FindRunAsync(knownRunId, administrator)).Should().NotBeNull();
     }
 
-    /// <summary>
-    /// A run that stopped on a budget covered part of the site, so every link it never reached
-    /// would look resolved. It must not become the current side of a comparison — the reason a
-    /// cancelled run is excluded applies just as much to a page limit.
-    /// </summary>
     private static async Task VerifyPartialRunIsNeverABaselineAsync(
         IServiceProvider services,
         Guid endpointId)
     {
-        // The full-scope run this stage asserts on is its own. Earlier stages write full-scope runs
-        // against the same endpoint, so the latest one is whichever stage ran last.
         var fullScopeRun = Guid.CreateVersion7();
         await WriteRunAsync(services, endpointId, fullScopeRun,
             ("https://partial.test/a", "https://partial.test/gone", CrawlLinkClassifications.Broken));
@@ -749,13 +650,6 @@ internal static class CrawlSchemaAssertions
             "a page-limited run must not displace the last full-scope run as the current side");
     }
 
-    /// <summary>
-    /// A crawl refused at every door drains its frontier without fetching a page, so the stop
-    /// reason alone cannot tell it apart from a real sweep. Observed against a site whose
-    /// robots.txt disallowed the whole origin: the run completed, counted as full scope, became the
-    /// baseline, and reported all 33 previously broken links as resolved on the strength of a crawl
-    /// that examined nothing.
-    /// </summary>
     private static async Task VerifyRunThatFetchedNothingIsNeverABaselineAsync(
         IServiceProvider services,
         Guid endpointId)
@@ -772,14 +666,11 @@ internal static class CrawlSchemaAssertions
                 refusedRun, endpointId, ["https://blocked.test/"],
                 new([], [], "Canonicalize", 1000, 5, false), DateTimeOffset.UtcNow));
 
-            // The seed itself was refused, which is the only row such a run writes: no status
-            // code, because no request was ever made.
             await sink.RecordLinkAsync(new(
                 refusedRun, null, "https://blocked.test/", true, 0,
                 CrawlLinkClassifications.Skipped, null, 0, null,
                 CrawlSkipReasons.RobotsDisallowed, null));
 
-            // Zero pages fetched against one link recorded — the shape that reproduced the defect.
             await FinishRunAsync(sink, refusedRun, new(
                 refusedRun, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
                 0, 1, false, CrawlOverrideRefusals.NotRequested, []));
@@ -801,13 +692,6 @@ internal static class CrawlSchemaAssertions
             "a link is only resolved when a crawl re-checked it, not when a crawl was refused");
     }
 
-    /// <summary>
-    /// A run that fetched pages, drained its frontier, and still could not read part of the site.
-    /// Every other test of a baseline passes it: the status is Completed, the stop reason is
-    /// FrontierExhausted, and the page count is not zero. Only the coverage flag separates it from
-    /// a crawl that actually swept the site, and the links the unreadable pages carry are simply
-    /// absent from it -- which is what the comparison reads as resolved.
-    /// </summary>
     private static async Task VerifyCoverageLimitedRunIsNeverABaselineAsync(
         IServiceProvider services,
         Guid endpointId)
@@ -824,8 +708,6 @@ internal static class CrawlSchemaAssertions
                 limitedRun, endpointId, ["https://partial.test/"],
                 new([], [], "Canonicalize", 1000, 5, false), DateTimeOffset.UtcNow));
 
-            // A page it did read, linking to something healthy. The broken pair above is missing
-            // from this run because the page carrying it was one of the ones it could not read.
             await sink.RecordLinkAsync(new(
                 limitedRun, "https://partial.test/a", "https://partial.test/ok", true, 1,
                 CrawlLinkClassifications.Healthy, 200, 0, null, null, 8));
@@ -856,10 +738,6 @@ internal static class CrawlSchemaAssertions
             + "that it was fixed");
     }
 
-    /// <summary>
-    /// A previously broken link that timed out this time has not been shown to work. Reporting it
-    /// as resolved would close a finding on evidence the crawl never gathered.
-    /// </summary>
     private static async Task VerifyUncheckedLinkIsNotReportedResolvedAsync(
         IServiceProvider services,
         Guid endpointId)
@@ -881,7 +759,6 @@ internal static class CrawlSchemaAssertions
             .Contain("https://cmp.test/slow");
     }
 
-    /// <summary>Replaying a run start is a no-op, matching how link writes tolerate replay.</summary>
     private static async Task VerifyRedactedUrlsUseHashesForComparisonAsync(
         IServiceProvider services,
         Guid endpointId)
@@ -964,11 +841,6 @@ internal static class CrawlSchemaAssertions
             "a replayed start must not fail the one operation that cannot be retried");
     }
 
-    /// <summary>
-    /// The reader scopes every read to what the requester may see, so these assertions need a real
-    /// access context rather than an id alone. The bootstrap administrator has global visibility,
-    /// which keeps this stage about the schema; the per-role checks live in the shell tests.
-    /// </summary>
     private static async Task<RegistryAccessContext> AdministratorAccessAsync(AsyncServiceScope scope)
     {
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -1023,11 +895,6 @@ internal static class CrawlSchemaAssertions
             links.Length, links.Length, false, CrawlOverrideRefusals.NotRequested, []));
     }
 
-    /// <summary>
-    /// Claims the run and finishes it, the way an execution does. A test that wrote an outcome
-    /// without claiming would be exercising a path the application does not have: the finish is
-    /// conditional on ownership, so an unclaimed write is dropped.
-    /// </summary>
     private static async Task FinishRunAsync(
         ICrawlResultSink sink,
         Guid runId,

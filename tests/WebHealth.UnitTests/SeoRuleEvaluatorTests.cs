@@ -6,10 +6,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-E02, BR-E03, BR-E04, BR-E05 and BR-E09, as written down in
-/// docs/phase-6/SEO_Canonical_And_Indexing_Policy.md.
-/// </summary>
 public sealed class SeoRuleEvaluatorTests
 {
     private const string Host = "example.test";
@@ -65,7 +61,6 @@ public sealed class SeoRuleEvaluatorTests
         RuleKeys(Applicable(titleCount: 2), Policy())
             .Should().Contain(SeoRules.TitleDuplicate).And.NotContain(SeoRules.TitleMissing);
 
-        // A page with two title elements, the first empty, is both missing and duplicated.
         RuleKeys(Applicable(title: null, titleCount: 2), Policy())
             .Should().Contain([SeoRules.TitleMissing, SeoRules.TitleDuplicate]);
     }

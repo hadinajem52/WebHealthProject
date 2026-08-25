@@ -2,58 +2,183 @@
 @{
     ViewData.SetTitle(Model.Website.Name);
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), Breadcrumbs.Websites(Url), new BreadcrumbItem(Model.Website.Name));
+
+    var website = Model.Website;
+    var websiteTone = website.IsDeleted ? StatusBadges.Danger
+        : website.IsEnabled ? StatusBadges.Success
+        : StatusBadges.Warning;
+    var websiteState = website.IsDeleted ? "Archived"
+        : website.IsEnabled ? "Enabled"
+        : "Disabled";
 }
-<div id="ajax-page" data-ajax-region>
-<section class="card">
-    <div class="page-intro">
-        <div><h2 class="card__title">@Model.Website.Name</h2><p class="card__subtitle">@Model.Website.ClientName · Version @Model.Website.Version</p></div>
-        <div class="form-actions">
-            @if (!Model.Website.IsDeleted){<a class="button button--secondary" asp-controller="Targets" asp-action="Environments" asp-route-websiteId="@Model.Website.Id">Environments</a>}
-            @if (Model.CanManage && !Model.Website.IsDeleted)
-            {
-                <a class="button button--primary" asp-action="EditWebsite" asp-route-id="@Model.Website.Id">
-                    @await Html.PartialAsync("_Icon", "pencil")
-                    <span>Edit website</span>
-                </a>
-            }
-        </div>
-    </div>
-    <dl class="registry-facts">
-        <div><dt>Status</dt><dd><span class="badge" data-status="@(Model.Website.IsDeleted ? "danger" : Model.Website.IsEnabled ? "success" : "warning")">@(Model.Website.IsDeleted ? "Deleted" : Model.Website.IsEnabled ? "Enabled" : "Disabled")</span></dd></div>
-        <div><dt>Owner</dt><dd>@Model.Website.OwnerName</dd></div>
-        <div><dt>Technology / CMS</dt><dd>@(Model.Website.TechnologyCms ?? "Not set")</dd></div>
-        <div><dt>Active environments</dt><dd>@Model.Website.ActiveEnvironmentCount</dd></div>
-        <div>
-            <dt>Tags</dt>
-            <dd>
-                @if (Model.Website.Tags.Count == 0)
-                {
-                    <span>None</span>
-                }
-                else
-                {
-                    <span class="tag-list tag-list--compact">@foreach (var tag in Model.Website.Tags){<span class="tag">@tag</span>}</span>
-                }
-            </dd>
-        </div>
-    </dl>
-    @if (Model.CanManage)
-    {
-        <div class="registry-lifecycle">
-            <div class="registry-lifecycle__summary">
-                <strong>Lifecycle controls</strong>
-                <span>@(Model.Website.IsDeleted ? "Restore returns this website in a disabled state." : "Archiving is a soft delete: history and audit evidence are retained.")</span>
+
+<div id="ajax-page" class="stack" data-ajax-region>
+    <section class="card" aria-labelledby="website-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="website-heading">@website.Name</h2>
+                <p class="card__status" data-status="@websiteTone">
+                    @await Html.PartialAsync("_Icon", StatusBadges.Icon(websiteTone))
+                    <span>Website &middot; @websiteState</span>
+                </p>
             </div>
-            @if (Model.Website.IsDeleted)
-            {
-                <form asp-action="RestoreWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--primary" type="submit">Restore website</button></form>
-            }
-            else
-            {
-                @if (Model.Website.IsEnabled){<form asp-action="DisableWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--secondary" type="submit">Disable website</button></form>}
-                <form asp-action="DeleteWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page"><input type="hidden" name="id" value="@Model.Website.Id" /><input type="hidden" name="version" value="@Model.Website.Version" /><button class="button button--danger" type="submit">Archive website</button></form>
-            }
+
+            <div class="form-actions">
+                @if (!website.IsDeleted)
+                {
+                    <a class="button button--secondary"
+                       asp-controller="Targets"
+                       asp-action="Environments"
+                       asp-route-websiteId="@website.Id">
+                        @await Html.PartialAsync("_Icon", "building")
+                        <span>Environments</span>
+                    </a>
+                }
+
+                @if (Model.CanManage && !website.IsDeleted)
+                {
+                    <a class="button button--primary" asp-action="EditWebsite" asp-route-id="@website.Id">
+                        @await Html.PartialAsync("_Icon", "pencil")
+                        <span>Edit website</span>
+                    </a>
+                }
+
+                
+                @if (Model.CanManage)
+                {
+                    <div class="action-menu" data-shell-menu data-open="false">
+                        <button type="button"
+                                class="button button--secondary"
+                                data-shell-menu-toggle
+                                aria-controls="website-actions-menu"
+                                aria-expanded="false"
+                                aria-haspopup="true">
+                            @await Html.PartialAsync("_Icon", "settings")
+                            <span>Actions</span>
+                            <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        </button>
+
+                        <div class="action-menu__panel" id="website-actions-menu" data-shell-menu-panel>
+                            @if (website.IsDeleted)
+                            {
+                                <form asp-action="RestoreWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                    <input type="hidden" name="id" value="@website.Id" />
+                                    <input type="hidden" name="version" value="@website.Version" />
+                                    <button class="action-menu__item" type="submit"
+                                            title="Restore returns this website in a disabled state.">
+                                        @await Html.PartialAsync("_Icon", "restore")
+                                        <span>Restore website</span>
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                @if (website.IsEnabled)
+                                {
+                                    <form asp-action="DisableWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                        <input type="hidden" name="id" value="@website.Id" />
+                                        <input type="hidden" name="version" value="@website.Version" />
+                                        <button class="action-menu__item" type="submit">
+                                            @await Html.PartialAsync("_Icon", "power")
+                                            <span>Disable website</span>
+                                        </button>
+                                    </form>
+                                }
+
+                                <hr class="action-menu__separator" />
+                                <form asp-action="DeleteWebsite" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                                    <input type="hidden" name="id" value="@website.Id" />
+                                    <input type="hidden" name="version" value="@website.Version" />
+                                    <button class="action-menu__item action-menu__item--danger" type="submit"
+                                            title="Archiving is a soft delete: history and audit evidence are retained.">
+                                        @await Html.PartialAsync("_Icon", "archive")
+                                        <span>Archive website</span>
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
         </div>
-    }
-</section>
+
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
+            </div>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "building")</span>
+                            <span>Client</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <a asp-action="Client" asp-route-id="@website.ClientId">@website.ClientName</a>
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "person")</span>
+                            <span>Owner</span>
+                        </span>
+                        <span class="detail-list__value">@website.OwnerName</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "settings")</span>
+                            <span>Technology / CMS</span>
+                        </span>
+                        <span class="detail-list__value">@(website.TechnologyCms ?? "Not set")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                            <span>Active environments</span>
+                        </span>
+                        <span class="detail-list__value">@website.ActiveEnvironmentCount</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "filter")</span>
+                            <span>Tags</span>
+                        </span>
+                        <span class="detail-list__value">
+                            @if (website.Tags.Count == 0)
+                            {
+                                <span>None</span>
+                            }
+                            else
+                            {
+                                <span class="tag-list tag-list--compact">
+                                    @foreach (var tag in website.Tags)
+                                    {
+                                        <span class="tag">@tag</span>
+                                    }
+                                </span>
+                            }
+                        </span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "key")</span>
+                            <span>Version</span>
+                        </span>
+                        <span class="detail-list__value">@website.Version</span>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
 </div>

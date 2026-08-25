@@ -151,8 +151,6 @@ internal sealed class IncidentReader(
                 delivery.NormalizedRecipient, delivery.State, delivery.AttemptCount, delivery.SentAt)).ToArray()))
             .ToArray();
 
-        // Mirrors IncidentLifecycleService.CanManageAsync exactly — that method is the actual
-        // authorization authority for every mutation; this copy only drives what the UI shows.
         var canManage = RegistryVisibility.CanManage(access)
             || (access.Roles.Contains(ApplicationRoles.DeveloperSupport)
                 && await assignmentAccess.IsAssignedAsync(access.UserId, incident.OwnerSubjectId, now, cancellationToken));

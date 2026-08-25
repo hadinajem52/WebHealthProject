@@ -15,9 +15,6 @@ internal sealed class SeoObservationConfiguration : IEntityTypeConfiguration<Seo
                 "ck_seo_observation_applicability",
                 "applicability IN ('Applicable', 'NotApplicable')");
 
-            // The applicability contract lives in the database, not only in the extractor: a
-            // NotApplicable row records why and carries no values, and an Applicable row carries
-            // no reason. Neither shape can be written by mistake.
             table.HasCheckConstraint(
                 "ck_seo_observation_applicability_fields",
                 "(applicability = 'Applicable' AND not_applicable_reason IS NULL) "
@@ -35,8 +32,6 @@ internal sealed class SeoObservationConfiguration : IEntityTypeConfiguration<Seo
                 "title_count >= 0 AND meta_description_count >= 0 AND canonical_count >= 0 "
                 + "AND robots_meta_count >= 0");
 
-            // Lengths are the observed, untruncated lengths, so a stored value that was cut short
-            // never misreports how long the real one was — but it can never be shorter either.
             table.HasCheckConstraint(
                 "ck_seo_observation_lengths",
                 "title_length >= COALESCE(length(title), 0) "
@@ -56,13 +51,9 @@ internal sealed class SeoObservationConfiguration : IEntityTypeConfiguration<Seo
         builder.Property(observation => observation.PolicyExpectedHost).HasMaxLength(253);
         builder.Property(observation => observation.PolicyIndexingExpectation).HasMaxLength(20);
 
-        // Reporting filters SEO history by monitor and measurement window, so both predicates are
-        // served from this row rather than through a join to logical_check (the Phase 5 lesson).
         builder.HasIndex(observation => new { observation.EndpointMonitorId, observation.ObservedAt })
             .IsDescending(false, true);
 
-        // The composite key stops an observation from claiming a logical check that belongs to one
-        // monitor while pointing at another.
         builder.HasOne(observation => observation.LogicalCheck).WithOne()
             .HasForeignKey<SeoObservation>(observation =>
                 new { observation.LogicalCheckId, observation.EndpointMonitorId })

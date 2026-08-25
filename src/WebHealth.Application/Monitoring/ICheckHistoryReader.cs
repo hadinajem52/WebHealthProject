@@ -21,10 +21,6 @@ public interface ICheckHistoryReader
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Check history with BR-P05 comparability assessed over the results actually shown, so the
-/// warning appears on exactly the pages where the mixture exists.
-/// </summary>
 public sealed record CheckHistoryPage(
     Guid EndpointId,
     string EndpointDisplayUrl,

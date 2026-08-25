@@ -5,11 +5,6 @@ using WebHealth.Domain.Monitoring;
 
 namespace WebHealth.Web.Shell;
 
-/// <summary>
-/// Maps the vocabularies the views display onto the badge styles the stylesheet defines.
-/// It exists so the three severity bands (BR-C04) read the same way on every page — a rule the
-/// views were previously each free to get slightly wrong on their own.
-/// </summary>
 public static class StatusBadges
 {
     public const string Success = "success";
@@ -19,17 +14,8 @@ public static class StatusBadges
     public const string Acknowledged = "acknowledged";
     public const string Info = "info";
 
-    /// <summary>
-    /// Neither a verdict nor information: the state of something that is switched off or has
-    /// not reported. Figma node 1633:352 draws Disabled and Unknown in one grey for that reason.
-    /// </summary>
     public const string Neutral = "neutral";
 
-    /// <summary>
-    /// The glyph for a tier. Success, warning and danger get three visually distinct shapes;
-    /// anything unrecognised falls back to the neutral information mark rather than to no glyph
-    /// at all, so a state is never colour-only by accident.
-    /// </summary>
     public static string Icon(string status) => status switch
     {
         Success => "success",
@@ -45,11 +31,6 @@ public static class StatusBadges
         _ => Warning
     };
 
-    /// <summary>
-    /// The badge style for a confirmed endpoint health state. <c>Unknown</c> and
-    /// <c>Disabled</c> are neutral rather than a warning: an endpoint that has not reported yet,
-    /// or that nothing is checking, is not a problem.
-    /// </summary>
     public static string ForHealthStatus(string? status) => status switch
     {
         EndpointHealthStatuses.Healthy => Success,
@@ -58,16 +39,6 @@ public static class StatusBadges
         _ => Neutral
     };
 
-    /// <summary>
-    /// The badge style for an incident's lifecycle status. Acknowledged carries its own fill
-    /// (Figma node 1633:352) rather than sharing Open's: someone has picked the incident up,
-    /// which is not the same as nobody having looked at it yet.
-    /// </summary>
-    /// <remarks>
-    /// It lives here rather than in the incident views because the list and the detail page were
-    /// each carrying their own copy of the same switch, and a status added to one of them would
-    /// have been styled differently on the other.
-    /// </remarks>
     public static string ForIncidentStatus(string? status) => status switch
     {
         IncidentStatuses.Open => Danger,
@@ -91,10 +62,6 @@ public static class StatusBadges
         _ => Success
     };
 
-    /// <summary>
-    /// The label for an expiry band, phrased as what it means rather than as its enum name:
-    /// a certificate outside every band is simply valid, not "None".
-    /// </summary>
     public static string DescribeExpirySeverity(CertificateExpirySeverity severity) => severity switch
     {
         CertificateExpirySeverity.Critical => "Expiring — critical",

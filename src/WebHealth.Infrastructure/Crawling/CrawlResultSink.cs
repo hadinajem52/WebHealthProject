@@ -15,16 +15,6 @@ internal sealed class CrawlResultSink(
 {
     private const int LinkBatchSize = 250;
 
-    /// <summary>
-    /// Opens the run. Replaying the same run id is a controlled no-op rather than a primary-key
-    /// failure: link writes already tolerate duplicate delivery, and a start that threw on replay
-    /// would make the one operation that cannot be retried the first one in the sequence.
-    /// <para>
-    /// A replay carrying a different endpoint is refused. That is not a retry of this run, it is a
-    /// different crawl reusing an id, and accepting it would attach one crawl's results to another
-    /// crawl's target.
-    /// </para>
-    /// </summary>
     public async Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(start);
@@ -42,9 +32,6 @@ internal sealed class CrawlResultSink(
             return;
         }
 
-        // The run opens as Running with no finish time, so a process that dies mid-crawl leaves a
-        // visibly unfinished run rather than one that reads as complete. `stop_reason` has no null
-        // state, so an in-flight run carries the reason it would stop with if the frontier drained.
         dbContext.CrawlRuns.Add(new CrawlRun
         {
             Id = start.RunId,
@@ -73,23 +60,9 @@ internal sealed class CrawlResultSink(
         }
         catch (DbUpdateException exception) when (IsViolationOf(exception, "pk_crawl_run"))
         {
-            // Two callers opening the same run id at once: the row that won is the same row.
-            //
-            // Matched by constraint name rather than by "any unique violation". crawl_run also
-            // carries ux_crawl_run_active, which says this endpoint already has a crawl in
-            // flight -- a different fact entirely, and one the caller must see. Swallowing it
-            // here would report a run as opened that was never inserted, and the caller would
-            // enqueue a job against a row that does not exist.
         }
     }
 
-    /// <summary>
-    /// One UPDATE, so two deliveries of the same job cannot both read "unclaimed" and both crawl.
-    /// The claim is never taken from a run that already carries one: this is a claim rather than a
-    /// lease because a crawl has no legitimate second attempt -- re-running it would repeat every
-    /// request against a site we do not own, which is exactly what this phase's limits prevent.
-    /// The reconciliation sweep is what releases the endpoint, by closing the row.
-    /// </summary>
     public async Task<bool> TryClaimRunAsync(
         Guid runId,
         Guid executionClaimId,
@@ -106,7 +79,6 @@ internal sealed class CrawlResultSink(
         return claimed == 1;
     }
 
-    /// <summary>An empty scope list means "derived from the seeds", which is stored as null.</summary>
     private static string? Scope(IReadOnlyList<string> values) =>
         values.Count == 0
             ? null
@@ -199,12 +171,6 @@ internal sealed class CrawlResultSink(
         return await batch.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// Written as one conditional UPDATE rather than read-modify-save. The condition is the whole
-    /// point: a run this execution no longer owns, or one the reconciliation sweep has already
-    /// closed, must not be reopened as Completed by a worker that took longer than the sweep was
-    /// willing to wait.
-    /// </summary>
     public async Task<bool> RecordRunOutcomeAsync(
         CrawlRunOutcome outcome,
         Guid executionClaimId,
@@ -243,18 +209,11 @@ internal sealed class CrawlResultSink(
         return written == 1;
     }
 
-    /// <summary>SHA-256 of the canonical URL: identity, where the text beside it is evidence.</summary>
     public static byte[] Hash(string url) => SHA256.HashData(Encoding.UTF8.GetBytes(url));
 
     private static string? Bounded(string? value, int maxLength) =>
         value is null || value.Length <= maxLength ? value : value[..maxLength];
 
-    /// <summary>
-    /// A unique violation of one named constraint. The name is the whole point: this class writes
-    /// to two tables carrying three unique indexes between them, and each says something
-    /// different. Matching on the SQL state alone made every one of them look like a harmless
-    /// replay.
-    /// </summary>
     private static bool IsViolationOf(DbUpdateException exception, string constraintName) =>
         exception.InnerException is PostgresException
         {

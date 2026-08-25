@@ -1,9 +1,5 @@
-﻿namespace WebHealth.Domain.PageAudits;
+namespace WebHealth.Domain.PageAudits;
 
-/// <summary>
-/// Who ran the audit. Stored on every run so history stays interpretable after the target's
-/// configuration changes, and so a later provider can be introduced without rewriting old rows.
-/// </summary>
 public static class PageAuditProviders
 {
     public const string PageSpeedInsights = "PageSpeedInsights";
@@ -101,27 +97,13 @@ public static class PageAuditStrategies
     public const string MobileParameter = "mobile";
     public const string DesktopParameter = "desktop";
 
-    /// <summary>
-    /// Every form factor an endpoint is audited on. Google scores the same page differently on
-    /// each, so both are asked for and both are kept: a mobile score alone answers half the
-    /// question, and a reader comparing the two needs them measured the same day.
-    /// </summary>
     public static readonly string[] All = [Mobile, Desktop];
 
     public static bool IsSupported(string value) => value is Mobile or Desktop;
 
-    /// <summary>
-    /// The strategy a request asked to read, defaulting to mobile. The value arrives in a query
-    /// string, so an unrecognised one is a wrong address rather than an error worth a page: mobile
-    /// is what the feature has always recorded, and is what Google itself reports first.
-    /// </summary>
     public static string Normalize(string? value) =>
         string.Equals(value, Desktop, StringComparison.OrdinalIgnoreCase) ? Desktop : Mobile;
 
-    /// <summary>
-    /// The query value for a stored strategy. Always sent explicitly: the API's own default is
-    /// desktop, so omitting it would silently audit a different form factor than the one recorded.
-    /// </summary>
     public static string ToParameter(string strategy) => strategy switch
     {
         Mobile => MobileParameter,
@@ -130,7 +112,6 @@ public static class PageAuditStrategies
     };
 }
 
-/// <summary>Whether a run was asked for by the scheduler or by a person.</summary>
 public static class PageAuditSources
 {
     public const string Scheduled = "Scheduled";
@@ -139,10 +120,6 @@ public static class PageAuditSources
     public static bool IsSupported(string value) => value is Scheduled or Manual;
 }
 
-/// <summary>
-/// A run's lifecycle. <c>Completed</c> and <c>CompletedWithWarnings</c> are both successes: a run
-/// that produced a trustworthy score is complete even when every audit inside it failed.
-/// </summary>
 public static class PageAuditRunStatuses
 {
     public const string Queued = "Queued";
@@ -155,49 +132,31 @@ public static class PageAuditRunStatuses
     public static bool IsSupported(string value) =>
         value is Queued or Running or Completed or CompletedWithWarnings or Failed or Cancelled;
 
-    /// <summary>A run that will never change again. Only these carry a finish time.</summary>
     public static bool IsTerminal(string value) =>
         value is Completed or CompletedWithWarnings or Failed or Cancelled;
 
-    /// <summary>A run that has been asked for and not yet resolved. At most one per target.</summary>
     public static bool IsActive(string value) => value is Queued or Running;
 
-    /// <summary>The two statuses that carry a score worth reading.</summary>
     public static bool IsScored(string value) => value is Completed or CompletedWithWarnings;
 }
 
-/// <summary>
-/// What one Lighthouse audit says, reduced to the distinctions this feature acts on. Manual and
-/// not-applicable are separate statuses rather than absences: "a person still has to check this"
-/// and "this page passed" must never be shown as the same thing, and neither is a failure.
-/// </summary>
 public static class PageAuditItemStatuses
 {
     public const string Passed = "Passed";
     public const string Failed = "Failed";
 
-    /// <summary>
-    /// A numeric audit. Deliberately not split into pass/fail: Lighthouse publishes no threshold
-    /// for these, so inventing one would attribute a judgement to the provider it never made.
-    /// </summary>
     public const string Scored = "Scored";
 
     public const string Manual = "Manual";
     public const string NotApplicable = "NotApplicable";
     public const string Informative = "Informative";
 
-    /// <summary>The audit itself could not run. Not a failure of the page.</summary>
     public const string Error = "Error";
 
     public static bool IsSupported(string value) =>
         value is Passed or Failed or Scored or Manual or NotApplicable or Informative or Error;
 }
 
-/// <summary>
-/// Whether two runs may be read as a like-for-like change. A Lighthouse major version can add,
-/// remove or redefine audits, so a delta across one is a different kind of number and is labelled
-/// rather than silently presented as a regression.
-/// </summary>
 public static class PageAuditComparability
 {
     public const string Comparable = "Comparable";
@@ -206,10 +165,6 @@ public static class PageAuditComparability
     public static bool IsSupported(string value) => value is Comparable or LighthouseVersionChanged;
 }
 
-/// <summary>
-/// Why a run did not produce a score. Bounded on purpose: the provider's own error text is never
-/// stored verbatim, because it can carry the request URI and the request URI carries the API key.
-/// </summary>
 public static class PageAuditFailureCategories
 {
     public const string ProviderRateLimited = "ProviderRateLimited";
@@ -231,19 +186,11 @@ public static class PageAuditFailureCategories
             or LighthouseRuntimeError or ProviderContractInvalid or ProviderResponseTooLarge
             or ProviderResponseInvalid or Cancelled or UnknownProviderFailure;
 
-    /// <summary>
-    /// Failures worth another attempt inside the bounded retry budget. A rejected target or a
-    /// misconfigured key will fail identically every time, so retrying them only spends quota.
-    /// </summary>
     public static bool IsTransient(string value) =>
         value is ProviderRateLimited or ProviderUnavailable or ProviderTimeout
             or UnknownProviderFailure;
 }
 
-/// <summary>
-/// The provider's own <c>scoreDisplayMode</c> values. Named here so the mapping in
-/// <see cref="PageAuditNormalization" /> reads against constants rather than loose strings.
-/// </summary>
 public static class PageAuditScoreDisplayModes
 {
     public const string Binary = "binary";

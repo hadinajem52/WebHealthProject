@@ -5,9 +5,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// BR-E06, BR-E07 and BR-E08, as written down in docs/phase-6/Robots_And_Sitemap.md.
-/// </summary>
 public sealed class RobotsRuleEvaluatorTests
 {
     private const string Agent = "WebHealthMonitor/1.0";
@@ -139,10 +136,6 @@ public sealed class RobotsRuleEvaluatorTests
         finding.ObservedValue!.Length.Should().BeLessThanOrEqualTo(FindingValues.MaxLength);
     }
 
-    /// <summary>
-    /// The transport sends "WebHealthMonitor/1.0"; a group naming that agent must win over the
-    /// wildcard group, which it cannot if the evaluator invents its own shorter token.
-    /// </summary>
     [Fact]
     public void Evaluate_UsesTheConfiguredTransportUserAgentToSelectTheGroup()
     {

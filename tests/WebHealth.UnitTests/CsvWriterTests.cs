@@ -5,16 +5,11 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// The CSV contract: what a recipient's spreadsheet does with the file, and what it must not do.
-/// </summary>
 public sealed class CsvWriterTests
 {
     [Fact]
     public void TheFileStartsWithAUtf8ByteOrderMark()
     {
-        // Without it Excel opens a UTF-8 file as the local code page and mangles every
-        // non-ASCII name in it.
         var bytes = CsvWriter.Write(["Name"], [[CsvField.Text("Ünique")]]);
 
         bytes.Take(3).Should().Equal(0xEF, 0xBB, 0xBF);
@@ -45,8 +40,6 @@ public sealed class CsvWriterTests
     [Fact]
     public void AGuardedFieldThatAlsoNeedsQuotingGetsBoth()
     {
-        // The guard runs first and the quoting rule then sees the guarded value, so the
-        // apostrophe ends up inside the field's own quotes rather than outside them.
         var text = Decode(CsvWriter.Write(["A"], [[CsvField.Text("=a,b")]]));
 
         text.Should().Be("A\r\n\"'=a,b\"\r\n");
@@ -61,8 +54,6 @@ public sealed class CsvWriterTests
     [InlineData("\r=cmd")]
     public void UserTextBeginningWithAFormulaTriggerIsNeutralised(string value)
     {
-        // A spreadsheet evaluates such a cell instead of showing it. Tab and carriage return
-        // are included because Excel strips leading whitespace before deciding.
         var text = Decode(CsvWriter.Write(["A"], [[CsvField.Text(value)]]));
 
         text[3..].TrimStart('"').Should().StartWith("'");
@@ -71,8 +62,6 @@ public sealed class CsvWriterTests
     [Fact]
     public void MachineFormattedValuesAreNotGuarded()
     {
-        // A blanket guard would rewrite the ordinary value -1 as '-1 and corrupt every negative
-        // number in the file to defend against a risk generated numerals do not carry.
         var text = Decode(CsvWriter.Write(
             ["Number", "Count", "Token"],
             [[CsvField.Number(-1.5), CsvField.Count(-42), CsvField.Token("-Healthy")]]));
@@ -103,7 +92,6 @@ public sealed class CsvWriterTests
     [Fact]
     public void ARowWithTheWrongFieldCountIsRejected()
     {
-        // Silently padding or truncating would shift every later column against its header.
         var act = () => CsvWriter.Write(["A", "B"], [[CsvField.Token("only-one")]]);
 
         act.Should().Throw<ArgumentException>();

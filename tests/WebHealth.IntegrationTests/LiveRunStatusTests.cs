@@ -6,12 +6,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// The contract the browser poller reads. A page that shows work in progress declares the region
-/// to refresh and the address to refresh it from; when nothing is in progress it declares itself
-/// inactive so nothing polls. These are string attributes shared between Razor and JavaScript,
-/// with no compiler between them, so a rename that misses one side is silent without this.
-/// </summary>
 public sealed class LiveRunStatusTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
@@ -58,11 +52,6 @@ public sealed class LiveRunStatusTests(WebHealthWebApplicationFactory factory)
         html.Should().Contain("class=\"spinner\"");
     }
 
-    /// <summary>
-    /// The request the poller actually makes. It carries the AJAX header, so the response must be
-    /// the fragment both regions are read from and nothing else: a full document here would leave
-    /// the poller replacing regions with markup nested inside a second layout.
-    /// </summary>
     [Fact]
     public async Task CrawlHistory_PolledAsAFragment_CarriesBothReplacedRegions()
     {

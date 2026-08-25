@@ -49,11 +49,6 @@ public sealed class SafeHttpTransportTests
         request.Should().NotContain("Cookie:");
     }
 
-    /// <summary>
-    /// BR-L09. Every outbound request identifies the project *and* carries a way to reach it, so a
-    /// site owner seeing our traffic in their logs can act on it. Asserted on the wire rather than
-    /// on the options object, because a header composed correctly and never sent proves nothing.
-    /// </summary>
     [Fact]
     public async Task SendAsync_SendsTheConfiguredContactAlongsideTheUserAgent()
     {
@@ -373,9 +368,6 @@ public sealed class SafeHttpTransportTests
     [Fact]
     public async Task SendAsync_RecordsTheNegotiatedCertificateForAValidatedHttpsResponse()
     {
-        // The handler's own validation is left completely untouched. The test only tells it
-        // which root to trust, so the handshake below is a real, fully validated one: expiry,
-        // hostname and signature are all still checked by the platform.
         using var authority = TestCertificateAuthority.Create();
         using var serverCertificate = authority.IssueServerCertificate("allowed.test");
         await using var server = await HttpsFixture.Start(
@@ -736,11 +728,6 @@ public sealed class SafeHttpTransportTests
         }
     }
 
-    /// <summary>
-    /// A throwaway certificate authority for tests that need a genuinely valid handshake.
-    /// <see cref="Trust" /> adds the root to one handler's chain policy only; it never disables
-    /// or weakens validation, and no store on the machine is touched.
-    /// </summary>
     private sealed class TestCertificateAuthority : IDisposable
     {
         private readonly X509Certificate2 _authority;

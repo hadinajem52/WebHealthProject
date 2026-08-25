@@ -106,7 +106,6 @@ public sealed class HealthConfirmationEngineTests
     [Fact]
     public void ConfirmedWarningIssue_ConfirmsWarningRatherThanCritical()
     {
-        // BR-C04: an endpoint whose certificate expires in 30 days is still serving traffic.
         var first = Evaluate(
             EndpointHealthStatuses.Healthy, [], [Warning(ExpiryIssueKey)], false);
         var second = Evaluate(
@@ -120,7 +119,6 @@ public sealed class HealthConfirmationEngineTests
     [Fact]
     public void HighSeverityIssue_ConfirmsWarningStatus()
     {
-        // High is an escalation of urgency, not of unavailability, so it stops at Warning.
         var first = Evaluate(
             EndpointHealthStatuses.Healthy, [], [High(ExpiryIssueKey)], false);
         var second = Evaluate(
@@ -165,8 +163,6 @@ public sealed class HealthConfirmationEngineTests
     [Fact]
     public void SlowResponse_ConfirmsOnItsOwnCountWhileAvailabilityConfirmsOnTheMonitorCount()
     {
-        // BR-P03 against a monitor that confirms availability in two: the slow-response issue
-        // still needs three consecutive breaches, and the availability issue still needs two.
         var observed = new[] { Critical(IssueKey), SlowResponse() };
 
         var first = Evaluate(EndpointHealthStatuses.Healthy, [], observed, false);
@@ -181,8 +177,6 @@ public sealed class HealthConfirmationEngineTests
     [Fact]
     public void SlowResponse_ResetsOnASampleThatIsNotSlow()
     {
-        // BR-P03: two breaches, then a fast sample that still failed for another reason. The
-        // slow-response counter restarts; the availability counter does not.
         var slowAndFailing = new[] { Critical(IssueKey), SlowResponse() };
 
         var first = Evaluate(EndpointHealthStatuses.Healthy, [], slowAndFailing, false);
@@ -213,8 +207,6 @@ public sealed class HealthConfirmationEngineTests
     [Fact]
     public void AnIssueRecoversWhileAnotherIssueOnTheSameEndpointKeepsFailing()
     {
-        // The defect this guards: a page-size warning on every sample means the endpoint never
-        // produces a wholly healthy result, so an availability incident could never resolve.
         var current = new[]
         {
             new HealthIssueCounter(IssueKey, 2, 0),
@@ -253,8 +245,6 @@ public sealed class HealthConfirmationEngineTests
     [Fact]
     public void AHealthyEndpointDoesNotAccumulateRecoveryCredit()
     {
-        // Nothing is recovering from a Healthy endpoint, so a failing sample must not hand
-        // unrelated issues a head start toward resolution.
         var current = new[] { new HealthIssueCounter(IssueKey, 0, 0) };
 
         var decision = Evaluate(

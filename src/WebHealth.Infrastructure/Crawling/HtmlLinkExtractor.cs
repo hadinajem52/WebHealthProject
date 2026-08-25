@@ -9,19 +9,12 @@ internal sealed class HtmlLinkExtractor : IHtmlLinkExtractor
 {
     private static readonly HtmlParser Parser = new();
 
-    /// <summary>
-    /// A page with more anchors than this is a generated index. The frontier's caps would bound the
-    /// crawl anyway; this bounds the parse result itself so one hostile document cannot make the
-    /// worker allocate without limit.
-    /// </summary>
     private const int MaxHrefsPerPage = 5000;
 
     static HtmlLinkExtractor() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
     public CrawlDocumentLinks ExtractHrefs(ReadOnlyMemory<byte> body, string? contentType)
     {
-        // A response with no declared type is the one case that cannot be judged: it may be markup
-        // full of links or a binary with none, and either way its links were not enumerated.
         if (contentType is null) return CrawlDocumentLinks.NotInspected;
         if (!SeoExtractionRules.IsHtml(contentType) || body.Length == 0)
         {
@@ -38,16 +31,12 @@ internal sealed class HtmlLinkExtractor : IHtmlLinkExtractor
                 .ToArray();
             var baseHref = document.QuerySelector("base[href]")?.GetAttribute("href");
 
-            // One over the cap: the extra element is how a document that has more links than this
-            // reads is told apart from one that has exactly as many.
             return hrefs.Length > MaxHrefsPerPage
                 ? new(hrefs[..MaxHrefsPerPage]!, FullyInspected: false, baseHref)
                 : new(hrefs!, FullyInspected: true, baseHref);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            // A document is untrusted input. A parse that fails costs this page's links, never the
-            // run. The exception carries document text, so it is deliberately not logged.
             return CrawlDocumentLinks.NotInspected;
         }
     }

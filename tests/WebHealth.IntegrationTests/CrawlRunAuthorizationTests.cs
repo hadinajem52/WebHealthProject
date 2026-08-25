@@ -7,15 +7,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// Who may read the Broken links page and who may start a crawl, made against the real routes.
-/// Hiding the Run crawl button is a usability choice; only the request itself proves the server
-/// refuses.
-/// <para>
-/// This surface deserves the scrutiny: a crawl fetches a whole site this application does not own,
-/// and <c>CrawlController.RunNow</c> is the only trigger a crawl has anywhere in the system.
-/// </para>
-/// </summary>
 public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
@@ -41,10 +32,6 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
             "crawl results are a read surface for every persona that may read the registry");
     }
 
-    /// <summary>
-    /// Fetching a site page by page is active testing of that target, so it needs the same
-    /// permission a manual check needs. A Viewer may read every crawl and start none.
-    /// </summary>
     [Fact]
     public async Task RunNow_IsRefusedToAViewer()
     {
@@ -105,9 +92,6 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
         runner.Requested.Should().BeEmpty();
     }
 
-    /// <summary>
-    /// A crawl must not be startable by following a link, which is what a GET route would make it.
-    /// </summary>
     [Fact]
     public async Task RunNow_IsNotReachableByGet()
     {
@@ -122,11 +106,6 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
         runner.Requested.Should().BeEmpty();
     }
 
-    /// <summary>
-    /// With crawl scheduling off there is no worker serving the crawl queue. Offering the button
-    /// there would open a run nothing ever picks up, and that run would hold the endpoint's only
-    /// active-crawl slot until the staleness window expires.
-    /// </summary>
     [Fact]
     public async Task RunCrawlButton_IsHiddenWhenCrawlsCannotRunOnThisInstance()
     {
@@ -170,11 +149,6 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
         response.Headers.Location!.OriginalString.Should().StartWith("/Account/Login");
     }
 
-    /// <summary>
-    /// Posts with a valid anti-forgery token, taken from the page that hosts the form. Requesting
-    /// the page first is what a browser does, and it is the only way to obtain the pair of tokens
-    /// the framework validates.
-    /// </summary>
     private static async Task<HttpResponseMessage> PostRunNowAsync(
         HttpClient client,
         Guid endpointId,

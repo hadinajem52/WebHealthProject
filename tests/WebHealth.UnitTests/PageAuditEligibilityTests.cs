@@ -4,11 +4,6 @@ using Xunit;
 
 namespace WebHealth.UnitTests;
 
-/// <summary>
-/// The public-only rule. A wrong answer here is not a failed check but a disclosure: an internal
-/// URL handed to Google and loaded by their infrastructure. So the tests below are written around
-/// what the rule must refuse, not around what it may allow.
-/// </summary>
 public sealed class PageAuditEligibilityTests
 {
     private static PageAuditEligibilityResult Evaluate(string? url) =>
@@ -64,11 +59,6 @@ public sealed class PageAuditEligibilityTests
     public void Evaluate_RejectsASchemeTheProviderCannotAudit(string url) =>
         Evaluate(url).Reason.Should().Be(PageAuditIneligibilityReasons.SchemeNotSupported);
 
-    /// <summary>
-    /// A query is where a signed link, a reset token or a session identifier lives, and nothing
-    /// here can tell one of those from a locale switch. Refusing the whole class costs an endpoint
-    /// that cannot be audited; allowing it costs a secret handed to a third party who then loads it.
-    /// </summary>
     [Theory]
     [InlineData("https://example.com/reset?token=SECRET")]
     [InlineData("https://example.com/?lang=en")]

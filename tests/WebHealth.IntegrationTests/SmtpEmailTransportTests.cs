@@ -6,10 +6,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// Sends one real message through the configured SMTP account. Opt-in only: it needs live
-/// credentials and delivers to a real mailbox, so it never runs as part of the normal suite.
-/// </summary>
 public sealed class SmtpEmailTransportTests
 {
     [SmtpFact]

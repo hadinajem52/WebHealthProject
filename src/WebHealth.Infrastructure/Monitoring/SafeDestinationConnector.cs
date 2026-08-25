@@ -8,12 +8,6 @@ namespace WebHealth.Infrastructure.Monitoring;
 
 internal sealed class SafeDestinationException : HttpRequestException;
 
-/// <summary>
-/// The single implementation of "open a TCP connection to a monitored host safely": resolve,
-/// apply destination policy to every answer, connect, then verify the address actually
-/// connected to (BR-Q01, BR-Q02). Both the monitoring HTTP handler and the SSL certificate
-/// probe go through here, so neither can drift away from the enforced network policy.
-/// </summary>
 internal static class SafeDestinationConnector
 {
     public static async Task<Stream> ConnectAsync(

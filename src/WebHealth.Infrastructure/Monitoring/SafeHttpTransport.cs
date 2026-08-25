@@ -125,8 +125,6 @@ internal sealed class SafeHttpTransport(
                         request.MaxResponseBodyBytes,
                         timeout.Token);
 
-                    // A response only exists here because the handshake passed full
-                    // validation, so the negotiated certificate is trusted and matched.
                     var certificate = TlsCertificateReader.TryRead(
                         currentTls.CertificateDer,
                         hostnameMatched: true,
@@ -145,14 +143,9 @@ internal sealed class SafeHttpTransport(
                         requestIdentity,
                         BuildTiming(currentTiming, currentTtfbMs),
                         certificate,
-                        // BR-P04: what the response said it was sending, before decoding. A
-                        // negative or absurd advertised length is discarded rather than stored,
-                        // because the header is attacker-controlled input like any other.
                         response.Content.Headers.ContentLength is { } advertised and >= 0
                             ? advertised
                             : null,
-                        // BR-E01 needs the media type to decide whether this body may be parsed,
-                        // and the charset to decode it. Stored as declared, bounded, never trusted.
                         BoundedContentType(response.Content.Headers.ContentType?.ToString()),
                         RetryAfter(response.Headers.RetryAfter));
                 }
@@ -253,11 +246,6 @@ internal sealed class SafeHttpTransport(
         }
     }
 
-    /// <summary>
-    /// Only DNS/connect/TLS phases actually reached by the final network attempt are
-    /// populated; a phase the attempt never got to (or a hop that failed before any
-    /// attempt, e.g. an unauthorized redirect target) stays null instead of a misleading zero.
-    /// </summary>
     private static SafeHttpPhaseTiming? BuildTiming(SafeHttpTimingCollector? collector, int? ttfbMs) =>
         collector is null
             ? null

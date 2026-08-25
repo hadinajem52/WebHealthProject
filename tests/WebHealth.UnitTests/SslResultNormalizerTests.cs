@@ -29,7 +29,6 @@ public sealed class SslResultNormalizerTests
         TlsValidationCategory category,
         string expected)
     {
-        // BR-C03: each validation failure is critical and identifies its own cause.
         var result = Normalize(Observed(category));
 
         result.Outcome.Should().Be(HttpResultOutcomes.Critical);
@@ -43,9 +42,6 @@ public sealed class SslResultNormalizerTests
     [Fact]
     public void Normalize_ReportsAnExpiredCertificateOnTheSameIssueKeyItUsedWhileValid()
     {
-        // BR-C03 for the category, BR-C05/BR-C06 for the key. A certificate crossing its own
-        // expiry date has not become a second problem: splitting the key there would open a
-        // duplicate incident and leave the first one unrecognisable at renewal.
         var expiringSoon = Normalize(Observed(TlsValidationCategory.Valid, 3));
         var expired = Normalize(Observed(TlsValidationCategory.Expired, -1));
 
@@ -62,7 +58,6 @@ public sealed class SslResultNormalizerTests
     [Fact]
     public void IsSupersededExpiryIssueKey_RecognisesAnExpiredCertificatesIssueKey()
     {
-        // BR-C06: renewing an already-expired certificate must resolve its incident too.
         var issueKey = Normalize(Observed(TlsValidationCategory.Expired, -1)).Findings.Single().IssueKey;
 
         SslMonitorIdentity.IsSupersededExpiryIssueKey(issueKey, Fingerprint('b')).Should().BeTrue();
@@ -99,7 +94,6 @@ public sealed class SslResultNormalizerTests
     [Fact]
     public void Normalize_ReportsCallerCancellationWithoutRaisingAFinding()
     {
-        // A cancelled probe observed nothing; it must not open an incident.
         var result = Normalize(new(SslProbeFailureKind.Cancelled, null, TimeSpan.FromSeconds(1)));
 
         result.Outcome.Should().Be(HttpResultOutcomes.Cancelled);
@@ -128,8 +122,6 @@ public sealed class SslResultNormalizerTests
     [InlineData(0, FindingSeverities.Critical)]
     public void Normalize_RaisesTheExpiryBandForAValidCertificate(int daysAhead, string? expected)
     {
-        // AC-06 / BR-C04: both sides of all three boundaries, on the full normalizer rather
-        // than only on the domain function, so the wiring is pinned too.
         var result = Normalize(Observed(TlsValidationCategory.Valid, daysAhead));
 
         if (expected is null)
@@ -155,8 +147,6 @@ public sealed class SslResultNormalizerTests
         int daysAhead,
         string expectedOutcome)
     {
-        // High is an urgency band, not an availability state: a certificate with 15 days left
-        // still serves traffic, so the result outcome stays a warning.
         Normalize(Observed(TlsValidationCategory.Valid, daysAhead)).Outcome
             .Should().Be(expectedOutcome);
     }
@@ -164,8 +154,6 @@ public sealed class SslResultNormalizerTests
     [Fact]
     public void Normalize_KeysTheExpiryIssueByFingerprint()
     {
-        // BR-C05: repeated checks of one certificate produce one issue key, and a different
-        // certificate produces a different one.
         var first = Normalize(Observed(TlsValidationCategory.Valid, 10, Fingerprint('a')));
         var repeat = Normalize(Observed(TlsValidationCategory.Valid, 9, Fingerprint('a')));
         var renewed = Normalize(Observed(TlsValidationCategory.Valid, 10, Fingerprint('b')));
@@ -179,8 +167,6 @@ public sealed class SslResultNormalizerTests
     [Fact]
     public void Normalize_DoesNotStackAnExpiryBandOnACertificateThatIsInvalidForAnotherReason()
     {
-        // An untrusted certificate is already critical under BR-C03. Adding an expiry finding
-        // on top would track one certificate as two issues.
         var result = Normalize(Observed(TlsValidationCategory.Untrusted));
 
         result.Findings.Should().ContainSingle().Which.FailureCategory
@@ -192,7 +178,6 @@ public sealed class SslResultNormalizerTests
     [InlineData(false)]
     public void IsSupersededExpiryIssueKey_RecognisesOnlyExpiryKeysForOtherCertificates(bool renewed)
     {
-        // BR-C06. The renewal check must not sweep up a hostname-mismatch incident on the way.
         var issueKey = SslMonitorIdentity.CreateExpiryIssueKey(Fingerprint('a'));
         var observedFingerprint = renewed ? Fingerprint('b') : Fingerprint('a');
 
@@ -246,14 +231,12 @@ public sealed class CertificateExpiryTests
     [Fact]
     public void DaysRemaining_TruncatesRatherThanRounding()
     {
-        // 29 hours left is one whole day, not two.
         CertificateExpiry.DaysRemaining(ObservedAt.AddHours(29), ObservedAt).Should().Be(1);
     }
 
     [Fact]
     public void DaysRemaining_ReportsExpiredCertificatesAsNegative()
     {
-        // Clamping to zero would make "expires today" and "expired last week" identical.
         CertificateExpiry.DaysRemaining(ObservedAt.AddDays(-7), ObservedAt).Should().Be(-7);
     }
 
@@ -271,7 +254,6 @@ public sealed class CertificateExpiryTests
         int daysRemaining,
         CertificateExpirySeverity expected)
     {
-        // BR-C04 / AC-06: 30, 15 and 7 are inside their bands; 31, 16 and 8 are one band lower.
         CertificateExpiry.SelectSeverity(daysRemaining, CertificateExpiryThresholds.Default)
             .Should().Be(expected);
     }

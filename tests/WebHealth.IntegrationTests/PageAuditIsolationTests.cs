@@ -11,12 +11,6 @@ using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
-/// <summary>
-/// A PageSpeed audit is a call to somebody else's infrastructure that can take a minute and a
-/// half. The isolation claim is proved here rather than left to design intent, because a page
-/// audit that starved availability monitoring would be a silent failure: checks would simply
-/// report late.
-/// </summary>
 public sealed class PageAuditIsolationTests
 {
     [Fact]
@@ -41,11 +35,6 @@ public sealed class PageAuditIsolationTests
             .Should().NotBe("page-audits",
                 "the two long-running features must not compete for one another's workers");
 
-    /// <summary>
-    /// The application counts attempts itself, in <c>attempt_count</c>. Hangfire retrying as well
-    /// would mean two mechanisms disagreeing about how many times we have already asked Google to
-    /// load somebody's page, and only one of those counts is stored beside the run.
-    /// </summary>
     [Fact]
     public void PageAuditRunJob_LeavesRetryToTheApplicationsOwnAttemptBudget() =>
         typeof(PageAuditRunJob).GetMethod(nameof(PageAuditRunJob.ExecuteAsync))!
@@ -62,11 +51,6 @@ public sealed class PageAuditIsolationTests
             "concurrency here buys latency at the cost of spending somebody else's quota faster");
     }
 
-    /// <summary>
-    /// A claim has to outlive the call it protects. A lease shorter than the provider timeout
-    /// would let a second worker reclaim a run while the first is still waiting on Google, and
-    /// both would then audit the same page.
-    /// </summary>
     [Fact]
     public void DefaultOptions_HoldALeaseForLongerThanTheProviderIsGivenToAnswer() =>
         new PageAuditSchedulingOptions().LeaseDuration
@@ -77,10 +61,6 @@ public sealed class PageAuditIsolationTests
         new PageAuditSchedulingOptions().MaximumAttempts.Should().BeInRange(1, 5,
             "every attempt is another request against somebody else's site and quota");
 
-    /// <summary>
-    /// The service origin is a constant. As configuration it would be a way to point a client
-    /// holding our API key at any host a settings file names.
-    /// </summary>
     [Fact]
     public void ServiceOrigin_IsAConstantRatherThanAConfigurableSetting()
     {
@@ -94,16 +74,6 @@ public sealed class PageAuditIsolationTests
                 || name.Contains("BaseAddress", StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// Page audits on their own must be able to start the application.
-    /// </summary>
-    /// <remarks>
-    /// Hangfire refuses a server with no queues. Enabling only an isolated-queue feature leaves
-    /// the shared server with nothing to serve, and building its queue list inside the
-    /// registration callback turned that into an unhandled exception at startup rather than a
-    /// server that is simply not registered. Found by running the application, not by a test,
-    /// which is why there is one now.
-    /// </remarks>
     [Fact]
     public void EnablingOnlyPageAudits_StillBuildsAStartableServiceProvider()
     {
@@ -121,13 +91,8 @@ public sealed class PageAuditIsolationTests
 
         var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration);
 
-        // Deliberately not disposed. AddHangfire writes to Hangfire's static GlobalConfiguration,
-        // which then holds this provider's logger factory; disposing it here tears that factory
-        // out from under every later test that touches Hangfire.
         var provider = services.BuildServiceProvider();
 
-        // Resolving the hosted services is what Host.StartAsync does, and it is where the empty
-        // queue list threw. No connection is opened, so no database is needed here.
         var act = () => provider.GetServices<IHostedService>().ToArray();
 
         act.Should().NotThrow();
