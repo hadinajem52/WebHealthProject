@@ -6,6 +6,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using WebHealth.Application.Monitoring;
+using WebHealth.Application.PngAudits;
 using WebHealth.Domain.Normalization;
 
 namespace WebHealth.Infrastructure.Monitoring;
@@ -13,11 +14,22 @@ namespace WebHealth.Infrastructure.Monitoring;
 internal sealed class SafeHttpTransport(
     IHttpClientFactory httpClientFactory,
     SafeHttpConcurrencyLimiter concurrencyLimiter,
-    TimeProvider timeProvider) : ISafeHttpTransport
+    TimeProvider timeProvider) : ISafeHttpTransport, IPngImageTransport
 {
-    public async Task<SafeHttpTransportResult> SendAsync(
+    public Task<SafeHttpTransportResult> SendAsync(
         SafeHttpTransportRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        SendAsync(request, SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes, cancellationToken);
+
+    Task<SafeHttpTransportResult> IPngImageTransport.SendAsync(
+        SafeHttpTransportRequest request,
+        CancellationToken cancellationToken) =>
+        SendAsync(request, SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes, cancellationToken);
+
+    private async Task<SafeHttpTransportResult> SendAsync(
+        SafeHttpTransportRequest request,
+        int maximumResponseBodyBytes,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var redirects = new List<SafeHttpRedirectHop>();
@@ -29,7 +41,7 @@ internal sealed class SafeHttpTransport(
             || requestIdentity is null
             || request.MaxRedirects is < 0 or > SafeHttpTransportDefaults.MaxRedirects
             || request.MaxResponseBodyBytes <= 0
-            || request.MaxResponseBodyBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes
+            || request.MaxResponseBodyBytes > maximumResponseBodyBytes
             || request.TimeoutSeconds <= 0
             || request.TimeoutSeconds > SafeHttpTransportDefaults.MaxTimeoutSeconds)
         {

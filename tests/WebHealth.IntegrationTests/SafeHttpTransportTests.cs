@@ -9,6 +9,7 @@ using System.Text;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using WebHealth.Application.Monitoring;
+using WebHealth.Application.PngAudits;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
 using Xunit;
@@ -83,6 +84,74 @@ public sealed class SafeHttpTransportTests
         result.BodyTruncated.Should().BeFalse();
         result.ResponseBytesRead.Should().Be(8);
         result.Body.Length.Should().Be(8);
+    }
+
+    [Fact]
+    public void Request_UsesTheTwoMegabyteDefault()
+    {
+        var request = new SafeHttpTransportRequest(Guid.NewGuid(), "https://allowed.test/", false);
+
+        request.MaxResponseBodyBytes.Should().Be(2 * 1024 * 1024);
+        request.MaxResponseBodyBytes.Should().Be(SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes);
+        SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes.Should().Be(8 * 1024 * 1024);
+    }
+
+    [Fact]
+    public async Task PngSendAsync_AcceptsTheAbsoluteResponseBodyLimitWhenExplicitlyRequested()
+    {
+        var body = new string('x', SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes + 1);
+        await using var server = await HttpFixture.Start(
+            $"HTTP/1.1 200 OK\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n{body}");
+        await using var harness = CreateHarness(
+            new HostResolver(("large.test", [IPAddress.Loopback])));
+
+        var result = await harness.PngImageTransport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://large.test:{server.Port}/",
+            false,
+            MaxResponseBodyBytes: SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes));
+
+        result.Succeeded.Should().BeTrue();
+        result.BodyTruncated.Should().BeFalse();
+        result.ResponseBytesRead.Should().Be(body.Length);
+        result.Body.Length.Should().Be(body.Length);
+        server.ContactCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendAsync_RejectsElevatedLimitForGenericRequestsBeforeOutboundExecution()
+    {
+        await using var server = await HttpFixture.Start(
+            "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        await using var harness = CreateHarness(
+            new HostResolver(("elevated.test", [IPAddress.Loopback])));
+
+        var result = await harness.Transport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://elevated.test:{server.Port}/",
+            false,
+            MaxResponseBodyBytes: SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes + 1));
+
+        result.Failure.Should().Be(SafeHttpFailureKind.InvalidUrl);
+        server.ContactCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task PngSendAsync_RejectsResponseBodyLimitAboveTheAbsoluteCeilingBeforeOutboundExecution()
+    {
+        await using var server = await HttpFixture.Start(
+            "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        await using var harness = CreateHarness(
+            new HostResolver(("oversized.test", [IPAddress.Loopback])));
+
+        var result = await harness.PngImageTransport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://oversized.test:{server.Port}/",
+            false,
+            MaxResponseBodyBytes: SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes + 1));
+
+        result.Failure.Should().Be(SafeHttpFailureKind.InvalidUrl);
+        server.ContactCount.Should().Be(0);
     }
 
     [Fact]
@@ -492,10 +561,18 @@ public sealed class SafeHttpTransportTests
                 configureHandler?.Invoke(handler);
                 return handler;
             });
-        services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
+        services.AddScoped<SafeHttpTransport>();
+        services.AddScoped<ISafeHttpTransport>(provider =>
+            provider.GetRequiredService<SafeHttpTransport>());
+        services.AddScoped<IPngImageTransport>(provider =>
+            provider.GetRequiredService<SafeHttpTransport>());
         var provider = services.BuildServiceProvider();
         var scope = provider.CreateAsyncScope();
-        return new(provider, scope, scope.ServiceProvider.GetRequiredService<ISafeHttpTransport>());
+        return new(
+            provider,
+            scope,
+            scope.ServiceProvider.GetRequiredService<ISafeHttpTransport>(),
+            scope.ServiceProvider.GetRequiredService<IPngImageTransport>());
     }
 
     private static SafeHttpTransportOptions DefaultOptions() => new();
@@ -599,7 +676,8 @@ public sealed class SafeHttpTransportTests
     private sealed record TransportHarness(
         ServiceProvider Provider,
         AsyncServiceScope Scope,
-        ISafeHttpTransport Transport) : IAsyncDisposable
+        ISafeHttpTransport Transport,
+        IPngImageTransport PngImageTransport) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {

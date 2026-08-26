@@ -130,7 +130,7 @@ public sealed record HttpResultPolicy(
 
     public static HttpResultPolicy Default { get; } = new(
         [], null, false, FindingSeverities.Warning,
-        SafeHttpTransportDefaults.MaxDecodedBodyBytes);
+        SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes);
 }
 
 public sealed record NormalizeHttpResult(
@@ -512,7 +512,7 @@ public static class HttpResultNormalizer
         if (policy.AcceptedStatusCodes.Any(status => status is < 100 or > 599)
             || policy.RequiredContentMarker?.Length > 500
             || policy.MaxResponseBodyBytes <= 0
-            || policy.MaxResponseBodyBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes
+            || policy.MaxResponseBodyBytes > SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes
             || policy.PageSizeWarningBytes <= 0
             || policy.EffectiveResponseTime.WarningMs <= 0
             || policy.EffectiveResponseTime.CriticalMs < policy.EffectiveResponseTime.WarningMs

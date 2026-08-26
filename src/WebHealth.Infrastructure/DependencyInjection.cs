@@ -28,6 +28,8 @@ using WebHealth.Application.Incidents;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Application.Notifications;
 using WebHealth.Infrastructure.Notifications;
+using WebHealth.Application.PngAudits;
+using WebHealth.Infrastructure.PngAudits;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -60,6 +62,14 @@ public static class DependencyInjection
         var crawlOptions = configuration.GetSection(CrawlSchedulingOptions.SectionName)
             .Get<CrawlSchedulingOptions>() ?? new CrawlSchedulingOptions();
         services.AddSingleton(crawlOptions);
+
+        var pngAuditOptions = configuration.GetSection(PngAuditOptions.SectionName)
+            .Get<PngAuditOptions>() ?? new PngAuditOptions();
+        ValidatePngAuditOptions(pngAuditOptions);
+        services.AddSingleton(pngAuditOptions);
+        services.AddSingleton(new PngRecommendationThresholds(
+            pngAuditOptions.MinSavingsPercent,
+            pngAuditOptions.MinSavingsBytes));
 
         var pageAuditOptions = configuration.GetSection(PageAuditSchedulingOptions.SectionName)
             .Get<PageAuditSchedulingOptions>() ?? new PageAuditSchedulingOptions();
@@ -321,7 +331,11 @@ public static class DependencyInjection
         services.AddSingleton<IMonitoringDnsResolver, SystemMonitoringDnsResolver>();
         services.AddSingleton<IDestinationAddressPolicy, StrictDestinationAddressPolicy>();
         services.AddSingleton<SafeHttpConcurrencyLimiter>();
-        services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
+        services.AddScoped<SafeHttpTransport>();
+        services.AddScoped<ISafeHttpTransport>(provider =>
+            provider.GetRequiredService<SafeHttpTransport>());
+        services.AddScoped<IPngImageTransport>(provider =>
+            provider.GetRequiredService<SafeHttpTransport>());
         services.AddScoped<IEndpointUrlSchemeProbe, EndpointUrlSchemeProbe>();
         services.AddScoped<EndpointUrlResolver>();
         services.AddScoped<ISslCertificateProbe, SslCertificateProbe>();
@@ -389,9 +403,47 @@ public static class DependencyInjection
             || options.MaxRetryDelay < options.RetryBaseDelay
             || options.MaxRetryDelay > TimeSpan.FromMinutes(2)
             || options.MaxPageBytes < 64 * 1024
-            || options.MaxPageBytes > SafeHttpTransportDefaults.MaxDecodedBodyBytes)
+            || options.MaxPageBytes > SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes)
         {
             throw new InvalidOperationException("Crawl scheduling options are outside their safe bounds.");
+        }
+    }
+
+    private static void ValidatePngAuditOptions(PngAuditOptions options)
+    {
+        if (options.Enabled
+            || options.WorkerCount != 1
+            || options.MaxPages is < 1 or > 1000
+            || options.MaxDepth is < 0 or > 10
+            || options.MaxPageBytes < 1
+            || options.MaxPageBytes > SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes
+            || options.MaxTotalPageBytes < options.MaxPageBytes
+            || options.MaxTotalPageBytes > 512L * 1024 * 1024
+            || options.MaxImageReferencesPerPage is < 1 or > 10000
+            || options.MaxUniqueImages is < 1 or > 5000
+            || options.MaxTotalImageSourceMappings < options.MaxUniqueImages
+            || options.MaxTotalImageSourceMappings > 50000
+            || options.MaxImageBytes < 1
+            || options.MaxImageBytes > SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes
+            || options.MaxTotalImageBytes < options.MaxImageBytes
+            || options.MaxTotalImageBytes > 1024L * 1024 * 1024
+            || options.MaxWidth is < 1 or > 100000
+            || options.MaxHeight is < 1 or > 100000
+            || options.MaxDecodedPixels is < 1 or > 1000000000
+            || options.MaxDecodedMemoryBytes < options.MaxDecodedPixels * 4
+            || options.MaxDecodedMemoryBytes > 4L * 1024 * 1024 * 1024
+            || options.MaxTotalHttpAttempts is < 1 or > 100000
+            || options.FetchTimeoutSeconds is < 1 or > SafeHttpTransportDefaults.MaxTimeoutSeconds
+            || options.TransientRetryCount is < 0 or > 3
+            || options.ImageFetchConcurrency != 1
+            || options.ImageDecodeConcurrency != 1
+            || options.MaxDuration < TimeSpan.FromMinutes(1)
+            || options.MaxDuration > TimeSpan.FromHours(4)
+            || options.MinSavingsPercent is < 0 or > 100
+            || options.MinSavingsBytes < 0
+            || options.MinSavingsBytes > options.MaxImageBytes)
+        {
+            throw new InvalidOperationException("PNG audit options are outside their safe bounds.");
         }
     }
 

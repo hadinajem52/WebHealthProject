@@ -26,7 +26,7 @@ public sealed record SafeHttpTransportRequest(
     string Url,
     bool IsProduction,
     int MaxRedirects = SafeHttpTransportDefaults.MaxRedirects,
-    int MaxResponseBodyBytes = SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+    int MaxResponseBodyBytes = SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes,
     int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds)
 {
     public ISafeHttpRequestHopPolicy? HopPolicy { get; init; }
@@ -101,5 +101,9 @@ public static class SafeHttpTransportDefaults
     public const int DefaultTimeoutSeconds = 15;
     public const int MaxTimeoutSeconds = 300;
     public const int MaxRedirects = 10;
-    public const int MaxDecodedBodyBytes = 2 * 1024 * 1024;
+    public const int DefaultMaxResponseBodyBytes = 2 * 1024 * 1024;
+    public const int AbsoluteMaxResponseBodyBytes = 8 * 1024 * 1024;
+
+    [Obsolete($"Use {nameof(DefaultMaxResponseBodyBytes)} instead.")]
+    public const int MaxDecodedBodyBytes = DefaultMaxResponseBodyBytes;
 }

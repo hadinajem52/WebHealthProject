@@ -930,7 +930,7 @@ internal static class DatabaseFoundationAssertions
             null,
             "OrdinalIgnoreCase",
             FindingSeverities.Warning,
-            SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+            SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes,
             SafeHttpTransportDefaults.MaxRedirects)));
         var scheduledFor = monitor.NextDueAt;
         var logicalCheckId = Guid.NewGuid();

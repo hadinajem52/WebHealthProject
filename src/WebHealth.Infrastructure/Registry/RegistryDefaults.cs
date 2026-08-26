@@ -52,7 +52,7 @@ internal static class RegistryDefaults
             null,
             "OrdinalIgnoreCase",
             FindingSeverities.Warning,
-            SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+            SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes,
             SafeHttpTransportDefaults.MaxRedirects));
 
     public static string CreateHttpFingerprint(
@@ -78,7 +78,7 @@ internal static class RegistryDefaults
             null,
             "OrdinalIgnoreCase",
             FindingSeverities.Warning,
-            SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+            SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes,
             SafeHttpTransportDefaults.MaxRedirects));
 
     public static string CreatePageAuditFingerprint(string normalizedUrl, bool isProduction) =>
@@ -96,6 +96,6 @@ internal static class RegistryDefaults
             null,
             "OrdinalIgnoreCase",
             FindingSeverities.Warning,
-            SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+            SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes,
             SafeHttpTransportDefaults.MaxRedirects));
 }

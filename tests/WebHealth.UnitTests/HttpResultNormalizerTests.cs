@@ -272,6 +272,6 @@ public sealed class HttpResultNormalizerTests
         null,
         "OrdinalIgnoreCase",
         FindingSeverities.Warning,
-        SafeHttpTransportDefaults.MaxDecodedBodyBytes,
+        SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes,
         SafeHttpTransportDefaults.MaxRedirects);
 }

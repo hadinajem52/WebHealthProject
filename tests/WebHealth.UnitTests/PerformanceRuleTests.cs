@@ -213,7 +213,7 @@ public sealed class PerformanceRuleTests
 
     private static SafeHttpTransportResult Truncated(long? transferredLength)
     {
-        var cap = SafeHttpTransportDefaults.MaxDecodedBodyBytes;
+        var cap = SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes;
         return new(
             null,
             200,
