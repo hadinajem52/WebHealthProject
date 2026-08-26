@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -207,6 +207,29 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
     }
 
     [Fact]
+    public async Task PlacingAnEndpointInAnExistingHierarchyDoesNotRequireTheUnusedNames()
+    {
+        var registration = new RecordingEndpointRegistrationService();
+        using var configuredFactory = CreateFactory(registration);
+        using var client = CreateClient(configuredFactory, false, ApplicationRoles.Administrator);
+        client.DefaultRequestHeaders.Add(AjaxResponseHeaders.Request, "1");
+        var token = await GetAntiforgeryTokenAsync(client);
+        var fields = ValidFields(EndpointRegistrationModes.ExistingEnvironment);
+        fields["ClientName"] = string.Empty;
+        fields["WebsiteName"] = string.Empty;
+        fields["EnvironmentName"] = string.Empty;
+
+        using var response = await PostAsync(client, token, fields);
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("is required", content, StringComparison.Ordinal);
+        Assert.Equal(
+            RegistrationFormReader.EnvironmentId,
+            Assert.IsType<ExistingEnvironment>(Assert.Single(registration.Requests).Hierarchy).EnvironmentId);
+    }
+
+    [Fact]
     public async Task EndpointInventoryShowsTheGlobalRegistrationActionOnlyToManagers()
     {
         using var administrator = factory.CreateHttpsClient(ApplicationRoles.Administrator);
@@ -219,8 +242,8 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
 
         Assert.True(administratorResponse.IsSuccessStatusCode, administratorContent);
         Assert.True(viewerResponse.IsSuccessStatusCode, viewerContent);
-        Assert.Contains("Register endpoint", administratorContent, StringComparison.Ordinal);
-        Assert.DoesNotContain("Register endpoint", viewerContent, StringComparison.Ordinal);
+        Assert.Contains("Create endpoint", administratorContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("Create endpoint", viewerContent, StringComparison.Ordinal);
     }
 
     private WebApplicationFactory<Program> CreateFactory(RecordingEndpointRegistrationService registration) =>
