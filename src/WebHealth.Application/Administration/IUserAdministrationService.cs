@@ -22,7 +22,8 @@ public sealed record ManagedUser(
     string DisplayName,
     string Email,
     bool IsDisabled,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    string? NotificationEmail);
 
 public sealed record CreateManagedUser(
     string DisplayName,
@@ -35,7 +36,8 @@ public sealed record UpdateManagedUser(
     string DisplayName,
     bool IsDisabled,
     IReadOnlyCollection<string> Roles,
-    string? NewPassword = null);
+    string? NewPassword = null,
+    string? NotificationEmail = null);
 
 public sealed record UserAdministrationResult(bool Succeeded, Guid? UserId, IReadOnlyList<ValidationError> Errors)
 {

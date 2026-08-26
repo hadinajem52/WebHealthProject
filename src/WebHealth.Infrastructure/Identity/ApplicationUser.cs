@@ -8,6 +8,8 @@ public sealed class ApplicationUser : IdentityUser<Guid>
 
     public bool IsDisabled { get; set; }
 
+    public string? NotificationEmail { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

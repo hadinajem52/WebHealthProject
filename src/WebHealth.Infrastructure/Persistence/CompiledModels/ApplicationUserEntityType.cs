@@ -21,7 +21,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Identity.ApplicationUser",
                 typeof(ApplicationUser),
                 baseEntityType,
-                propertyCount: 19,
+                propertyCount: 20,
                 unnamedIndexCount: 2,
                 keyCount: 1);
 
@@ -137,6 +137,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 maxLength: 256);
             normalizedUserName.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             normalizedUserName.AddAnnotation("Relational:ColumnName", "normalized_user_name");
+
+            var notificationEmail = runtimeEntityType.AddProperty(
+                "NotificationEmail",
+                typeof(string),
+                propertyInfo: typeof(ApplicationUser).GetProperty("NotificationEmail", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(ApplicationUser).GetField("<NotificationEmail>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                maxLength: 320);
+            notificationEmail.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            notificationEmail.AddAnnotation("Relational:ColumnName", "notification_email");
 
             var passwordHash = runtimeEntityType.AddProperty(
                 "PasswordHash",

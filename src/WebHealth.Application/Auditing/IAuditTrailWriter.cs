@@ -92,7 +92,8 @@ public sealed record UserAuditSnapshot(
     string Email,
     bool IsDisabled,
     IReadOnlyList<string> Roles,
-    bool PasswordReset);
+    bool PasswordReset,
+    string? NotificationEmail);
 
 public sealed record TeamAuditSnapshot(
     Guid TeamId,

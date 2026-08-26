@@ -75,7 +75,11 @@ public sealed class AdministrationController(
             DisplayName = user.DisplayName,
             Email = user.Email,
             IsDisabled = user.IsDisabled,
-            Roles = user.Roles.ToList()
+            Roles = user.Roles.ToList(),
+            NotificationEmail = user.NotificationEmail,
+            NotificationRouting = user.NotificationEmail is null
+                ? NotificationRoutingModes.SignInEmail
+                : NotificationRoutingModes.CustomEmail
         });
     }
 
@@ -85,6 +89,21 @@ public sealed class AdministrationController(
         CancellationToken cancellationToken)
     {
         ValidateRoleSelection(model.Roles);
+        if (model.RoutesToDifferentAddress)
+        {
+            if (string.IsNullOrWhiteSpace(model.NotificationEmail))
+            {
+                ModelState.AddModelError(
+                    nameof(EditUserViewModel.NotificationEmail),
+                    "Enter the address to route notifications to, or keep sending to the sign-in address.");
+            }
+        }
+        else
+        {
+            model.NotificationEmail = null;
+            ModelState.Remove(nameof(EditUserViewModel.NotificationEmail));
+        }
+
         if (!ModelState.IsValid)
         {
             model.NewPassword = null;
@@ -98,7 +117,8 @@ public sealed class AdministrationController(
                 model.DisplayName,
                 model.IsDisabled,
                 model.Roles,
-                model.NewPassword),
+                model.NewPassword,
+                model.RoutesToDifferentAddress ? model.NotificationEmail : null),
             GetActorUserId(),
             cancellationToken);
         if (!result.Succeeded)

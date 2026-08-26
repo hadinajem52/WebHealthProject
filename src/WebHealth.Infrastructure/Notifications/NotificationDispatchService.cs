@@ -9,6 +9,7 @@ using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Persistence;
 using WebHealth.Infrastructure.Registry;
+using WebHealth.Domain.Normalization;
 
 namespace WebHealth.Infrastructure.Notifications;
 
@@ -113,7 +114,8 @@ internal sealed class NotificationDispatchService(
         }
 
         var ownerDisplayName = await ResolveOwnerDisplayNameAsync(source.NotificationEvent.Incident.OwnerSubject, cancellationToken);
-        var message = BuildMessage(source, ownerDisplayName);
+        var routedRecipient = await ResolveRoutedRecipientAsync(source.NormalizedRecipient, cancellationToken);
+        var message = BuildMessage(source, ownerDisplayName, routedRecipient);
 
         var result = await emailTransport.SendAsync(message, cancellationToken);
 
@@ -191,7 +193,26 @@ internal sealed class NotificationDispatchService(
         _ => NotificationTransportOutcomes.PermanentFailure
     };
 
-    private static EmailMessage BuildMessage(NotificationDelivery delivery, string ownerDisplayName)
+    private async Task<string> ResolveRoutedRecipientAsync(
+        string normalizedRecipient,
+        CancellationToken cancellationToken)
+    {
+        var overrides = await dbContext.Users.AsNoTracking()
+            .Where(user => user.NotificationEmail != null && !user.IsDisabled)
+            .Select(user => new { user.Email, user.NotificationEmail })
+            .ToListAsync(cancellationToken);
+
+        var match = overrides.FirstOrDefault(candidate => string.Equals(
+            RecipientNormalizer.Normalize(candidate.Email),
+            normalizedRecipient,
+            StringComparison.Ordinal));
+        return match?.NotificationEmail ?? normalizedRecipient;
+    }
+
+    private static EmailMessage BuildMessage(
+        NotificationDelivery delivery,
+        string ownerDisplayName,
+        string routedRecipient)
     {
         var notificationEvent = delivery.NotificationEvent;
         var incident = notificationEvent.Incident;
@@ -218,7 +239,7 @@ internal sealed class NotificationDispatchService(
             NotificationEventTypes.Escalated => NotificationTemplates.RenderEscalated(data),
             _ => throw new InvalidOperationException($"Unsupported notification event type '{notificationEvent.EventType}'.")
         };
-        return new EmailMessage(delivery.NormalizedRecipient, subject, body);
+        return new EmailMessage(routedRecipient, subject, body);
     }
 
     private async Task<string> ResolveOwnerDisplayNameAsync(

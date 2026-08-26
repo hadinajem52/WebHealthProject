@@ -7,6 +7,7 @@ using WebHealth.Application.Administration;
 using WebHealth.Application.Auditing;
 using WebHealth.Infrastructure.Persistence;
 using WebHealth.Infrastructure.Assignments;
+using WebHealth.Domain.Normalization;
 
 namespace WebHealth.Infrastructure.Identity;
 
@@ -142,8 +143,16 @@ public sealed class UserAdministrationService(
                 + "role first.");
         }
 
+        var routing = NormalizeNotificationEmail(command.NotificationEmail);
+        if (routing.Error is not null)
+        {
+            return UserAdministrationResult.Failure(
+                ValidationError.For(nameof(UpdateManagedUser.NotificationEmail), routing.Error));
+        }
+
         var disabledStateChanged = user.IsDisabled != command.IsDisabled;
         user.DisplayName = command.DisplayName.Trim();
+        user.NotificationEmail = routing.Address;
         user.IsDisabled = command.IsDisabled;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         var updateResult = await userManager.UpdateAsync(user);
@@ -218,13 +227,40 @@ public sealed class UserAdministrationService(
             .AnyAsync(cancellationToken);
     }
 
+    private static NotificationEmailDecision NormalizeNotificationEmail(string? submitted)
+    {
+        if (string.IsNullOrWhiteSpace(submitted))
+        {
+            return new(null, null);
+        }
+
+        var trimmed = submitted.Trim();
+        if (trimmed.Length > EmailAddressRules.MaxAddressLength)
+        {
+            return new(null, "This address is too long. Use 320 characters or fewer.");
+        }
+
+        if (!EmailAddressRules.IsValid(trimmed))
+        {
+            return new(null, "Enter a valid email address, such as alerts@example.com.");
+        }
+
+        var normalized = RecipientNormalizer.Normalize(trimmed);
+        return normalized is null
+            ? new(null, "Enter a valid email address, such as alerts@example.com.")
+            : new(normalized, null);
+    }
+
+    private sealed record NotificationEmailDecision(string? Address, string? Error);
+
     private static ManagedUser ToManagedUser(ApplicationUser user, IEnumerable<string> roles) =>
         new(
             user.Id,
             user.DisplayName,
             user.Email ?? string.Empty,
             user.IsDisabled,
-            roles.OrderBy(role => role, StringComparer.Ordinal).ToArray());
+            roles.OrderBy(role => role, StringComparer.Ordinal).ToArray(),
+            user.NotificationEmail);
 
     private static string[] NormalizeRoles(IEnumerable<string> roles) =>
         roles.Where(role => !string.IsNullOrWhiteSpace(role))
@@ -302,5 +338,6 @@ public sealed class UserAdministrationService(
             user.Email ?? string.Empty,
             user.IsDisabled,
             roles.OrderBy(role => role, StringComparer.Ordinal).ToArray(),
-            passwordReset);
+            passwordReset,
+            user.NotificationEmail);
 }

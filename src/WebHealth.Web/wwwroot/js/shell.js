@@ -709,6 +709,35 @@
         sync();
     }
 
+    function setUpNotificationRouting(container) {
+        if (!beginInitialization(container)) {
+            return;
+        }
+        var options = container.querySelectorAll('[data-shell-routing-option]');
+        var field = container.querySelector('[data-shell-routing-field]');
+        var input = container.querySelector('[data-shell-routing-input]');
+
+        if (!options.length || !field || !input) {
+            return;
+        }
+
+        function sync() {
+            var custom = false;
+            Array.prototype.forEach.call(options, function (option) {
+                if (option.checked && option.value === 'CustomEmail') {
+                    custom = true;
+                }
+            });
+            field.setAttribute('data-inactive', custom ? 'false' : 'true');
+            input.readOnly = !custom;
+        }
+
+        Array.prototype.forEach.call(options, function (option) {
+            option.addEventListener('change', sync);
+        });
+        sync();
+    }
+
     function setUpEndpointRegistration(form) {
         if (!beginInitialization(form)) {
             return;
@@ -888,6 +917,9 @@
 
         elements(root, '[data-shell-dependency]')
             .forEach(setUpDependentFields);
+
+        elements(root, '[data-shell-routing]')
+            .forEach(setUpNotificationRouting);
 
         elements(root, '[data-shell-password-toggle]')
             .forEach(setUpPasswordReveal);

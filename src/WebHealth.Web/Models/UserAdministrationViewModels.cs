@@ -54,4 +54,21 @@ public sealed class EditUserViewModel
         ErrorMessage = "The new password must be between 12 and 128 characters. Use at least 12 characters, with an uppercase letter, a lowercase letter, a digit, a symbol, and at least 4 different characters.")]
     [Display(Name = "New password")]
     public string? NewPassword { get; set; }
+
+    [Display(Name = "Notification delivery")]
+    public string NotificationRouting { get; set; } = NotificationRoutingModes.SignInEmail;
+
+    [EmailAddress(ErrorMessage = "Enter a valid email address, such as alerts@example.com.")]
+    [StringLength(320, ErrorMessage = "This address is too long. Use 320 characters or fewer.")]
+    [Display(Name = "Send notifications to")]
+    public string? NotificationEmail { get; set; }
+
+    public bool RoutesToDifferentAddress =>
+        string.Equals(NotificationRouting, NotificationRoutingModes.CustomEmail, StringComparison.Ordinal);
+}
+
+public static class NotificationRoutingModes
+{
+    public const string SignInEmail = "SignInEmail";
+    public const string CustomEmail = "CustomEmail";
 }

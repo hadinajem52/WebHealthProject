@@ -2386,6 +2386,11 @@ code,
     display: inline-flex;
     align-items: center;
     margin-left: -0.125rem;
+    transition: transform var(--motion-fast) var(--motion-easing);
+}
+
+.js .action-menu[data-open="true"] .button__caret {
+    transform: rotate(180deg);
 }
 
 

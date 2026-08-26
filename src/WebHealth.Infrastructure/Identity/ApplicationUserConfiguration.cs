@@ -13,6 +13,7 @@ internal sealed class ApplicationUserConfiguration : IEntityTypeConfiguration<Ap
         builder.Property(user => user.NormalizedUserName).HasMaxLength(256).IsRequired();
         builder.Property(user => user.Email).HasMaxLength(256).IsRequired();
         builder.Property(user => user.NormalizedEmail).HasMaxLength(256).IsRequired();
+        builder.Property(user => user.NotificationEmail).HasMaxLength(320);
         builder.Property(user => user.CreatedAt).IsRequired();
         builder.Property(user => user.UpdatedAt).IsRequired();
         builder.HasIndex(user => user.NormalizedEmail)

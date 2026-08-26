@@ -74,6 +74,46 @@
             </div>
 
             <div class="panel">
+                <fieldset class="form-field" data-shell-routing>
+                    <div class="panel__header">
+                        <legend class="panel__title">Notifications</legend>
+                        <p class="panel__hint">Where this account's incident emails are delivered.</p>
+                    </div>
+                    <div class="panel__body">
+                        <div class="choice-grid">
+                            <label class="choice-card">
+                                <input type="radio" asp-for="NotificationRouting"
+                                       value="@NotificationRoutingModes.SignInEmail" data-shell-routing-option />
+                                <span>
+                                    Sign-in address
+                                    <small>@Model.Email</small>
+                                </span>
+                            </label>
+                            <label class="choice-card">
+                                <input type="radio" asp-for="NotificationRouting"
+                                       value="@NotificationRoutingModes.CustomEmail" data-shell-routing-option />
+                                <span>
+                                    A different address
+                                    <small>Route emails elsewhere</small>
+                                </span>
+                            </label>
+                        </div>
+
+                        <div class="form-field" data-shell-routing-field
+                             data-inactive="@((!Model.RoutesToDifferentAddress).ToString().ToLowerInvariant())">
+                            <label asp-for="NotificationEmail"></label>
+                            <input asp-for="NotificationEmail" type="email" autocomplete="email"
+                                   placeholder="alerts@example.com" data-shell-routing-input />
+                            <span class="form-field__hint">
+                                The sign-in address is unchanged. Only where notification email is delivered moves.
+                            </span>
+                            <span asp-validation-for="NotificationEmail"></span>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <div class="panel">
                 <div class="panel__header">
                     <p class="panel__title">Account state</p>
                 </div>

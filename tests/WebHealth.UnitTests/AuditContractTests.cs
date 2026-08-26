@@ -53,7 +53,8 @@ public sealed class AuditContractTests
                 nameof(UserAuditSnapshot.Email),
                 nameof(UserAuditSnapshot.IsDisabled),
                 nameof(UserAuditSnapshot.Roles),
-                nameof(UserAuditSnapshot.PasswordReset));
+                nameof(UserAuditSnapshot.PasswordReset),
+                nameof(UserAuditSnapshot.NotificationEmail));
         typeof(TeamAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
                 nameof(TeamAuditSnapshot.TeamId),

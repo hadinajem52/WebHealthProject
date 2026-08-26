@@ -168,7 +168,8 @@ internal sealed class EmptyUserAdministrationService : IUserAdministrationServic
         "Example user",
         "example@example.test",
         false,
-        ["Administrator"]);
+        ["Administrator"],
+        null);
 
     public Task<IReadOnlyList<ManagedUser>> ListUsersAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<ManagedUser>>([User]);
