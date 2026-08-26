@@ -419,7 +419,7 @@
                                     else
                                     {
                                         @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                            StatusBadges.ForIncidentStatus(incident.Status), incident.Status, incident.Severity))
+                                            StatusBadges.ForIncidentStatus(incident.Status), IncidentStatusDisplay.Name(incident.Status), incident.Severity))
                                     }
                                 </td>
 
@@ -443,7 +443,6 @@
             <div>
                 <h2 class="card__title" id="dashboard-health-heading">Endpoint health</h2>
             </div>
-            <span class="tag">@dataset.TotalCount monitor@(dataset.TotalCount == 1 ? null : "s")</span>
         </div>
 
         @if (endpoints.Count == 0)
@@ -472,7 +471,7 @@
                         @foreach (var endpoint in endpoints)
                         {
                             var availability = endpoint.Availability;
-                            <tr data-attention="@(endpoint.NeedsAttention ? "true" : null)">
+                            <tr data-attention="@(endpoint.NeedsAttention ? "true" : null)" data-status="@StatusBadges.ForHealthStatus(endpoint.WorstStatus)">
                                 <th scope="row" data-label="Endpoint">
                                     <a asp-controller="Targets" asp-action="Endpoint" asp-route-id="@endpoint.EndpointId" class="target-url">@endpoint.EndpointDisplayUrl</a>
 

@@ -1,7 +1,10 @@
 @model RegistryActionScreenViewModel
 @{
     ViewData.SetTitle(Model.Title);
-    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem(Model.Title));
+    ViewData.SetBreadcrumbs(
+        Breadcrumbs.Registry(Url),
+        new BreadcrumbItem(Model.ParentLabel, Url.Action(Model.BackAction)),
+        new BreadcrumbItem(Model.Title));
 }
 
 <section class="card">
@@ -11,7 +14,7 @@
             <p class="card__subtitle">@Model.Subtitle</p>
         </div>
         <div class="form-actions">
-            <a class="button button--secondary" asp-action="@Model.BackAction">@Model.BackLabel</a>
+            <a class="button button--secondary" asp-action="@Model.BackAction">Back to @Model.ParentLabel.ToLowerInvariant()</a>
         </div>
     </div>
 

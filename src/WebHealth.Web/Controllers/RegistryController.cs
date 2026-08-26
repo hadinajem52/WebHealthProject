@@ -427,7 +427,7 @@ public sealed class RegistryController(
         "No archived clients",
         "Archiving a client from the client registry moves it here.",
         nameof(Clients),
-        "Back to clients");
+        "Clients");
 
     private static RegistryArchiveScreenViewModel BuildWebsiteArchiveScreen(
         IReadOnlyList<WebsiteListItem> websites) => new(
@@ -448,7 +448,7 @@ public sealed class RegistryController(
         "No archived websites",
         "Archiving a website from the website registry moves it here.",
         nameof(Websites),
-        "Back to websites");
+        "Websites");
 
     private static RegistryActionScreenViewModel BuildClientScreen(
         IReadOnlyList<ClientListItem> clients,
@@ -478,7 +478,7 @@ public sealed class RegistryController(
         destructive ? "No clients to delete" : "No clients to archive",
         "No client records are available within your current access scope.",
         nameof(Clients),
-        "Back to clients");
+        "Clients");
 
     private static RegistryActionScreenViewModel BuildWebsiteScreen(
         IReadOnlyList<WebsiteListItem> websites,
@@ -508,7 +508,7 @@ public sealed class RegistryController(
         destructive ? "No websites to delete" : "No websites to archive",
         "No website records are available within your current access scope.",
         nameof(Websites),
-        "Back to websites");
+        "Websites");
 
     private async Task<IActionResult> RunScreenActionAsync(
         Guid id,

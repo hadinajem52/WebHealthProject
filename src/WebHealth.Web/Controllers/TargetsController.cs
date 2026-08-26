@@ -444,7 +444,7 @@ public sealed class TargetsController(
         "No archived environments",
         "Archiving an environment from a website's environment list moves it here.",
         "Websites",
-        "Back to websites",
+        "Websites",
         "Registry");
 
     private static RegistryArchiveScreenViewModel BuildEndpointArchiveScreen(
@@ -466,7 +466,7 @@ public sealed class TargetsController(
         "No archived endpoints",
         "Archiving an endpoint from the endpoint registry moves it here.",
         nameof(Endpoints),
-        "Back to endpoints");
+        "Endpoints");
 
     private static RegistryActionScreenViewModel BuildEndpointScreen(
         IReadOnlyList<RegistryEndpointItem> endpoints,
@@ -496,7 +496,7 @@ public sealed class TargetsController(
         destructive ? "No endpoints to delete" : "No endpoints to archive",
         "No endpoint records are available within your current access scope.",
         nameof(Endpoints),
-        "Back to endpoints");
+        "Endpoints");
 
     private async Task<IActionResult> RunScreenActionAsync(
         Guid id,

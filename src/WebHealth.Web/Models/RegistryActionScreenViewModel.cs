@@ -24,4 +24,4 @@ public sealed record RegistryActionScreenViewModel(
     string EmptyTitle,
     string EmptyDescription,
     string BackAction,
-    string BackLabel);
+    string ParentLabel);

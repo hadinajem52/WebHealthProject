@@ -1116,7 +1116,8 @@ code,
     .form-field select,
     .form-field select:open {
         position: relative;
-        display: block;
+        display: flex;
+        align-items: center;
         overflow: hidden;
         background-image: none;
         text-align: left;
@@ -2013,8 +2014,24 @@ code,
 }
 
 .data-table tbody tr[data-attention="true"] th[scope="row"] {
-    box-shadow: inset 3px 0 0 var(--status-danger-text);
+    box-shadow: inset 3px 0 0 var(--badge-neutral);
     padding-left: var(--space-3);
+}
+
+.data-table tbody tr[data-attention="true"][data-status="success"] th[scope="row"] {
+    box-shadow: inset 3px 0 0 var(--badge-success);
+}
+
+.data-table tbody tr[data-attention="true"][data-status="warning"] th[scope="row"] {
+    box-shadow: inset 3px 0 0 var(--badge-warning);
+}
+
+.data-table tbody tr[data-attention="true"][data-status="high"] th[scope="row"] {
+    box-shadow: inset 3px 0 0 var(--badge-high);
+}
+
+.data-table tbody tr[data-attention="true"][data-status="danger"] th[scope="row"] {
+    box-shadow: inset 3px 0 0 var(--badge-danger);
 }
 
 .filter-menu {

@@ -1,7 +1,10 @@
 @model RegistryArchiveScreenViewModel
 @{
     ViewData.SetTitle(Model.Title);
-    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem(Model.Title));
+    ViewData.SetBreadcrumbs(
+        Breadcrumbs.Registry(Url),
+        new BreadcrumbItem(Model.ParentLabel, Url.Action(Model.BackAction, Model.BackController)),
+        new BreadcrumbItem(Model.Title));
 }
 
 <section class="card">
@@ -13,7 +16,7 @@
         <div class="form-actions">
             <a class="button button--secondary" asp-controller="@Model.BackController" asp-action="@Model.BackAction">
                 @await Html.PartialAsync("_Icon", "arrow-left")
-                <span>@Model.BackLabel</span>
+                <span>Back to @Model.ParentLabel.ToLowerInvariant()</span>
             </a>
         </div>
     </div>

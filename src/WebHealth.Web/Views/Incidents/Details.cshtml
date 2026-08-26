@@ -52,7 +52,7 @@
             </div>
             <div class="form-actions">
                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(incident.Severity), incident.Severity))
-                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(incidentStatus, incident.Status))
+                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(incidentStatus, IncidentStatusDisplay.Name(incident.Status)))
 
                 @if (hasQuickActions)
                 {
