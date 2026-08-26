@@ -12,12 +12,21 @@ using WebHealth.Application.Monitoring;
 using WebHealth.Application.PngAudits;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.PngAudits;
 using Xunit;
 
 namespace WebHealth.IntegrationTests;
 
 public sealed class SafeHttpTransportTests
 {
+    [Fact]
+    public void PngTransport_IsASeparateFeatureAdapter()
+    {
+        typeof(SafeHttpTransport).GetInterfaces().Should().ContainSingle()
+            .Which.Should().Be(typeof(ISafeHttpTransport));
+        typeof(PngImageTransport).Should().BeAssignableTo<IPngImageTransport>();
+    }
+
     [Fact]
     public async Task SendAsync_PreservesHostAndUserAgentAndBoundsDecodedBody()
     {
@@ -564,8 +573,7 @@ public sealed class SafeHttpTransportTests
         services.AddScoped<SafeHttpTransport>();
         services.AddScoped<ISafeHttpTransport>(provider =>
             provider.GetRequiredService<SafeHttpTransport>());
-        services.AddScoped<IPngImageTransport>(provider =>
-            provider.GetRequiredService<SafeHttpTransport>());
+        services.AddScoped<IPngImageTransport, PngImageTransport>();
         var provider = services.BuildServiceProvider();
         var scope = provider.CreateAsyncScope();
         return new(

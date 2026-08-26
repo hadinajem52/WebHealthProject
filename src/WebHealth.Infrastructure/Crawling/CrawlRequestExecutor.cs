@@ -1,71 +1,47 @@
-using System.Security.Cryptography;
-using System.Text;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.Monitoring;
+using WebHealth.Application.SiteAnalysis;
 
 namespace WebHealth.Infrastructure.Crawling;
 
-internal sealed class CrawlRequestExecutor(
-    CrawlRunRequest request,
-    CrawlSchedulingOptions options,
-    CrawlDependencies dependencies,
-    TimeProvider timeProvider)
+internal sealed class CrawlRequestExecutor
 {
+    private readonly CrawlRunRequest _request;
+    private readonly ISiteAnalysisFetcher _fetcher;
+    private readonly SiteAnalysisFetchProfile _profile;
+
+    public CrawlRequestExecutor(
+        CrawlRunRequest request,
+        CrawlSchedulingOptions options,
+        ISiteAnalysisFetcher fetcher)
+    {
+        _request = request;
+        _fetcher = fetcher;
+        _profile = new(
+            options.MaxPageBytes,
+            options.FetchTimeoutSeconds,
+            options.RequestsPerSecondPerHost,
+            options.TransientRetryCount,
+            options.RetryBaseDelay,
+            options.MaxRetryDelay);
+    }
+
     public async Task<SafeHttpTransportResult> ExecuteAsync(
         string url,
-        string host,
         ISafeHttpRequestHopPolicy hopPolicy,
         CancellationToken cancellationToken)
     {
-        SafeHttpTransportResult result;
-        for (var attempt = 0; ; attempt++)
-        {
-            await dependencies.RateLimiter.WaitAsync(host, cancellationToken);
-            using (await dependencies.RequestBudget.AcquireAsync(cancellationToken))
+        var result = await _fetcher.FetchAsync(
+            new(
+                _request.RunId,
+                _request.EndpointId,
+                url,
+                _request.IsProduction)
             {
-                result = await dependencies.Transport.SendAsync(
-                    new SafeHttpTransportRequest(request.EndpointId, url, request.IsProduction,
-                        MaxResponseBodyBytes: options.MaxPageBytes,
-                        TimeoutSeconds: options.FetchTimeoutSeconds)
-                    {
-                        HopPolicy = hopPolicy
-                    },
-                    cancellationToken);
-            }
-
-            if (attempt >= options.TransientRetryCount || !IsTransient(result))
-            {
-                return result;
-            }
-
-            var delay = RetryDelay(url, attempt, result.RetryAfter);
-            if (delay > TimeSpan.Zero)
-            {
-                await Task.Delay(delay, timeProvider, cancellationToken);
-            }
-        }
+                HopPolicy = hopPolicy
+            },
+            _profile,
+            cancellationToken);
+        return result.Response;
     }
-
-    private TimeSpan RetryDelay(string url, int attempt, TimeSpan? retryAfter)
-    {
-        if (retryAfter is { } requested)
-        {
-            return requested > options.MaxRetryDelay ? options.MaxRetryDelay : requested;
-        }
-
-        var multiplier = 1 << attempt;
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes($"{request.RunId:N}:{attempt}:{url}"));
-        var jitter = BitConverter.ToUInt32(bytes, 0) % 100;
-        var delay = options.RetryBaseDelay * multiplier + TimeSpan.FromMilliseconds(jitter);
-        return delay > options.MaxRetryDelay ? options.MaxRetryDelay : delay;
-    }
-
-    private static bool IsTransient(SafeHttpTransportResult result) =>
-        result.StatusCode is 408 or 425 or 429 or >= 500
-        || result.Failure is SafeHttpFailureKind.NameResolution
-            or SafeHttpFailureKind.Connection
-            or SafeHttpFailureKind.Tls
-            or SafeHttpFailureKind.Timeout
-            or SafeHttpFailureKind.ResponseHeadersTooLarge
-            or SafeHttpFailureKind.Protocol;
 }

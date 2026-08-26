@@ -30,6 +30,8 @@ using WebHealth.Application.Notifications;
 using WebHealth.Infrastructure.Notifications;
 using WebHealth.Application.PngAudits;
 using WebHealth.Infrastructure.PngAudits;
+using WebHealth.Application.SiteAnalysis;
+using WebHealth.Infrastructure.SiteAnalysis;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -174,12 +176,11 @@ public static class DependencyInjection
         services.AddScoped<RobotsRefreshService>();
         services.AddScoped<IRobotsPolicyService, RobotsPolicyService>();
         services.AddScoped<RobotsRefreshJob>();
+        services.AddSingleton<IHtmlDocumentDiscoveryExtractor, HtmlDocumentDiscoveryExtractor>();
         services.AddSingleton<IHtmlLinkExtractor, HtmlLinkExtractor>();
-
-        services.AddSingleton<CrawlRequestBudget>();
-        services.AddSingleton(provider => new HostRequestRateLimiter(
-            provider.GetRequiredService<TimeProvider>(),
-            provider.GetRequiredService<CrawlSchedulingOptions>().RequestsPerSecondPerHost));
+        services.AddSingleton<SiteAnalysisRequestBudget>();
+        services.AddSingleton<SiteAnalysisHostRateLimiter>();
+        services.AddScoped<ISiteAnalysisFetcher, SiteAnalysisFetcher>();
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
         services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
@@ -334,8 +335,7 @@ public static class DependencyInjection
         services.AddScoped<SafeHttpTransport>();
         services.AddScoped<ISafeHttpTransport>(provider =>
             provider.GetRequiredService<SafeHttpTransport>());
-        services.AddScoped<IPngImageTransport>(provider =>
-            provider.GetRequiredService<SafeHttpTransport>());
+        services.AddScoped<IPngImageTransport, PngImageTransport>();
         services.AddScoped<IEndpointUrlSchemeProbe, EndpointUrlSchemeProbe>();
         services.AddScoped<EndpointUrlResolver>();
         services.AddScoped<ISslCertificateProbe, SslCertificateProbe>();
@@ -393,6 +393,7 @@ public static class DependencyInjection
         if (options.WorkerCount is < 1 or > 8
             || options.RequestConcurrency < 1
             || options.WorkerCount * options.RequestConcurrency > transportOptions.GlobalConcurrency / 2
+            || !double.IsFinite(options.RequestsPerSecondPerHost)
             || options.RequestsPerSecondPerHost is <= 0 or > 10
             || options.MaxDuration < TimeSpan.FromMinutes(1)
             || options.MaxDuration > TimeSpan.FromHours(4)
@@ -419,7 +420,8 @@ public static class DependencyInjection
             || options.MaxPageBytes > SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes
             || options.MaxTotalPageBytes < options.MaxPageBytes
             || options.MaxTotalPageBytes > 512L * 1024 * 1024
-            || options.MaxImageReferencesPerPage is < 1 or > 10000
+            || options.MaxImageReferencesPerPage is < 1
+                or > HtmlDocumentDiscoveryLimits.MaxImageReferences
             || options.MaxUniqueImages is < 1 or > 5000
             || options.MaxTotalImageSourceMappings < options.MaxUniqueImages
             || options.MaxTotalImageSourceMappings > 50000

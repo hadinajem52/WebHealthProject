@@ -17,6 +17,16 @@ The comparison requires the configured byte and percentage thresholds to pass ag
 
 Fetch outcomes and byte-analysis outcomes have separate typed classifications. Analyzer results expose validated image facts and comparison metrics through factory methods so invalid state combinations cannot be constructed through the public contract.
 
+## Increment 2 shared site analysis
+
+`ISiteAnalysisFetcher` now owns standard site-analysis transport execution, bounded transient retries, `Retry-After`, the shared request budget and per-host rate limiting. `CrawlRequestExecutor` is a thin adapter that supplies the existing crawl profile, including its per-host request rate, and redirect policy. Future PNG runs can therefore supply their own snapshotted rate without inheriting crawler configuration. The shared profile remains capped at the normal 2 MB transport ceiling; the separate PNG image transport capability from Increment 1 remains the only path that can request up to 8 MB and will be connected to PNG crawling in a later increment.
+
+`SiteAnalysisRequestBudget` replaces the crawler-specific budget without changing its capacity. All site-analysis consumers resolve the same singleton budget, preserving at least half of the global safe-transport capacity for monitoring.
+
+The shared host limiter admits requests through per-host gates, advances pacing only after a non-cancelled waiter is admitted and retains at most 4096 host states with idle-state eviction.
+
+`IHtmlDocumentDiscoveryExtractor` parses navigation links, the first base URL, `img[src]`, `img[srcset]` and `picture source[srcset]` in one bounded pass. It deliberately ignores `source[src]`, which is outside V1. Navigation and image-reference completeness are reported independently. The existing `IHtmlLinkExtractor` remains as an adapter over navigation discovery, so broken-link behavior does not consume image data.
+
 ## ImageSharp dependency decision
 
 Reviewed on 2026-08-26.
@@ -51,6 +61,6 @@ ImageSharp 3.1.12 `Image.Identify` rejects the known-valid APNG fixture even tho
 
 ## Transport limits
 
-Normal monitoring and crawling continue to default to 2 MB. `ISafeHttpTransport` rejects requests above that standard ceiling. The PNG-specific `IPngImageTransport` path may explicitly request up to the 8 MB absolute ceiling. Requests beyond the ceiling for either path are rejected before outbound execution.
+Normal monitoring and crawling continue to default to 2 MB. `SafeHttpTransport` implements only `ISafeHttpTransport` and rejects requests above that standard ceiling. The PNG-specific `PngImageTransport` adapter uses an internal extended operation and may explicitly request up to the 8 MB absolute ceiling. Requests beyond the ceiling for either path are rejected before outbound execution.
 
 The `PngAudits` configuration snapshots the V1 defaults from the implementation plan and validates them during application startup. Since Increment 1 has no execution path, `Enabled: true` is rejected at startup instead of being accepted as a silent no-op. A later execution increment must remove that rejection only when it also wires scheduling, queue and worker activation.

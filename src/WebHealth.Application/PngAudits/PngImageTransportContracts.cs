@@ -5,8 +5,19 @@ namespace WebHealth.Application.PngAudits;
 public interface IPngImageTransport
 {
     Task<SafeHttpTransportResult> SendAsync(
-        SafeHttpTransportRequest request,
+        PngImageTransportRequest request,
         CancellationToken cancellationToken = default);
+}
+
+public sealed record PngImageTransportRequest(
+    Guid EndpointId,
+    string Url,
+    bool IsProduction,
+    int MaxRedirects = SafeHttpTransportDefaults.MaxRedirects,
+    int MaxResponseBodyBytes = SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes,
+    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds)
+{
+    public ISafeHttpRequestHopPolicy? HopPolicy { get; init; }
 }
 
 public enum PngImageFetchClassification

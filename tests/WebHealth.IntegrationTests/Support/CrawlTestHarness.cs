@@ -7,6 +7,7 @@ using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Crawling;
 using WebHealth.Infrastructure.Crawling;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.SiteAnalysis;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -144,22 +145,27 @@ internal static class CrawlTestHarness
         CrawlRunRequest request,
         CrawlSchedulingOptions? options = null,
         ICrawlRobotsReader? robotsReader = null,
-        CrawlRequestBudget? budget = null,
+        SiteAnalysisRequestBudget? budget = null,
         CancellationToken cancellationToken = default)
     {
         var sink = new RecordingCrawlResultSink();
         var transportOptions = new SafeHttpTransportOptions();
         var effective = options ?? Options;
-        var service = new CrawlExecutionService(
+        var timeProvider = TimeProvider.System;
+        var discoveryExtractor = new HtmlDocumentDiscoveryExtractor();
+        var fetcher = new SiteAnalysisFetcher(
             transport,
-            new HtmlLinkExtractor(),
+            budget ?? new SiteAnalysisRequestBudget(transportOptions),
+            new SiteAnalysisHostRateLimiter(timeProvider),
+            timeProvider);
+        var service = new CrawlExecutionService(
+            fetcher,
+            new HtmlLinkExtractor(discoveryExtractor),
             robotsReader ?? new FakeRobotsReader(),
             sink,
-            budget ?? new CrawlRequestBudget(transportOptions),
-            new HostRequestRateLimiter(TimeProvider.System, effective.RequestsPerSecondPerHost),
             effective,
             transportOptions,
-            TimeProvider.System,
+            timeProvider,
             NullLogger<CrawlExecutionService>.Instance);
 
         var outcome = await service.ExecuteAsync(request, cancellationToken);

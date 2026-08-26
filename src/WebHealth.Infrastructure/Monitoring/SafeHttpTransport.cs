@@ -6,7 +6,6 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using WebHealth.Application.Monitoring;
-using WebHealth.Application.PngAudits;
 using WebHealth.Domain.Normalization;
 
 namespace WebHealth.Infrastructure.Monitoring;
@@ -14,16 +13,16 @@ namespace WebHealth.Infrastructure.Monitoring;
 internal sealed class SafeHttpTransport(
     IHttpClientFactory httpClientFactory,
     SafeHttpConcurrencyLimiter concurrencyLimiter,
-    TimeProvider timeProvider) : ISafeHttpTransport, IPngImageTransport
+    TimeProvider timeProvider) : ISafeHttpTransport
 {
     public Task<SafeHttpTransportResult> SendAsync(
         SafeHttpTransportRequest request,
         CancellationToken cancellationToken = default) =>
         SendAsync(request, SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes, cancellationToken);
 
-    Task<SafeHttpTransportResult> IPngImageTransport.SendAsync(
+    internal Task<SafeHttpTransportResult> SendExtendedAsync(
         SafeHttpTransportRequest request,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken = default) =>
         SendAsync(request, SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes, cancellationToken);
 
     private async Task<SafeHttpTransportResult> SendAsync(

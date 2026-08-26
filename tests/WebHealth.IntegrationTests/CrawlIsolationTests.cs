@@ -4,6 +4,7 @@ using Hangfire;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Crawling;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Infrastructure.SiteAnalysis;
 using WebHealth.IntegrationTests.Support;
 using Xunit;
 
@@ -48,10 +49,10 @@ public sealed class CrawlIsolationTests
     }
 
     [Fact]
-    public async Task ConcurrentRuns_ShareOneCrawlBudgetRatherThanOneEach()
+    public async Task ConcurrentRuns_ShareOneSiteAnalysisBudgetRatherThanOneEach()
     {
         var transportOptions = new SafeHttpTransportOptions();
-        var budget = new CrawlRequestBudget(transportOptions);
+        var budget = new SiteAnalysisRequestBudget(transportOptions);
         budget.Capacity.Should().Be(transportOptions.GlobalConcurrency / 2);
 
         var options = CrawlTestHarness.Options with { RequestConcurrency = budget.Capacity };

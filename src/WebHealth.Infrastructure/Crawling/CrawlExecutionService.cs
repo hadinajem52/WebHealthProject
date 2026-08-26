@@ -5,27 +5,24 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.Monitoring;
+using WebHealth.Application.SiteAnalysis;
 using WebHealth.Domain.Crawling;
 using WebHealth.Infrastructure.Monitoring;
 
 namespace WebHealth.Infrastructure.Crawling;
 
 internal sealed record CrawlDependencies(
-    ISafeHttpTransport Transport,
+    ISiteAnalysisFetcher Fetcher,
     IHtmlLinkExtractor LinkExtractor,
     ICrawlRobotsReader RobotsReader,
     ICrawlResultSink Sink,
-    CrawlRequestBudget RequestBudget,
-    HostRequestRateLimiter RateLimiter,
     ILogger Logger);
 
 internal sealed class CrawlExecutionService(
-    ISafeHttpTransport transport,
+    ISiteAnalysisFetcher fetcher,
     IHtmlLinkExtractor linkExtractor,
     ICrawlRobotsReader robotsReader,
     ICrawlResultSink sink,
-    CrawlRequestBudget requestBudget,
-    HostRequestRateLimiter rateLimiter,
     CrawlSchedulingOptions options,
     SafeHttpTransportOptions transportOptions,
     TimeProvider timeProvider,
@@ -63,8 +60,7 @@ internal sealed class CrawlExecutionService(
 
         var run = new CrawlRunExecution(
             request, scope!, options, transportOptions.UserAgent, timeProvider, executionClaimId,
-            new(transport, linkExtractor, robotsReader, sink, requestBudget,
-                rateLimiter, logger));
+            new(fetcher, linkExtractor, robotsReader, sink, logger));
         return await run.ExecuteAsync(cancellationToken);
     }
 
@@ -153,7 +149,7 @@ internal sealed class CrawlRunExecution
         _frontier = new(scope, request.Limits);
         _deadline = timeProvider.GetUtcNow() + options.MaxDuration;
         _userAgent = userAgent;
-        _requestExecutor = new(request, options, dependencies, timeProvider);
+        _requestExecutor = new(request, options, dependencies.Fetcher);
 
         foreach (var seed in scope.Seeds)
         {
@@ -370,7 +366,6 @@ internal sealed class CrawlRunExecution
         CancellationToken cancellationToken) =>
         await _requestExecutor.ExecuteAsync(
             item.Url.Value,
-            item.Url.Host,
             new CrawlRedirectHopPolicy(this),
             cancellationToken);
 
@@ -420,7 +415,6 @@ internal sealed class CrawlRunExecution
             }
         }
 
-        await _dependencies.RateLimiter.WaitAsync(destination.Host, cancellationToken);
         return new(true);
     }
 

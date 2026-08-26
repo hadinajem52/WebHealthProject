@@ -1,12 +1,12 @@
 using WebHealth.Infrastructure.Monitoring;
 
-namespace WebHealth.Infrastructure.Crawling;
+namespace WebHealth.Infrastructure.SiteAnalysis;
 
-internal sealed class CrawlRequestBudget
+internal sealed class SiteAnalysisRequestBudget
 {
     private readonly SemaphoreSlim _slots;
 
-    public CrawlRequestBudget(SafeHttpTransportOptions transportOptions)
+    public SiteAnalysisRequestBudget(SafeHttpTransportOptions transportOptions)
     {
         ArgumentNullException.ThrowIfNull(transportOptions);
         Capacity = Math.Max(1, transportOptions.GlobalConcurrency / 2);
