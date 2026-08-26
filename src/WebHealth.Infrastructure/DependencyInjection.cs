@@ -182,6 +182,7 @@ public static class DependencyInjection
         services.AddSingleton<SiteAnalysisHostRateLimiter>();
         services.AddScoped<ISiteAnalysisFetcher, SiteAnalysisFetcher>();
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
+        services.AddScoped<IPngSiteCrawler, PngSiteCrawler>();
         services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlReconciler, CrawlReconciler>();

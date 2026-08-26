@@ -49,6 +49,9 @@ public sealed class SafeHttpTransportTests
         Encoding.UTF8.GetString(result.Body.Span).Should().Be("Hello wo");
         result.FinalDestination.Should().Be(new SafeHttpDestination(
             $"http://allowed.test:{server.Port}/health"));
+        result.FinalRequestUrl.Should().Be(
+            $"http://allowed.test:{server.Port}/health?token=not-logged");
+        result.OutboundRequestCount.Should().Be(1);
         result.RequestIdentity.Should().Be(SafeHttpRequestIdentity.Create(transportRequest));
         result.Certificate.Should().BeNull();
         var request = await server.Request;
@@ -142,6 +145,7 @@ public sealed class SafeHttpTransportTests
             MaxResponseBodyBytes: SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes + 1));
 
         result.Failure.Should().Be(SafeHttpFailureKind.InvalidUrl);
+        result.OutboundRequestCount.Should().Be(0);
         server.ContactCount.Should().Be(0);
     }
 
@@ -241,7 +245,30 @@ public sealed class SafeHttpTransportTests
         var result = await harness.Transport.SendAsync(request);
 
         result.Failure.Should().Be(SafeHttpFailureKind.RequestPolicyRejected);
+        result.OutboundRequestCount.Should().Be(1);
         server.ContactCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendAsync_SeparatesTheExactFinalRequestFromItsDisplayDestination()
+    {
+        await using var server = await HttpFixture.Start(
+            contact => contact == 1
+                ? "HTTP/1.1 302 Found\r\nLocation: /final?variant=2&token=secret\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            repeat: true);
+        await using var harness = CreateHarness(
+            new HostResolver(("final.test", [IPAddress.Loopback])));
+
+        var result = await harness.Transport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://final.test:{server.Port}/start",
+            false));
+
+        result.FinalDestination!.Url.Should().Be($"http://final.test:{server.Port}/final");
+        result.FinalRequestUrl.Should().Be(
+            $"http://final.test:{server.Port}/final?variant=2&token=secret");
+        result.OutboundRequestCount.Should().Be(2);
     }
 
     [Fact]
@@ -283,6 +310,7 @@ public sealed class SafeHttpTransportTests
 
         success.Succeeded.Should().BeTrue();
         success.Redirects.Should().HaveCount(10);
+        success.OutboundRequestCount.Should().Be(11);
         allowed.ContactCount.Should().Be(11);
 
         await using var excessive = await HttpFixture.Start(
@@ -297,6 +325,7 @@ public sealed class SafeHttpTransportTests
         failure.Failure.Should().Be(SafeHttpFailureKind.RedirectLimit);
         failure.StatusCode.Should().Be(302);
         failure.Redirects.Should().HaveCount(10);
+        failure.OutboundRequestCount.Should().Be(11);
         excessive.ContactCount.Should().Be(11);
     }
 

@@ -44,6 +44,8 @@ public sealed record SiteAnalysisFetchRequest
     public bool IsProduction { get; }
 
     public ISafeHttpRequestHopPolicy? HopPolicy { get; init; }
+
+    public int MaxOutboundRequests { get; init; } = int.MaxValue;
 }
 
 public sealed record SiteAnalysisFetchProfile
@@ -105,17 +107,34 @@ public sealed record SiteAnalysisFetchProfile
 
 public sealed record SiteAnalysisFetchResult
 {
+    [Obsolete("Provide the outbound request count and limit state.")]
     public SiteAnalysisFetchResult(SafeHttpTransportResult response, int attempts)
+        : this(response, attempts, attempts, false)
+    {
+    }
+
+    public SiteAnalysisFetchResult(
+        SafeHttpTransportResult response,
+        int attempts,
+        int outboundRequestCount,
+        bool outboundRequestLimitReached)
     {
         ArgumentNullException.ThrowIfNull(response);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attempts);
+        ArgumentOutOfRangeException.ThrowIfNegative(outboundRequestCount);
         Response = response;
         Attempts = attempts;
+        OutboundRequestCount = outboundRequestCount;
+        OutboundRequestLimitReached = outboundRequestLimitReached;
     }
 
     public SafeHttpTransportResult Response { get; }
 
     public int Attempts { get; }
+
+    public int OutboundRequestCount { get; }
+
+    public bool OutboundRequestLimitReached { get; }
 }
 
 public sealed record HtmlDocumentDiscovery(

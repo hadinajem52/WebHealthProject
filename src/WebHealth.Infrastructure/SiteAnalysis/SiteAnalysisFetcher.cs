@@ -18,14 +18,27 @@ internal sealed class SiteAnalysisFetcher(
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(profile);
+        if (request.MaxOutboundRequests <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(request));
+        }
 
         SafeHttpTransportResult response;
+        var outboundRequestCount = 0;
         for (var attempt = 0; ; attempt++)
         {
-            response = await SendAsync(request, profile, cancellationToken);
+            var remainingRequests = request.MaxOutboundRequests - outboundRequestCount;
+            response = await SendAsync(request, profile, remainingRequests, cancellationToken);
+            outboundRequestCount = checked(outboundRequestCount + response.OutboundRequestCount);
+            var redirectBudgetReached = response.Failure == SafeHttpFailureKind.RedirectLimit
+                && remainingRequests <= SafeHttpTransportDefaults.MaxRedirects;
             if (attempt >= profile.TransientRetryCount || !IsTransient(response))
             {
-                return new(response, attempt + 1);
+                return new(response, attempt + 1, outboundRequestCount, redirectBudgetReached);
+            }
+            if (outboundRequestCount >= request.MaxOutboundRequests)
+            {
+                return new(response, attempt + 1, outboundRequestCount, true);
             }
 
             await WaitBeforeRetryAsync(request, profile, response, attempt, cancellationToken);
@@ -35,6 +48,7 @@ internal sealed class SiteAnalysisFetcher(
     private async Task<SafeHttpTransportResult> SendAsync(
         SiteAnalysisFetchRequest request,
         SiteAnalysisFetchProfile profile,
+        int remainingRequests,
         CancellationToken cancellationToken)
     {
         await rateLimiter.WaitAsync(
@@ -48,6 +62,9 @@ internal sealed class SiteAnalysisFetcher(
                     request.EndpointId,
                     request.Url,
                     request.IsProduction,
+                    MaxRedirects: Math.Min(
+                        SafeHttpTransportDefaults.MaxRedirects,
+                        remainingRequests - 1),
                     MaxResponseBodyBytes: profile.MaxResponseBodyBytes,
                     TimeoutSeconds: profile.TimeoutSeconds)
                 {

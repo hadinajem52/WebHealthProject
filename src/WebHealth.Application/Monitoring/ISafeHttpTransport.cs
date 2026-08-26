@@ -61,6 +61,15 @@ public sealed record SafeHttpTransportResult(
     string? PolicyRejectionReason = null)
 {
     public bool Succeeded => Failure is null;
+
+    public string? FinalRequestUrl { get; init; }
+
+    public int OutboundRequestCount { get; init; } =
+        Failure is SafeHttpFailureKind.InvalidUrl or SafeHttpFailureKind.DestinationRejected
+            ? 0
+            : Failure == SafeHttpFailureKind.RequestPolicyRejected
+                ? Redirects.Count
+                : Redirects.Count + 1;
 }
 
 public sealed record SafeHttpPhaseTiming(

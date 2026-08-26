@@ -36,6 +36,13 @@ internal sealed class SafeHttpTransport(
         var requestIdentity = SafeHttpRequestIdentity.Create(request);
         SafeHttpTimingCollector? currentTiming = null;
         int? currentTtfbMs = null;
+        string? finalRequestUrl = null;
+        var outboundRequestCount = 0;
+        SafeHttpTransportResult Complete(SafeHttpTransportResult result) => result with
+        {
+            FinalRequestUrl = finalRequestUrl,
+            OutboundRequestCount = outboundRequestCount
+        };
         if (!normalized.Succeeded
             || requestIdentity is null
             || request.MaxRedirects is < 0 or > SafeHttpTransportDefaults.MaxRedirects
@@ -44,7 +51,11 @@ internal sealed class SafeHttpTransport(
             || request.TimeoutSeconds <= 0
             || request.TimeoutSeconds > SafeHttpTransportDefaults.MaxTimeoutSeconds)
         {
-            return Failure(SafeHttpFailureKind.InvalidUrl, stopwatch, redirects, requestIdentity);
+            return Complete(Failure(
+                SafeHttpFailureKind.InvalidUrl,
+                stopwatch,
+                redirects,
+                requestIdentity));
         }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -62,7 +73,11 @@ internal sealed class SafeHttpTransport(
                 var currentNormalization = EndpointUrlNormalizer.Normalize(current.AbsoluteUri);
                 if (!currentNormalization.Succeeded)
                 {
-                    return Failure(SafeHttpFailureKind.RedirectInvalid, stopwatch, redirects, requestIdentity);
+                    return Complete(Failure(
+                        SafeHttpFailureKind.RedirectInvalid,
+                        stopwatch,
+                        redirects,
+                        requestIdentity));
                 }
 
                 if (!visited.Add(currentNormalization.NormalizedUrl!))
@@ -71,14 +86,14 @@ internal sealed class SafeHttpTransport(
                     {
                         redirects[^1] = redirects[^1] with { IsLoop = true };
                     }
-                    return Failure(
+                    return Complete(Failure(
                         SafeHttpFailureKind.RedirectLoop,
                         stopwatch,
                         redirects,
                         requestIdentity,
                         redirects[^1].StatusCode,
                         Destination(currentNormalization),
-                        BuildTiming(currentTiming, currentTtfbMs));
+                        BuildTiming(currentTiming, currentTtfbMs)));
                 }
 
                 var hopDecision = request.HopPolicy is null
@@ -87,14 +102,14 @@ internal sealed class SafeHttpTransport(
                         new(currentNormalization.NormalizedUrl!, redirects.Count), timeout.Token);
                 if (hopDecision is { Allowed: false })
                 {
-                    return Failure(
+                    return Complete(Failure(
                         SafeHttpFailureKind.RequestPolicyRejected,
                         stopwatch,
                         redirects,
                         requestIdentity,
                         finalDestination: Destination(currentNormalization),
                         timing: BuildTiming(currentTiming, currentTtfbMs),
-                        policyRejectionReason: hopDecision.RejectionReason);
+                        policyRejectionReason: hopDecision.RejectionReason));
                 }
 
                 using var hostLease = await concurrencyLimiter.AcquireHostAsync(
@@ -110,6 +125,8 @@ internal sealed class SafeHttpTransport(
                 message.Options.Set(SafeHttpTimingOptions.Key, currentTiming);
                 message.Options.Set(SafeHttpTlsOptions.Key, currentTls);
                 var ttfbStart = Stopwatch.GetTimestamp();
+                finalRequestUrl = currentNormalization.NormalizedUrl;
+                outboundRequestCount++;
                 using var response = await client.SendAsync(
                     message,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -129,7 +146,7 @@ internal sealed class SafeHttpTransport(
                         chainTrusted: true,
                         timeProvider.GetUtcNow());
 
-                    return new SafeHttpTransportResult(
+                    return Complete(new SafeHttpTransportResult(
                         null,
                         (int)response.StatusCode,
                         Destination(currentNormalization),
@@ -145,31 +162,31 @@ internal sealed class SafeHttpTransport(
                             ? advertised
                             : null,
                         BoundedContentType(response.Content.Headers.ContentType?.ToString()),
-                        RetryAfter(response.Headers.RetryAfter));
+                        RetryAfter(response.Headers.RetryAfter)));
                 }
 
                 if (redirects.Count >= request.MaxRedirects)
                 {
-                    return Failure(
+                    return Complete(Failure(
                         SafeHttpFailureKind.RedirectLimit,
                         stopwatch,
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization),
-                        BuildTiming(currentTiming, currentTtfbMs));
+                        BuildTiming(currentTiming, currentTtfbMs)));
                 }
 
                 if (response.Headers.Location is null)
                 {
-                    return Failure(
+                    return Complete(Failure(
                         SafeHttpFailureKind.RedirectMissingLocation,
                         stopwatch,
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization),
-                        BuildTiming(currentTiming, currentTtfbMs));
+                        BuildTiming(currentTiming, currentTtfbMs)));
                 }
 
                 Uri target;
@@ -179,41 +196,41 @@ internal sealed class SafeHttpTransport(
                 }
                 catch (UriFormatException)
                 {
-                    return Failure(
+                    return Complete(Failure(
                         SafeHttpFailureKind.RedirectInvalid,
                         stopwatch,
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization),
-                        BuildTiming(currentTiming, currentTtfbMs));
+                        BuildTiming(currentTiming, currentTtfbMs)));
                 }
 
                 var targetNormalization = EndpointUrlNormalizer.Normalize(target.AbsoluteUri);
                 if (!targetNormalization.Succeeded)
                 {
-                    return Failure(
+                    return Complete(Failure(
                         SafeHttpFailureKind.RedirectInvalid,
                         stopwatch,
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization),
-                        BuildTiming(currentTiming, currentTtfbMs));
+                        BuildTiming(currentTiming, currentTtfbMs)));
                 }
 
                 if (request.IsProduction
                     && current.Scheme == Uri.UriSchemeHttps
                     && target.Scheme == Uri.UriSchemeHttp)
                 {
-                    return Failure(
+                    return Complete(Failure(
                         SafeHttpFailureKind.HttpsDowngrade,
                         stopwatch,
                         redirects,
                         requestIdentity,
                         (int)response.StatusCode,
                         Destination(currentNormalization),
-                        BuildTiming(currentTiming, currentTtfbMs));
+                        BuildTiming(currentTiming, currentTtfbMs)));
                 }
 
                 redirects.Add(new SafeHttpRedirectHop(
@@ -226,21 +243,21 @@ internal sealed class SafeHttpTransport(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return Failure(
+            return Complete(Failure(
                 SafeHttpFailureKind.Cancelled, stopwatch, redirects, requestIdentity,
-                timing: BuildTiming(currentTiming, currentTtfbMs));
+                timing: BuildTiming(currentTiming, currentTtfbMs)));
         }
         catch (OperationCanceledException)
         {
-            return Failure(
+            return Complete(Failure(
                 SafeHttpFailureKind.Timeout, stopwatch, redirects, requestIdentity,
-                timing: BuildTiming(currentTiming, currentTtfbMs));
+                timing: BuildTiming(currentTiming, currentTtfbMs)));
         }
         catch (Exception exception) when (TryClassify(exception, out var failure))
         {
-            return Failure(
+            return Complete(Failure(
                 failure, stopwatch, redirects, requestIdentity,
-                timing: BuildTiming(currentTiming, currentTtfbMs));
+                timing: BuildTiming(currentTiming, currentTtfbMs)));
         }
     }
 

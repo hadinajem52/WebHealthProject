@@ -27,6 +27,22 @@ The shared host limiter admits requests through per-host gates, advances pacing 
 
 `IHtmlDocumentDiscoveryExtractor` parses navigation links, the first base URL, `img[src]`, `img[srcset]` and `picture source[srcset]` in one bounded pass. It deliberately ignores `source[src]`, which is outside V1. Navigation and image-reference completeness are reported independently. The existing `IHtmlLinkExtractor` remains as an adapter over navigation discovery, so broken-link behavior does not consume image data.
 
+## Increment 3 bounded discovery
+
+`IPngSiteCrawler` now produces the in-memory discovery result required by the later analyzer and persistence increments. It sequentially fetches internal HTML pages through `ISiteAnalysisFetcher`, applies the snapshotted PNG request rate, timeout and retry policy, obeys robots rules, and rejects redirects outside the page scope.
+
+Page traversal and image asset scope are separate. Pages require both an allowed host and an allowed path prefix. Image references require only an allowed asset host, so a page under `/application/` may validly discover `/assets/image.png`. External asset hosts, `data:`, `blob:`, unsupported schemes, credentials, malformed URLs and overlong values are recorded as typed discovery skips and are not fetched.
+
+Discovered image requests retain an in-memory fetch URL, a SHA-256 identity hash and a bounded redacted display URL. Query order and authored query encoding remain part of the request identity, fragments are removed, and sensitive query values appear only as `REDACTED` in display and skip values. Image bodies are not downloaded in this increment.
+
+The crawler resolves image and navigation references against the redirected document URL and the document's first valid `<base href>`. It uses the shared `srcset` parser rather than comma splitting, keeps descriptors on source mappings, and deduplicates each image request independently from its source mappings.
+
+Discovery is bounded by page count, depth, page bytes, total page bytes, per-page image references, unique image requests, source mappings, HTTP attempts and duration. Coverage reasons remain separated across crawl, image-analysis and source-mapping areas. Reaching one limit does not falsely report complete coverage in another area.
+
+The HTTP-attempt budget counts every outbound exchange, including redirect hops and retries. The remaining run budget constrains redirect traversal before each transport call, so a single redirect chain cannot exceed it. The run duration is also a linked cancellation deadline for active requests, robots lookups, rate-limit waits and retry delays; deadline cancellation returns partial discovery with `DurationLimit`, while caller cancellation still propagates.
+
+Safe transport exposes the exact normalized final request URL only in memory while retaining its query-free final destination for logs and display. Page identity uses the requested URL when no redirect occurred and the exact final request URL after redirects. Asset fetch URLs retain their resolved authored form, while identity hashes use the same canonical request representation that transport sends, preserving query order and values while consolidating equivalent host, port and escape spellings.
+
 ## ImageSharp dependency decision
 
 Reviewed on 2026-08-26.

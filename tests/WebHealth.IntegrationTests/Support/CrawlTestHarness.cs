@@ -31,7 +31,8 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
         int RedirectCount = 0,
         string? FinalUrl = null,
         bool Truncated = false,
-        TimeSpan? RetryAfter = null);
+        TimeSpan? RetryAfter = null,
+        string? DisplayUrl = null);
 
     public FakeSiteTransport Page(string url, string html) =>
         With(url, new(200, html));
@@ -66,6 +67,23 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
 
             var response = _pages.GetValueOrDefault(request.Url, new SiteResponse(404));
             var finalUrl = response.FinalUrl ?? request.Url;
+            if (response.RedirectCount > request.MaxRedirects)
+            {
+                return new(
+                    SafeHttpFailureKind.RedirectLimit,
+                    302,
+                    new SafeHttpDestination(request.Url),
+                    TimeSpan.FromMilliseconds(5),
+                    0,
+                    false,
+                    ReadOnlyMemory<byte>.Empty,
+                    [.. Enumerable.Range(0, request.MaxRedirects)
+                        .Select(index => new SafeHttpRedirectHop(301, request.Url, request.Url, false))])
+                {
+                    FinalRequestUrl = request.Url,
+                    OutboundRequestCount = request.MaxRedirects + 1
+                };
+            }
             if (response.RedirectCount > 0
                 && request.HopPolicy is not null
                 && await request.HopPolicy.EvaluateAsync(
@@ -80,7 +98,11 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
                     false,
                     ReadOnlyMemory<byte>.Empty,
                     [new SafeHttpRedirectHop(302, request.Url, finalUrl, false)],
-                    PolicyRejectionReason: decision.RejectionReason);
+                    PolicyRejectionReason: decision.RejectionReason)
+                {
+                    FinalRequestUrl = request.Url,
+                    OutboundRequestCount = 1
+                };
             }
             var body = response.Html is null
                 ? ReadOnlyMemory<byte>.Empty
@@ -89,7 +111,7 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
             return new(
                 response.Failure,
                 response.StatusCode,
-                new SafeHttpDestination(finalUrl),
+                new SafeHttpDestination(response.DisplayUrl ?? finalUrl),
                 TimeSpan.FromMilliseconds(5),
                 body.Length,
                 response.Truncated,
@@ -97,7 +119,11 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
                 [.. Enumerable.Range(0, response.RedirectCount)
                     .Select(index => new SafeHttpRedirectHop(301, request.Url, request.Url, false))],
                 ContentType: response.Html is null ? null : "text/html; charset=utf-8",
-                RetryAfter: response.RetryAfter);
+                RetryAfter: response.RetryAfter)
+            {
+                FinalRequestUrl = finalUrl,
+                OutboundRequestCount = response.RedirectCount + 1
+            };
         }
         finally
         {

@@ -51,6 +51,23 @@ public sealed class HtmlDocumentDiscoveryExtractorTests
     }
 
     [Fact]
+    public void Extract_ParsesADataUrlCommaAsPartOfOneSourceSetCandidate()
+    {
+        var result = Extract(
+            "<html><body><img srcset=\"data:image/png;base64,AAAA 1x, /image.png 2x\"></body></html>");
+
+        result.Images.Should().Equal(
+            new HtmlImageReference(
+                "data:image/png;base64,AAAA",
+                HtmlImageAttributeKinds.ImageSourceSet,
+                "1x"),
+            new HtmlImageReference(
+                "/image.png",
+                HtmlImageAttributeKinds.ImageSourceSet,
+                "2x"));
+    }
+
+    [Fact]
     public void LinkAdapter_ExposesOnlyNavigationDiscovery()
     {
         var extractor = new HtmlDocumentDiscoveryExtractor();
