@@ -23,7 +23,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 typeof(Endpoint),
                 baseEntityType,
                 propertyCount: 23,
-                navigationCount: 3,
+                navigationCount: 2,
                 foreignKeyCount: 6,
                 unnamedIndexCount: 7,
                 keyCount: 1);

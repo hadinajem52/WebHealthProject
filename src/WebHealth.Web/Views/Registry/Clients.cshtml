@@ -49,7 +49,10 @@
             <a class="button button--secondary" asp-controller="Targets" asp-action="Endpoints">View endpoints</a>
             @if (Model.CanManage)
             {
-                <a class="button button--secondary" asp-action="Archived">Archived</a>
+                <a class="button button--secondary" asp-action="Archived">
+                    @await Html.PartialAsync("_Icon", "archive")
+                    <span>Archived</span>
+                </a>
             }
         </div>
     </div>

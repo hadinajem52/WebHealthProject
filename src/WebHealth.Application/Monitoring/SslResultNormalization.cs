@@ -146,7 +146,7 @@ public static class SslResultNormalizer
             SslProbeFailureKind.Connection => HttpFailureCategories.Connection,
             SslProbeFailureKind.Timeout => HttpFailureCategories.Timeout,
             SslProbeFailureKind.Cancelled => HttpFailureCategories.Cancellation,
-            SslProbeFailureKind.DestinationRejected or SslProbeFailureKind.TargetNotAuthorized =>
+            SslProbeFailureKind.DestinationRejected =>
                 HttpFailureCategories.DestinationPolicy,
             SslProbeFailureKind.InvalidUrl or SslProbeFailureKind.NotHttps =>
                 HttpFailureCategories.InvalidConfiguration,

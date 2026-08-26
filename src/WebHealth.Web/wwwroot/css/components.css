@@ -882,14 +882,6 @@ code,
     text-transform: uppercase;
 }
 
-.registration-authorization {
-    transition: opacity var(--motion-fast) var(--motion-easing);
-}
-
-.registration-authorization[data-inactive="true"] {
-    opacity: 0.6;
-}
-
 .registration-advanced {
     margin-top: var(--space-6);
 }

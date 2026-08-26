@@ -45,7 +45,7 @@ public sealed class CrawlRunner(
         }
 
         var endpoint = await MonitoringEligibility
-            .ApplyTestable(dbContext.Endpoints.AsNoTracking(), now)
+            .ApplyTestable(dbContext.Endpoints.AsNoTracking())
             .Where(candidate => candidate.Id == endpointId)
             .Select(candidate => new
             {
@@ -56,7 +56,7 @@ public sealed class CrawlRunner(
         if (endpoint is null)
         {
             return CrawlManualResult.Rejected(
-                "The endpoint is not active, or its target authorization has lapsed.");
+                "The endpoint is not active.");
         }
 
         await reconciler.RetireAbandonedRunsAsync(endpointId, cancellationToken);

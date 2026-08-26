@@ -158,20 +158,6 @@ public sealed class SslCertificateProbeTests
     }
 
     [Fact]
-    public async Task ProbeAsync_RequiresTargetAuthorizationBeforeContactingTheTarget()
-    {
-        using var certificate = TestCertificates.SelfSigned(
-            "CN=allowed.test", "allowed.test", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(60));
-        await using var server = await TlsServerFixture.Start(certificate);
-        var probe = CreateProbe(authorize: false);
-
-        var result = await probe.ProbeAsync(new(Guid.NewGuid(), $"https://allowed.test:{server.Port}/"));
-
-        result.Failure.Should().Be(SslProbeFailureKind.TargetNotAuthorized);
-        server.ContactCount.Should().Be(0);
-    }
-
-    [Fact]
     public async Task ProbeAsync_RejectsHttpOnlyEndpointsWithoutConnecting()
     {
         using var certificate = TestCertificates.SelfSigned(
@@ -230,25 +216,15 @@ public sealed class SslCertificateProbeTests
     }
 
     private static ISslCertificateProbe CreateProbe(
-        IMonitoringDnsResolver? resolver = null,
-        bool authorize = true)
+        IMonitoringDnsResolver? resolver = null)
     {
         var options = new SafeHttpTransportOptions();
         return new SslCertificateProbe(
             resolver ?? new HostResolver(("allowed.test", [IPAddress.Loopback])),
             new ExactLoopbackPolicy(),
-            new DelegateAuthorizer(authorize),
             new SafeHttpConcurrencyLimiter(options),
             options,
             TimeProvider.System);
-    }
-
-    private sealed record DelegateAuthorizer(bool Authorized) : IMonitoringTargetAuthorizer
-    {
-        public Task<bool> IsAuthorizedAsync(
-            Guid endpointId, string normalizedHost, int port, DateTimeOffset at,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(Authorized);
     }
 
     private sealed class ExactLoopbackPolicy : IDestinationAddressPolicy

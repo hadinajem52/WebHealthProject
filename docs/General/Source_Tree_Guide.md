@@ -491,7 +491,7 @@ Generated migration designer files and `ApplicationDbContextModelSnapshot.cs` ar
 
 | File | Role |
 |---|---|
-| `RegistryEntities.cs` | Persistence entities for clients, websites, tags, environments, endpoints, monitors, policy profiles, grants, and authorization evidence. |
+| `RegistryEntities.cs` | Persistence entities for clients, websites, tags, environments, endpoints, monitors, policy profiles, and grants. |
 | `RegistryEntityConfigurations.cs` | Configures registry relationships, normalized uniqueness, foreign keys, constraints, indexes, and concurrency fields. |
 | `RegistryDefaults.cs` | Defines default monitor types, policy profiles, intervals, thresholds, and configuration fingerprints. |
 | `RegistryMutationSupport.cs` | Shared validation, concurrency, authorization, normalization, and audit helpers for registry mutations. |
@@ -500,9 +500,9 @@ Generated migration designer files and `ApplicationDbContextModelSnapshot.cs` ar
 | `ClientRegistryService.cs` | Implements client mutations and records their audit events. |
 | `WebsiteRegistryService.cs` | Implements website mutations, tags, ownership, and related audit behavior. |
 | `EnvironmentRegistryService.cs` | Implements environment mutations and validates their website relationship. |
-| `EndpointRegistryService.cs` | Implements endpoint mutations, URL rules, target authorization, monitor creation, scheduling, and threshold overrides. |
+| `EndpointRegistryService.cs` | Implements endpoint mutations, URL rules, monitor creation, scheduling, and threshold overrides. |
 | `TargetRegistryReader.cs` | Reads environments, endpoints, archives, and current certificate status for target pages. |
-| `TargetAuthorizationService.cs` | Checks target ownership/permission evidence and user rights before target operations or outbound checks. |
+| `TargetAuthorizationService.cs` | Decides whether an endpoint can be tested: visibility, role rights, and the enabled state of the endpoint, environment, website, client, and monitor. |
 | `MonitoringEligibility.cs` | Builds the database query that determines whether a target is enabled, active, authorized, and schedulable. |
 | `MonitorIntervalOverride.cs` | Resolves endpoint interval overrides against policy/default values. |
 | `OwnerSubjectNames.cs` | Resolves owner subject IDs into safe display names for pages and reports. |
@@ -687,7 +687,7 @@ Razor views render the models returned by controllers. Shared views are composed
 | `Endpoints.cshtml` | Lists visible endpoints and supports search. |
 | `Endpoint.cshtml` | Displays endpoint configuration, latest check, certificate status, and actions. |
 | `CreateEndpoint.cshtml` | Creates an endpoint and its HTTP monitor. |
-| `EditEndpoint.cshtml` | Edits endpoint URL, authorization evidence, schedule, owner, and performance overrides. |
+| `EditEndpoint.cshtml` | Edits endpoint URL, schedule, owner, and performance overrides. |
 | `Environments.cshtml` | Lists environments belonging to a website. |
 | `Environment.cshtml` | Displays one environment and its endpoints. |
 | `CreateEnvironment.cshtml` | Creates an environment. |

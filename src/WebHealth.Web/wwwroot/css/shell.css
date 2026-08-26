@@ -421,26 +421,6 @@ a.app-nav__link:hover {
     color: var(--color-gray-500);
 }
 
-.app-account__item.is-planned {
-    color: var(--text-secondary);
-    cursor: default;
-}
-
-.app-account__item.is-planned:hover {
-    background: none;
-}
-
-.app-account__badge {
-    padding: 0 var(--space-2);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-pill);
-    margin-left: auto;
-    color: var(--text-secondary);
-    font-size: 0.625rem;
-    font-weight: 700;
-    line-height: 1.4rem;
-}
-
 .app-header__icon {
     width: 2.75rem;
     flex: 0 0 auto;

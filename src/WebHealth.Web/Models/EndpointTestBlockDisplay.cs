@@ -21,9 +21,6 @@ public static class EndpointTestBlockDisplay
             $"The client this endpoint belongs to is inactive, which stops {runLabel} for every endpoint under it.",
         EndpointTestBlock.NoMonitor =>
             $"This endpoint has no monitor yet. Add one on the endpoint page to allow {runLabel}.",
-        EndpointTestBlock.NoTargetAuthorization =>
-            "This endpoint has no current testing authorization for its host and port. Record it on "
-            + "the endpoint page: an expired one, or one recorded for a different host or port, does not count.",
         _ => null
     };
 }

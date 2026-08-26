@@ -13,8 +13,8 @@ public sealed class MonitoringEligibilityTests
     {
         var endpoints = new[] { CreateEndpoint(monitorEnabled: false) }.AsQueryable();
 
-        MonitoringEligibility.Apply(endpoints, Now).Should().BeEmpty();
-        MonitoringEligibility.ApplyTestable(endpoints, Now).Should().ContainSingle();
+        MonitoringEligibility.Apply(endpoints).Should().BeEmpty();
+        MonitoringEligibility.ApplyTestable(endpoints).Should().ContainSingle();
     }
 
     [Fact]
@@ -22,8 +22,8 @@ public sealed class MonitoringEligibilityTests
     {
         var endpoints = new[] { CreateEndpoint(monitorEnabled: true) }.AsQueryable();
 
-        MonitoringEligibility.Apply(endpoints, Now).Should().ContainSingle();
-        MonitoringEligibility.ApplyTestable(endpoints, Now).Should().ContainSingle();
+        MonitoringEligibility.Apply(endpoints).Should().ContainSingle();
+        MonitoringEligibility.ApplyTestable(endpoints).Should().ContainSingle();
     }
 
     [Fact]
@@ -33,8 +33,8 @@ public sealed class MonitoringEligibilityTests
         endpoint.Monitors.Single().SchedulingEnabled = false;
         var endpoints = new[] { endpoint }.AsQueryable();
 
-        MonitoringEligibility.Apply(endpoints, Now).Should().BeEmpty();
-        MonitoringEligibility.ApplyTestable(endpoints, Now).Should().ContainSingle();
+        MonitoringEligibility.Apply(endpoints).Should().BeEmpty();
+        MonitoringEligibility.ApplyTestable(endpoints).Should().ContainSingle();
     }
 
     [Fact]
@@ -44,19 +44,8 @@ public sealed class MonitoringEligibilityTests
         endpoint.IsEnabled = false;
         var endpoints = new[] { endpoint }.AsQueryable();
 
-        MonitoringEligibility.Apply(endpoints, Now).Should().BeEmpty();
-        MonitoringEligibility.ApplyTestable(endpoints, Now).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void MissingAuthorizationEvidence_IsNeitherScheduledNorTestable()
-    {
-        var endpoint = CreateEndpoint(monitorEnabled: true);
-        endpoint.TargetAuthorizations.Clear();
-        var endpoints = new[] { endpoint }.AsQueryable();
-
-        MonitoringEligibility.Apply(endpoints, Now).Should().BeEmpty();
-        MonitoringEligibility.ApplyTestable(endpoints, Now).Should().BeEmpty();
+        MonitoringEligibility.Apply(endpoints).Should().BeEmpty();
+        MonitoringEligibility.ApplyTestable(endpoints).Should().BeEmpty();
     }
 
     [Fact]
@@ -66,8 +55,8 @@ public sealed class MonitoringEligibilityTests
         endpoint.Monitors.Single().DeletedAt = Now;
         var endpoints = new[] { endpoint }.AsQueryable();
 
-        MonitoringEligibility.Apply(endpoints, Now).Should().BeEmpty();
-        MonitoringEligibility.ApplyTestable(endpoints, Now).Should().BeEmpty();
+        MonitoringEligibility.Apply(endpoints).Should().BeEmpty();
+        MonitoringEligibility.ApplyTestable(endpoints).Should().BeEmpty();
     }
 
     private static Endpoint CreateEndpoint(bool monitorEnabled)
@@ -108,15 +97,6 @@ public sealed class MonitoringEligibilityTests
             ConfigurationFingerprint = "fingerprint",
             SchedulingEnabled = true,
             IsEnabled = monitorEnabled
-        });
-        endpoint.TargetAuthorizations.Add(new TargetAuthorizationEvidence
-        {
-            Id = Guid.NewGuid(),
-            AuthorizationKind = "Owned",
-            EvidenceReference = "domain owned by me",
-            NormalizedHost = "example.test",
-            Port = 443,
-            EffectiveFrom = Now.AddDays(-1)
         });
         return endpoint;
     }

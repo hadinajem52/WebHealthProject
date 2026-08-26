@@ -321,7 +321,6 @@ public static class DependencyInjection
         services.AddSingleton<IMonitoringDnsResolver, SystemMonitoringDnsResolver>();
         services.AddSingleton<IDestinationAddressPolicy, StrictDestinationAddressPolicy>();
         services.AddSingleton<SafeHttpConcurrencyLimiter>();
-        services.AddScoped<IMonitoringTargetAuthorizer, MonitoringTargetAuthorizer>();
         services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
         services.AddScoped<IEndpointUrlSchemeProbe, EndpointUrlSchemeProbe>();
         services.AddScoped<EndpointUrlResolver>();

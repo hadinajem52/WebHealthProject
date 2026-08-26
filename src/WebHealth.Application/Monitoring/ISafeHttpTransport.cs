@@ -21,16 +21,6 @@ public interface IDestinationAddressPolicy
     bool IsAllowed(IPAddress address);
 }
 
-public interface IMonitoringTargetAuthorizer
-{
-    Task<bool> IsAuthorizedAsync(
-        Guid endpointId,
-        string normalizedHost,
-        int port,
-        DateTimeOffset at,
-        CancellationToken cancellationToken = default);
-}
-
 public sealed record SafeHttpTransportRequest(
     Guid EndpointId,
     string Url,
@@ -90,7 +80,6 @@ public sealed record SafeHttpDestination(string Url);
 public enum SafeHttpFailureKind
 {
     InvalidUrl,
-    TargetNotAuthorized,
     DestinationRejected,
     NameResolution,
     Connection,

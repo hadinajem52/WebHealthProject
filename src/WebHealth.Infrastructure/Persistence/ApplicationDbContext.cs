@@ -40,7 +40,6 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<Endpoint> Endpoints => Set<Endpoint>();
 
-    public DbSet<TargetAuthorizationEvidence> TargetAuthorizations => Set<TargetAuthorizationEvidence>();
 
     public DbSet<EndpointMonitor> EndpointMonitors => Set<EndpointMonitor>();
 

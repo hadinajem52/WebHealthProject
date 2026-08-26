@@ -79,7 +79,6 @@ public sealed class SslResultNormalizerTests
     [InlineData(SslProbeFailureKind.Connection, HttpFailureCategories.Connection)]
     [InlineData(SslProbeFailureKind.Timeout, HttpFailureCategories.Timeout)]
     [InlineData(SslProbeFailureKind.DestinationRejected, HttpFailureCategories.DestinationPolicy)]
-    [InlineData(SslProbeFailureKind.TargetNotAuthorized, HttpFailureCategories.DestinationPolicy)]
     [InlineData(SslProbeFailureKind.NotHttps, HttpFailureCategories.InvalidConfiguration)]
     public void Normalize_ReusesSharedCategoriesForTransportLevelFailures(
         SslProbeFailureKind failure,

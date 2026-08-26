@@ -117,8 +117,6 @@ public sealed class PageAuditExecutionService(
         IReadOnlyList<PageAuditRun> runs,
         CancellationToken cancellationToken)
     {
-        var now = timeProvider.GetUtcNow();
-
         var first = runs[0];
         var targetIds = runs.Select(run => run.PageAuditTargetId).ToArray();
 
@@ -130,13 +128,13 @@ public sealed class PageAuditExecutionService(
         }
 
         var current = await MonitoringEligibility
-            .ApplyTestable(dbContext.Endpoints.AsNoTracking(), now)
+            .ApplyTestable(dbContext.Endpoints.AsNoTracking())
             .Where(endpoint => endpoint.Id == first.EndpointId)
             .Select(endpoint => endpoint.NormalizedUrl)
             .SingleOrDefaultAsync(cancellationToken);
         if (current is null)
         {
-            return "The endpoint is no longer active, or its target authorization has lapsed.";
+            return "The endpoint is no longer active.";
         }
 
         if (!runs.All(run => string.Equals(current, run.RequestedUrl, StringComparison.Ordinal)))

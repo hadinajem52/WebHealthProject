@@ -15,7 +15,6 @@ internal sealed record CrawlDependencies(
     IHtmlLinkExtractor LinkExtractor,
     ICrawlRobotsReader RobotsReader,
     ICrawlResultSink Sink,
-    IMonitoringTargetAuthorizer TargetAuthorizer,
     CrawlRequestBudget RequestBudget,
     HostRequestRateLimiter RateLimiter,
     ILogger Logger);
@@ -25,7 +24,6 @@ internal sealed class CrawlExecutionService(
     IHtmlLinkExtractor linkExtractor,
     ICrawlRobotsReader robotsReader,
     ICrawlResultSink sink,
-    IMonitoringTargetAuthorizer targetAuthorizer,
     CrawlRequestBudget requestBudget,
     HostRequestRateLimiter rateLimiter,
     CrawlSchedulingOptions options,
@@ -65,7 +63,7 @@ internal sealed class CrawlExecutionService(
 
         var run = new CrawlRunExecution(
             request, scope!, options, transportOptions.UserAgent, timeProvider, executionClaimId,
-            new(transport, linkExtractor, robotsReader, sink, targetAuthorizer, requestBudget,
+            new(transport, linkExtractor, robotsReader, sink, requestBudget,
                 rateLimiter, logger));
         return await run.ExecuteAsync(cancellationToken);
     }
@@ -443,21 +441,6 @@ internal sealed class CrawlRunExecution
         var isInternal = _frontier.Scope.Decide(item.Url) == CrawlScopeDecision.Internal;
         if (!isInternal && !_request.CheckExternalLinks) return CrawlSkipReasons.ExternalCheckDisabled;
 
-        await _dataAccess.WaitAsync(cancellationToken);
-        try
-        {
-            if (!await _dependencies.TargetAuthorizer.IsAuthorizedAsync(
-                _request.EndpointId, item.Url.Host, item.Url.Port,
-                _timeProvider.GetUtcNow(), cancellationToken))
-            {
-                return CrawlSkipReasons.TargetNotAuthorized;
-            }
-        }
-        finally
-        {
-            _dataAccess.Release();
-        }
-
         if (!isInternal) return null;
 
         var facts = await RobotsFactsAsync(item.Url.Origin, cancellationToken);
@@ -567,8 +550,7 @@ internal sealed class CrawlRunExecution
         {
             null => CrawlRequestOutcome.Responded,
             SafeHttpFailureKind.Timeout or SafeHttpFailureKind.Cancelled => CrawlRequestOutcome.Timeout,
-            SafeHttpFailureKind.TargetNotAuthorized or SafeHttpFailureKind.DestinationRejected
-                or SafeHttpFailureKind.RequestPolicyRejected
+            SafeHttpFailureKind.DestinationRejected or SafeHttpFailureKind.RequestPolicyRejected
                 => CrawlRequestOutcome.Blocked,
             SafeHttpFailureKind.RedirectLoop or SafeHttpFailureKind.RedirectLimit
                 or SafeHttpFailureKind.RedirectInvalid or SafeHttpFailureKind.RedirectMissingLocation

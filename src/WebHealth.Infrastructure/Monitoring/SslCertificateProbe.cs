@@ -11,7 +11,6 @@ namespace WebHealth.Infrastructure.Monitoring;
 internal sealed class SslCertificateProbe(
     IMonitoringDnsResolver resolver,
     IDestinationAddressPolicy addressPolicy,
-    IMonitoringTargetAuthorizer targetAuthorizer,
     SafeHttpConcurrencyLimiter concurrencyLimiter,
     SafeHttpTransportOptions options,
     TimeProvider timeProvider) : ISslCertificateProbe
@@ -44,12 +43,6 @@ internal sealed class SslCertificateProbe(
         try
         {
             using var globalLease = await concurrencyLimiter.AcquireGlobalAsync(timeout.Token);
-            if (!await targetAuthorizer.IsAuthorizedAsync(
-                request.EndpointId, host, port, timeProvider.GetUtcNow(), timeout.Token))
-            {
-                return Failure(SslProbeFailureKind.TargetNotAuthorized, stopwatch);
-            }
-
             using var hostLease = await concurrencyLimiter.AcquireHostAsync(host, timeout.Token);
             await using var connection = await SafeDestinationConnector.ConnectAsync(
                 resolver, addressPolicy, concurrencyLimiter, options, host, port, null, timeout.Token);

@@ -119,10 +119,6 @@ internal sealed class TargetRegistryReader(
             endpoint.IsDeleted,
             endpoint.HttpExceptionReason is not null,
             canManage ? endpoint.HttpExceptionReason : null,
-            endpoint.TargetAuthorizationKind is not null,
-            canManage ? endpoint.TargetAuthorizationKind : null,
-            canManage ? endpoint.TargetAuthorizationEvidence : null,
-            canManage ? endpoint.TargetAuthorizationExpiresAt : null,
             endpoint.Version,
             endpoint.MonitorType,
             endpoint.IntervalSeconds,
@@ -402,24 +398,6 @@ internal sealed class TargetRegistryReader(
                 endpoint.IsEnabled,
                 endpoint.DeletedAt != null,
                 endpoint.HttpExceptionReason,
-                endpoint.TargetAuthorizations
-                    .Where(evidence => evidence.RevokedAt == null
-                        && evidence.NormalizedHost == endpoint.NormalizedHost
-                        && evidence.Port == endpoint.EffectivePort)
-                    .OrderByDescending(evidence => evidence.EffectiveFrom)
-                    .Select(evidence => evidence.AuthorizationKind).FirstOrDefault(),
-                endpoint.TargetAuthorizations
-                    .Where(evidence => evidence.RevokedAt == null
-                        && evidence.NormalizedHost == endpoint.NormalizedHost
-                        && evidence.Port == endpoint.EffectivePort)
-                    .OrderByDescending(evidence => evidence.EffectiveFrom)
-                    .Select(evidence => evidence.EvidenceReference).FirstOrDefault(),
-                endpoint.TargetAuthorizations
-                    .Where(evidence => evidence.RevokedAt == null
-                        && evidence.NormalizedHost == endpoint.NormalizedHost
-                        && evidence.Port == endpoint.EffectivePort)
-                    .OrderByDescending(evidence => evidence.EffectiveFrom)
-                    .Select(evidence => evidence.ExpiresAt).FirstOrDefault(),
                 endpoint.Version,
                 endpoint.Monitors
                     .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
@@ -479,8 +457,7 @@ internal sealed class TargetRegistryReader(
         Guid Id, Guid EnvironmentId, string EnvironmentName, bool IsProduction, Guid WebsiteId, string WebsiteName,
         string DisplayUrl, string NormalizedUrl, short NormalizationVersion, Guid? OwnerSubjectId,
         Guid EffectiveOwnerSubjectId, bool IsEnabled, bool IsDeleted, string? HttpExceptionReason,
-        string? TargetAuthorizationKind, string? TargetAuthorizationEvidence,
-        DateTimeOffset? TargetAuthorizationExpiresAt, long Version, string MonitorType,
+        long Version, string MonitorType,
         int IntervalSeconds, string BoundedOverrides, int? WarningThresholdMs,
         int? CriticalThresholdMs, int TimeoutSeconds, bool MonitorEnabled,
         bool SchedulingEnabled, string? SeoExpectedCanonicalHost, string SeoIndexingExpectation,

@@ -13,7 +13,10 @@
         <div class="form-actions">
             @if (Model.CanManage)
             {
-                <a class="button button--secondary" asp-action="Archived">Archived targets</a>
+                <a class="button button--secondary" asp-action="Archived">
+                    @await Html.PartialAsync("_Icon", "archive")
+                    <span>Archived targets</span>
+                </a>
                 <a class="button button--primary" asp-action="CreateEnvironment" asp-route-websiteId="@Model.WebsiteId">
                     @await Html.PartialAsync("_Icon", "plus")
                     <span>Add environment</span>

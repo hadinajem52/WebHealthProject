@@ -119,8 +119,7 @@ internal static class ReportingPerformanceBaseline
                         var host = $"c{clientIndex:D2}-s{websiteIndex:D2}-"
                             + $"{environmentType.ToLowerInvariant()}-{endpointIndex:D2}.baseline.test";
                         var endpoint = await endpointService.CreateAsync(
-                            new(environment.EntityId!.Value, $"https://{host}/status", null, true, null,
-                                TargetAuthorizationKinds.Owned, "Baseline fixture owned by the project.", null),
+                            new(environment.EntityId!.Value, $"https://{host}/status", null, true, null),
                             access);
                         Succeeded(endpoint, "endpoint");
                     }

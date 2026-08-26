@@ -182,8 +182,6 @@ public sealed record EndpointAuditSnapshot(
     bool IsEnabled,
     bool HasHttpException,
     bool HttpExceptionChanged,
-    bool HasTargetAuthorization,
-    bool TargetAuthorizationChanged,
     int MonitorIntervalSeconds,
     bool HasIntervalOverride,
     string SeoIndexingExpectation,

@@ -271,8 +271,6 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
         ["Url"] = "https://new.example.test/health",
         ["IsEnabled"] = "true",
         ["SchedulingEnabled"] = "true",
-        ["TargetAuthorizationKind"] = TargetAuthorizationKinds.Owned,
-        ["TargetAuthorizationEvidence"] = "Owned test fixture",
         ["SeoIndexingExpectation"] = "Default",
         ["SeoDescriptionRequired"] = "true",
         ["PageAuditIntervalHours"] = PageAuditCadence.DefaultIntervalHours.ToString()

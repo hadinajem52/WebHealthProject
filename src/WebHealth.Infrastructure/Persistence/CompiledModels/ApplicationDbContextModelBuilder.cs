@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("43546934-1df0-4fdd-a8a8-98ab9ceacc62"), entityTypeCount: 50)
+            : base(skipDetectChanges: false, modelId: new Guid("6511814b-1e37-4e58-9d0e-eca9b0484e00"), entityTypeCount: 49)
         {
         }
 
@@ -62,7 +62,6 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var endpointMonitor = EndpointMonitorEntityType.Create(this);
             var policyProfile = PolicyProfileEntityType.Create(this);
             var tag = TagEntityType.Create(this);
-            var targetAuthorizationEvidence = TargetAuthorizationEvidenceEntityType.Create(this);
             var website = WebsiteEntityType.Create(this);
             var websiteEnvironment = WebsiteEnvironmentEntityType.Create(this);
             var websiteTag = WebsiteTagEntityType.Create(this);
@@ -156,9 +155,6 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             EndpointMonitorEntityType.CreateForeignKey4(endpointMonitor, policyProfile);
             EndpointMonitorEntityType.CreateForeignKey5(endpointMonitor, applicationUser);
             TagEntityType.CreateForeignKey1(tag, applicationUser);
-            TargetAuthorizationEvidenceEntityType.CreateForeignKey1(targetAuthorizationEvidence, applicationUser);
-            TargetAuthorizationEvidenceEntityType.CreateForeignKey2(targetAuthorizationEvidence, endpoint);
-            TargetAuthorizationEvidenceEntityType.CreateForeignKey3(targetAuthorizationEvidence, applicationUser);
             WebsiteEntityType.CreateForeignKey1(website, client);
             WebsiteEntityType.CreateForeignKey2(website, applicationUser);
             WebsiteEntityType.CreateForeignKey3(website, applicationUser);
@@ -219,7 +215,6 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             EndpointMonitorEntityType.CreateAnnotations(endpointMonitor);
             PolicyProfileEntityType.CreateAnnotations(policyProfile);
             TagEntityType.CreateAnnotations(tag);
-            TargetAuthorizationEvidenceEntityType.CreateAnnotations(targetAuthorizationEvidence);
             WebsiteEntityType.CreateAnnotations(website);
             WebsiteEnvironmentEntityType.CreateAnnotations(websiteEnvironment);
             WebsiteTagEntityType.CreateAnnotations(websiteTag);

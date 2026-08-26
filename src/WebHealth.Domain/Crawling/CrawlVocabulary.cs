@@ -28,12 +28,10 @@ public static class CrawlSkipReasons
 
     public const string ExternalCheckDisabled = "ExternalCheckDisabled";
 
-    public const string TargetNotAuthorized = "TargetNotAuthorized";
-
     public const string RunStopped = "RunStopped";
 
     public static IReadOnlyList<string> LimitsCoverage =>
-        [PageLimit, QueryVariantCap, RobotsDisallowed, TargetNotAuthorized];
+        [PageLimit, QueryVariantCap, RobotsDisallowed];
 }
 
 public static class CrawlStopReasons

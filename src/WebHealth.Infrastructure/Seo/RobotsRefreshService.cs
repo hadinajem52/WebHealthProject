@@ -57,13 +57,7 @@ internal sealed class RobotsRefreshService(
     {
         var candidates = await dbContext.Endpoints.AsNoTracking()
             .Where(endpoint => endpoint.DeletedAt == null && endpoint.IsEnabled
-                && endpoint.Environment.DeletedAt == null
-                && endpoint.TargetAuthorizations.Any(evidence =>
-                    evidence.RevokedAt == null
-                    && evidence.NormalizedHost == endpoint.NormalizedHost
-                    && evidence.Port == endpoint.EffectivePort
-                    && evidence.EffectiveFrom <= now
-                    && (evidence.ExpiresAt == null || evidence.ExpiresAt > now)))
+                && endpoint.Environment.DeletedAt == null)
             .OrderBy(endpoint => endpoint.CreatedAt)
             .Select(endpoint => new
             {

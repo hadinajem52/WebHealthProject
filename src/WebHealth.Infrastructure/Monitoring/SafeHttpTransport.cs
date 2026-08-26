@@ -12,7 +12,6 @@ namespace WebHealth.Infrastructure.Monitoring;
 
 internal sealed class SafeHttpTransport(
     IHttpClientFactory httpClientFactory,
-    IMonitoringTargetAuthorizer targetAuthorizer,
     SafeHttpConcurrencyLimiter concurrencyLimiter,
     TimeProvider timeProvider) : ISafeHttpTransport
 {
@@ -85,18 +84,6 @@ internal sealed class SafeHttpTransport(
                         finalDestination: Destination(currentNormalization),
                         timing: BuildTiming(currentTiming, currentTtfbMs),
                         policyRejectionReason: hopDecision.RejectionReason);
-                }
-
-                if (!await targetAuthorizer.IsAuthorizedAsync(
-                    request.EndpointId,
-                    currentNormalization.NormalizedHost!,
-                    currentNormalization.EffectivePort!.Value,
-                    timeProvider.GetUtcNow(),
-                    timeout.Token))
-                {
-                    return Failure(
-                        SafeHttpFailureKind.TargetNotAuthorized, stopwatch, redirects, requestIdentity,
-                        timing: BuildTiming(currentTiming, currentTtfbMs));
                 }
 
                 using var hostLease = await concurrencyLimiter.AcquireHostAsync(

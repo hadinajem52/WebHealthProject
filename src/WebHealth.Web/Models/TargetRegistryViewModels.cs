@@ -85,16 +85,6 @@ public sealed class EndpointFormViewModel
     [Display(Name = "Production HTTP exception reason")]
     public string? HttpExceptionReason { get; set; }
 
-    [Display(Name = "Target authorization")]
-    public string? TargetAuthorizationKind { get; set; }
-
-    [StringLength(500, ErrorMessage = "This reference is too long. Use 500 characters or fewer.")]
-    [Display(Name = "Ownership or permission reference")]
-    public string? TargetAuthorizationEvidence { get; set; }
-
-    [Display(Name = "Authorization expires")]
-    public DateTimeOffset? TargetAuthorizationExpiresAt { get; set; }
-
     [Range(1, 1440,
         ErrorMessage = "Enter between 1 and 1440 minutes (24 hours), or leave blank for the default: "
             + "5 minutes for Production, 15 for everything else.")]
@@ -225,16 +215,6 @@ public sealed class EndpointRegistrationFormViewModel : IValidatableObject
     [StringLength(500, ErrorMessage = "This reason is too long. Use 500 characters or fewer.")]
     [Display(Name = "Production HTTP exception reason")]
     public string? HttpExceptionReason { get; set; }
-
-    [Display(Name = "Target authorization")]
-    public string? TargetAuthorizationKind { get; set; }
-
-    [StringLength(500, ErrorMessage = "This reference is too long. Use 500 characters or fewer.")]
-    [Display(Name = "Ownership or permission reference")]
-    public string? TargetAuthorizationEvidence { get; set; }
-
-    [Display(Name = "Authorization expires")]
-    public DateTimeOffset? TargetAuthorizationExpiresAt { get; set; }
 
     [Range(1, 1440,
         ErrorMessage = "Enter between 1 and 1440 minutes (24 hours), or leave blank for the environment default.")]

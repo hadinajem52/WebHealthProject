@@ -23,8 +23,7 @@ public sealed class SafeHttpTransportTests
         await using var server = await HttpFixture.Start(
             "HTTP/1.1 200 OK\r\nContent-Length: 12\r\nConnection: close\r\n\r\nHello world!");
         await using var harness = CreateHarness(
-            new HostResolver(("allowed.test", [IPAddress.Loopback])),
-            (_, host, _, _, _) => Task.FromResult(host == "allowed.test"));
+            new HostResolver(("allowed.test", [IPAddress.Loopback])));
 
         var transportRequest = new SafeHttpTransportRequest(
             Guid.NewGuid(),
@@ -56,7 +55,6 @@ public sealed class SafeHttpTransportTests
             "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
         await using var harness = CreateHarness(
             new HostResolver(("contact.test", [IPAddress.Loopback])),
-            AuthorizeAll,
             configure: defaults => defaults with { Contact = "https://example.test/contact" });
 
         var result = await harness.Transport.SendAsync(new(
@@ -73,7 +71,7 @@ public sealed class SafeHttpTransportTests
         await using var server = await HttpFixture.Start(
             "HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\n12345678");
         await using var harness = CreateHarness(
-            new HostResolver(("bounded.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("bounded.test", [IPAddress.Loopback])));
 
         var result = await harness.Transport.SendAsync(new(
             Guid.NewGuid(),
@@ -94,7 +92,7 @@ public sealed class SafeHttpTransportTests
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
             + "5\r\nHello\r\n6\r\n world\r\n0\r\n\r\n");
         await using var harness = CreateHarness(
-            new HostResolver(("chunked.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("chunked.test", [IPAddress.Loopback])));
 
         var result = await harness.Transport.SendAsync(new(
             Guid.NewGuid(),
@@ -115,7 +113,6 @@ public sealed class SafeHttpTransportTests
             "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         await using var harness = CreateHarness(
             new HostResolver(("mixed.test", [IPAddress.Loopback, IPAddress.Parse("10.0.0.1")])),
-            AuthorizeAll,
             addressPolicy: new ExactLoopbackPolicy());
 
         var result = await harness.Transport.SendAsync(
@@ -133,7 +130,6 @@ public sealed class SafeHttpTransportTests
             repeat: true);
         await using var harness = CreateHarness(
             new SequenceResolver([IPAddress.Loopback], [IPAddress.Parse("10.0.0.1")]),
-            AuthorizeAll,
             addressPolicy: new ExactLoopbackPolicy());
         var request = new SafeHttpTransportRequest(
             Guid.NewGuid(), $"http://rebind.test:{server.Port}/", false);
@@ -143,29 +139,6 @@ public sealed class SafeHttpTransportTests
 
         first.Succeeded.Should().BeTrue();
         second.Failure.Should().Be(SafeHttpFailureKind.DestinationRejected);
-        server.ContactCount.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task SendAsync_ReauthorizesRedirectDestinationsBeforeConnecting()
-    {
-        var redirectPort = 0;
-        await using var server = await HttpFixture.Start(
-            contact => contact == 1
-                ? $"HTTP/1.1 302 Found\r\nLocation: http://blocked.test:{redirectPort}/next\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                : "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-            repeat: true);
-        redirectPort = server.Port;
-        await using var harness = CreateHarness(
-            new HostResolver(
-                ("allowed.test", [IPAddress.Loopback]),
-                ("blocked.test", [IPAddress.Loopback])),
-            (_, host, _, _, _) => Task.FromResult(host == "allowed.test"));
-
-        var result = await harness.Transport.SendAsync(
-            new(Guid.NewGuid(), $"http://allowed.test:{server.Port}/", false));
-
-        result.Failure.Should().Be(SafeHttpFailureKind.TargetNotAuthorized);
         server.ContactCount.Should().Be(1);
     }
 
@@ -180,7 +153,7 @@ public sealed class SafeHttpTransportTests
             repeat: true);
         redirectPort = server.Port;
         await using var harness = CreateHarness(
-            new HostResolver(("allowed.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("allowed.test", [IPAddress.Loopback])));
         var request = new SafeHttpTransportRequest(
             Guid.NewGuid(), $"http://allowed.test:{server.Port}/", false)
         {
@@ -202,7 +175,7 @@ public sealed class SafeHttpTransportTests
                 : "HTTP/1.1 302 Found\r\nLocation: /again?q=A\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             repeat: true);
         await using var loopHarness = CreateHarness(
-            new HostResolver(("loop.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("loop.test", [IPAddress.Loopback])));
 
         var loopResult = await loopHarness.Transport.SendAsync(
             new(Guid.NewGuid(), $"http://loop.test:{loop.Port}/", false));
@@ -225,7 +198,7 @@ public sealed class SafeHttpTransportTests
                 : "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK",
             repeat: true);
         await using var allowedHarness = CreateHarness(
-            new HostResolver(("exact.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("exact.test", [IPAddress.Loopback])));
 
         var success = await allowedHarness.Transport.SendAsync(
             new(Guid.NewGuid(), $"http://exact.test:{allowed.Port}/", false, MaxRedirects: 10));
@@ -238,7 +211,7 @@ public sealed class SafeHttpTransportTests
             contact => $"HTTP/1.1 302 Found\r\nLocation: /hop-{contact}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             repeat: true);
         await using var excessiveHarness = CreateHarness(
-            new HostResolver(("excessive.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("excessive.test", [IPAddress.Loopback])));
 
         var failure = await excessiveHarness.Transport.SendAsync(
             new(Guid.NewGuid(), $"http://excessive.test:{excessive.Port}/", false, MaxRedirects: 10));
@@ -262,7 +235,7 @@ public sealed class SafeHttpTransportTests
                 : "HTTP/1.1 302 Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             repeat: true);
         await using var harness = CreateHarness(
-            new HostResolver(("limit.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("limit.test", [IPAddress.Loopback])));
 
         var result = await harness.Transport.SendAsync(new(
             Guid.NewGuid(),
@@ -281,8 +254,7 @@ public sealed class SafeHttpTransportTests
             contact => $"HTTP/1.1 302 Found\r\nLocation: /hop-{contact}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
             repeat: true);
         await using var limitedHarness = CreateHarness(
-            new HostResolver(("redirect.test", [IPAddress.Loopback])),
-            AuthorizeAll);
+            new HostResolver(("redirect.test", [IPAddress.Loopback])));
 
         var limited = await limitedHarness.Transport.SendAsync(
             new(Guid.NewGuid(), $"http://redirect.test:{endless.Port}/", false, MaxRedirects: 1));
@@ -294,7 +266,7 @@ public sealed class SafeHttpTransportTests
         await using var invalid = await HttpFixture.Start(
             "HTTP/1.1 302 Found\r\nLocation: ftp://redirect.test/file\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         await using var invalidHarness = CreateHarness(
-            new HostResolver(("redirect.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("redirect.test", [IPAddress.Loopback])));
         var invalidResult = await invalidHarness.Transport.SendAsync(
             new(Guid.NewGuid(), $"http://redirect.test:{invalid.Port}/", false));
 
@@ -308,7 +280,7 @@ public sealed class SafeHttpTransportTests
         await using var server = await HttpFixture.Start(
             $"HTTP/1.1 200 OK\r\nX-Large: {header}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         await using var harness = CreateHarness(
-            new HostResolver(("headers.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("headers.test", [IPAddress.Loopback])));
 
         var result = await harness.Transport.SendAsync(
             new(Guid.NewGuid(), $"http://headers.test:{server.Port}/", false));
@@ -342,7 +314,6 @@ public sealed class SafeHttpTransportTests
         var options = DefaultOptions();
         var transport = new SafeHttpTransport(
             new SingleClientFactory(client),
-            new DelegateAuthorizer(AuthorizeAll),
             new SafeHttpConcurrencyLimiter(options),
             TimeProvider.System);
 
@@ -357,7 +328,7 @@ public sealed class SafeHttpTransportTests
     {
         await using var server = await TlsFixture.Start();
         await using var harness = CreateHarness(
-            new HostResolver(("allowed.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("allowed.test", [IPAddress.Loopback])));
 
         var result = await harness.Transport.SendAsync(
             new(Guid.NewGuid(), $"https://allowed.test:{server.Port}/", true));
@@ -375,7 +346,6 @@ public sealed class SafeHttpTransportTests
             "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
         await using var harness = CreateHarness(
             new HostResolver(("allowed.test", [IPAddress.Loopback])),
-            AuthorizeAll,
             configureHandler: authority.Trust);
 
         var result = await harness.Transport.SendAsync(
@@ -404,8 +374,7 @@ public sealed class SafeHttpTransportTests
             delay: TimeSpan.FromSeconds(2),
             repeat: true);
         await using var harness = CreateHarness(
-            new HostResolver(("slow.test", [IPAddress.Loopback])),
-            AuthorizeAll);
+            new HostResolver(("slow.test", [IPAddress.Loopback])));
 
         var timeout = await harness.Transport.SendAsync(
             new(
@@ -428,7 +397,7 @@ public sealed class SafeHttpTransportTests
     {
         await using var server = await HttpFixture.Start(response);
         await using var harness = CreateHarness(
-            new HostResolver(("broken.test", [IPAddress.Loopback])), AuthorizeAll);
+            new HostResolver(("broken.test", [IPAddress.Loopback])));
 
         var result = await harness.Transport.SendAsync(
             new(Guid.NewGuid(), $"http://broken.test:{server.Port}/", false));
@@ -445,7 +414,6 @@ public sealed class SafeHttpTransportTests
         var options = DefaultOptions();
         var transport = new SafeHttpTransport(
             factory,
-            new DelegateAuthorizer(AuthorizeAll),
             new SafeHttpConcurrencyLimiter(options),
             TimeProvider.System);
 
@@ -494,13 +462,8 @@ public sealed class SafeHttpTransportTests
         task.IsCompleted.Should().BeFalse();
     }
 
-    private static Task<bool> AuthorizeAll(
-        Guid endpointId, string host, int port, DateTimeOffset at, CancellationToken cancellationToken) =>
-        Task.FromResult(true);
-
     private static TransportHarness CreateHarness(
         IMonitoringDnsResolver resolver,
-        Func<Guid, string, int, DateTimeOffset, CancellationToken, Task<bool>> authorize,
         Func<SafeHttpTransportOptions, SafeHttpTransportOptions>? configure = null,
         IDestinationAddressPolicy? addressPolicy = null,
         Action<SocketsHttpHandler>? configureHandler = null)
@@ -513,7 +476,6 @@ public sealed class SafeHttpTransportTests
         services.AddSingleton<IMonitoringDnsResolver>(resolver);
         services.AddSingleton<IDestinationAddressPolicy>(addressPolicy ?? new ExactLoopbackPolicy());
         services.AddSingleton<SafeHttpConcurrencyLimiter>();
-        services.AddSingleton<IMonitoringTargetAuthorizer>(new DelegateAuthorizer(authorize));
         services.AddSingleton(TimeProvider.System);
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
             {
@@ -537,16 +499,6 @@ public sealed class SafeHttpTransportTests
     }
 
     private static SafeHttpTransportOptions DefaultOptions() => new();
-
-    private sealed record DelegateAuthorizer(
-        Func<Guid, string, int, DateTimeOffset, CancellationToken, Task<bool>> Authorize)
-        : IMonitoringTargetAuthorizer
-    {
-        public Task<bool> IsAuthorizedAsync(
-            Guid endpointId, string normalizedHost, int port, DateTimeOffset at,
-            CancellationToken cancellationToken = default) =>
-            Authorize(endpointId, normalizedHost, port, at, cancellationToken);
-    }
 
     private sealed class ExactLoopbackPolicy : IDestinationAddressPolicy
     {

@@ -26,7 +26,6 @@ public enum SslProbeFailureKind
 {
     InvalidUrl,
     NotHttps,
-    TargetNotAuthorized,
     DestinationRejected,
     NameResolution,
     Connection,

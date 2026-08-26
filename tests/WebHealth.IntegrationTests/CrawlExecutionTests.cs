@@ -260,22 +260,6 @@ public sealed class CrawlExecutionTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_NeverRequestsAHostWithNoAuthorizationEvidence()
-    {
-        var site = Site().Page(Seed, CrawlTestHarness.LinkTo("https://other.test/landing"));
-
-        var (_, sink) = await CrawlTestHarness.RunAsync(
-            site,
-            CrawlTestHarness.Request() with { CheckExternalLinks = true },
-            authorizer: new FakeTargetAuthorizer("other.test"));
-
-        site.Requested.Should().NotContain("https://other.test/landing",
-            "following an arbitrary href through our own network position is the SSRF this refuses");
-        sink.Links.Should().ContainSingle(link => link.TargetUrl == "https://other.test/landing")
-            .Which.SkipReason.Should().Be(CrawlSkipReasons.TargetNotAuthorized);
-    }
-
-    [Fact]
     public async Task ExecuteAsync_ClassifiesRedirectedAndFailedTargets()
     {
         var site = Site()

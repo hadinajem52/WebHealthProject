@@ -730,8 +730,6 @@
             };
         }).filter(function (level) { return level.select; });
         var panels = Array.prototype.slice.call(form.querySelectorAll('[data-registration-new]'));
-        var monitoring = form.querySelector('[data-registration-monitoring]');
-        var authorization = form.querySelector('.registration-authorization');
         var advanced = form.querySelector('[data-registration-advanced]');
         var advancedState = form.querySelector('[data-registration-advanced-state]');
 
@@ -791,18 +789,9 @@
             });
         }
 
-        function syncMonitoring() {
-            if (authorization && monitoring) {
-                authorization.setAttribute('data-inactive', monitoring.checked ? 'false' : 'true');
-            }
-        }
-
         levels.forEach(function (level) {
             level.select.addEventListener('change', syncPlacement);
         });
-        if (monitoring) {
-            monitoring.addEventListener('change', syncMonitoring);
-        }
         if (advanced && advancedState) {
             advanced.addEventListener('toggle', function () {
                 advancedState.value = advanced.open ? 'true' : 'false';
@@ -811,7 +800,6 @@
         }
 
         syncPlacement();
-        syncMonitoring();
     }
 
     function initialize(root) {

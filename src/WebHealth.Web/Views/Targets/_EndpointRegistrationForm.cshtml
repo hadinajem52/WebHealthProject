@@ -19,11 +19,11 @@
 
         <div class="switch-block">
             <label class="switch-field">
-                <input asp-for="IsEnabled" type="checkbox" data-registration-monitoring />
+                <input asp-for="IsEnabled" type="checkbox" />
                 <span>@Html.DisplayNameFor(model => model.IsEnabled)</span>
             </label>
             <span class="form-field__hint">
-                Off registers the endpoint without testing evidence or scheduled monitoring.
+                Off registers the endpoint without starting any monitoring.
             </span>
         </div>
     </div>
@@ -212,29 +212,6 @@
     </div>
 </fieldset>
 
-<fieldset class="form-section registration-authorization">
-    <legend class="form-section__title">Permission to test</legend>
-    <p class="form-section__hint">Required when monitoring starts immediately. Record a reference, never a credential or token.</p>
-    <div class="form-section__body">
-        <div class="form-grid form-grid--two">
-            <div class="form-field">
-                <label asp-for="TargetAuthorizationKind"></label>
-                <select asp-for="TargetAuthorizationKind">
-                    <option value="">No evidence recorded</option>
-                    <option value="@TargetAuthorizationKinds.Owned">I own this target</option>
-                    <option value="@TargetAuthorizationKinds.ExplicitPermission">I have explicit testing permission</option>
-                </select>
-                <span asp-validation-for="TargetAuthorizationKind"></span>
-            </div>
-            <div class="form-field">
-                <label asp-for="TargetAuthorizationEvidence"></label>
-                <input asp-for="TargetAuthorizationEvidence" placeholder="Domain owned by me" />
-                <span asp-validation-for="TargetAuthorizationEvidence"></span>
-            </div>
-        </div>
-    </div>
-</fieldset>
-
 <details class="disclosure registration-advanced" data-registration-advanced open="@Model.AdvancedSettingsOpen">
     <summary class="disclosure__summary">
         <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
@@ -247,36 +224,26 @@
         <input asp-for="AdvancedSettingsOpen" type="hidden" data-registration-advanced-state />
 
         <fieldset class="form-section">
-            <legend class="form-section__title">Ownership and authorization lifetime</legend>
+            <legend class="form-section__title">Ownership</legend>
             <div class="form-section__body">
-                <div class="form-grid form-grid--two">
-                    <div class="form-field">
-                        <label asp-for="OwnerSubjectId">
-                            @Html.DisplayNameFor(model => model.OwnerSubjectId)
-                            <span class="form-field__optional">Optional</span>
-                        </label>
-                        <select asp-for="OwnerSubjectId">
-                            <option value="">Inherit the website owner</option>
-                            @if (Model.OwnerSubjectId is { } selectedEndpointOwnerId
-                                && Model.Owners.All(owner => owner.OwnerSubjectId != selectedEndpointOwnerId))
-                            {
-                                <option value="@selectedEndpointOwnerId">Previously selected owner — no longer available</option>
-                            }
-                            @foreach (var owner in Model.Owners)
-                            {
-                                <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
-                            }
-                        </select>
-                        <span asp-validation-for="OwnerSubjectId"></span>
-                    </div>
-                    <div class="form-field">
-                        <label asp-for="TargetAuthorizationExpiresAt">
-                            @Html.DisplayNameFor(model => model.TargetAuthorizationExpiresAt)
-                            <span class="form-field__optional">Optional</span>
-                        </label>
-                        <input asp-for="TargetAuthorizationExpiresAt" type="datetime-local" />
-                        <span asp-validation-for="TargetAuthorizationExpiresAt"></span>
-                    </div>
+                <div class="form-field">
+                    <label asp-for="OwnerSubjectId">
+                        @Html.DisplayNameFor(model => model.OwnerSubjectId)
+                        <span class="form-field__optional">Optional</span>
+                    </label>
+                    <select asp-for="OwnerSubjectId">
+                        <option value="">Inherit the website owner</option>
+                        @if (Model.OwnerSubjectId is { } selectedEndpointOwnerId
+                            && Model.Owners.All(owner => owner.OwnerSubjectId != selectedEndpointOwnerId))
+                        {
+                            <option value="@selectedEndpointOwnerId">Previously selected owner — no longer available</option>
+                        }
+                        @foreach (var owner in Model.Owners)
+                        {
+                            <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+                        }
+                    </select>
+                    <span asp-validation-for="OwnerSubjectId"></span>
                 </div>
             </div>
         </fieldset>
@@ -360,10 +327,6 @@
         <fieldset class="form-section">
             <legend class="form-section__title">Google PageSpeed audits</legend>
             <div class="form-section__body">
-                <p class="form-notice">
-                    @await Html.PartialAsync("_Icon", "warning")
-                    <span>Enabling this sends the URL to Google. Do not use it for private or authenticated targets.</span>
-                </p>
                 <label class="switch-field">
                     <input asp-for="PageAuditEnabled" type="checkbox" data-shell-dependency="registration-page-audits" />
                     <span>@Html.DisplayNameFor(model => model.PageAuditEnabled)</span>

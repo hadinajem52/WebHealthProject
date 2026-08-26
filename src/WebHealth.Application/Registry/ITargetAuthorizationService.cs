@@ -27,6 +27,5 @@ public enum EndpointTestBlock
     EnvironmentArchived,
     WebsiteDisabled,
     ClientInactive,
-    NoMonitor,
-    NoTargetAuthorization
+    NoMonitor
 }

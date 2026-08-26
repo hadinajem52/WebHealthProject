@@ -105,17 +105,6 @@ internal sealed class FakeSiteTransport : ISafeHttpTransport
     }
 }
 
-internal sealed class FakeTargetAuthorizer(params string[] deniedHosts) : IMonitoringTargetAuthorizer
-{
-    public Task<bool> IsAuthorizedAsync(
-        Guid endpointId,
-        string normalizedHost,
-        int port,
-        DateTimeOffset at,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult(!deniedHosts.Contains(normalizedHost, StringComparer.OrdinalIgnoreCase));
-}
-
 internal sealed class FakeRobotsReader(CrawlRobotsFacts? facts = null) : ICrawlRobotsReader
 {
     public Task<CrawlRobotsFacts> GetAsync(string origin, CancellationToken cancellationToken = default) =>
@@ -155,7 +144,6 @@ internal static class CrawlTestHarness
         CrawlRunRequest request,
         CrawlSchedulingOptions? options = null,
         ICrawlRobotsReader? robotsReader = null,
-        IMonitoringTargetAuthorizer? authorizer = null,
         CrawlRequestBudget? budget = null,
         CancellationToken cancellationToken = default)
     {
@@ -167,7 +155,6 @@ internal static class CrawlTestHarness
             new HtmlLinkExtractor(),
             robotsReader ?? new FakeRobotsReader(),
             sink,
-            authorizer ?? new FakeTargetAuthorizer(),
             budget ?? new CrawlRequestBudget(transportOptions),
             new HostRequestRateLimiter(TimeProvider.System, effective.RequestsPerSecondPerHost),
             effective,

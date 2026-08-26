@@ -566,7 +566,7 @@ internal static class CrawlSchemaAssertions
         var skips = await reader.ListSkipReasonsAsync(currentRun, access);
         skips.Should().Equal(
             new CrawlSkipSummary(CrawlSkipReasons.RobotsDisallowed, 2),
-            new CrawlSkipSummary(CrawlSkipReasons.TargetNotAuthorized, 1));
+            new CrawlSkipSummary(CrawlSkipReasons.ExternalCheckDisabled, 1));
 
         var runs = await reader.ListRunsAsync(endpointId, 2, access);
         runs.Should().HaveCount(2);
@@ -868,7 +868,7 @@ internal static class CrawlSchemaAssertions
             CrawlLinkClassifications.Skipped, null, 0, null, CrawlSkipReasons.RobotsDisallowed, null));
         await sink.RecordLinkAsync(new(
             runId, "https://cmp.test/a", "https://external.test/blocked", false, 1,
-            CrawlLinkClassifications.Skipped, null, 0, null, CrawlSkipReasons.TargetNotAuthorized, null));
+            CrawlLinkClassifications.Skipped, null, 0, null, CrawlSkipReasons.ExternalCheckDisabled, null));
     }
 
     private static async Task WriteRunAsync(

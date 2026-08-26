@@ -1,4 +1,4 @@
-@{
+﻿@{
     var pageTitle = ViewData.GetTitle();
     var pageSubtitle = ViewData.GetSubtitle();
     var documentTitle = string.IsNullOrWhiteSpace(pageTitle) ? "WebHealth" : $"{pageTitle} - WebHealth";
@@ -63,12 +63,6 @@
                                     <span class="app-account__name">@User.GetDisplayName()</span>
                                     <span class="app-account__email">@User.Identity?.Name</span>
                                 </p>
-
-                                <button type="button" class="app-account__item is-planned" aria-disabled="true">
-                                    @await Html.PartialAsync("_Icon", "settings")
-                                    <span>Settings</span>
-                                    <span class="app-account__badge">Planned</span>
-                                </button>
 
                                 <form asp-controller="Account" asp-action="Logout" method="post" class="app-header__account-form">
                                     <button type="submit" class="app-account__item">

@@ -1,8 +1,6 @@
 using System.Net;
-using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Monitoring;
-using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
@@ -17,26 +15,4 @@ internal sealed class SystemMonitoringDnsResolver : IMonitoringDnsResolver
 internal sealed class StrictDestinationAddressPolicy : IDestinationAddressPolicy
 {
     public bool IsAllowed(IPAddress address) => DestinationAddressPolicy.IsAllowed(address);
-}
-
-internal sealed class MonitoringTargetAuthorizer(IDbContextFactory<ApplicationDbContext> contextFactory)
-    : IMonitoringTargetAuthorizer
-{
-    public async Task<bool> IsAuthorizedAsync(
-        Guid endpointId,
-        string normalizedHost,
-        int port,
-        DateTimeOffset at,
-        CancellationToken cancellationToken = default)
-    {
-        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
-        return await dbContext.TargetAuthorizations.AsNoTracking().AnyAsync(evidence =>
-            evidence.EndpointId == endpointId
-            && evidence.NormalizedHost == normalizedHost
-            && evidence.Port == port
-            && evidence.RevokedAt == null
-            && evidence.EffectiveFrom <= at
-            && (evidence.ExpiresAt == null || evidence.ExpiresAt > at),
-            cancellationToken);
-    }
 }

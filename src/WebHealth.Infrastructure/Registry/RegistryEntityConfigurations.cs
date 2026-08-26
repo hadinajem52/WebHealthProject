@@ -238,38 +238,6 @@ internal sealed class EndpointConfiguration : IEntityTypeConfiguration<Endpoint>
     }
 }
 
-internal sealed class TargetAuthorizationEvidenceConfiguration : IEntityTypeConfiguration<TargetAuthorizationEvidence>
-{
-    public void Configure(EntityTypeBuilder<TargetAuthorizationEvidence> builder)
-    {
-        builder.ToTable("target_authorization", table =>
-        {
-            table.HasCheckConstraint(
-                "ck_target_authorization_kind",
-                "authorization_kind IN ('Owned', 'ExplicitPermission')");
-            table.HasCheckConstraint("ck_target_authorization_port", "port BETWEEN 1 AND 65535");
-            table.HasCheckConstraint(
-                "ck_target_authorization_expiry",
-                "expires_at IS NULL OR expires_at > effective_from");
-        });
-        builder.Property(evidence => evidence.Id).ValueGeneratedNever();
-        builder.Property(evidence => evidence.AuthorizationKind).HasMaxLength(30).IsRequired();
-        builder.Property(evidence => evidence.EvidenceReference).HasMaxLength(500).IsRequired();
-        builder.Property(evidence => evidence.NormalizedHost).HasMaxLength(253).IsRequired();
-        builder.Property(evidence => evidence.RevocationReason).HasMaxLength(500);
-        builder.Property(evidence => evidence.Version).IsConcurrencyToken();
-        builder.HasIndex(evidence => new { evidence.EndpointId, evidence.NormalizedHost, evidence.Port })
-            .IsUnique().HasFilter("revoked_at IS NULL");
-        builder.HasIndex(evidence => new { evidence.EndpointId, evidence.EffectiveFrom, evidence.ExpiresAt });
-        builder.HasOne(evidence => evidence.Endpoint).WithMany(endpoint => endpoint.TargetAuthorizations)
-            .HasForeignKey(evidence => evidence.EndpointId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(evidence => evidence.CreatedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(evidence => evidence.RevokedByUserId)
-            .OnDelete(DeleteBehavior.Restrict);
-    }
-}
-
 internal sealed class PolicyProfileConfiguration : IEntityTypeConfiguration<PolicyProfile>
 {
     public void Configure(EntityTypeBuilder<PolicyProfile> builder)

@@ -120,8 +120,6 @@ public static class CrawlRunDisplay
     {
         CrawlSkipReasons.RobotsDisallowed =>
             "Blocked by robots.txt — the site's rules do not permit this crawler",
-        CrawlSkipReasons.TargetNotAuthorized =>
-            "No target authorization covers this host, so it was never contacted",
         CrawlSkipReasons.ExternalCheckDisabled =>
             "External link — this run did not opt in to checking links off the site",
         CrawlSkipReasons.ExternalCheckLimit =>

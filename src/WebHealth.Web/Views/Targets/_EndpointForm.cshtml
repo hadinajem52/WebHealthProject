@@ -44,50 +44,6 @@
     </div>
 </fieldset>
 
-
-<fieldset class="form-section">
-    <legend class="form-section__title">Permission to test this target</legend>
-    <p class="form-section__hint">
-        Checks are only dispatched for a target we can show we are entitled to contact. Without
-        evidence here the endpoint is registered but never monitored.
-    </p>
-
-    <div class="form-section__body">
-        <div class="form-grid form-grid--two">
-            <div class="form-field">
-                <label asp-for="TargetAuthorizationKind"></label>
-                <select asp-for="TargetAuthorizationKind">
-                    <option value="">No evidence recorded</option>
-                    <option value="@TargetAuthorizationKinds.Owned">I own this target</option>
-                    <option value="@TargetAuthorizationKinds.ExplicitPermission">I have explicit testing permission</option>
-                </select>
-                <span asp-validation-for="TargetAuthorizationKind"></span>
-            </div>
-
-            <div class="form-field">
-                <label asp-for="TargetAuthorizationExpiresAt">
-                    @Html.DisplayNameFor(model => model.TargetAuthorizationExpiresAt)
-                    <span class="form-field__optional">Optional</span>
-                </label>
-                <input asp-for="TargetAuthorizationExpiresAt" type="datetime-local" />
-                <span class="form-field__hint">Once expired, monitoring stops.</span>
-                <span asp-validation-for="TargetAuthorizationExpiresAt"></span>
-            </div>
-        </div>
-
-        <div class="form-field">
-            <label asp-for="TargetAuthorizationEvidence"></label>
-            <textarea asp-for="TargetAuthorizationEvidence" rows="3"
-                      placeholder="Domain owned by me"></textarea>
-            <span class="form-field__hint">
-                Required once a kind is chosen. A reference you can stand behind &mdash; never a
-                credential or token.
-            </span>
-            <span asp-validation-for="TargetAuthorizationEvidence"></span>
-        </div>
-    </div>
-</fieldset>
-
 <fieldset class="form-section">
     <legend class="form-section__title">Availability checks</legend>
     <p class="form-section__hint">
@@ -223,15 +179,6 @@
     </p>
 
     <div class="form-section__body">
-        
-        <p class="form-notice">
-            @await Html.PartialAsync("_Icon", "warning")
-            <span>
-                Enabling this sends this URL to Google and asks Google's infrastructure to load
-                the page. Never enable it for a private, authenticated or internal-only address.
-            </span>
-        </p>
-
         <div class="switch-block">
             <label class="switch-field">
                 <input asp-for="PageAuditEnabled" type="checkbox" data-shell-dependency="page-audits" />

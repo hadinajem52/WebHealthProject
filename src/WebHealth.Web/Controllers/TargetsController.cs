@@ -99,9 +99,7 @@ public sealed class TargetsController(
                 await BuildRegistrationFormAsync(model, cancellationToken));
         }
 
-        var url = await ResolveEndpointUrlAsync(
-            model.Url, model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
-            model.TargetAuthorizationExpiresAt, cancellationToken);
+        var url = await urlResolver.ResolveAsync(model.Url, cancellationToken);
         model.Url = url.Value ?? string.Empty;
         var baseUrl = EndpointUrlResolver.Coerce(model.EnvironmentBaseUrl);
         model.EnvironmentBaseUrl = baseUrl.Value;
@@ -292,13 +290,10 @@ public sealed class TargetsController(
                 await BuildEndpointFormAsync(model, cancellationToken));
         }
 
-        var url = await ResolveEndpointUrlAsync(
-            model.Url, model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
-            model.TargetAuthorizationExpiresAt, cancellationToken);
+        var url = await urlResolver.ResolveAsync(model.Url, cancellationToken);
         model.Url = url.Value ?? string.Empty;
         var result = await endpointService.CreateAsync(
             new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
-                model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt,
                 model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
                 model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
@@ -331,9 +326,6 @@ public sealed class TargetsController(
             OwnerSubjectId = endpoint.OwnerSubjectId,
             IsEnabled = endpoint.IsEnabled,
             HttpExceptionReason = endpoint.HttpExceptionReason,
-            TargetAuthorizationKind = endpoint.TargetAuthorizationKind,
-            TargetAuthorizationEvidence = endpoint.TargetAuthorizationEvidence,
-            TargetAuthorizationExpiresAt = endpoint.TargetAuthorizationExpiresAt,
             SchedulingEnabled = endpoint.SchedulingEnabled,
             IntervalMinutesOverride = endpoint.IntervalMinutesOverride,
             WarningThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.WarningThresholdMs : null,
@@ -358,15 +350,11 @@ public sealed class TargetsController(
                 await BuildEndpointFormAsync(model, cancellationToken));
         }
 
-        var url = await ResolveEndpointUrlAsync(
-            model.Url, model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
-            model.TargetAuthorizationExpiresAt, cancellationToken);
+        var url = await urlResolver.ResolveAsync(model.Url, cancellationToken);
         model.Url = url.Value ?? string.Empty;
         var result = await endpointService.UpdateAsync(
             new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
-                model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
-                model.TargetAuthorizationExpiresAt, model.Version,
-                model.IntervalMinutesOverride, model.SchedulingEnabled,
+                model.Version, model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
                 model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
                 model.PageAuditEnabled, model.PageAuditSchedulingEnabled, model.PageAuditIntervalHours),
@@ -533,7 +521,6 @@ public sealed class TargetsController(
     private static readonly string[] AdvancedRegistrationFields =
     [
         nameof(EndpointRegistrationFormViewModel.OwnerSubjectId),
-        nameof(EndpointRegistrationFormViewModel.TargetAuthorizationExpiresAt),
         nameof(EndpointRegistrationFormViewModel.SchedulingEnabled),
         nameof(EndpointRegistrationFormViewModel.IntervalMinutesOverride),
         nameof(EndpointRegistrationFormViewModel.WarningThresholdMsOverride),
@@ -590,9 +577,6 @@ public sealed class TargetsController(
             OwnerSubjectId = model.OwnerSubjectId,
             IsEnabled = model.IsEnabled,
             HttpExceptionReason = model.HttpExceptionReason,
-            TargetAuthorizationKind = model.TargetAuthorizationKind,
-            TargetAuthorizationEvidence = model.TargetAuthorizationEvidence,
-            TargetAuthorizationExpiresAt = model.TargetAuthorizationExpiresAt,
             IntervalMinutesOverride = model.IntervalMinutesOverride,
             SchedulingEnabled = model.SchedulingEnabled,
             WarningThresholdMsOverride = model.WarningThresholdMsOverride,
@@ -604,24 +588,6 @@ public sealed class TargetsController(
             PageAuditSchedulingEnabled = model.PageAuditSchedulingEnabled,
             PageAuditIntervalHours = model.PageAuditIntervalHours
         };
-
-    private Task<EndpointUrlResolution> ResolveEndpointUrlAsync(
-        string? url,
-        string? authorizationKind,
-        string? authorizationEvidence,
-        DateTimeOffset? authorizationExpiresAt,
-        CancellationToken cancellationToken) =>
-        HasAssertedAuthorization(authorizationKind, authorizationEvidence, authorizationExpiresAt)
-            ? urlResolver.ResolveAsync(url, cancellationToken)
-            : Task.FromResult(EndpointUrlResolver.Coerce(url));
-
-    private static bool HasAssertedAuthorization(
-        string? kind,
-        string? evidence,
-        DateTimeOffset? expiresAt) =>
-        TargetAuthorizationKinds.All.Contains(kind?.Trim(), StringComparer.Ordinal)
-        && !string.IsNullOrWhiteSpace(evidence)
-        && (expiresAt is null || expiresAt > DateTimeOffset.UtcNow);
 
     private static string WithSchemeNotice(
         string message,

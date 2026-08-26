@@ -15,8 +15,7 @@ internal sealed class TargetAuthorizationService(
     {
         var now = DateTimeOffset.UtcNow;
         return MonitoringEligibility.ApplyTestable(
-                visibility.ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now),
-                now)
+                visibility.ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now))
             .AnyAsync(endpoint => endpoint.Id == endpointId && endpoint.DeletedAt == null, cancellationToken);
     }
 
@@ -28,8 +27,7 @@ internal sealed class TargetAuthorizationService(
         var now = DateTimeOffset.UtcNow;
         var readiness = await MonitoringEligibility.ProjectTestReadiness(
                 visibility.ApplyEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now)
-                    .Where(endpoint => endpoint.Id == endpointId && endpoint.DeletedAt == null),
-                now)
+                    .Where(endpoint => endpoint.Id == endpointId && endpoint.DeletedAt == null))
             .FirstOrDefaultAsync(cancellationToken);
         if (readiness is null)
         {
@@ -59,8 +57,7 @@ internal sealed class TargetAuthorizationService(
 
         var now = DateTimeOffset.UtcNow;
         var testable = await MonitoringEligibility.ApplyTestable(
-                visibility.ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now),
-                now)
+                visibility.ApplyTestableEndpointScope(dbContext.Endpoints.AsNoTracking(), access, now))
             .Where(endpoint => endpointIds.Contains(endpoint.Id) && endpoint.DeletedAt == null)
             .Select(endpoint => endpoint.Id)
             .ToListAsync(cancellationToken);

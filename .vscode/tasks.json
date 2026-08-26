@@ -61,6 +61,29 @@
       }
     },
     {
+      "label": "apply migrations",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "ef",
+        "database",
+        "update",
+        "--project",
+        "${workspaceFolder}/src/WebHealth.Infrastructure",
+        "--startup-project",
+        "${workspaceFolder}/src/WebHealth.Infrastructure"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
       "label": "update seed snapshot",
       "type": "process",
       "command": "powershell",

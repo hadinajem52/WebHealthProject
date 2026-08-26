@@ -50,7 +50,7 @@ internal sealed class MonitoringSchedulingService(
             .ThenBy(monitor => monitor.Id)
             .ToArrayAsync(token);
         var claimedEndpointIds = monitors.Select(monitor => monitor.EndpointId).Distinct().ToArray();
-        var eligibleEndpointIds = (await MonitoringEligibility.Apply(dbContext.Endpoints.AsNoTracking(), now)
+        var eligibleEndpointIds = (await MonitoringEligibility.Apply(dbContext.Endpoints.AsNoTracking())
             .Where(endpoint => claimedEndpointIds.Contains(endpoint.Id))
             .Select(endpoint => endpoint.Id)
             .ToArrayAsync(token)).ToHashSet();

@@ -457,8 +457,7 @@ public static class HttpResultNormalizer
         SafeHttpFailureKind.RedirectLimit => HttpFailureCategories.ExcessiveRedirects,
         SafeHttpFailureKind.ResponseHeadersTooLarge => HttpFailureCategories.ResponseTooLarge,
         SafeHttpFailureKind.InvalidUrl => HttpFailureCategories.InvalidConfiguration,
-        SafeHttpFailureKind.TargetNotAuthorized or SafeHttpFailureKind.DestinationRejected =>
-            HttpFailureCategories.DestinationPolicy,
+        SafeHttpFailureKind.DestinationRejected => HttpFailureCategories.DestinationPolicy,
         SafeHttpFailureKind.RedirectMissingLocation or SafeHttpFailureKind.RedirectInvalid =>
             HttpFailureCategories.InvalidRedirect,
         SafeHttpFailureKind.HttpsDowngrade => HttpFailureCategories.HttpsRequired,

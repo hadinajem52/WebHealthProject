@@ -80,11 +80,11 @@ public sealed class CrawlLinkLedgerTests
         var ledger = new CrawlLinkLedger();
         ledger.RecordDiscovery("https://a.test/source", "https://other.test/x");
 
-        var edges = ledger.RecordSkip("https://other.test/x", CrawlSkipReasons.TargetNotAuthorized);
+        var edges = ledger.RecordSkip("https://other.test/x", CrawlSkipReasons.ExternalCheckDisabled);
 
         edges.Should().ContainSingle();
         edges[0].Classification.Should().Be(CrawlLinkClassifications.Skipped);
-        edges[0].SkipReason.Should().Be(CrawlSkipReasons.TargetNotAuthorized);
+        edges[0].SkipReason.Should().Be(CrawlSkipReasons.ExternalCheckDisabled);
     }
 
     [Fact]

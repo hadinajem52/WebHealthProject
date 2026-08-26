@@ -187,20 +187,6 @@ erDiagram
         uuid tag_id PK, FK
     }
 
-    TARGET_AUTHORIZATION {
-        uuid id PK
-        uuid endpoint_id FK
-        uuid granted_by_user_id FK
-        text evidence_reference
-        text allowed_host
-        integer allowed_port
-        timestamptz effective_from
-        timestamptz expires_at
-        timestamptz revoked_at
-        uuid revoked_by_user_id FK
-        text revocation_reason
-    }
-
     LOGICAL_CHECK {
         uuid id PK
         uuid endpoint_monitor_id FK
@@ -458,9 +444,6 @@ erDiagram
     ENVIRONMENT ||--o{ ENDPOINT : contains
     ENDPOINT ||--o{ ENDPOINT_MONITOR : enables
     POLICY_PROFILE ||--o{ ENDPOINT_MONITOR : configures
-    ENDPOINT ||--o{ TARGET_AUTHORIZATION : authorizes
-    APP_USER ||--o{ TARGET_AUTHORIZATION : grants
-    APP_USER o|--o{ TARGET_AUTHORIZATION : revokes
     CLIENT o|--o{ ACCESS_GRANT : scopes
     WEBSITE o|--o{ ACCESS_GRANT : scopes
     ENVIRONMENT o|--o{ ACCESS_GRANT : scopes
@@ -524,7 +507,6 @@ These support the product's role/assignment behavior. They do not imply a multi-
 | `endpoint` | Environment, display/normalized URL and hash, assignment override, enabled state, HTTPS exception evidence, version |
 | `endpoint_monitor` | Endpoint, monitor type, typed interval/timeout/confirmation/threshold values, policy/overrides, schedule anchor, next due, configuration fingerprint |
 | `tag`, `website_tag` | Normalized tag and unique website/tag relation |
-| `target_authorization` | Personal ownership/permission evidence, effective/expiry/revocation state, endpoint and normalized redirect host/port scope |
 
 An endpoint represents one URL in one environment. Child monitors represent HTTP, SSL, SEO, and other monitor types.
 

@@ -121,14 +121,14 @@ public sealed class PageAuditSchedulingService(
         }
 
         var endpoint = await MonitoringEligibility
-            .ApplyTestable(dbContext.Endpoints.AsNoTracking(), now)
+            .ApplyTestable(dbContext.Endpoints.AsNoTracking())
             .Where(candidate => candidate.Id == endpointId)
             .Select(candidate => new { candidate.NormalizedUrl })
             .SingleOrDefaultAsync(cancellationToken);
         if (endpoint is null)
         {
             return PageAuditManualResult.Rejected(
-                "The endpoint is not active, or its target authorization has lapsed.");
+                "The endpoint is not active.");
         }
 
         var eligibility = PageAuditEligibility.Evaluate(endpoint.NormalizedUrl);
@@ -252,7 +252,7 @@ public sealed class PageAuditSchedulingService(
 
         var endpointIds = targets.Select(target => target.EndpointId).Distinct().ToArray();
         var eligible = await MonitoringEligibility
-            .ApplyTestable(dbContext.Endpoints.AsNoTracking(), now)
+            .ApplyTestable(dbContext.Endpoints.AsNoTracking())
             .Where(endpoint => endpointIds.Contains(endpoint.Id))
             .Select(endpoint => new { endpoint.Id, endpoint.NormalizedUrl })
             .ToDictionaryAsync(endpoint => endpoint.Id, endpoint => endpoint.NormalizedUrl, cancellationToken);

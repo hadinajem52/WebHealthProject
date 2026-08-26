@@ -102,8 +102,6 @@ public sealed class AuditContractTests
                 nameof(EndpointAuditSnapshot.IsEnabled),
                 nameof(EndpointAuditSnapshot.HasHttpException),
                 nameof(EndpointAuditSnapshot.HttpExceptionChanged),
-                nameof(EndpointAuditSnapshot.HasTargetAuthorization),
-                nameof(EndpointAuditSnapshot.TargetAuthorizationChanged),
                 nameof(EndpointAuditSnapshot.MonitorIntervalSeconds),
                 nameof(EndpointAuditSnapshot.HasIntervalOverride),
                 nameof(EndpointAuditSnapshot.SeoIndexingExpectation),

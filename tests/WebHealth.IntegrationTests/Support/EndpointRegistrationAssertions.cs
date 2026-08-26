@@ -100,13 +100,6 @@ internal static class EndpointRegistrationAssertions
         await VerifyInactiveEnvironmentAsync(
             registration, database, eligibility, modeTwoEndpoint, label, access);
         await VerifyDisabledOwnerAsync(registration, baseEndpoint, disabledOwnerId, label, access);
-        await VerifyMissingAuthorizationAsync(
-            registration,
-            database,
-            eligibility,
-            baseEndpoint,
-            label,
-            access);
         await VerifyDisabledWebsiteAsync(registration, database, eligibility, baseEndpoint, label, access);
         await VerifyInactiveClientAsync(registration, database, eligibility, baseEndpoint, label, access);
         await VerifyManualOnlyAsync(
@@ -270,37 +263,6 @@ internal static class EndpointRegistrationAssertions
             .Should().Contain("disabled owner");
     }
 
-    private static async Task VerifyMissingAuthorizationAsync(
-        IEndpointRegistrationService registration,
-        ApplicationDbContext database,
-        IMonitoringEligibilityService eligibility,
-        Endpoint endpoint,
-        string label,
-        RegistryAccessContext access)
-    {
-        var rejected = await registration.RegisterAsync(
-            new RegisterEndpointRequest(
-                new ExistingEnvironment(endpoint.EnvironmentId),
-                Settings($"https://missing-evidence-{label}.example.test/", evidence: false)),
-            access);
-        AssertField(rejected, EndpointRegistrationFields.TargetAuthorizationEvidence)
-            .Should().Contain("needs testing evidence");
-
-        var disabledId = await RegisterAsync(
-            registration,
-            new ExistingEnvironment(endpoint.EnvironmentId),
-            Settings(
-                $"https://disabled-no-evidence-{label}.example.test/",
-                enabled: false,
-                evidence: false),
-            access);
-        var disabled = await LoadEndpointAsync(database, disabledId);
-        disabled.IsEnabled.Should().BeFalse();
-        (await database.TargetAuthorizations.AnyAsync(item => item.EndpointId == disabledId))
-            .Should().BeFalse();
-        (await eligibility.IsEndpointEligibleAsync(disabledId)).Should().BeFalse();
-    }
-
     private static async Task VerifyDisabledWebsiteAsync(
         IEndpointRegistrationService registration,
         ApplicationDbContext database,
@@ -325,7 +287,7 @@ internal static class EndpointRegistrationAssertions
         var disabledId = await RegisterAsync(
             registration,
             new ExistingEnvironment(endpoint.EnvironmentId),
-            Settings($"https://disabled-website-{label}.example.test/", enabled: false, evidence: false),
+            Settings($"https://disabled-website-{label}.example.test/", enabled: false),
             access);
         var disabled = await LoadEndpointAsync(database, disabledId);
         disabled.IsEnabled.Should().BeFalse();
@@ -362,7 +324,7 @@ internal static class EndpointRegistrationAssertions
         var disabledId = await RegisterAsync(
             registration,
             new ExistingEnvironment(endpoint.EnvironmentId),
-            Settings($"https://inactive-client-{label}.example.test/", enabled: false, evidence: false),
+            Settings($"https://inactive-client-{label}.example.test/", enabled: false),
             access);
         var disabled = await LoadEndpointAsync(database, disabledId);
         disabled.IsEnabled.Should().BeFalse();
@@ -376,8 +338,7 @@ internal static class EndpointRegistrationAssertions
                 Environment($"Inactive client environment {label}", $"inactive-client-new-{label}")),
             Settings(
                 $"https://inactive-client-new-{label}.example.test/",
-                enabled: false,
-                evidence: false),
+                enabled: false),
             access);
         var disabledWithNewWebsite = await LoadEndpointAsync(database, disabledWithNewWebsiteId);
         disabledWithNewWebsite.Environment.Website.IsEnabled.Should().BeTrue();
@@ -430,16 +391,11 @@ internal static class EndpointRegistrationAssertions
         string url,
         bool enabled = true,
         bool scheduling = true,
-        bool evidence = true,
         Guid? ownerSubjectId = null) => new()
         {
             Url = url,
             OwnerSubjectId = ownerSubjectId,
             IsEnabled = enabled,
-            TargetAuthorizationKind = evidence ? TargetAuthorizationKinds.Owned : null,
-            TargetAuthorizationEvidence = evidence
-                ? "Phase 3 registration fixture owned by the project."
-                : null,
             SchedulingEnabled = scheduling
         };
 

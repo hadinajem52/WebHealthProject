@@ -92,15 +92,6 @@ internal sealed class EndpointRegistryService(
         }
 
         var now = DateTimeOffset.UtcNow;
-        var authorization = DecideTargetAuthorization(
-            command.TargetAuthorizationKind, command.TargetAuthorizationEvidence,
-            command.TargetAuthorizationExpiresAt, command.IsEnabled, url, null, now);
-        if (authorization.Error is not null)
-        {
-            return new RegistryCreateCompleted(Validation(ValidationError.For(
-                nameof(UpdateEndpoint.TargetAuthorizationEvidence), authorization.Error)));
-        }
-
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
         dbContext.Endpoints.Add(endpoint);
         dbContext.EndpointMonitors.Add(CreateMonitor(
@@ -111,7 +102,6 @@ internal sealed class EndpointRegistryService(
             dbContext.EndpointMonitors.Add(CreateSslMonitor(
                 endpoint, environment.IsProduction, command.SchedulingEnabled, access.UserId, now));
         }
-        await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
         await PageAuditConfiguration.ApplyAsync(
             dbContext, endpoint.Id, command.PageAuditEnabled, command.PageAuditSchedulingEnabled,
             command.PageAuditIntervalHours, now, cancellationToken);
@@ -123,8 +113,7 @@ internal sealed class EndpointRegistryService(
         {
             await auditTrail.RecordEndpointMutationAsync(
                 new(access.UserId, now), EndpointAuditAction.Created, null,
-                ToAudit(endpoint, urlChanged: true, httpExceptionChanged: exception.Reason is not null,
-                    targetAuthorizationChanged: authorization.Changed, now, pageAudit),
+                ToAudit(endpoint, urlChanged: true, httpExceptionChanged: exception.Reason is not null, pageAudit),
                 cancellationToken);
             return new RegistryCreateCompleted(RegistryMutationResult.Success(endpoint.Id));
         }
@@ -163,7 +152,6 @@ internal sealed class EndpointRegistryService(
         var endpoint = await dbContext.Endpoints.Include(candidate => candidate.Environment)
             .ThenInclude(environment => environment.Website)
             .Include(candidate => candidate.Monitors)
-            .Include(candidate => candidate.TargetAuthorizations)
             .AsSingleQuery()
             .SingleOrDefaultAsync(candidate => candidate.Id == command.EndpointId, cancellationToken);
         if (endpoint is null)
@@ -226,25 +214,11 @@ internal sealed class EndpointRegistryService(
         var exceptionChanged = !string.Equals(endpoint.HttpExceptionReason, exception.Reason, StringComparison.Ordinal)
             || endpoint.HttpExceptionApprovedByUserId != exception.ApprovedByUserId;
         var now = DateTimeOffset.UtcNow;
-        var currentAuthorization = endpoint.TargetAuthorizations.SingleOrDefault(evidence =>
-            evidence.RevokedAt == null
-            && evidence.NormalizedHost == endpoint.NormalizedHost
-            && evidence.Port == endpoint.EffectivePort);
-        var authorization = DecideTargetAuthorization(
-            command.TargetAuthorizationKind, command.TargetAuthorizationEvidence,
-            command.TargetAuthorizationExpiresAt, command.IsEnabled, url, currentAuthorization, now);
-        if (authorization.Error is not null)
-        {
-            return Validation(ValidationError.For(nameof(UpdateEndpoint.TargetAuthorizationEvidence), authorization.Error));
-        }
-
         var pageAuditBefore = await PageAuditConfiguration.ReadAsync(
             dbContext, endpoint.Id, cancellationToken);
-        var before = ToAudit(endpoint, urlChanged: false, httpExceptionChanged: false,
-            targetAuthorizationChanged: false, now, pageAuditBefore);
+        var before = ToAudit(endpoint, urlChanged: false, httpExceptionChanged: false, pageAuditBefore);
         try
         {
-            await ApplyTargetAuthorizationAsync(endpoint, authorization, access.UserId, now, cancellationToken);
             await PageAuditConfiguration.ApplyAsync(
                 dbContext, endpoint.Id, command.PageAuditEnabled, command.PageAuditSchedulingEnabled,
                 command.PageAuditIntervalHours, now, cancellationToken);
@@ -266,7 +240,7 @@ internal sealed class EndpointRegistryService(
                 now);
             await auditTrail.RecordEndpointMutationAsync(
                 new(access.UserId, now), EndpointAuditAction.Updated, before,
-                ToAudit(endpoint, urlChanged, exceptionChanged, authorization.Changed, now,
+                ToAudit(endpoint, urlChanged, exceptionChanged,
                     new(command.PageAuditEnabled, command.PageAuditSchedulingEnabled,
                         command.PageAuditIntervalHours)),
                 cancellationToken);
@@ -309,7 +283,6 @@ internal sealed class EndpointRegistryService(
             SELECT * FROM web_health.endpoint WHERE id = {command.EntityId} FOR UPDATE
             """)
             .Include(candidate => candidate.Monitors)
-            .Include(candidate => candidate.TargetAuthorizations)
             .AsNoTracking()
             .AsSingleQuery()
             .SingleOrDefaultAsync(cancellationToken);
@@ -327,7 +300,7 @@ internal sealed class EndpointRegistryService(
 
         var pageAuditState = await PageAuditConfiguration.ReadAsync(
             dbContext, endpoint.Id, cancellationToken);
-        var snapshot = ToAudit(endpoint, false, false, false, now, pageAuditState);
+        var snapshot = ToAudit(endpoint, false, false, pageAuditState);
         await auditTrail.RecordEndpointMutationAsync(
             new(access.UserId, now), EndpointAuditAction.Purged, snapshot, snapshot, cancellationToken);
         await purgeCascade.ExecuteAsync(endpoint.Id, cancellationToken);
@@ -394,7 +367,7 @@ internal sealed class EndpointRegistryService(
             : EndpointAuditAction.SchedulePaused;
         var pageAuditState = await PageAuditConfiguration.ReadAsync(
             dbContext, endpoint.Id, cancellationToken);
-        var before = ToAudit(endpoint, false, false, false, now, pageAuditState);
+        var before = ToAudit(endpoint, false, false, pageAuditState);
 
         foreach (var active in endpoint.Monitors.Where(candidate => candidate.DeletedAt == null))
         {
@@ -414,7 +387,7 @@ internal sealed class EndpointRegistryService(
         try
         {
             await auditTrail.RecordEndpointMutationAsync(
-                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now, pageAuditState), cancellationToken);
+                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, pageAuditState), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
         }
@@ -454,13 +427,13 @@ internal sealed class EndpointRegistryService(
         var now = DateTimeOffset.UtcNow;
         var pageAuditState = await PageAuditConfiguration.ReadAsync(
             dbContext, endpoint.Id, cancellationToken);
-        var before = ToAudit(endpoint, false, false, false, now, pageAuditState);
+        var before = ToAudit(endpoint, false, false, pageAuditState);
         ApplyState(endpoint, action, endpoint.Environment.IsProduction, access.UserId, now);
 
         try
         {
             await auditTrail.RecordEndpointMutationAsync(
-                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, false, now, pageAuditState), cancellationToken);
+                new(access.UserId, now), action, before, ToAudit(endpoint, false, false, pageAuditState), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return RegistryMutationResult.Success(endpoint.Id);
         }
@@ -997,8 +970,6 @@ internal sealed class EndpointRegistryService(
         Endpoint endpoint,
         bool urlChanged,
         bool httpExceptionChanged,
-        bool targetAuthorizationChanged,
-        DateTimeOffset now,
         PageAuditConfigurationState pageAudit)
     {
         var monitor = AuditedAvailabilityMonitor(endpoint);
@@ -1006,8 +977,7 @@ internal sealed class EndpointRegistryService(
             endpoint.Id, endpoint.EnvironmentId, endpoint.OwnerSubjectId,
             Convert.ToHexString(endpoint.NormalizedUrlHash).ToLowerInvariant(), endpoint.NormalizationVersion,
             urlChanged, endpoint.IsEnabled, endpoint.HttpExceptionReason is not null,
-            httpExceptionChanged, HasCurrentAuthorization(endpoint, now), targetAuthorizationChanged,
-            monitor.IntervalSeconds,
+            httpExceptionChanged, monitor.IntervalSeconds,
             MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides),
             endpoint.SeoIndexingExpectation,
             endpoint.SeoDescriptionRequired,
@@ -1038,110 +1008,6 @@ internal sealed class EndpointRegistryService(
         }
 
         return new(submittedSeconds, null);
-    }
-
-    private static bool HasCurrentAuthorization(Endpoint endpoint, DateTimeOffset now) =>
-        endpoint.TargetAuthorizations.Any(evidence =>
-            evidence.RevokedAt == null
-            && evidence.EffectiveFrom <= now
-            && (evidence.ExpiresAt == null || evidence.ExpiresAt > now)
-            && evidence.NormalizedHost == endpoint.NormalizedHost
-            && evidence.Port == endpoint.EffectivePort);
-
-    private static TargetAuthorizationDecision DecideTargetAuthorization(
-        string? submittedKind,
-        string? submittedEvidence,
-        DateTimeOffset? expiresAt,
-        bool endpointEnabled,
-        EndpointUrlNormalizationResult url,
-        TargetAuthorizationEvidence? current,
-        DateTimeOffset now)
-    {
-        var kind = submittedKind?.Trim();
-        var evidence = submittedEvidence?.Trim();
-        if (string.IsNullOrEmpty(kind) && string.IsNullOrEmpty(evidence) && expiresAt is null)
-        {
-            return endpointEnabled
-                ? new(null, current, false, "An enabled endpoint needs testing evidence: record that you own this "
-                    + "target or that you have explicit permission, or save the endpoint disabled.")
-                : new(null, current, current is not null, null);
-        }
-
-        if (!TargetAuthorizationKinds.All.Contains(kind, StringComparer.Ordinal))
-        {
-            return new(null, current, false, "Choose how this target is authorized: owned, or explicit permission.");
-        }
-
-        if (string.IsNullOrWhiteSpace(evidence) || evidence.Length > 500)
-        {
-            return new(null, current, false, "Enter a reference for this authorization, 500 characters or fewer — "
-                + "never a credential or token.");
-        }
-
-        if (expiresAt is not null && expiresAt <= now)
-        {
-            return new(null, current, false, "This authorization expires in the past, so it would never permit a check. "
-                + "Choose a future date, or leave it blank for no expiry.");
-        }
-
-        var unchanged = current is not null
-            && current.NormalizedHost == url.NormalizedHost
-            && current.Port == url.EffectivePort
-            && current.AuthorizationKind == kind
-            && current.EvidenceReference == evidence
-            && current.ExpiresAt == expiresAt;
-        if (unchanged)
-        {
-            return new(null, null, false, null);
-        }
-
-        return new(new TargetAuthorizationEvidence
-        {
-            Id = Guid.NewGuid(),
-            AuthorizationKind = kind!,
-            EvidenceReference = evidence,
-            NormalizedHost = url.NormalizedHost!,
-            Port = url.EffectivePort!.Value,
-            EffectiveFrom = now,
-            ExpiresAt = expiresAt,
-            CreatedAt = now,
-            Version = 1
-        }, current, true, null);
-    }
-
-    private async Task ApplyTargetAuthorizationAsync(
-        Endpoint endpoint,
-        TargetAuthorizationDecision decision,
-        Guid actorId,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        if (decision is { ToCreate: not null, ToRevoke: not null }
-            && decision.ToCreate.NormalizedHost == decision.ToRevoke.NormalizedHost
-            && decision.ToCreate.Port == decision.ToRevoke.Port)
-        {
-            decision.ToRevoke.AuthorizationKind = decision.ToCreate.AuthorizationKind;
-            decision.ToRevoke.EvidenceReference = decision.ToCreate.EvidenceReference;
-            decision.ToRevoke.ExpiresAt = decision.ToCreate.ExpiresAt;
-            decision.ToRevoke.Version++;
-            return;
-        }
-
-        if (decision.ToRevoke is not null)
-        {
-            decision.ToRevoke.RevokedAt = now;
-            decision.ToRevoke.RevokedByUserId = actorId;
-            decision.ToRevoke.RevocationReason = "Endpoint authorization evidence replaced or removed.";
-            decision.ToRevoke.Version++;
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        if (decision.ToCreate is not null)
-        {
-            decision.ToCreate.EndpointId = endpoint.Id;
-            decision.ToCreate.CreatedByUserId = actorId;
-            endpoint.TargetAuthorizations.Add(decision.ToCreate);
-        }
     }
 
     private static string? ValidateState(Endpoint endpoint, EndpointAuditAction action) => action switch
@@ -1209,12 +1075,6 @@ internal sealed class EndpointRegistryService(
         string? Reason, Guid? ApprovedByUserId, DateTimeOffset? ApprovedAt, string? Error);
 
     private sealed record IntervalOverrideDecision(int? Seconds, string? Error);
-
-    private sealed record TargetAuthorizationDecision(
-        TargetAuthorizationEvidence? ToCreate,
-        TargetAuthorizationEvidence? ToRevoke,
-        bool Changed,
-        string? Error);
 
     private sealed record EndpointCreatePreparation(
         EndpointUrlNormalizationResult? Url,

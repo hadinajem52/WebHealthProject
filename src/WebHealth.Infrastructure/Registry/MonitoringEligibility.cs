@@ -6,7 +6,7 @@ namespace WebHealth.Infrastructure.Registry;
 
 internal static class MonitoringEligibility
 {
-    public static IQueryable<Endpoint> ApplyTestable(IQueryable<Endpoint> endpoints, DateTimeOffset now) =>
+    public static IQueryable<Endpoint> ApplyTestable(IQueryable<Endpoint> endpoints) =>
         endpoints.Where(endpoint =>
             endpoint.DeletedAt == null
             && endpoint.IsEnabled
@@ -15,32 +15,18 @@ internal static class MonitoringEligibility
             && endpoint.Environment.Website.IsEnabled
             && endpoint.Environment.Website.Client.DeletedAt == null
             && endpoint.Environment.Website.Client.IsActive
-            && endpoint.Monitors.Any(monitor => monitor.DeletedAt == null)
-            && endpoint.TargetAuthorizations.Any(evidence =>
-                evidence.RevokedAt == null
-                && evidence.EffectiveFrom <= now
-                && (evidence.ExpiresAt == null || evidence.ExpiresAt > now)
-                && evidence.NormalizedHost == endpoint.NormalizedHost
-                && evidence.Port == endpoint.EffectivePort));
+            && endpoint.Monitors.Any(monitor => monitor.DeletedAt == null));
 
-    public static IQueryable<EndpointTestReadiness> ProjectTestReadiness(
-        IQueryable<Endpoint> endpoints,
-        DateTimeOffset now) =>
+    public static IQueryable<EndpointTestReadiness> ProjectTestReadiness(IQueryable<Endpoint> endpoints) =>
         endpoints.Select(endpoint => new EndpointTestReadiness(
             endpoint.IsEnabled,
             endpoint.Environment.DeletedAt == null,
             endpoint.Environment.Website.DeletedAt == null && endpoint.Environment.Website.IsEnabled,
             endpoint.Environment.Website.Client.DeletedAt == null && endpoint.Environment.Website.Client.IsActive,
-            endpoint.Monitors.Any(monitor => monitor.DeletedAt == null),
-            endpoint.TargetAuthorizations.Any(evidence =>
-                evidence.RevokedAt == null
-                && evidence.EffectiveFrom <= now
-                && (evidence.ExpiresAt == null || evidence.ExpiresAt > now)
-                && evidence.NormalizedHost == endpoint.NormalizedHost
-                && evidence.Port == endpoint.EffectivePort)));
+            endpoint.Monitors.Any(monitor => monitor.DeletedAt == null)));
 
-    public static IQueryable<Endpoint> Apply(IQueryable<Endpoint> endpoints, DateTimeOffset now) =>
-        ApplyTestable(endpoints, now)
+    public static IQueryable<Endpoint> Apply(IQueryable<Endpoint> endpoints) =>
+        ApplyTestable(endpoints)
             .Where(endpoint => endpoint.Monitors.Any(monitor =>
                 monitor.DeletedAt == null && monitor.SchedulingEnabled && monitor.IsEnabled));
 }
@@ -50,8 +36,7 @@ internal sealed record EndpointTestReadiness(
     bool EnvironmentAvailable,
     bool WebsiteEnabled,
     bool ClientActive,
-    bool HasMonitor,
-    bool HasTargetAuthorization)
+    bool HasMonitor)
 {
     public EndpointTestBlock Block => this switch
     {
@@ -60,7 +45,6 @@ internal sealed record EndpointTestReadiness(
         { WebsiteEnabled: false } => EndpointTestBlock.WebsiteDisabled,
         { ClientActive: false } => EndpointTestBlock.ClientInactive,
         { HasMonitor: false } => EndpointTestBlock.NoMonitor,
-        { HasTargetAuthorization: false } => EndpointTestBlock.NoTargetAuthorization,
         _ => EndpointTestBlock.None
     };
 }
@@ -70,12 +54,12 @@ internal sealed class MonitoringEligibilityService(ApplicationDbContext dbContex
     public Task<bool> IsEndpointEligibleAsync(
         Guid endpointId,
         CancellationToken cancellationToken = default) =>
-        MonitoringEligibility.Apply(dbContext.Endpoints.AsNoTracking(), DateTimeOffset.UtcNow)
+        MonitoringEligibility.Apply(dbContext.Endpoints.AsNoTracking())
             .AnyAsync(endpoint => endpoint.Id == endpointId, cancellationToken);
 
     public Task<bool> IsEndpointTestableAsync(
         Guid endpointId,
         CancellationToken cancellationToken = default) =>
-        MonitoringEligibility.ApplyTestable(dbContext.Endpoints.AsNoTracking(), DateTimeOffset.UtcNow)
+        MonitoringEligibility.ApplyTestable(dbContext.Endpoints.AsNoTracking())
             .AnyAsync(endpoint => endpoint.Id == endpointId, cancellationToken);
 }

@@ -87,7 +87,8 @@ internal static class DatabaseFoundationAssertions
         "20260824081054_PageAuditIncidentPoliciesAndBatches",
         "20260824084650_PageAuditEndpointIncidentPolicies",
         "20260824102608_CrawlRunExecutionClaim",
-        "20260825090421_MaintenanceWindowArchive"
+        "20260825090421_MaintenanceWindowArchive",
+        "20260826072635_DropTargetAuthorization"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -121,7 +122,6 @@ internal static class DatabaseFoundationAssertions
         ,"owner_subject"
         ,"team"
         ,"team_member"
-        ,"target_authorization"
         ,"issue_state"
         ,"endpoint_health"
         ,"maintenance_window"
@@ -154,6 +154,11 @@ internal static class DatabaseFoundationAssertions
         "page_audit_target", "page_audit_run", "page_audit_item", "page_audit_incident_policy"
     ];
 
+    private static readonly string[] TablesRemovedAfterPhaseThree =
+    [
+        "target_authorization"
+    ];
+
     private static readonly string[] ExpectedEntityTypeNames =
     [
         "IdentityRoleClaim`1",
@@ -174,7 +179,6 @@ internal static class DatabaseFoundationAssertions
         "WebsiteEnvironment",
         "AccessGrant",
         "Endpoint",
-        "TargetAuthorizationEvidence",
         "EndpointMonitor",
         "PolicyProfile",
         "EndpointHealth",
@@ -320,8 +324,7 @@ internal static class DatabaseFoundationAssertions
                     $"https://{committedLabel}.example.test/", true),
                 access));
             committedEndpointId = CreatedId(await endpoints.CreateEndpointCoreAsync(
-                new(committedEnvironmentId, $"https://{committedLabel}.example.test/health", null, true, null,
-                    TargetAuthorizationKinds.Owned, "Phase 2 composability fixture.", null),
+                new(committedEnvironmentId, $"https://{committedLabel}.example.test/health", null, true, null),
                 access));
             await transaction.CommitAsync();
         }
@@ -356,8 +359,7 @@ internal static class DatabaseFoundationAssertions
                     $"https://{rolledBackLabel}.example.test/", true),
                 access));
             rolledBackEndpointId = CreatedId(await endpoints.CreateEndpointCoreAsync(
-                new(rolledBackEnvironmentId, $"https://{rolledBackLabel}.example.test/health", null, true, null,
-                    TargetAuthorizationKinds.Owned, "Phase 2 rollback fixture.", null),
+                new(rolledBackEnvironmentId, $"https://{rolledBackLabel}.example.test/health", null, true, null),
                 access));
             await transaction.RollbackAsync();
         }
@@ -406,8 +408,7 @@ internal static class DatabaseFoundationAssertions
             .Select(candidate => candidate.Id).FirstAsync();
 
         var httpsResult = await endpointService.CreateAsync(
-            new(environmentId, "https://certificates.test/status", null, true, null,
-                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null),
+            new(environmentId, "https://certificates.test/status", null, true, null),
             access);
         httpsResult.Succeeded.Should().BeTrue(string.Join(" ", httpsResult.Errors));
         var httpsEndpointId = httpsResult.EntityId!.Value;
@@ -420,8 +421,7 @@ internal static class DatabaseFoundationAssertions
         sslMonitor.PolicyProfileId.Should().Be(RegistryDefaults.SslCertificatePolicyProfileId);
 
         var httpResult = await endpointService.CreateAsync(
-            new(environmentId, "http://plaintext.test/status", null, true, null,
-                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null),
+            new(environmentId, "http://plaintext.test/status", null, true, null),
             access);
         httpResult.Succeeded.Should().BeTrue(string.Join(" ", httpResult.Errors));
         (await database.EndpointMonitors.AnyAsync(monitor =>
@@ -446,9 +446,7 @@ internal static class DatabaseFoundationAssertions
         database.ChangeTracker.Clear();
         var endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
         var renamed = await endpointService.UpdateAsync(
-            new(endpointId, "https://renamed-certificates.test/status", null, true, null,
-                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null,
-                endpoint.Version),
+            new(endpointId, "https://renamed-certificates.test/status", null, true, null, endpoint.Version),
             access);
         renamed.Succeeded.Should().BeTrue(string.Join(" ", renamed.Errors));
 
@@ -467,9 +465,7 @@ internal static class DatabaseFoundationAssertions
         database.ChangeTracker.Clear();
         endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
         (await endpointService.UpdateAsync(
-            new(endpointId, "https://renamed-certificates.test/other", null, true, null,
-                TargetAuthorizationKinds.Owned, "Certificate fixture owned by the project.", null,
-                endpoint.Version),
+            new(endpointId, "https://renamed-certificates.test/other", null, true, null, endpoint.Version),
             access))
             .Succeeded.Should().BeTrue();
         (await database.EndpointMonitors.AsNoTracking().CountAsync(monitor =>
@@ -609,8 +605,7 @@ internal static class DatabaseFoundationAssertions
             .FirstAsync();
 
         var created = await endpointService.CreateAsync(
-            new(environmentId, url, null, true, null,
-                TargetAuthorizationKinds.Owned, "Foundation fixture owned by the project.", null),
+            new(environmentId, url, null, true, null),
             access);
         created.Succeeded.Should().BeTrue(string.Join(" ", created.Errors));
 
@@ -669,14 +664,12 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
 
         var endpointResult = await endpointService.CreateAsync(
-            new(stagingId, " HTTPS://EXAMPLE.test:443/a/../Health?q=%41 ", developerOwnerId, true, null,
-                TargetAuthorizationKinds.Owned, "Integration fixture owned by the project.", null),
+            new(stagingId, " HTTPS://EXAMPLE.test:443/a/../Health?q=%41 ", developerOwnerId, true, null),
             administratorAccess);
         endpointResult.Succeeded.Should().BeTrue(string.Join(" ", endpointResult.Errors));
         var endpointId = endpointResult.EntityId ?? throw new InvalidOperationException("Endpoint id was not returned.");
         (await endpointService.CreateAsync(
-            new(stagingId, "https://example.test/Health?q=A", null, true, null,
-                TargetAuthorizationKinds.Owned, "Integration fixture owned by the project.", null), administratorAccess))
+            new(stagingId, "https://example.test/Health?q=A", null, true, null), administratorAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         var endpoint = await database.Endpoints.Include(candidate => candidate.Monitors)
             .SingleAsync(candidate => candidate.Id == endpointId);
@@ -688,37 +681,26 @@ internal static class DatabaseFoundationAssertions
             candidate.MonitorType == "HttpAvailability");
         monitor.ScheduleAnchor.Should().Be(monitor.CreatedAt);
         monitor.NextDueAt.Should().Be(monitor.CreatedAt);
-        var authorizationEvidence = await database.TargetAuthorizations.SingleAsync(
-            evidence => evidence.EndpointId == endpointId && evidence.RevokedAt == null);
-        authorizationEvidence.AuthorizationKind.Should().Be(TargetAuthorizationKinds.Owned);
-        authorizationEvidence.NormalizedHost.Should().Be("example.test");
-        authorizationEvidence.Port.Should().Be(443);
 
         (await endpointService.CreateAsync(
-            new(stagingId, "/relative", null, true, null, null, null, null), administratorAccess))
+            new(stagingId, "/relative", null, true, null), administratorAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
-        (await endpointService.CreateAsync(
-            new(stagingId, "https://no-evidence.example.test/", null, true, null, null, null, null),
-            administratorAccess)).Status.Should().Be(RegistryMutationStatus.ValidationFailed);
-
         var productionResult = await environmentService.CreateAsync(
             new(website.Id, "Production", EnvironmentTypes.Production, "https://example.test", true),
             administratorAccess);
         productionResult.Succeeded.Should().BeTrue(string.Join(" ", productionResult.Errors));
         var productionId = productionResult.EntityId ?? throw new InvalidOperationException("Production environment id was not returned.");
         (await endpointService.CreateAsync(
-            new(productionId, "http://legacy.example.test/", null, true, "Legacy appliance",
-                TargetAuthorizationKinds.ExplicitPermission, "Permission ticket TEST-1", null), operationsAccess))
+            new(productionId, "http://legacy.example.test/", null, true, "Legacy appliance"), operationsAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         var productionHttp = await endpointService.CreateAsync(
             new(productionId, "http://legacy.example.test/", null, true,
-                "Legacy appliance requires HTTP during migration.", TargetAuthorizationKinds.ExplicitPermission,
-                "Permission ticket TEST-2", null),
+                "Legacy appliance requires HTTP during migration."),
             administratorAccess);
         productionHttp.Succeeded.Should().BeTrue(string.Join(" ", productionHttp.Errors));
 
         var stagingHttp = await endpointService.CreateAsync(
-            new(stagingId, "http://staging.example.test/", null, false, null, null, null, null),
+            new(stagingId, "http://staging.example.test/", null, false, null),
             administratorAccess);
         stagingHttp.Succeeded.Should().BeTrue(string.Join(" ", stagingHttp.Errors));
         var stagingHttpId = stagingHttp.EntityId
@@ -770,20 +752,13 @@ internal static class DatabaseFoundationAssertions
                 WebsiteActive = candidate.Environment.Website.DeletedAt == null && candidate.Environment.Website.IsEnabled,
                 ClientActive = candidate.Environment.Website.Client.DeletedAt == null
                     && candidate.Environment.Website.Client.IsActive,
-                MonitorActive = candidate.Monitors.Any(monitor => monitor.DeletedAt == null && monitor.IsEnabled),
-                EvidenceActive = candidate.TargetAuthorizations.Any(evidence =>
-                    evidence.RevokedAt == null
-                    && evidence.EffectiveFrom <= DateTimeOffset.UtcNow
-                    && (evidence.ExpiresAt == null || evidence.ExpiresAt > DateTimeOffset.UtcNow)
-                    && evidence.NormalizedHost == candidate.NormalizedHost
-                    && evidence.Port == candidate.EffectivePort)
+                MonitorActive = candidate.Monitors.Any(monitor => monitor.DeletedAt == null && monitor.IsEnabled)
             }).SingleAsync();
         eligibilityState.EndpointActive.Should().BeTrue();
         eligibilityState.EnvironmentActive.Should().BeTrue();
         eligibilityState.WebsiteActive.Should().BeTrue();
         eligibilityState.ClientActive.Should().BeTrue();
         eligibilityState.MonitorActive.Should().BeTrue();
-        eligibilityState.EvidenceActive.Should().BeTrue();
         (await monitoringEligibility.IsEndpointEligibleAsync(endpointId)).Should().BeTrue();
         (await targetReader.ListEndpointsAsync(
             stagingId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
@@ -820,8 +795,7 @@ internal static class DatabaseFoundationAssertions
         website.Version++;
         await database.SaveChangesAsync();
         var overriddenEndpoint = await endpointService.CreateAsync(
-            new(stagingId, "https://override.example.test/", administratorOwnerId, true, null,
-                TargetAuthorizationKinds.Owned, "Administrator-owned integration fixture.", null, 7),
+            new(stagingId, "https://override.example.test/", administratorOwnerId, true, null, 7),
             administratorAccess);
         overriddenEndpoint.Succeeded.Should().BeTrue(string.Join(" ", overriddenEndpoint.Errors));
         var overriddenEndpointId = overriddenEndpoint.EntityId!.Value;
@@ -830,8 +804,8 @@ internal static class DatabaseFoundationAssertions
         overriddenMonitor.IntervalSeconds.Should().Be(420);
         MonitorIntervalOverride.GetSeconds(overriddenMonitor.BoundedOverrides).Should().Be(420);
         (await endpointService.CreateAsync(
-            new(stagingId, "https://operations-override.example.test/", null, false, null,
-                null, null, null, 7), operationsAccess))
+            new(stagingId, "https://operations-override.example.test/", null, false, null, 7),
+            operationsAccess))
             .Status.Should().Be(RegistryMutationStatus.ValidationFailed);
         (await targetReader.ListEndpointsAsync(stagingId,
             new(developer.Id, [ApplicationRoles.DeveloperSupport])))
@@ -841,8 +815,7 @@ internal static class DatabaseFoundationAssertions
             .Should().BeFalse();
 
         var staleEndpoint = await endpointService.UpdateAsync(
-            new(endpointId, endpoint.DisplayUrl, endpoint.OwnerSubjectId, endpoint.IsEnabled, null,
-                TargetAuthorizationKinds.Owned, "Integration fixture owned by the project.", null, 0),
+            new(endpointId, endpoint.DisplayUrl, endpoint.OwnerSubjectId, endpoint.IsEnabled, null, 0),
             administratorAccess);
         staleEndpoint.Status.Should().Be(RegistryMutationStatus.ConcurrencyConflict);
 
@@ -860,8 +833,7 @@ internal static class DatabaseFoundationAssertions
         database.ChangeTracker.Clear();
         endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
         var updateEndpoint = await endpointService.UpdateAsync(
-            new(endpoint.Id, "https://example.test/health-v2", endpoint.OwnerSubjectId, true, null,
-                TargetAuthorizationKinds.Owned, "Updated integration fixture ownership evidence.", null, endpoint.Version),
+            new(endpoint.Id, "https://example.test/health-v2", endpoint.OwnerSubjectId, true, null, endpoint.Version),
             administratorAccess);
         updateEndpoint.Succeeded.Should().BeTrue(string.Join(" ", updateEndpoint.Errors));
         endpoint = await database.Endpoints.SingleAsync(candidate => candidate.Id == endpointId);
@@ -939,8 +911,6 @@ internal static class DatabaseFoundationAssertions
                 .ThenInclude(endpoint => endpoint.Environment)
                     .ThenInclude(environment => environment.Website)
                         .ThenInclude(website => website.Client)
-            .Include(candidate => candidate.Endpoint)
-                .ThenInclude(endpoint => endpoint.TargetAuthorizations)
             .Where(candidate => candidate.DeletedAt == null && candidate.IsEnabled)
             .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
             .FirstAsync();
@@ -2356,8 +2326,7 @@ internal static class DatabaseFoundationAssertions
             """).SingleAsync();
         hangfireTables.Should().BeGreaterThan(0);
 
-        var eligibleEndpointIds = MonitoringEligibility.Apply(
-                database.Endpoints.AsNoTracking(), clock.GetUtcNow())
+        var eligibleEndpointIds = MonitoringEligibility.Apply(database.Endpoints.AsNoTracking())
             .Select(endpoint => endpoint.Id);
         var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
@@ -2439,12 +2408,6 @@ internal static class DatabaseFoundationAssertions
             candidate => candidate.IsEnabled = false,
             candidate => candidate.IsEnabled = true,
             advancesCadence: false);
-        await VerifySuppressedSchedulingAsync(
-            database, scheduling, clock, monitor.Id,
-            candidate => candidate.Endpoint.TargetAuthorizations.Single(
-                evidence => evidence.RevokedAt == null).ExpiresAt = clock.GetUtcNow(),
-            candidate => candidate.Endpoint.TargetAuthorizations.Single(
-                evidence => evidence.RevokedAt == null).ExpiresAt = null);
 
         database.ChangeTracker.Clear();
         monitor = await database.EndpointMonitors.SingleAsync(candidate => candidate.Id == monitor.Id);
@@ -2511,8 +2474,6 @@ internal static class DatabaseFoundationAssertions
                 .ThenInclude(endpoint => endpoint.Environment)
                     .ThenInclude(environment => environment.Website)
                         .ThenInclude(website => website.Client)
-            .Include(candidate => candidate.Endpoint)
-                .ThenInclude(endpoint => endpoint.TargetAuthorizations)
             .SingleAsync(candidate => candidate.Id == monitorId);
         var dueAt = clock.GetUtcNow();
         monitor.NextDueAt = dueAt;
@@ -2640,15 +2601,13 @@ internal static class DatabaseFoundationAssertions
         var environmentId = environmentResult.EntityId!.Value;
 
         var ownedResult = await endpointService.CreateAsync(
-            new(environmentId, "HTTPS://Manual-Checks.EXAMPLE.test/Owned", developerOwnerId, true, null,
-                TargetAuthorizationKinds.Owned, "Manual check integration fixture.", null),
+            new(environmentId, "HTTPS://Manual-Checks.EXAMPLE.test/Owned", developerOwnerId, true, null),
             administratorAccess);
         ownedResult.Succeeded.Should().BeTrue(string.Join(" ", ownedResult.Errors));
         var ownedEndpointId = ownedResult.EntityId!.Value;
 
         var unownedResult = await endpointService.CreateAsync(
-            new(environmentId, "https://manual-checks.example.test/unowned", administratorOwnerId, true, null,
-                TargetAuthorizationKinds.Owned, "Manual check integration fixture.", null),
+            new(environmentId, "https://manual-checks.example.test/unowned", administratorOwnerId, true, null),
             administratorAccess);
         unownedResult.Succeeded.Should().BeTrue(string.Join(" ", unownedResult.Errors));
         var unownedEndpointId = unownedResult.EntityId!.Value;
@@ -2914,7 +2873,9 @@ internal static class DatabaseFoundationAssertions
         (await database.Database.GetAppliedMigrationsAsync()).Should().HaveCount(7);
         var phaseThreeState = await ReadFoundationState(upgradeConnectionString);
         phaseThreeState.Tables.Should().BeEquivalentTo(
-            ExpectedTables.Except(TablesAddedAfterPhaseThree).Append(DatabaseConventions.MigrationsHistoryTable));
+            ExpectedTables.Except(TablesAddedAfterPhaseThree)
+                .Concat(TablesRemovedAfterPhaseThree)
+                .Append(DatabaseConventions.MigrationsHistoryTable));
 
         await database.Database.MigrateAsync();
         (await database.Database.GetAppliedMigrationsAsync()).Should().HaveCount(ExpectedMigrations.Length);
@@ -2998,8 +2959,7 @@ internal static class DatabaseFoundationAssertions
         environment.Succeeded.Should().BeTrue(string.Join(" ", environment.Errors));
 
         var endpoint = await endpointService.CreateAsync(
-            new(environment.EntityId!.Value, "http://upgrade.test/status", null, true, null,
-                TargetAuthorizationKinds.Owned, "Upgrade fixture owned by the project.", null),
+            new(environment.EntityId!.Value, "http://upgrade.test/status", null, true, null),
             access);
         endpoint.Succeeded.Should().BeTrue(string.Join(" ", endpoint.Errors));
     }
@@ -3666,8 +3626,7 @@ internal static class DatabaseFoundationAssertions
             .Select(candidate => candidate.Id).FirstAsync();
 
         var endpointResult = await endpointService.CreateAsync(
-            new(environmentId, "https://recurring-maintenance.test/status", null, true, null,
-                TargetAuthorizationKinds.Owned, "Recurring maintenance fixture owned by the project.", null),
+            new(environmentId, "https://recurring-maintenance.test/status", null, true, null),
             access);
         endpointResult.Succeeded.Should().BeTrue(string.Join(" ", endpointResult.Errors));
         var monitor = await database.EndpointMonitors
@@ -4226,7 +4185,6 @@ internal static class DatabaseFoundationAssertions
         {
             ["endpoint"] = await database.Endpoints.CountAsync(item => item.Id == endpointId),
             ["endpoint_monitor"] = await database.EndpointMonitors.CountAsync(item => item.EndpointId == endpointId),
-            ["target_authorization"] = await database.TargetAuthorizations.CountAsync(item => item.EndpointId == endpointId),
             ["access_grant"] = await database.AccessGrants.CountAsync(item => item.EndpointId == endpointId),
             ["logical_check"] = await database.LogicalChecks.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
             ["check_configuration_snapshot"] = await database.CheckConfigurationSnapshots.CountAsync(item => checks.Contains(item.LogicalCheckId)),
@@ -5241,9 +5199,6 @@ internal static class DatabaseFoundationAssertions
                 "https://rearm-on-enable.test/",
                 developerOwnerId,
                 true,
-                null,
-                TargetAuthorizationKinds.Owned,
-                "Registry fixture owned by the project.",
                 null),
             administratorAccess);
         endpointResult.Succeeded.Should().BeTrue(string.Join(" ", endpointResult.Errors));

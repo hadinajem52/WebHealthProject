@@ -407,8 +407,7 @@ internal static class ReportingQueryCoreAssertions
             .FirstAsync();
 
         var created = await endpointService.CreateAsync(
-            new(environment.Id, "https://reporting.test/status", null, true, null,
-                TargetAuthorizationKinds.Owned, "Reporting fixture owned by the project.", null),
+            new(environment.Id, "https://reporting.test/status", null, true, null),
             access);
         created.Succeeded.Should().BeTrue(string.Join(" ", created.Errors));
         var endpointId = created.EntityId!.Value;

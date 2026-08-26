@@ -55,9 +55,6 @@ public sealed record EndpointRegistrationSettings
     public Guid? OwnerSubjectId { get; init; }
     public required bool IsEnabled { get; init; }
     public string? HttpExceptionReason { get; init; }
-    public string? TargetAuthorizationKind { get; init; }
-    public string? TargetAuthorizationEvidence { get; init; }
-    public DateTimeOffset? TargetAuthorizationExpiresAt { get; init; }
     public int? IntervalMinutesOverride { get; init; }
     public bool SchedulingEnabled { get; init; } = true;
     public int? WarningThresholdMsOverride { get; init; }
@@ -88,9 +85,6 @@ public static class EndpointRegistrationFields
     public const string Url = nameof(Url);
     public const string OwnerSubjectId = nameof(OwnerSubjectId);
     public const string HttpExceptionReason = nameof(HttpExceptionReason);
-    public const string TargetAuthorizationKind = nameof(TargetAuthorizationKind);
-    public const string TargetAuthorizationEvidence = nameof(TargetAuthorizationEvidence);
-    public const string TargetAuthorizationExpiresAt = nameof(TargetAuthorizationExpiresAt);
     public const string IntervalMinutesOverride = nameof(IntervalMinutesOverride);
     public const string WarningThresholdMsOverride = nameof(WarningThresholdMsOverride);
     public const string CriticalThresholdMsOverride = nameof(CriticalThresholdMsOverride);

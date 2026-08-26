@@ -12,7 +12,7 @@
     string? notTestableReason = Model.Endpoint.CanTest ? null
         : Model.Endpoint.IsDeleted ? "endpoint is archived"
         : !Model.Endpoint.IsEnabled ? "endpoint is disabled"
-        : "you are not authorized to test this target";
+        : EndpointTestBlockDisplay.Describe(Model.TestBlock, "a manual run");
     var monitoringBlockReason = Model.Endpoint.IsMonitoringEligible
         ? null
         : EndpointTestBlockDisplay.Describe(Model.TestBlock, "monitoring");
@@ -272,26 +272,13 @@
                 <div class="detail-list__row">
                     <span class="detail-list__subject">
                         <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield")</span>
-                        <span>Testing authorization</span>
+                        <span>Manual runs</span>
                     </span>
                     <span class="detail-list__value">
                         @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                             Model.Endpoint.CanTest ? StatusBadges.Success : StatusBadges.Warning,
-                            Model.Endpoint.CanTest ? "Authorized" : "Not authorized",
+                            Model.Endpoint.CanTest ? "Available" : "Blocked",
                             notTestableReason is null ? null : $"Reason: {notTestableReason}"))
-                    </span>
-                </div>
-            </li>
-            <li>
-                <div class="detail-list__row">
-                    <span class="detail-list__subject">
-                        <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "audit")</span>
-                        <span>Target evidence</span>
-                    </span>
-                    <span class="detail-list__value">
-                        @(Model.CanManage
-                            ? Model.Endpoint.TargetAuthorizationEvidence ?? "Not recorded"
-                            : Model.Endpoint.HasTargetAuthorization ? "Recorded" : "Not recorded")
                     </span>
                 </div>
             </li>
