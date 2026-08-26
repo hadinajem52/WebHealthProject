@@ -60,12 +60,8 @@ internal sealed class MaintenanceReader(ApplicationDbContext dbContext, TimeProv
             row.Window.SuppressionPolicy, row.Window.PauseEscalation, row.Window.ContinueFailureCounter,
             row.Window.DeletedAt is not null, ToRecurrence(row.Window), row.NextOccurrenceStartsAt,
             row.OccurrenceCount, row.Window.Version, row.Window.ArchivedAt,
-            // Finished is decided the same way the list decides it. Computed here rather than in
-            // the view because a detail page that called a finished window "Scheduled" -- which it
-            // did -- disagrees with the row the reader clicked to get here.
             MaintenanceArchiveEligibility.IsFinished(
-                row.HasRemainingOccurrence, row.Window.RecurrencePattern,
-                row.Window.RecurrenceUntil, now));
+                row.HasRemainingOccurrence, row.Window.RecurrencePattern, row.Window.RecurrenceUntil, now));
     }
 
     public async Task<IReadOnlyList<MaintenanceScopeOption>> ListScopeOptionsAsync(CancellationToken cancellationToken = default)
