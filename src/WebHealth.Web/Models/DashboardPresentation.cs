@@ -14,6 +14,14 @@ public static class MonitorTypeDisplay
         null or "" => "—",
         _ => monitorType
     };
+
+    public static string DescribeFromMonitorSource(string? monitorSource) => monitorSource switch
+    {
+        HttpResultNormalizer.MonitorSource => "Availability",
+        SslResultNormalizer.MonitorSource => "SSL certificate",
+        null or "" => "—",
+        _ => monitorSource
+    };
 }
 
 public static class RelativeTime

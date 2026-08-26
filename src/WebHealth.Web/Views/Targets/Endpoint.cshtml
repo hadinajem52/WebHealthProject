@@ -463,7 +463,7 @@
                 {
                     @await Html.PartialAsync("_Icon", StatusIcon(latestStatus))
                 }
-                <span>Outcome &middot; @(latest is null ? "No checks yet" : latest.Outcome ?? latest.State)</span>
+                <span>@(latest is null ? "No checks yet" : $"{MonitorTypeDisplay.DescribeFromMonitorSource(latest.MonitorSource)} · {latest.Outcome ?? latest.State}")</span>
             </p>
         </div>
 
@@ -505,6 +505,15 @@
                 <span>Status</span>
             </div>
             <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield")</span>
+                            <span>Type</span>
+                        </span>
+                        <span class="detail-list__value">@MonitorTypeDisplay.DescribeFromMonitorSource(latest.MonitorSource)</span>
+                    </div>
+                </li>
                 <li>
                     <div class="detail-list__row">
                         <span class="detail-list__subject">
