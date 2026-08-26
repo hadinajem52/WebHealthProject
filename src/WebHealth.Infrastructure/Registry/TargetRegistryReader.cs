@@ -11,7 +11,7 @@ namespace WebHealth.Infrastructure.Registry;
 internal sealed class TargetRegistryReader(
     ApplicationDbContext dbContext,
     RegistryVisibility visibility,
-    ITargetAuthorizationService targetAuthorization,
+    IEndpointTestGate testGate,
     IMonitoringEligibilityService monitoringEligibility,
     OwnerSubjectNames ownerSubjectNames) : ITargetRegistryReader
 {
@@ -131,7 +131,7 @@ internal sealed class TargetRegistryReader(
             endpoint.MonitorEnabled,
             endpoint.SchedulingEnabled,
             await monitoringEligibility.IsEndpointEligibleAsync(endpoint.Id, cancellationToken),
-            await targetAuthorization.CanTestEndpointAsync(endpoint.Id, access, cancellationToken),
+            await testGate.CanTestEndpointAsync(endpoint.Id, access, cancellationToken),
             endpoint.SeoExpectedCanonicalHost,
             endpoint.SeoIndexingExpectation,
             endpoint.SeoDescriptionRequired,
@@ -193,7 +193,7 @@ internal sealed class TargetRegistryReader(
             })
             .ToListAsync(cancellationToken);
 
-        var testable = await targetAuthorization.FilterTestableEndpointsAsync(
+        var testable = await testGate.FilterTestableEndpointsAsync(
             rows.Select(row => row.Id).ToArray(), access, cancellationToken);
         var endpointIds = rows.Select(row => row.Id).ToArray();
 

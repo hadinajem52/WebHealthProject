@@ -632,7 +632,7 @@ internal static class DatabaseFoundationAssertions
         var environmentService = scope.ServiceProvider.GetRequiredService<IEnvironmentRegistryService>();
         var endpointService = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
         var targetReader = scope.ServiceProvider.GetRequiredService<ITargetRegistryReader>();
-        var targetAuthorization = scope.ServiceProvider.GetRequiredService<ITargetAuthorizationService>();
+        var testGate = scope.ServiceProvider.GetRequiredService<IEndpointTestGate>();
         var monitoringEligibility = scope.ServiceProvider.GetRequiredService<IMonitoringEligibilityService>();
 
         var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
@@ -763,9 +763,9 @@ internal static class DatabaseFoundationAssertions
         (await targetReader.ListEndpointsAsync(
             stagingId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
             .Should().Contain(item => item.Id == endpointId);
-        (await targetAuthorization.CanTestEndpointAsync(endpointId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
+        (await testGate.CanTestEndpointAsync(endpointId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
             .Should().BeTrue();
-        (await targetAuthorization.CanTestEndpointAsync(endpointId, new(viewer.Id, [ApplicationRoles.Viewer])))
+        (await testGate.CanTestEndpointAsync(endpointId, new(viewer.Id, [ApplicationRoles.Viewer])))
             .Should().BeFalse();
 
         website = await database.Websites.SingleAsync(candidate => candidate.Id == website.Id);
@@ -810,7 +810,7 @@ internal static class DatabaseFoundationAssertions
         (await targetReader.ListEndpointsAsync(stagingId,
             new(developer.Id, [ApplicationRoles.DeveloperSupport])))
             .Should().NotContain(item => item.Id == overriddenEndpointId);
-        (await targetAuthorization.CanTestEndpointAsync(
+        (await testGate.CanTestEndpointAsync(
             overriddenEndpointId, new(developer.Id, [ApplicationRoles.DeveloperSupport])))
             .Should().BeFalse();
 
@@ -863,7 +863,7 @@ internal static class DatabaseFoundationAssertions
         monitorAfterRename.Version.Should().Be(versionBeforeRename);
         staging = await database.Environments.SingleAsync(environment => environment.Id == stagingId);
         (await environmentService.DisableAsync(new(staging.Id, staging.Version), administratorAccess)).Succeeded.Should().BeTrue();
-        (await targetAuthorization.CanTestEndpointAsync(endpointId,
+        (await testGate.CanTestEndpointAsync(endpointId,
             new(developer.Id, [ApplicationRoles.DeveloperSupport]))).Should().BeFalse();
         (await AvailabilityMonitors(database).Where(candidate => candidate.EndpointId == endpointId)
             .Select(candidate => candidate.IsEnabled).SingleAsync()).Should().BeTrue();

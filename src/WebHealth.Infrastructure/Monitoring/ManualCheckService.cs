@@ -10,7 +10,7 @@ namespace WebHealth.Infrastructure.Monitoring;
 
 internal sealed class ManualCheckService(
     ApplicationDbContext dbContext,
-    ITargetAuthorizationService targetAuthorization,
+    IEndpointTestGate testGate,
     ILogicalCheckQueue logicalCheckQueue,
     MonitoringSchedulingOptions schedulingOptions,
     TimeProvider timeProvider,
@@ -41,10 +41,10 @@ internal sealed class ManualCheckService(
             return ManualCheckResult.SchedulingUnavailable();
         }
 
-        if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
+        if (!await testGate.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             return ManualCheckResult.Forbidden(
-                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
+                await testGate.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var now = timeProvider.GetUtcNow();
@@ -60,11 +60,11 @@ internal sealed class ManualCheckService(
             return ManualCheckResult.MonitorNotAvailable();
         }
 
-        if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
+        if (!await testGate.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             await transaction.RollbackAsync(cancellationToken);
             return ManualCheckResult.Forbidden(
-                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
+                await testGate.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var logicalCheckId = Guid.NewGuid();

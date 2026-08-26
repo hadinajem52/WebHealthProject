@@ -14,7 +14,7 @@ public sealed class CrawlRunner(
     ApplicationDbContext dbContext,
     ICrawlResultSink sink,
     ICrawlReconciler reconciler,
-    ITargetAuthorizationService targetAuthorization,
+    IEndpointTestGate testGate,
     CrawlSchedulingOptions schedulingOptions,
     TimeProvider timeProvider,
     ILogger<CrawlRunner> logger,
@@ -38,10 +38,10 @@ public sealed class CrawlRunner(
                 + "Enable Crawling:Scheduling to run them.");
         }
 
-        if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
+        if (!await testGate.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             return CrawlManualResult.NotTestable(
-                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
+                await testGate.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var endpoint = await MonitoringEligibility

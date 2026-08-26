@@ -15,7 +15,7 @@ namespace WebHealth.Web.Controllers;
 public sealed class CrawlController(
     ICrawlReportReader crawlReader,
     ITargetRegistryReader targetReader,
-    ITargetAuthorizationService targetAuthorization,
+    IEndpointTestGate testGate,
     ICrawlRunner crawlRunner) : Controller
 {
     private const int RunsListed = 20;
@@ -40,7 +40,7 @@ public sealed class CrawlController(
         var runs = await crawlReader.ListRunsAsync(selected, RunsListed, access, cancellationToken);
         var comparison = await crawlReader.CompareLatestAsync(selected, access, cancellationToken);
 
-        var block = await targetAuthorization.DescribeTestBlockAsync(selected, access, cancellationToken);
+        var block = await testGate.DescribeTestBlockAsync(selected, access, cancellationToken);
         var canRun = crawlRunner.CanQueue && block == EndpointTestBlock.None;
         var activeRun = runs
             .FirstOrDefault(run => run.Status == CrawlRunStatuses.Running)?.RunId;

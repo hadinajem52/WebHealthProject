@@ -1,6 +1,6 @@
 namespace WebHealth.Application.Registry;
 
-public interface ITargetAuthorizationService
+public interface IEndpointTestGate
 {
     Task<bool> CanTestEndpointAsync(
         Guid endpointId,

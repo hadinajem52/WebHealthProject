@@ -21,7 +21,7 @@ public sealed class TargetsController(
     IEndpointRegistryService endpointService,
     IEndpointRegistrationService endpointRegistrationService,
     ICheckHistoryReader checkHistoryReader,
-    ITargetAuthorizationService targetAuthorization,
+    IEndpointTestGate testGate,
     EndpointUrlResolver urlResolver) : Controller
 {
     [HttpGet]
@@ -160,7 +160,7 @@ public sealed class TargetsController(
 
         var latestCheck = await checkHistoryReader.FindLatestForEndpointAsync(id, access, cancellationToken);
         var certificate = await targetReader.FindCertificateStatusAsync(id, access, cancellationToken);
-        var testBlock = await targetAuthorization.DescribeTestBlockAsync(id, access, cancellationToken);
+        var testBlock = await testGate.DescribeTestBlockAsync(id, access, cancellationToken);
         return View(new EndpointDetailsViewModel(
             endpoint,
             CanManage(access),

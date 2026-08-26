@@ -146,7 +146,7 @@ public static class DependencyInjection
         services.AddScoped<IEndpointRegistryService>(provider =>
             provider.GetRequiredService<EndpointRegistryService>());
         services.AddScoped<IEndpointRegistrationService, EndpointRegistrationService>();
-        services.AddScoped<ITargetAuthorizationService, TargetAuthorizationService>();
+        services.AddScoped<IEndpointTestGate, EndpointTestGate>();
         services.AddScoped<IMonitoringEligibilityService, MonitoringEligibilityService>();
         services.AddScoped<IExecutionLeaseService, ExecutionLeaseService>();
         services.AddScoped<ILogicalCheckFinalizationService, LogicalCheckFinalizationService>();

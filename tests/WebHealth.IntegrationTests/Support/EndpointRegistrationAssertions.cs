@@ -27,7 +27,7 @@ internal static class EndpointRegistrationAssertions
         var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var registration = scope.ServiceProvider.GetRequiredService<IEndpointRegistrationService>();
         var eligibility = scope.ServiceProvider.GetRequiredService<IMonitoringEligibilityService>();
-        var authorization = scope.ServiceProvider.GetRequiredService<ITargetAuthorizationService>();
+        var testGate = scope.ServiceProvider.GetRequiredService<IEndpointTestGate>();
         scope.ServiceProvider.GetRequiredService<IClientRegistryService>().Should()
             .BeSameAs(scope.ServiceProvider.GetRequiredService<ClientRegistryService>());
         scope.ServiceProvider.GetRequiredService<IWebsiteRegistryService>().Should()
@@ -105,7 +105,7 @@ internal static class EndpointRegistrationAssertions
         await VerifyManualOnlyAsync(
             registration,
             eligibility,
-            authorization,
+            testGate,
             baseEndpoint,
             label,
             access);
@@ -355,7 +355,7 @@ internal static class EndpointRegistrationAssertions
     private static async Task VerifyManualOnlyAsync(
         IEndpointRegistrationService registration,
         IMonitoringEligibilityService eligibility,
-        ITargetAuthorizationService authorization,
+        IEndpointTestGate testGate,
         Endpoint endpoint,
         string label,
         RegistryAccessContext access)
@@ -366,7 +366,7 @@ internal static class EndpointRegistrationAssertions
             Settings($"https://manual-only-{label}.example.test/", scheduling: false),
             access);
 
-        (await authorization.CanTestEndpointAsync(endpointId, access)).Should().BeTrue();
+        (await testGate.CanTestEndpointAsync(endpointId, access)).Should().BeTrue();
         (await eligibility.IsEndpointEligibleAsync(endpointId)).Should().BeFalse();
     }
 

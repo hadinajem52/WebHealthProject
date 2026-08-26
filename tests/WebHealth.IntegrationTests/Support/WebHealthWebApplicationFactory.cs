@@ -92,8 +92,8 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddSingleton<RecordingCrawlRunner>();
             services.AddScoped<ICrawlRunner>(provider =>
                 provider.GetRequiredService<RecordingCrawlRunner>());
-            services.RemoveAll<ITargetAuthorizationService>();
-            services.AddScoped<ITargetAuthorizationService, PermissiveTargetAuthorizationService>();
+            services.RemoveAll<IEndpointTestGate>();
+            services.AddScoped<IEndpointTestGate, PermissiveEndpointTestGate>();
 
             services.RemoveAll<IAuthorizationDenialAuditWriter>();
             services.AddSingleton<RecordingAuthorizationDenialAuditWriter>();

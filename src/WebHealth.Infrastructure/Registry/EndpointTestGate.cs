@@ -4,9 +4,9 @@ using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Registry;
 
-internal sealed class TargetAuthorizationService(
+internal sealed class EndpointTestGate(
     ApplicationDbContext dbContext,
-    RegistryVisibility visibility) : ITargetAuthorizationService
+    RegistryVisibility visibility) : IEndpointTestGate
 {
     public Task<bool> CanTestEndpointAsync(
         Guid endpointId,

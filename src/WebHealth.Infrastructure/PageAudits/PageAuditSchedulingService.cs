@@ -15,7 +15,7 @@ namespace WebHealth.Infrastructure.PageAudits;
 public sealed class PageAuditSchedulingService(
     ApplicationDbContext dbContext,
     IPageAuditQueue queue,
-    ITargetAuthorizationService targetAuthorization,
+    IEndpointTestGate testGate,
     PageAuditSchedulingOptions options,
     PageSpeedInsightsOptions providerOptions,
     TimeProvider timeProvider,
@@ -94,10 +94,10 @@ public sealed class PageAuditSchedulingService(
         ArgumentNullException.ThrowIfNull(access);
         var now = timeProvider.GetUtcNow();
 
-        if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
+        if (!await testGate.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             return PageAuditManualResult.NotTestable(
-                await targetAuthorization.DescribeTestBlockAsync(endpointId, access, cancellationToken));
+                await testGate.DescribeTestBlockAsync(endpointId, access, cancellationToken));
         }
 
         var targets = await dbContext.PageAuditTargets.AsNoTracking()

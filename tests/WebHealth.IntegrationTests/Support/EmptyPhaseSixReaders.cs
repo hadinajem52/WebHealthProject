@@ -294,7 +294,7 @@ internal sealed class RecordingCrawlRunner : ICrawlRunner
     }
 }
 
-internal sealed class PermissiveTargetAuthorizationService : ITargetAuthorizationService
+internal sealed class PermissiveEndpointTestGate : IEndpointTestGate
 {
     public Task<bool> CanTestEndpointAsync(
         Guid endpointId,

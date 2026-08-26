@@ -16,7 +16,7 @@ namespace WebHealth.Web.Controllers;
 public sealed class PageAuditsController(
     IPageAuditReader pageAuditReader,
     ITargetRegistryReader targetReader,
-    ITargetAuthorizationService targetAuthorization,
+    IEndpointTestGate testGate,
     IPageAuditRunner pageAuditRunner) : Controller
 {
     private const int RunsListed = 20;
@@ -54,9 +54,9 @@ public sealed class PageAuditsController(
 
         var selectedStrategy = PageAuditStrategies.Normalize(strategy);
 
-        if (!await targetAuthorization.CanTestEndpointAsync(endpointId, access, cancellationToken))
+        if (!await testGate.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
-            var block = await targetAuthorization.DescribeTestBlockAsync(
+            var block = await testGate.DescribeTestBlockAsync(
                 endpointId, access, cancellationToken);
             return this.AjaxMessage(
                 Url.Action(nameof(Index), new { endpointId })!,
@@ -193,7 +193,7 @@ public sealed class PageAuditsController(
                 summary.LatestRun.RunId,
                 access,
                 cancellationToken);
-        var block = await targetAuthorization.DescribeTestBlockAsync(selected, access, cancellationToken);
+        var block = await testGate.DescribeTestBlockAsync(selected, access, cancellationToken);
         var canRun = summary.IsEnabled && block == EndpointTestBlock.None;
         var categorySummaries = await pageAuditReader.GetLatestCategorySummariesAsync(
             selected,

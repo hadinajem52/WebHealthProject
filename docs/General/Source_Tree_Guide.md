@@ -286,7 +286,7 @@ Most `I...` files are **ports**: interfaces that Infrastructure implements and W
 | `IWebsiteRegistryService.cs` | Defines website management operations. |
 | `IRegistryReader.cs` | Defines client, website, owner, tag, and registry-detail read operations. |
 | `ITargetRegistryReader.cs` | Defines environment, endpoint, archive, and certificate-status read operations. |
-| `ITargetAuthorizationService.cs` | Defines whether a user may view, manage, or test a monitored target. |
+| `IEndpointTestGate.cs` | Defines whether an endpoint may be tested, and the reason when it may not. |
 | `IMonitoringEligibilityService.cs` | Defines whether a client, website, environment, endpoint, or monitor may produce scheduled work. |
 | `RegistryContracts.cs` | Contains client, website, owner, tag, access-context, command, and mutation-result records. |
 | `TargetContracts.cs` | Contains environment, endpoint, certificate-status, target-authorization, and endpoint command records. |
@@ -502,7 +502,7 @@ Generated migration designer files and `ApplicationDbContextModelSnapshot.cs` ar
 | `EnvironmentRegistryService.cs` | Implements environment mutations and validates their website relationship. |
 | `EndpointRegistryService.cs` | Implements endpoint mutations, URL rules, monitor creation, scheduling, and threshold overrides. |
 | `TargetRegistryReader.cs` | Reads environments, endpoints, archives, and current certificate status for target pages. |
-| `TargetAuthorizationService.cs` | Decides whether an endpoint can be tested: visibility, role rights, and the enabled state of the endpoint, environment, website, client, and monitor. |
+| `EndpointTestGate.cs` | Decides whether an endpoint can be tested: visibility, role rights, and the enabled state of the endpoint, environment, website, client, and monitor. |
 | `MonitoringEligibility.cs` | Builds the database query that determines whether a target is enabled, active, authorized, and schedulable. |
 | `MonitorIntervalOverride.cs` | Resolves endpoint interval overrides against policy/default values. |
 | `OwnerSubjectNames.cs` | Resolves owner subject IDs into safe display names for pages and reports. |
