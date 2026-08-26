@@ -1,3 +1,4 @@
+﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +9,12 @@ namespace WebHealth.Web.Controllers;
 
 public sealed class AccountController : Controller
 {
+    private static readonly TimeSpan RememberMeDuration = TimeSpan.FromDays(14);
+
+    private const string TwoFactorUnsupportedMessage =
+        "This account has two-factor authentication enabled, and this application has no "
+        + "second-factor challenge. Ask an Administrator to turn two-factor off for the account.";
+
     private const string InvalidSignInMessage =
         "That email address and password do not match an active account. Check both, and note "
         + "that a disabled account cannot sign in even with the right password.";
@@ -45,14 +52,20 @@ public sealed class AccountController : Controller
             return View(model);
         }
 
-        var result = await signInManager.PasswordSignInAsync(
+        var result = await signInManager.CheckPasswordSignInAsync(
             user,
             model.Password,
-            model.RememberMe,
             lockoutOnFailure: true);
 
         if (result.Succeeded)
         {
+            if (await userManager.GetTwoFactorEnabledAsync(user))
+            {
+                ModelState.AddModelError(string.Empty, TwoFactorUnsupportedMessage);
+                return View(model);
+            }
+
+            await signInManager.SignInAsync(user, BuildSignInProperties(model.RememberMe));
             return LocalRedirect(model.ReturnUrl);
         }
 
@@ -78,6 +91,17 @@ public sealed class AccountController : Controller
     public IActionResult AccessDenied()
     {
         return RedirectToAction("HttpStatusCode", "Home", new { code = 403 });
+    }
+
+    private static AuthenticationProperties BuildSignInProperties(bool rememberMe)
+    {
+        return rememberMe
+            ? new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.Add(RememberMeDuration),
+            }
+            : new AuthenticationProperties { IsPersistent = false };
     }
 
     private string GetSafeReturnUrl(string? returnUrl)

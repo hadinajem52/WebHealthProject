@@ -838,95 +838,20 @@ code,
 }
 
 .registration-primary {
-    padding: var(--space-5) var(--space-6) var(--space-6);
-    border: 1px solid var(--border-subtle);
+    padding: var(--space-5) var(--space-6) var(--space-6) !important;
+    border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-tile);
     background: var(--surface-sunken);
 }
 
-.registration-mode-grid {
-    display: grid;
-    margin-top: var(--space-4);
-    gap: var(--space-2);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.registration-mode {
-    position: relative;
+.registration-step {
     display: flex;
-    min-height: 4.25rem;
-    align-items: center;
-    padding: var(--space-3);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-tile);
-    background: var(--surface-raised);
-    cursor: pointer;
-    gap: var(--space-3);
-    transition: border-color var(--motion-fast) var(--motion-easing),
-        background-color var(--motion-fast) var(--motion-easing);
-}
-
-.registration-mode:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-sunken);
-}
-
-.registration-mode:has(input:checked) {
-    border-color: var(--color-teal-600);
-    background: var(--status-success-surface);
-}
-
-.registration-mode:focus-within {
-    outline: 2px solid var(--focus-ring-color);
-    outline-offset: 2px;
-}
-
-.registration-mode input {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-}
-
-.registration-mode__number {
-    display: grid;
-    width: 1.75rem;
-    height: 1.75rem;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    background: var(--surface-sunken);
-    color: var(--text-secondary);
-    font-size: var(--font-size-xs);
-    font-weight: 700;
-    place-items: center;
-}
-
-.registration-mode:has(input:checked) .registration-mode__number {
-    background: var(--color-teal-600);
-    color: var(--color-white);
-}
-
-.registration-mode strong,
-.registration-mode small {
-    display: block;
-}
-
-.registration-mode strong {
-    color: var(--text-primary);
-    font-size: var(--font-size-sm);
-}
-
-.registration-mode small {
-    margin-top: 0.125rem;
-    color: var(--text-secondary);
-    font-size: var(--font-size-xs);
-}
-
-.registration-levels {
-    display: flex;
-    margin-top: var(--space-4);
     flex-direction: column;
     gap: var(--space-3);
+}
+
+.registration-step [hidden] {
+    display: none;
 }
 
 .registration-level {
@@ -972,13 +897,6 @@ code,
 .registration-advanced .form-section + .form-section {
     margin-top: var(--space-5);
 }
-
-@media (max-width: 42rem) {
-    .registration-mode-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-}
-
 
 .form-grid {
     display: grid;

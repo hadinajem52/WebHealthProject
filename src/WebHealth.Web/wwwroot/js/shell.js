@@ -714,19 +714,80 @@
             return;
         }
 
-        var modes = Array.prototype.slice.call(form.querySelectorAll('input[name="HierarchyMode"]'));
-        var panels = Array.prototype.slice.call(form.querySelectorAll('[data-registration-show]'));
+        var placement = form.querySelector('[data-registration-placement]');
+        var createNew = placement ? placement.getAttribute('data-registration-create-new') : '';
+        var levels = ['client', 'website', 'environment'].map(function (name) {
+            var picker = form.querySelector('[data-registration-picker="' + name + '"]');
+            var select = picker ? picker.querySelector('select') : null;
+            return {
+                name: name,
+                picker: picker,
+                select: select,
+                createOption: select ? select.querySelector('[data-registration-create]') : null,
+                records: select
+                    ? Array.prototype.slice.call(select.querySelectorAll('[data-registration-parent]'))
+                    : []
+            };
+        }).filter(function (level) { return level.select; });
+        var panels = Array.prototype.slice.call(form.querySelectorAll('[data-registration-new]'));
         var monitoring = form.querySelector('[data-registration-monitoring]');
         var authorization = form.querySelector('.registration-authorization');
         var advanced = form.querySelector('[data-registration-advanced]');
         var advancedState = form.querySelector('[data-registration-advanced-state]');
 
-        function syncMode() {
-            var selected = modes.find(function (mode) { return mode.checked; });
-            var value = selected ? selected.value : '';
+        function isRecord(value) {
+            return !!value && value !== createNew;
+        }
+
+        function listRecords(level, parentId) {
+            var matches = [];
+            level.records.forEach(function (option) {
+                if (option.parentNode) {
+                    option.parentNode.removeChild(option);
+                }
+                if (option.getAttribute('data-registration-parent') === parentId) {
+                    level.select.insertBefore(option, level.createOption);
+                    matches.push(option.value);
+                }
+            });
+            return matches;
+        }
+
+        function syncPlacement() {
+            var parentId = '';
+            var parentResolved = true;
+            var creating = -1;
+
+            levels.forEach(function (level, index) {
+                level.picker.hidden = !parentResolved;
+                if (!parentResolved) {
+                    level.select.value = '';
+                    return;
+                }
+
+                var selected = level.select.value;
+                var matches = listRecords(level, parentId);
+                if (selected !== createNew && matches.indexOf(selected) === -1) {
+                    selected = '';
+                }
+                if (!matches.length) {
+                    selected = createNew;
+                }
+
+                level.select.value = selected;
+                if (creating === -1 && selected === createNew) {
+                    creating = index;
+                }
+
+                parentId = selected;
+                parentResolved = isRecord(parentId);
+            });
+
             panels.forEach(function (panel) {
-                var visibleModes = panel.getAttribute('data-registration-show').split(',');
-                panel.hidden = visibleModes.indexOf(value) === -1;
+                var index = levels.findIndex(function (level) {
+                    return level.name === panel.getAttribute('data-registration-new');
+                });
+                panel.hidden = creating === -1 || index < creating;
             });
         }
 
@@ -736,8 +797,8 @@
             }
         }
 
-        modes.forEach(function (mode) {
-            mode.addEventListener('change', syncMode);
+        levels.forEach(function (level) {
+            level.select.addEventListener('change', syncPlacement);
         });
         if (monitoring) {
             monitoring.addEventListener('change', syncMonitoring);
@@ -749,7 +810,7 @@
             advancedState.value = advanced.open ? 'true' : 'false';
         }
 
-        syncMode();
+        syncPlacement();
         syncMonitoring();
     }
 

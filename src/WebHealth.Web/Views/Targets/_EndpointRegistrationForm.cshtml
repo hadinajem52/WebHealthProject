@@ -4,12 +4,16 @@
 
 <fieldset class="form-section registration-primary">
     <legend class="form-section__title">Endpoint</legend>
-    <p class="form-section__hint">The URL is the endpoint identity and must be reachable from the monitoring host.</p>
+    <p class="form-section__hint">
+        The URL is the endpoint identity and must be reachable from the monitoring host.
+        Type the address alone, such as example.com, and https:// is added for you.
+    </p>
     <div class="form-section__body">
         <div class="form-field">
             <label asp-for="Url"></label>
-            <input asp-for="Url" type="url" autocomplete="url" autofocus
-                   placeholder="https://example.com/health" />
+            <input asp-for="Url" type="text" inputmode="url" spellcheck="false"
+                   autocomplete="url" autocapitalize="none" autofocus
+                   placeholder="example.com/health" />
             <span asp-validation-for="Url"></span>
         </div>
 
@@ -25,239 +29,186 @@
     </div>
 </fieldset>
 
-<fieldset class="form-section">
-    <legend class="form-section__title">Where it belongs</legend>
-    <p class="form-section__hint">Choose the lowest level that already exists. Parent records are derived automatically.</p>
-    <div class="registration-mode-grid" role="radiogroup" aria-describedby="hierarchy-mode-hint">
-        <label class="registration-mode">
-            <input asp-for="HierarchyMode" id="hierarchy-existing-environment" type="radio"
-                   value="@EndpointRegistrationModes.ExistingEnvironment" />
-            <span class="registration-mode__number">1</span>
-            <span><strong>Existing environment</strong><small>Select an environment</small></span>
-        </label>
-        <label class="registration-mode">
-            <input asp-for="HierarchyMode" id="hierarchy-new-environment" type="radio"
-                   value="@EndpointRegistrationModes.NewEnvironment" />
-            <span class="registration-mode__number">2</span>
-            <span><strong>New environment</strong><small>Select a website</small></span>
-        </label>
-        <label class="registration-mode">
-            <input asp-for="HierarchyMode" id="hierarchy-new-website" type="radio"
-                   value="@EndpointRegistrationModes.NewWebsite" />
-            <span class="registration-mode__number">3</span>
-            <span><strong>New website</strong><small>Select a client</small></span>
-        </label>
-        <label class="registration-mode">
-            <input asp-for="HierarchyMode" id="hierarchy-new-client" type="radio"
-                   value="@EndpointRegistrationModes.NewClient" />
-            <span class="registration-mode__number">4</span>
-            <span><strong>New client</strong><small>Create every level</small></span>
-        </label>
-    </div>
-    <span class="form-field__hint" id="hierarchy-mode-hint">Only the fields needed by the selected path are saved.</span>
-    <span asp-validation-for="HierarchyMode"></span>
-
-    <div class="registration-levels">
-        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.ExistingEnvironment">
-            <div class="registration-level__heading">
-                <span class="registration-level__index">Environment</span>
-                <strong>Use an existing environment</strong>
-            </div>
-            <div class="form-field">
-                <label asp-for="EnvironmentId">Environment</label>
-                <select asp-for="EnvironmentId">
-                    <option value="">Select an environment</option>
-                    @if (Model.EnvironmentId is { } selectedEnvironmentId
-                        && Model.Environments.All(environment => environment.Id != selectedEnvironmentId))
-                    {
-                        <option value="@selectedEnvironmentId">Previously selected environment — no longer available</option>
-                    }
-                    @foreach (var group in Model.Environments.GroupBy(environment => $"{environment.ClientName} / {environment.WebsiteName}"))
-                    {
-                        <optgroup label="@group.Key">
-                            @foreach (var environment in group)
-                            {
-                                <option value="@environment.Id">@environment.Name (@environment.EnvironmentType)</option>
-                            }
-                        </optgroup>
-                    }
-                </select>
-                <span asp-validation-for="EnvironmentId"></span>
-            </div>
-        </section>
-
-        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.NewEnvironment">
-            <div class="registration-level__heading">
-                <span class="registration-level__index">Website</span>
-                <strong>Use an existing website</strong>
-            </div>
-            <div class="form-field">
-                <label asp-for="WebsiteId">Website</label>
-                <select asp-for="WebsiteId">
-                    <option value="">Select a website</option>
-                    @if (Model.WebsiteId is { } selectedWebsiteId
-                        && Model.Websites.All(website => website.Id != selectedWebsiteId))
-                    {
-                        <option value="@selectedWebsiteId">Previously selected website — no longer available</option>
-                    }
-                    @foreach (var group in Model.Websites.GroupBy(website => website.ClientName))
-                    {
-                        <optgroup label="@group.Key">
-                            @foreach (var website in group)
-                            {
-                                <option value="@website.Id">@website.Name@(website.IsEnabled ? "" : " — disabled")</option>
-                            }
-                        </optgroup>
-                    }
-                </select>
-                <span class="form-field__hint">Websites with no environments are available here.</span>
-                <span asp-validation-for="WebsiteId"></span>
-            </div>
-        </section>
-
-        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.NewWebsite">
-            <div class="registration-level__heading">
-                <span class="registration-level__index">Client</span>
-                <strong>Use an existing client</strong>
-            </div>
-            <div class="form-field">
-                <label asp-for="ClientId">Client</label>
+<fieldset class="form-section" data-registration-placement
+          data-registration-create-new="@EndpointRegistrationFormViewModel.CreateNew">
+    <legend class="form-section__title">Client, website and environment</legend>
+    <p class="form-section__hint">
+        Every endpoint sits under a client, a website and an environment. Work down the three lists and
+        pick "Create a new …" for any level that does not exist yet.
+    </p>
+    <div class="form-section__body">
+        <div class="registration-step">
+            <div class="form-field" data-registration-picker="client">
+                <label asp-for="ClientId"></label>
                 <select asp-for="ClientId">
                     <option value="">Select a client</option>
                     @if (Model.ClientId is { } selectedClientId
+                        && selectedClientId != EndpointRegistrationFormViewModel.CreateNew
                         && Model.Clients.All(client => client.Id != selectedClientId))
                     {
-                        <option value="@selectedClientId">Previously selected client — no longer available</option>
+                        <option value="@selectedClientId" data-registration-parent="">Previously selected client — no longer available</option>
                     }
                     @foreach (var client in Model.Clients)
                     {
-                        <option value="@client.Id">@client.Name@(client.IsActive ? "" : " — inactive")</option>
+                        <option value="@client.Id" data-registration-parent="">@client.Name@(client.IsActive ? "" : " — inactive")</option>
                     }
+                    <option value="@EndpointRegistrationFormViewModel.CreateNew" data-registration-create>Create a new client</option>
                 </select>
                 <span asp-validation-for="ClientId"></span>
             </div>
-        </section>
 
-        <section class="registration-level" data-registration-show="@EndpointRegistrationModes.NewClient">
-            <div class="registration-level__heading">
-                <span class="registration-level__index">New client</span>
-                <strong>Create the owning client</strong>
-            </div>
-            <div class="form-grid form-grid--two">
-                <div class="form-field">
-                    <label asp-for="ClientName"></label>
-                    <input asp-for="ClientName" autocomplete="organization" />
-                    <span asp-validation-for="ClientName"></span>
+            <section class="registration-level" data-registration-new="client">
+                <div class="registration-level__heading">
+                    <span class="registration-level__index">New client</span>
+                    <strong>Created and active with the endpoint</strong>
+                </div>
+                <div class="form-grid form-grid--two">
+                    <div class="form-field">
+                        <label asp-for="ClientName"></label>
+                        <input asp-for="ClientName" autocomplete="organization" />
+                        <span asp-validation-for="ClientName"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="ClientOwnerSubjectId"></label>
+                        <select asp-for="ClientOwnerSubjectId">
+                            <option value="">Select an owner</option>
+                            @if (Model.ClientOwnerSubjectId is { } selectedClientOwnerId
+                                && Model.Owners.All(owner => owner.OwnerSubjectId != selectedClientOwnerId))
+                            {
+                                <option value="@selectedClientOwnerId">Previously selected owner — no longer available</option>
+                            }
+                            @foreach (var owner in Model.Owners)
+                            {
+                                <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+                            }
+                        </select>
+                        <span asp-validation-for="ClientOwnerSubjectId"></span>
+                    </div>
                 </div>
                 <div class="form-field">
-                    <label asp-for="ClientOwnerSubjectId"></label>
-                    <select asp-for="ClientOwnerSubjectId">
-                        <option value="">Select an owner</option>
-                        @if (Model.ClientOwnerSubjectId is { } selectedClientOwnerId
-                            && Model.Owners.All(owner => owner.OwnerSubjectId != selectedClientOwnerId))
-                        {
-                            <option value="@selectedClientOwnerId">Previously selected owner — no longer available</option>
-                        }
-                        @foreach (var owner in Model.Owners)
-                        {
-                            <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
-                        }
-                    </select>
-                    <span asp-validation-for="ClientOwnerSubjectId"></span>
-                </div>
-            </div>
-            <div class="form-field">
-                <label asp-for="ClientNotes">
-                    @Html.DisplayNameFor(model => model.ClientNotes)
-                    <span class="form-field__optional">Optional</span>
-                </label>
-                <textarea asp-for="ClientNotes" rows="3"></textarea>
-                <span asp-validation-for="ClientNotes"></span>
-            </div>
-        </section>
-
-        <section class="registration-level"
-                 data-registration-show="@EndpointRegistrationModes.NewWebsite,@EndpointRegistrationModes.NewClient">
-            <div class="registration-level__heading">
-                <span class="registration-level__index">New website</span>
-                <strong>Create the website enabled</strong>
-            </div>
-            <div class="form-grid form-grid--two">
-                <div class="form-field">
-                    <label asp-for="WebsiteName"></label>
-                    <input asp-for="WebsiteName" />
-                    <span asp-validation-for="WebsiteName"></span>
-                </div>
-                <div class="form-field">
-                    <label asp-for="WebsiteOwnerSubjectId"></label>
-                    <select asp-for="WebsiteOwnerSubjectId">
-                        <option value="">Select an owner</option>
-                        @if (Model.WebsiteOwnerSubjectId is { } selectedWebsiteOwnerId
-                            && Model.Owners.All(owner => owner.OwnerSubjectId != selectedWebsiteOwnerId))
-                        {
-                            <option value="@selectedWebsiteOwnerId">Previously selected owner — no longer available</option>
-                        }
-                        @foreach (var owner in Model.Owners)
-                        {
-                            <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
-                        }
-                    </select>
-                    <span asp-validation-for="WebsiteOwnerSubjectId"></span>
-                </div>
-            </div>
-            <div class="form-grid form-grid--two">
-                <div class="form-field">
-                    <label asp-for="WebsiteTechnologyCms">
-                        @Html.DisplayNameFor(model => model.WebsiteTechnologyCms)
+                    <label asp-for="ClientNotes">
+                        @Html.DisplayNameFor(model => model.ClientNotes)
                         <span class="form-field__optional">Optional</span>
                     </label>
-                    <input asp-for="WebsiteTechnologyCms" placeholder="For example, WordPress" />
-                    <span asp-validation-for="WebsiteTechnologyCms"></span>
+                    <textarea asp-for="ClientNotes" rows="3"></textarea>
+                    <span asp-validation-for="ClientNotes"></span>
+                </div>
+            </section>
+        </div>
+
+        <div class="registration-step">
+            <div class="form-field" data-registration-picker="website">
+                <label asp-for="WebsiteId"></label>
+                <select asp-for="WebsiteId">
+                    <option value="">Select a website</option>
+                    @foreach (var website in Model.Websites)
+                    {
+                        <option value="@website.Id" data-registration-parent="@website.ClientId">@website.Name@(website.IsEnabled ? "" : " — disabled")</option>
+                    }
+                    <option value="@EndpointRegistrationFormViewModel.CreateNew" data-registration-create>Create a new website</option>
+                </select>
+                <span asp-validation-for="WebsiteId"></span>
+            </div>
+
+            <section class="registration-level" data-registration-new="website">
+                <div class="registration-level__heading">
+                    <span class="registration-level__index">New website</span>
+                    <strong>Created and enabled with the endpoint</strong>
+                </div>
+                <div class="form-grid form-grid--two">
+                    <div class="form-field">
+                        <label asp-for="WebsiteName"></label>
+                        <input asp-for="WebsiteName" />
+                        <span asp-validation-for="WebsiteName"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="WebsiteOwnerSubjectId"></label>
+                        <select asp-for="WebsiteOwnerSubjectId">
+                            <option value="">Select an owner</option>
+                            @if (Model.WebsiteOwnerSubjectId is { } selectedWebsiteOwnerId
+                                && Model.Owners.All(owner => owner.OwnerSubjectId != selectedWebsiteOwnerId))
+                            {
+                                <option value="@selectedWebsiteOwnerId">Previously selected owner — no longer available</option>
+                            }
+                            @foreach (var owner in Model.Owners)
+                            {
+                                <option value="@owner.OwnerSubjectId">@owner.DisplayName (@owner.OwnerType)</option>
+                            }
+                        </select>
+                        <span asp-validation-for="WebsiteOwnerSubjectId"></span>
+                    </div>
+                </div>
+                <div class="form-grid form-grid--two">
+                    <div class="form-field">
+                        <label asp-for="WebsiteTechnologyCms">
+                            @Html.DisplayNameFor(model => model.WebsiteTechnologyCms)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <input asp-for="WebsiteTechnologyCms" placeholder="For example, WordPress" />
+                        <span asp-validation-for="WebsiteTechnologyCms"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="WebsiteTags">
+                            @Html.DisplayNameFor(model => model.WebsiteTags)
+                            <span class="form-field__optional">Optional</span>
+                        </label>
+                        <input asp-for="WebsiteTags" placeholder="WordPress, Europe, Support" />
+                        <span asp-validation-for="WebsiteTags"></span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="registration-step">
+            <div class="form-field" data-registration-picker="environment">
+                <label asp-for="EnvironmentId"></label>
+                <select asp-for="EnvironmentId">
+                    <option value="">Select an environment</option>
+                    @foreach (var environment in Model.Environments)
+                    {
+                        <option value="@environment.Id" data-registration-parent="@environment.WebsiteId">@environment.Name (@environment.EnvironmentType)</option>
+                    }
+                    <option value="@EndpointRegistrationFormViewModel.CreateNew" data-registration-create>Create a new environment</option>
+                </select>
+                <span asp-validation-for="EnvironmentId"></span>
+            </div>
+
+            <section class="registration-level" data-registration-new="environment">
+                <div class="registration-level__heading">
+                    <span class="registration-level__index">New environment</span>
+                    <strong>Created and active with the endpoint</strong>
+                </div>
+                <div class="form-grid form-grid--two">
+                    <div class="form-field">
+                        <label asp-for="EnvironmentName"></label>
+                        <input asp-for="EnvironmentName" placeholder="Production" />
+                        <span asp-validation-for="EnvironmentName"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="EnvironmentType"></label>
+                        <select asp-for="EnvironmentType">
+                            @foreach (var type in EnvironmentTypes.All)
+                            {
+                                <option value="@type">@type</option>
+                            }
+                        </select>
+                        <span asp-validation-for="EnvironmentType"></span>
+                    </div>
                 </div>
                 <div class="form-field">
-                    <label asp-for="WebsiteTags">
-                        @Html.DisplayNameFor(model => model.WebsiteTags)
+                    <label asp-for="EnvironmentBaseUrl">
+                        @Html.DisplayNameFor(model => model.EnvironmentBaseUrl)
                         <span class="form-field__optional">Optional</span>
                     </label>
-                    <input asp-for="WebsiteTags" placeholder="WordPress, Europe, Support" />
-                    <span asp-validation-for="WebsiteTags"></span>
+                    <input asp-for="EnvironmentBaseUrl" type="text" inputmode="url" spellcheck="false"
+                           autocapitalize="none" placeholder="example.com" />
+                    <span class="form-field__hint">
+                        https:// is added when no scheme is typed. Production base URLs require HTTPS.
+                    </span>
+                    <span asp-validation-for="EnvironmentBaseUrl"></span>
                 </div>
-            </div>
-        </section>
-
-        <section class="registration-level"
-                 data-registration-show="@EndpointRegistrationModes.NewEnvironment,@EndpointRegistrationModes.NewWebsite,@EndpointRegistrationModes.NewClient">
-            <div class="registration-level__heading">
-                <span class="registration-level__index">New environment</span>
-                <strong>Create an active deployment environment</strong>
-            </div>
-            <div class="form-grid form-grid--two">
-                <div class="form-field">
-                    <label asp-for="EnvironmentName"></label>
-                    <input asp-for="EnvironmentName" placeholder="Production" />
-                    <span asp-validation-for="EnvironmentName"></span>
-                </div>
-                <div class="form-field">
-                    <label asp-for="EnvironmentType"></label>
-                    <select asp-for="EnvironmentType">
-                        @foreach (var type in EnvironmentTypes.All)
-                        {
-                            <option value="@type">@type</option>
-                        }
-                    </select>
-                    <span asp-validation-for="EnvironmentType"></span>
-                </div>
-            </div>
-            <div class="form-field">
-                <label asp-for="EnvironmentBaseUrl">
-                    @Html.DisplayNameFor(model => model.EnvironmentBaseUrl)
-                    <span class="form-field__optional">Optional</span>
-                </label>
-                <input asp-for="EnvironmentBaseUrl" type="url" placeholder="https://example.com/" />
-                <span class="form-field__hint">Production base URLs require HTTPS.</span>
-                <span asp-validation-for="EnvironmentBaseUrl"></span>
-            </div>
-        </section>
+            </section>
+        </div>
     </div>
 </fieldset>
 

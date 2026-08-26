@@ -323,6 +323,8 @@ public static class DependencyInjection
         services.AddSingleton<SafeHttpConcurrencyLimiter>();
         services.AddScoped<IMonitoringTargetAuthorizer, MonitoringTargetAuthorizer>();
         services.AddScoped<ISafeHttpTransport, SafeHttpTransport>();
+        services.AddScoped<IEndpointUrlSchemeProbe, EndpointUrlSchemeProbe>();
+        services.AddScoped<EndpointUrlResolver>();
         services.AddScoped<ISslCertificateProbe, SslCertificateProbe>();
         services.AddScoped<ISslUrgentCheckScheduler, SslUrgentCheckScheduler>();
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>

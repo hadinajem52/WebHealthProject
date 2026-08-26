@@ -87,10 +87,10 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
     }
 
     [Theory]
-    [InlineData("clientId", EndpointRegistrationModes.NewWebsite)]
-    [InlineData("websiteId", EndpointRegistrationModes.NewEnvironment)]
-    [InlineData("environmentId", EndpointRegistrationModes.ExistingEnvironment)]
-    public async Task EveryContextPrefillResolvesToItsRegistrationMode(string parameter, string expectedMode)
+    [InlineData("clientId")]
+    [InlineData("websiteId")]
+    [InlineData("environmentId")]
+    public async Task EveryContextPrefillSelectsItsLevelAndEveryLevelAboveIt(string parameter)
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
         var id = parameter switch
@@ -102,10 +102,13 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
 
         var content = await client.GetStringAsync($"/Targets/RegisterEndpoint?{parameter}={id}");
 
-        Assert.Matches(
-            $"<input(?=[^>]*name=\"HierarchyMode\")(?=[^>]*value=\"{expectedMode}\")(?=[^>]*checked=\"checked\")[^>]*>",
-            content);
-        Assert.Contains($"value=\"{id}\" selected=\"selected\"", content, StringComparison.Ordinal);
+        AssertSelected(content, id.ToString());
+        AssertSelected(content, EmptyRegistryReader.Client.Id.ToString());
+        if (parameter != "clientId")
+        {
+            AssertSelected(content, EmptyRegistryReader.Website.Id.ToString());
+        }
+
         Assert.Matches("<input(?=[^>]*name=\"Url\")(?=[^>]*autofocus)[^>]*>", content);
     }
 

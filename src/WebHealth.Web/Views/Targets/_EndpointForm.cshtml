@@ -15,10 +15,11 @@
                 @Html.DisplayNameFor(model => model.Url)
                 <span class="form-field__required">Required</span>
             </label>
-            <input asp-for="Url" type="url" placeholder="https://example.com/health" />
+            <input asp-for="Url" type="text" inputmode="url" spellcheck="false"
+                   autocapitalize="none" placeholder="example.com/health" />
             <span class="form-field__hint">
-                An absolute http:// or https:// address. Credentials, fragments and relative
-                URLs are rejected.
+                Type the address alone, such as example.com, and https:// is added for you.
+                Credentials, fragments and relative URLs are rejected.
             </span>
             <span asp-validation-for="Url"></span>
         </div>

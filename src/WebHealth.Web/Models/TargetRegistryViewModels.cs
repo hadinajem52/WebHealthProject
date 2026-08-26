@@ -153,10 +153,22 @@ public static class EndpointRegistrationModes
 
 public sealed class EndpointRegistrationFormViewModel : IValidatableObject
 {
-    public string HierarchyMode { get; set; } = EndpointRegistrationModes.ExistingEnvironment;
-    public Guid? EnvironmentId { get; set; }
-    public Guid? WebsiteId { get; set; }
+    public static Guid CreateNew => Guid.Empty;
+
+    [Display(Name = "Client")]
     public Guid? ClientId { get; set; }
+
+    [Display(Name = "Website")]
+    public Guid? WebsiteId { get; set; }
+
+    [Display(Name = "Environment")]
+    public Guid? EnvironmentId { get; set; }
+
+    public string HierarchyMode =>
+        ClientId == CreateNew ? EndpointRegistrationModes.NewClient
+        : WebsiteId == CreateNew ? EndpointRegistrationModes.NewWebsite
+        : EnvironmentId == CreateNew ? EndpointRegistrationModes.NewEnvironment
+        : EndpointRegistrationModes.ExistingEnvironment;
 
     [StringLength(200, ErrorMessage = "This name is too long. Use 200 characters or fewer.")]
     [Display(Name = "Client name")]
@@ -271,66 +283,61 @@ public sealed class EndpointRegistrationFormViewModel : IValidatableObject
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (!EndpointRegistrationModes.All.Contains(HierarchyMode, StringComparer.Ordinal))
+        if (ClientId is null)
         {
-            yield return new ValidationResult(
-                "Select where the endpoint belongs.",
-                [nameof(HierarchyMode)]);
+            yield return Required("Select a client, or choose to create a new one.", nameof(ClientId));
             yield break;
         }
 
-        if (HierarchyMode == EndpointRegistrationModes.ExistingEnvironment && EnvironmentId is null)
-        {
-            yield return Required("Select an active environment.", nameof(EnvironmentId));
-        }
-
-        if (HierarchyMode == EndpointRegistrationModes.NewEnvironment && WebsiteId is null)
-        {
-            yield return Required("Select the website for the new environment.", nameof(WebsiteId));
-        }
-
-        if (HierarchyMode == EndpointRegistrationModes.NewWebsite && ClientId is null)
-        {
-            yield return Required("Select the client for the new website.", nameof(ClientId));
-        }
-
-        if (HierarchyMode == EndpointRegistrationModes.NewClient)
+        if (ClientId == CreateNew)
         {
             if (string.IsNullOrWhiteSpace(ClientName))
             {
-                yield return Required("Enter a client name.", nameof(ClientName));
+                yield return Required("Enter a name for the new client.", nameof(ClientName));
             }
 
             if (ClientOwnerSubjectId is null)
             {
-                yield return Required("Select an owner for the client.", nameof(ClientOwnerSubjectId));
+                yield return Required("Select an owner for the new client.", nameof(ClientOwnerSubjectId));
             }
         }
+        else if (WebsiteId is null)
+        {
+            yield return Required("Select a website, or choose to create a new one.", nameof(WebsiteId));
+            yield break;
+        }
 
-        if (HierarchyMode is EndpointRegistrationModes.NewWebsite or EndpointRegistrationModes.NewClient)
+        if (HierarchyMode is EndpointRegistrationModes.NewClient or EndpointRegistrationModes.NewWebsite)
         {
             if (string.IsNullOrWhiteSpace(WebsiteName))
             {
-                yield return Required("Enter a website name.", nameof(WebsiteName));
+                yield return Required("Enter a name for the new website.", nameof(WebsiteName));
             }
 
             if (WebsiteOwnerSubjectId is null)
             {
-                yield return Required("Select an owner for the website.", nameof(WebsiteOwnerSubjectId));
+                yield return Required("Select an owner for the new website.", nameof(WebsiteOwnerSubjectId));
             }
         }
-
-        if (HierarchyMode != EndpointRegistrationModes.ExistingEnvironment)
+        else if (EnvironmentId is null)
         {
-            if (string.IsNullOrWhiteSpace(EnvironmentName))
-            {
-                yield return Required("Enter an environment name, such as Production or Staging.", nameof(EnvironmentName));
-            }
+            yield return Required("Select an environment, or choose to create a new one.", nameof(EnvironmentId));
+            yield break;
+        }
 
-            if (!EnvironmentTypes.All.Contains(EnvironmentType, StringComparer.Ordinal))
-            {
-                yield return Required("Select a supported environment type.", nameof(EnvironmentType));
-            }
+        if (HierarchyMode == EndpointRegistrationModes.ExistingEnvironment)
+        {
+            yield break;
+        }
+
+        if (string.IsNullOrWhiteSpace(EnvironmentName))
+        {
+            yield return Required("Enter an environment name, such as Production or Staging.", nameof(EnvironmentName));
+        }
+
+        if (!EnvironmentTypes.All.Contains(EnvironmentType, StringComparer.Ordinal))
+        {
+            yield return Required("Select a supported environment type.", nameof(EnvironmentType));
         }
     }
 

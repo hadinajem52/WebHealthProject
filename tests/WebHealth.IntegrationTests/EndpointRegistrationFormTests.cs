@@ -18,7 +18,7 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
     : IClassFixture<WebHealthWebApplicationFactory>
 {
     [Fact]
-    public async Task RegistrationPageShowsAllModesAndKeepsAdvancedSettingsCollapsed()
+    public async Task RegistrationPageOffersEveryPlacementLevelAndKeepsAdvancedSettingsCollapsed()
     {
         var registration = new RecordingEndpointRegistrationService();
         using var configuredFactory = CreateFactory(registration);
@@ -27,10 +27,12 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
         var content = await client.GetStringAsync("/Targets/RegisterEndpoint");
 
         Assert.Contains("Endpoint registration", content, StringComparison.Ordinal);
-        Assert.Contains($"value=\"{EndpointRegistrationModes.ExistingEnvironment}\"", content, StringComparison.Ordinal);
-        Assert.Contains($"value=\"{EndpointRegistrationModes.NewEnvironment}\"", content, StringComparison.Ordinal);
-        Assert.Contains($"value=\"{EndpointRegistrationModes.NewWebsite}\"", content, StringComparison.Ordinal);
-        Assert.Contains($"value=\"{EndpointRegistrationModes.NewClient}\"", content, StringComparison.Ordinal);
+        Assert.Contains("data-registration-picker=\"client\"", content, StringComparison.Ordinal);
+        Assert.Contains("data-registration-picker=\"website\"", content, StringComparison.Ordinal);
+        Assert.Contains("data-registration-picker=\"environment\"", content, StringComparison.Ordinal);
+        Assert.Contains("Create a new client", content, StringComparison.Ordinal);
+        Assert.Contains("Create a new website", content, StringComparison.Ordinal);
+        Assert.Contains("Create a new environment", content, StringComparison.Ordinal);
         Assert.Contains("Advanced settings", content, StringComparison.Ordinal);
         Assert.Contains("Client notes", content, StringComparison.Ordinal);
         Assert.Contains("Environment base URL", content, StringComparison.Ordinal);
@@ -50,10 +52,10 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
     }
 
     [Theory]
-    [InlineData("clientId", EndpointRegistrationModes.NewWebsite)]
-    [InlineData("websiteId", EndpointRegistrationModes.NewEnvironment)]
-    [InlineData("environmentId", EndpointRegistrationModes.ExistingEnvironment)]
-    public async Task PrefillSelectsTheLowestSuppliedHierarchyLevel(string parameter, string expectedMode)
+    [InlineData("clientId")]
+    [InlineData("websiteId")]
+    [InlineData("environmentId")]
+    public async Task PrefillSelectsTheSuppliedLevelAndEveryLevelAboveIt(string parameter)
     {
         var registration = new RecordingEndpointRegistrationService();
         using var configuredFactory = CreateFactory(registration);
@@ -67,8 +69,16 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
 
         var content = await client.GetStringAsync($"/Targets/RegisterEndpoint?{parameter}={id}");
 
-        AssertSelectedMode(content, expectedMode);
-        Assert.Contains($"value=\"{id}\" selected=\"selected\"", content, StringComparison.Ordinal);
+        AssertSelected(content, "ClientId", RegistrationFormReader.ClientId.ToString());
+        if (parameter != "clientId")
+        {
+            AssertSelected(content, "WebsiteId", RegistrationFormReader.WebsiteId.ToString());
+        }
+
+        if (parameter == "environmentId")
+        {
+            AssertSelected(content, "EnvironmentId", RegistrationFormReader.EnvironmentId.ToString());
+        }
     }
 
     [Fact]
@@ -80,22 +90,24 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
         var content = await client.GetStringAsync(
             $"/Targets/RegisterEndpoint?clientId={Guid.NewGuid()}&websiteId={Guid.NewGuid()}&environmentId={RegistrationFormReader.EnvironmentId}");
 
-        AssertSelectedMode(content, EndpointRegistrationModes.ExistingEnvironment);
+        AssertSelected(content, "ClientId", RegistrationFormReader.ClientId.ToString());
+        AssertSelected(content, "WebsiteId", RegistrationFormReader.WebsiteId.ToString());
+        AssertSelected(content, "EnvironmentId", RegistrationFormReader.EnvironmentId.ToString());
 
         content = await client.GetStringAsync(
             $"/Targets/RegisterEndpoint?websiteId={RegistrationFormReader.EmptyWebsiteId}");
 
-        AssertSelectedMode(content, EndpointRegistrationModes.NewEnvironment);
+        AssertSelected(content, "ClientId", RegistrationFormReader.ClientId.ToString());
+        AssertSelected(content, "WebsiteId", RegistrationFormReader.EmptyWebsiteId.ToString());
         Assert.Contains("Website with no environments", content, StringComparison.Ordinal);
-        Assert.Contains("Websites with no environments are available here", content, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(EndpointRegistrationModes.ExistingEnvironment, "EnvironmentId", "")]
+    [InlineData(EndpointRegistrationModes.ExistingEnvironment, "EnvironmentBaseUrl", "https://preserved.example.test/")]
     [InlineData(EndpointRegistrationModes.NewEnvironment, "EnvironmentName", "Preserved environment")]
     [InlineData(EndpointRegistrationModes.NewWebsite, "WebsiteName", "Preserved website")]
     [InlineData(EndpointRegistrationModes.NewClient, "ClientName", "Preserved client")]
-    public async Task AjaxValidationPreservesEverySelectedModeAndItsValues(
+    public async Task AjaxValidationPreservesEveryPlacementAndItsValues(
         string mode,
         string markerField,
         string markerValue)
@@ -113,13 +125,10 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
         var content = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        AssertSelectedMode(content, mode);
+        AssertPlacement(content, mode);
         Assert.Contains("id=\"ajax-form-region\"", content, StringComparison.Ordinal);
         Assert.Contains("data-shell-validation-summary", content, StringComparison.Ordinal);
-        if (markerValue.Length > 0)
-        {
-            Assert.Contains(markerValue, content, StringComparison.Ordinal);
-        }
+        Assert.Contains(markerValue, content, StringComparison.Ordinal);
         Assert.Empty(registration.Requests);
     }
 
@@ -243,10 +252,15 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
 
     private static Dictionary<string, string> ValidFields(string mode) => new()
     {
-        ["HierarchyMode"] = mode,
-        ["EnvironmentId"] = RegistrationFormReader.EnvironmentId.ToString(),
-        ["WebsiteId"] = RegistrationFormReader.WebsiteId.ToString(),
-        ["ClientId"] = RegistrationFormReader.ClientId.ToString(),
+        ["ClientId"] = mode == EndpointRegistrationModes.NewClient
+            ? CreateNew
+            : RegistrationFormReader.ClientId.ToString(),
+        ["WebsiteId"] = mode == EndpointRegistrationModes.NewWebsite
+            ? CreateNew
+            : RegistrationFormReader.WebsiteId.ToString(),
+        ["EnvironmentId"] = mode == EndpointRegistrationModes.NewEnvironment
+            ? CreateNew
+            : RegistrationFormReader.EnvironmentId.ToString(),
         ["ClientName"] = "New client",
         ["ClientOwnerSubjectId"] = RegistrationFormReader.OwnerId.ToString(),
         ["WebsiteName"] = "New website",
@@ -294,10 +308,47 @@ public sealed class EndpointRegistrationFormTests(WebHealthWebApplicationFactory
         return client.PostAsync("/Targets/RegisterEndpoint", new FormUrlEncodedContent(fields));
     }
 
-    private static void AssertSelectedMode(string content, string mode) =>
+    private static string CreateNew { get; } = EndpointRegistrationFormViewModel.CreateNew.ToString();
+
+    private static void AssertPlacement(string content, string mode)
+    {
+        AssertSelected(
+            content,
+            "ClientId",
+            mode == EndpointRegistrationModes.NewClient ? CreateNew : RegistrationFormReader.ClientId.ToString());
+        if (mode == EndpointRegistrationModes.NewClient)
+        {
+            return;
+        }
+
+        AssertSelected(
+            content,
+            "WebsiteId",
+            mode == EndpointRegistrationModes.NewWebsite ? CreateNew : RegistrationFormReader.WebsiteId.ToString());
+        if (mode == EndpointRegistrationModes.NewWebsite)
+        {
+            return;
+        }
+
+        AssertSelected(
+            content,
+            "EnvironmentId",
+            mode == EndpointRegistrationModes.NewEnvironment
+                ? CreateNew
+                : RegistrationFormReader.EnvironmentId.ToString());
+    }
+
+    private static void AssertSelected(string content, string field, string value)
+    {
+        var select = Regex.Match(
+            content,
+            $"<select[^>]*name=\"{field}\"[^>]*>(?<options>.*?)</select>",
+            RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        Assert.True(select.Success, $"No {field} select in: {content}");
         Assert.Matches(
-            $"<input(?=[^>]*name=\"HierarchyMode\")(?=[^>]*value=\"{mode}\")(?=[^>]*checked=\"checked\")[^>]*>",
-            content);
+            $"<option(?=[^>]*value=\"{Regex.Escape(value)}\")(?=[^>]*selected=\"selected\")[^>]*>",
+            select.Groups["options"].Value);
+    }
 
     private sealed class RecordingEndpointRegistrationService : IEndpointRegistrationService
     {

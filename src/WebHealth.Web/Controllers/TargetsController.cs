@@ -21,7 +21,8 @@ public sealed class TargetsController(
     IEndpointRegistryService endpointService,
     IEndpointRegistrationService endpointRegistrationService,
     ICheckHistoryReader checkHistoryReader,
-    ITargetAuthorizationService targetAuthorization) : Controller
+    ITargetAuthorizationService targetAuthorization,
+    EndpointUrlResolver urlResolver) : Controller
 {
     [HttpGet]
     public async Task<IActionResult> Endpoints(
@@ -46,26 +47,32 @@ public sealed class TargetsController(
         Guid? environmentId,
         CancellationToken cancellationToken)
     {
+        ModelState.Clear();
         var model = await BuildRegistrationFormAsync(new(), cancellationToken);
         if (environmentId is { } selectedEnvironmentId)
         {
-            if (!model.Environments.Any(environment => environment.Id == selectedEnvironmentId))
+            var environment = model.Environments
+                .FirstOrDefault(candidate => candidate.Id == selectedEnvironmentId);
+            if (environment is null)
             {
                 return this.NotFoundRecord("environment");
             }
 
-            model.HierarchyMode = EndpointRegistrationModes.ExistingEnvironment;
-            model.EnvironmentId = selectedEnvironmentId;
+            model.EnvironmentId = environment.Id;
+            model.WebsiteId = environment.WebsiteId;
+            model.ClientId = model.Websites
+                .FirstOrDefault(website => website.Id == environment.WebsiteId)?.ClientId;
         }
         else if (websiteId is { } selectedWebsiteId)
         {
-            if (!model.Websites.Any(website => website.Id == selectedWebsiteId))
+            var website = model.Websites.FirstOrDefault(candidate => candidate.Id == selectedWebsiteId);
+            if (website is null)
             {
                 return this.NotFoundRecord("website");
             }
 
-            model.HierarchyMode = EndpointRegistrationModes.NewEnvironment;
-            model.WebsiteId = selectedWebsiteId;
+            model.WebsiteId = website.Id;
+            model.ClientId = website.ClientId;
         }
         else if (clientId is { } selectedClientId)
         {
@@ -74,12 +81,7 @@ public sealed class TargetsController(
                 return this.NotFoundRecord("client");
             }
 
-            model.HierarchyMode = EndpointRegistrationModes.NewWebsite;
             model.ClientId = selectedClientId;
-        }
-        else
-        {
-            SelectDefaultRegistrationMode(model);
         }
 
         return View(model);
@@ -97,6 +99,13 @@ public sealed class TargetsController(
                 await BuildRegistrationFormAsync(model, cancellationToken));
         }
 
+        var url = await ResolveEndpointUrlAsync(
+            model.Url, model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
+            model.TargetAuthorizationExpiresAt, cancellationToken);
+        model.Url = url.Value ?? string.Empty;
+        var baseUrl = EndpointUrlResolver.Coerce(model.EnvironmentBaseUrl);
+        model.EnvironmentBaseUrl = baseUrl.Value;
+
         var result = await endpointRegistrationService.RegisterAsync(
             new RegisterEndpointRequest(
                 BuildRegistrationHierarchy(model),
@@ -113,7 +122,7 @@ public sealed class TargetsController(
 
         return this.RedirectOrAjaxNavigate(
             Url.Action(nameof(Endpoint), new { id = result.EntityId })!,
-            "Endpoint registered and ready for monitoring.");
+            WithSchemeNotice("Endpoint registered and ready for monitoring.", url, baseUrl));
     }
 
     [HttpGet]
@@ -203,6 +212,8 @@ public sealed class TargetsController(
             return this.ValidationView(nameof(CreateEnvironment), model);
         }
 
+        var baseUrl = EndpointUrlResolver.Coerce(model.BaseUrl);
+        model.BaseUrl = baseUrl.Value;
         var result = await environmentService.CreateAsync(
             new(model.WebsiteId, model.Name, model.EnvironmentType, model.BaseUrl, model.IsActive),
             GetAccess(), cancellationToken);
@@ -215,7 +226,7 @@ public sealed class TargetsController(
 
         return this.RedirectOrAjaxNavigate(
             Url.Action(nameof(Environment), new { id = result.EntityId })!,
-            "Environment created successfully.");
+            WithSchemeNotice("Environment created successfully.", baseUrl));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -244,6 +255,8 @@ public sealed class TargetsController(
             return this.ValidationView(nameof(EditEnvironment), model);
         }
 
+        var baseUrl = EndpointUrlResolver.Coerce(model.BaseUrl);
+        model.BaseUrl = baseUrl.Value;
         var result = await environmentService.UpdateAsync(
             new(model.EnvironmentId, model.Name, model.EnvironmentType, model.BaseUrl, model.IsActive, model.Version),
             GetAccess(), cancellationToken);
@@ -254,7 +267,7 @@ public sealed class TargetsController(
 
         return this.RedirectOrAjaxNavigate(
             Url.Action(nameof(Environment), new { id = model.EnvironmentId })!,
-            "Environment updated successfully.");
+            WithSchemeNotice("Environment updated successfully.", baseUrl));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -279,6 +292,10 @@ public sealed class TargetsController(
                 await BuildEndpointFormAsync(model, cancellationToken));
         }
 
+        var url = await ResolveEndpointUrlAsync(
+            model.Url, model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
+            model.TargetAuthorizationExpiresAt, cancellationToken);
+        model.Url = url.Value ?? string.Empty;
         var result = await endpointService.CreateAsync(
             new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence, model.TargetAuthorizationExpiresAt,
@@ -297,7 +314,7 @@ public sealed class TargetsController(
 
         return this.RedirectOrAjaxNavigate(
             Url.Action(nameof(Endpoint), new { id = result.EntityId })!,
-            "Endpoint and HTTP monitor created successfully.");
+            WithSchemeNotice("Endpoint and HTTP monitor created successfully.", url));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
@@ -341,6 +358,10 @@ public sealed class TargetsController(
                 await BuildEndpointFormAsync(model, cancellationToken));
         }
 
+        var url = await ResolveEndpointUrlAsync(
+            model.Url, model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
+            model.TargetAuthorizationExpiresAt, cancellationToken);
+        model.Url = url.Value ?? string.Empty;
         var result = await endpointService.UpdateAsync(
             new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
                 model.TargetAuthorizationKind, model.TargetAuthorizationEvidence,
@@ -368,7 +389,7 @@ public sealed class TargetsController(
 
         return this.RedirectOrAjaxNavigate(
             Url.Action(nameof(Endpoint), new { id = model.EndpointId })!,
-            "Endpoint updated successfully.");
+            WithSchemeNotice("Endpoint updated successfully.", url));
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
@@ -526,25 +547,6 @@ public sealed class TargetsController(
         nameof(EndpointRegistrationFormViewModel.HttpExceptionReason)
     ];
 
-    private static void SelectDefaultRegistrationMode(EndpointRegistrationFormViewModel model)
-    {
-        if (model.Environments.Count > 0)
-        {
-            model.HierarchyMode = EndpointRegistrationModes.ExistingEnvironment;
-            return;
-        }
-
-        if (model.Websites.Count > 0)
-        {
-            model.HierarchyMode = EndpointRegistrationModes.NewEnvironment;
-            return;
-        }
-
-        model.HierarchyMode = model.Clients.Count > 0
-            ? EndpointRegistrationModes.NewWebsite
-            : EndpointRegistrationModes.NewClient;
-    }
-
     private static EndpointRegistrationHierarchy BuildRegistrationHierarchy(
         EndpointRegistrationFormViewModel model) => model.HierarchyMode switch
         {
@@ -602,6 +604,32 @@ public sealed class TargetsController(
             PageAuditSchedulingEnabled = model.PageAuditSchedulingEnabled,
             PageAuditIntervalHours = model.PageAuditIntervalHours
         };
+
+    private Task<EndpointUrlResolution> ResolveEndpointUrlAsync(
+        string? url,
+        string? authorizationKind,
+        string? authorizationEvidence,
+        DateTimeOffset? authorizationExpiresAt,
+        CancellationToken cancellationToken) =>
+        HasAssertedAuthorization(authorizationKind, authorizationEvidence, authorizationExpiresAt)
+            ? urlResolver.ResolveAsync(url, cancellationToken)
+            : Task.FromResult(EndpointUrlResolver.Coerce(url));
+
+    private static bool HasAssertedAuthorization(
+        string? kind,
+        string? evidence,
+        DateTimeOffset? expiresAt) =>
+        TargetAuthorizationKinds.All.Contains(kind?.Trim(), StringComparer.Ordinal)
+        && !string.IsNullOrWhiteSpace(evidence)
+        && (expiresAt is null || expiresAt > DateTimeOffset.UtcNow);
+
+    private static string WithSchemeNotice(
+        string message,
+        params EndpointUrlResolution[] resolutions) =>
+        resolutions.Any(resolution => resolution.SchemeAssumed)
+            ? message + " No scheme was typed, so https:// was used. Edit the URL if the target "
+                + "is served over plain http://."
+            : message;
 
     private static Guid Required(Guid? value) =>
         value ?? throw new InvalidOperationException("A validated registration field is missing.");
