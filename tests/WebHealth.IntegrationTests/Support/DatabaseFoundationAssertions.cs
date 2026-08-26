@@ -89,7 +89,8 @@ internal static class DatabaseFoundationAssertions
         "20260824102608_CrawlRunExecutionClaim",
         "20260825090421_MaintenanceWindowArchive",
         "20260826072635_DropTargetAuthorization",
-        "20260826093318_NotificationEmailRouting"
+        "20260826093318_NotificationEmailRouting",
+        "20260826103956_SlowResponseIncidentSeverityDemotion"
     ];
 
     private static readonly string[] ExpectedTables =

@@ -31,7 +31,7 @@ so a renewal is recognisable as the same subject. Only the rule segment is liste
 | HttpAvailability | `Http.ClientError` | Responded 4xx | Critical |
 | HttpAvailability | `Http.ServerError` | Responded 5xx | Critical |
 | HttpAvailability | `Http.ContentMismatch` | Required content was not found on the page | Critical |
-| HttpAvailability | `Http.SlowResponse` | Slower than its response-time threshold | Critical past the critical threshold, otherwise Warning |
+| HttpAvailability | `Http.SlowResponse` | Slower than its response-time threshold | Warning |
 | HttpAvailability | `Http.PageTooLarge` | Larger than its page-size threshold | Warning |
 | HttpAvailability | `Http.HttpsRequired` | HTTPS is required but the endpoint served HTTP | The endpoint's `ProductionHttpSeverity` — Warning by default, Critical if configured |
 | HttpAvailability | `Seo.RobotsBlocksSite` | robots.txt blocks the whole site | Warning |

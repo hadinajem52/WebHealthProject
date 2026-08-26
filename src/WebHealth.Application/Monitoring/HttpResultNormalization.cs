@@ -313,9 +313,7 @@ public static class HttpResultNormalizer
             PerformanceRules.SlowResponse,
             $"{totalDurationMs} ms",
             $"Under {breached} ms",
-            severity == PerformanceSeverity.Critical
-                ? FindingSeverities.Critical
-                : FindingSeverities.Warning);
+            FindingSeverities.Warning);
     }
 
     private static NormalizedFinding? EvaluatePageSize(
@@ -416,7 +414,6 @@ public static class HttpResultNormalizer
             (FindingSeverities.Critical, HttpFailureCategories.ServerError) => 490,
             (FindingSeverities.Critical, HttpFailureCategories.ClientError) => 480,
             (FindingSeverities.Critical, HttpFailureCategories.ContentMismatch) => 470,
-            (FindingSeverities.Critical, HttpFailureCategories.SlowResponse) => 410,
             (FindingSeverities.Critical, _) => 400,
             (FindingSeverities.High, _) => 350,
             (FindingSeverities.Warning, HttpFailureCategories.HttpsRequired) => 300,

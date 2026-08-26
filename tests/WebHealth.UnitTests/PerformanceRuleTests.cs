@@ -56,7 +56,7 @@ public sealed class PerformanceRuleTests
             .ContainSingle(finding => finding.FailureCategory == HttpFailureCategories.ServerError)
             .Subject;
         slow.IssueKey.Should().NotBe(serverError.IssueKey);
-        slow.Severity.Should().Be(FindingSeverities.Critical);
+        slow.Severity.Should().Be(FindingSeverities.Warning);
         slow.ObservedValue.Should().Be("4000 ms");
     }
 
