@@ -48,6 +48,13 @@
             }
             <a class="button button--secondary" asp-controller="Registry" asp-action="Clients">View clients</a>
             <a class="button button--secondary" asp-controller="Registry" asp-action="Websites">View websites</a>
+            @if (Model.CanManage)
+            {
+                <a class="button button--secondary" asp-action="ArchivedEndpoints">
+                    @await Html.PartialAsync("_Icon", "archive")
+                    <span>Archived</span>
+                </a>
+            }
         </div>
     </div>
 

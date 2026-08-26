@@ -81,13 +81,14 @@ public sealed class RegistryController(
     }
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
-    public async Task<IActionResult> Archived(CancellationToken cancellationToken)
-    {
-        var access = GetAccess();
-        return View(new RegistryArchiveViewModel(
-            await registryReader.ListDeletedClientsAsync(access, cancellationToken),
-            await registryReader.ListDeletedWebsitesAsync(access, cancellationToken)));
-    }
+    public async Task<IActionResult> ArchivedClients(CancellationToken cancellationToken) =>
+        View(RegistryArchiveScreens.ViewName, BuildClientArchiveScreen(
+            await registryReader.ListDeletedClientsAsync(GetAccess(), cancellationToken)));
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
+    public async Task<IActionResult> ArchivedWebsites(CancellationToken cancellationToken) =>
+        View(RegistryArchiveScreens.ViewName, BuildWebsiteArchiveScreen(
+            await registryReader.ListDeletedWebsitesAsync(GetAccess(), cancellationToken)));
 
     [HttpGet]
     public async Task<IActionResult> Client(Guid id, CancellationToken cancellationToken)
@@ -406,6 +407,48 @@ public sealed class RegistryController(
                 ? StatusCodes.Status409Conflict
                 : StatusCodes.Status422UnprocessableEntity);
     }
+
+    private static RegistryArchiveScreenViewModel BuildClientArchiveScreen(
+        IReadOnlyList<ClientListItem> clients) => new(
+        "Archived clients",
+        "Archived clients keep their websites, environments, endpoints and audit history. Restoring one brings it back disabled so you decide when monitoring resumes.",
+        "Client",
+        ["Owner"],
+        clients.Select(client => new RegistryArchiveRow(
+            client.Id,
+            client.Version,
+            client.Name,
+            $"Version {client.Version}",
+            [client.OwnerName])).ToArray(),
+        nameof(Client),
+        nameof(RestoreClient),
+        "Restore {0}? It comes back disabled and nothing beneath it is checked until you enable it.",
+        "client",
+        "No archived clients",
+        "Archiving a client from the client registry moves it here.",
+        nameof(Clients),
+        "Back to clients");
+
+    private static RegistryArchiveScreenViewModel BuildWebsiteArchiveScreen(
+        IReadOnlyList<WebsiteListItem> websites) => new(
+        "Archived websites",
+        "Archived websites keep their environments, endpoints and audit history. Restoring one brings it back disabled so you decide when monitoring resumes.",
+        "Website",
+        ["Client", "Owner"],
+        websites.Select(website => new RegistryArchiveRow(
+            website.Id,
+            website.Version,
+            website.Name,
+            website.TechnologyCms ?? "Technology not set",
+            [website.ClientName, website.OwnerName])).ToArray(),
+        nameof(Website),
+        nameof(RestoreWebsite),
+        "Restore {0}? It comes back disabled and nothing beneath it is checked until you enable it.",
+        "website",
+        "No archived websites",
+        "Archiving a website from the website registry moves it here.",
+        nameof(Websites),
+        "Back to websites");
 
     private static RegistryActionScreenViewModel BuildClientScreen(
         IReadOnlyList<ClientListItem> clients,

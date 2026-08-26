@@ -184,13 +184,14 @@ public sealed class TargetsController(
             destructive: true));
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
-    public async Task<IActionResult> Archived(CancellationToken cancellationToken)
-    {
-        var access = GetAccess();
-        return View(new TargetArchiveViewModel(
-            await targetReader.ListDeletedEnvironmentsAsync(access, cancellationToken),
-            await targetReader.ListDeletedEndpointsAsync(access, cancellationToken)));
-    }
+    public async Task<IActionResult> ArchivedEnvironments(CancellationToken cancellationToken) =>
+        View(RegistryArchiveScreens.ViewName, BuildEnvironmentArchiveScreen(
+            await targetReader.ListDeletedEnvironmentsAsync(GetAccess(), cancellationToken)));
+
+    [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
+    public async Task<IActionResult> ArchivedEndpoints(CancellationToken cancellationToken) =>
+        View(RegistryArchiveScreens.ViewName, BuildEndpointArchiveScreen(
+            await targetReader.ListDeletedEndpointsAsync(GetAccess(), cancellationToken)));
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpGet]
     public async Task<IActionResult> CreateEnvironment(Guid websiteId, CancellationToken cancellationToken)
@@ -386,11 +387,11 @@ public sealed class TargetsController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteEnvironment(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, environmentService.DeleteAsync, nameof(Archived), nameof(Environment), "Environment archived.", cancellationToken);
+        ChangeStateAsync(id, version, environmentService.DeleteAsync, nameof(ArchivedEnvironments), nameof(Environment), "Environment archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEnvironment(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, environmentService.RestoreAsync, nameof(Archived), nameof(Environment), "Environment restored in a disabled state.", cancellationToken);
+        ChangeStateAsync(id, version, environmentService.RestoreAsync, nameof(ArchivedEnvironments), nameof(Environment), "Environment restored in a disabled state.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DisableEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
@@ -398,7 +399,7 @@ public sealed class TargetsController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> DeleteEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, endpointService.DeleteAsync, nameof(Archived), nameof(Endpoint), "Endpoint archived.", cancellationToken);
+        ChangeStateAsync(id, version, endpointService.DeleteAsync, nameof(ArchivedEndpoints), nameof(Endpoint), "Endpoint archived.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> PauseEndpointSchedule(Guid id, long version, CancellationToken cancellationToken) =>
@@ -412,7 +413,7 @@ public sealed class TargetsController(
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> RestoreEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
-        ChangeStateAsync(id, version, endpointService.RestoreAsync, nameof(Archived), nameof(Endpoint), "Endpoint restored in a disabled state.", cancellationToken);
+        ChangeStateAsync(id, version, endpointService.RestoreAsync, nameof(ArchivedEndpoints), nameof(Endpoint), "Endpoint restored in a disabled state.", cancellationToken);
 
     [Authorize(Policy = AuthorizationPolicies.ManageRegistry), HttpPost]
     public Task<IActionResult> ArchiveEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
@@ -423,6 +424,49 @@ public sealed class TargetsController(
     public Task<IActionResult> PurgeEndpoint(Guid id, long version, CancellationToken cancellationToken) =>
         RunScreenActionAsync(id, version, endpointService.PurgeAsync, nameof(DeleteEndpoints),
             "Endpoint permanently deleted with all of its monitoring history.", cancellationToken);
+
+    private static RegistryArchiveScreenViewModel BuildEnvironmentArchiveScreen(
+        IReadOnlyList<EnvironmentListItem> environments) => new(
+        "Archived environments",
+        "Archived environments keep their endpoints and audit history. Restoring one brings it back disabled so you decide when monitoring resumes.",
+        "Environment",
+        ["Client", "Website", "Type"],
+        environments.Select(environment => new RegistryArchiveRow(
+            environment.Id,
+            environment.Version,
+            environment.Name,
+            environment.BaseUrl ?? "Base URL not set",
+            [environment.ClientName, environment.WebsiteName, environment.EnvironmentType])).ToArray(),
+        nameof(Environment),
+        nameof(RestoreEnvironment),
+        "Restore {0}? It comes back disabled and its endpoints are not checked until you enable it.",
+        "environment",
+        "No archived environments",
+        "Archiving an environment from a website's environment list moves it here.",
+        "Websites",
+        "Back to websites",
+        "Registry");
+
+    private static RegistryArchiveScreenViewModel BuildEndpointArchiveScreen(
+        IReadOnlyList<EndpointListItem> endpoints) => new(
+        "Archived endpoints",
+        "Archived endpoints keep their checks, results, incidents and audit history. Restoring one brings it back disabled so you decide when its checks resume.",
+        "Endpoint",
+        ["Website", "Environment", "Owner"],
+        endpoints.Select(endpoint => new RegistryArchiveRow(
+            endpoint.Id,
+            endpoint.Version,
+            endpoint.DisplayUrl,
+            endpoint.MonitorType,
+            [endpoint.WebsiteName, endpoint.EnvironmentName, endpoint.OwnerName])).ToArray(),
+        nameof(Endpoint),
+        nameof(RestoreEndpoint),
+        "Restore {0}? It comes back disabled and its scheduled checks stay stopped until you enable it.",
+        "endpoint",
+        "No archived endpoints",
+        "Archiving an endpoint from the endpoint registry moves it here.",
+        nameof(Endpoints),
+        "Back to endpoints");
 
     private static RegistryActionScreenViewModel BuildEndpointScreen(
         IReadOnlyList<RegistryEndpointItem> endpoints,

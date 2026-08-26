@@ -29,10 +29,6 @@ public sealed record RegistryEndpointListViewModel(
     bool CanManage,
     bool CanPurge);
 
-public sealed record TargetArchiveViewModel(
-    IReadOnlyList<EnvironmentListItem> Environments,
-    IReadOnlyList<EndpointListItem> Endpoints);
-
 public sealed class EnvironmentFormViewModel
 {
     public Guid EnvironmentId { get; set; }

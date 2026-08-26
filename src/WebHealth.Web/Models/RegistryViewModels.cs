@@ -15,10 +15,6 @@ public sealed record ClientDetailsViewModel(ClientDetails Client, bool CanManage
 
 public sealed record WebsiteDetailsViewModel(WebsiteDetails Website, bool CanManage);
 
-public sealed record RegistryArchiveViewModel(
-    IReadOnlyList<ClientListItem> Clients,
-    IReadOnlyList<WebsiteListItem> Websites);
-
 public sealed class ClientFormViewModel
 {
     public Guid ClientId { get; set; }

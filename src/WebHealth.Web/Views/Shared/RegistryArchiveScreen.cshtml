@@ -1,0 +1,84 @@
+@model RegistryArchiveScreenViewModel
+@{
+    ViewData.SetTitle(Model.Title);
+    ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem(Model.Title));
+}
+
+<section class="card">
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title">@Model.Title</h2>
+            <p class="card__subtitle">@Model.Subtitle</p>
+        </div>
+        <div class="form-actions">
+            <a class="button button--secondary" asp-controller="@Model.BackController" asp-action="@Model.BackAction">
+                @await Html.PartialAsync("_Icon", "arrow-left")
+                <span>@Model.BackLabel</span>
+            </a>
+        </div>
+    </div>
+
+    @if (Model.Rows.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            Model.EmptyTitle,
+            Model.EmptyDescription,
+            "archive"))
+    }
+    else
+    {
+        <p class="card__status" data-status="neutral">
+            @await Html.PartialAsync("_Icon", "archive")
+            <span>@Model.Rows.Count archived @Model.CountNoun@(Model.Rows.Count == 1 ? null : "s")</span>
+        </p>
+
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">@Model.Title</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">@Model.PrimaryColumn</th>
+                        @foreach (var column in Model.Columns)
+                        {
+                            <th scope="col">@column</th>
+                        }
+                        <th scope="col">Status</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td data-label="@Model.PrimaryColumn">
+                            <span class="data-table__primary">@row.Primary</span>
+                            @if (row.Secondary is not null)
+                            {
+                                <span class="data-table__secondary">@row.Secondary</span>
+                            }
+                        </td>
+                        @for (var index = 0; index < Model.Columns.Count; index++)
+                        {
+                            <td data-label="@Model.Columns[index]">@(index < row.Cells.Count ? row.Cells[index] : string.Empty)</td>
+                        }
+                        <td data-label="Status"><span class="badge" data-status="danger">Archived</span></td>
+                        <td class="data-table__action" data-label="Actions">
+                            <div class="data-table__action-group">
+                                <a asp-action="@Model.DetailsAction" asp-route-id="@row.Id">Open<span class="visually-hidden"> @row.Primary</span></a>
+                                <form asp-action="@Model.RestoreAction" method="post" data-shell-confirm="@string.Format(Model.RestoreConfirmPrompt, row.Primary)">
+                                    <input type="hidden" name="id" value="@row.Id" />
+                                    <input type="hidden" name="version" value="@row.Version" />
+                                    <button class="button button--secondary" type="submit">
+                                        @await Html.PartialAsync("_Icon", "restore")
+                                        <span>Restore<span class="visually-hidden"> @row.Primary</span></span>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
