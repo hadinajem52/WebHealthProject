@@ -294,7 +294,7 @@ public sealed class TargetsController(
         var url = await urlResolver.ResolveAsync(model.Url, cancellationToken);
         model.Url = url.Value ?? string.Empty;
         var result = await endpointService.CreateAsync(
-            new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
+            new(model.EnvironmentId, model.Url, model.OwnerSubjectId, model.IsEnabled, null,
                 model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
                 model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
@@ -326,7 +326,6 @@ public sealed class TargetsController(
             Url = endpoint.DisplayUrl,
             OwnerSubjectId = endpoint.OwnerSubjectId,
             IsEnabled = endpoint.IsEnabled,
-            HttpExceptionReason = endpoint.HttpExceptionReason,
             SchedulingEnabled = endpoint.SchedulingEnabled,
             IntervalMinutesOverride = endpoint.IntervalMinutesOverride,
             WarningThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.WarningThresholdMs : null,
@@ -354,7 +353,7 @@ public sealed class TargetsController(
         var url = await urlResolver.ResolveAsync(model.Url, cancellationToken);
         model.Url = url.Value ?? string.Empty;
         var result = await endpointService.UpdateAsync(
-            new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, model.HttpExceptionReason,
+            new(model.EndpointId, model.Url, model.OwnerSubjectId, model.IsEnabled, null,
                 model.Version, model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
                 model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
@@ -555,7 +554,6 @@ public sealed class TargetsController(
                 .Where(owner => owners.All(existing => existing.OwnerSubjectId != owner.OwnerSubjectId)));
         }
         model.Owners = owners.OrderBy(owner => owner.DisplayName, StringComparer.OrdinalIgnoreCase).ToArray();
-        model.CanApproveHttp = User.IsInRole(ApplicationRoles.Administrator);
         model.CanConfigureInterval = User.IsInRole(ApplicationRoles.Administrator);
         model.AdvancedSettingsOpen = model.AdvancedSettingsOpen || AdvancedRegistrationFields.Any(field =>
             ModelState.TryGetValue(field, out var entry) && entry.Errors.Count > 0);
@@ -574,8 +572,7 @@ public sealed class TargetsController(
         nameof(EndpointRegistrationFormViewModel.SeoDescriptionRequired),
         nameof(EndpointRegistrationFormViewModel.PageAuditEnabled),
         nameof(EndpointRegistrationFormViewModel.PageAuditSchedulingEnabled),
-        nameof(EndpointRegistrationFormViewModel.PageAuditIntervalHours),
-        nameof(EndpointRegistrationFormViewModel.HttpExceptionReason)
+        nameof(EndpointRegistrationFormViewModel.PageAuditIntervalHours)
     ];
 
     private static EndpointRegistrationHierarchy BuildRegistrationHierarchy(
@@ -620,7 +617,6 @@ public sealed class TargetsController(
             Url = model.Url,
             OwnerSubjectId = model.OwnerSubjectId,
             IsEnabled = model.IsEnabled,
-            HttpExceptionReason = model.HttpExceptionReason,
             IntervalMinutesOverride = model.IntervalMinutesOverride,
             SchedulingEnabled = model.SchedulingEnabled,
             WarningThresholdMsOverride = model.WarningThresholdMsOverride,
@@ -654,7 +650,6 @@ public sealed class TargetsController(
         model.WebsiteId = environment?.WebsiteId ?? model.WebsiteId;
         model.WebsiteName = environment?.WebsiteName ?? model.WebsiteName;
         model.IsProduction = environment?.IsProduction ?? model.IsProduction;
-        model.CanApproveHttp = User.IsInRole(ApplicationRoles.Administrator);
         model.CanConfigureInterval = User.IsInRole(ApplicationRoles.Administrator);
         model.Owners = await registryReader.ListOwnersAsync(model.OwnerSubjectId, cancellationToken);
         return model;

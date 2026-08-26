@@ -876,13 +876,15 @@
 
         elements(root, '.flash-messages').forEach(setUpFlashDismissal);
 
-        var schedulingToggle = first(root, '[data-shell-scheduling-toggle]');
-        var intervalField = first(root, '[data-shell-interval-field]');
-        var intervalInput = first(root, '[data-shell-interval-input]');
+        elements(root, '[data-shell-scheduling-toggle]').forEach(function (schedulingToggle) {
+            var name = schedulingToggle.getAttribute('data-shell-scheduling-toggle') || '';
+            var intervalField = first(root, '[data-shell-interval-field="' + name + '"]');
+            var intervalInput = first(root, '[data-shell-interval-input="' + name + '"]');
 
-        if (schedulingToggle && intervalField && intervalInput) {
-            setUpIntervalAvailability(schedulingToggle, intervalField, intervalInput);
-        }
+            if (intervalField && intervalInput) {
+                setUpIntervalAvailability(schedulingToggle, intervalField, intervalInput);
+            }
+        });
 
         elements(root, '[data-shell-dependency]')
             .forEach(setUpDependentFields);

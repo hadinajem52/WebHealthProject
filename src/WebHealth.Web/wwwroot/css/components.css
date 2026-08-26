@@ -1143,6 +1143,7 @@ code,
     }
 
     .form-field select::picker(select) {
+        position-area: block-end span-inline-start;
         overflow-y: auto;
         max-height: 18rem;
         padding: var(--space-2);

@@ -190,7 +190,8 @@
              data-inactive="@((!Model.PageAuditEnabled).ToString().ToLowerInvariant())">
             <div class="switch-block">
                 <label class="switch-field">
-                    <input asp-for="PageAuditSchedulingEnabled" type="checkbox" aria-describedby="page-audit-schedule-hint" />
+                    <input asp-for="PageAuditSchedulingEnabled" type="checkbox"
+                           data-shell-scheduling-toggle="page-audit-interval" aria-describedby="page-audit-schedule-hint" />
                     <span>Run PageSpeed audits on a schedule</span>
                 </label>
                 <span class="form-field__hint" id="page-audit-schedule-hint">
@@ -198,16 +199,21 @@
                 </span>
             </div>
 
-            <div class="form-field">
-                <label asp-for="PageAuditIntervalHours"></label>
-                <input asp-for="PageAuditIntervalHours" type="number"
-                       min="@PageAuditCadence.MinimumIntervalHours" max="@PageAuditCadence.MaximumIntervalHours" />
-                <span class="form-field__hint">
-                    Between @PageAuditCadence.MinimumIntervalHours hours and
-                    @(PageAuditCadence.MaximumIntervalHours / 24) days. Each run asks Google to
-                    load the page for four categories on both form factors, so daily is usually enough.
-                </span>
-                <span asp-validation-for="PageAuditIntervalHours"></span>
+            <div class="form-dependent" data-shell-interval-field="page-audit-interval"
+                 data-inactive="@((!Model.PageAuditSchedulingEnabled).ToString().ToLowerInvariant())">
+                <div class="form-field">
+                    <label asp-for="PageAuditIntervalHours"></label>
+                    <input asp-for="PageAuditIntervalHours" type="number"
+                           min="@PageAuditCadence.MinimumIntervalHours" max="@PageAuditCadence.MaximumIntervalHours"
+                           readonly="@(!Model.PageAuditSchedulingEnabled ? "readonly" : null)"
+                           data-shell-interval-input="page-audit-interval" />
+                    <span class="form-field__hint">
+                        Between @PageAuditCadence.MinimumIntervalHours hours and
+                        @(PageAuditCadence.MaximumIntervalHours / 24) days. Each run asks Google to
+                        load the page for four categories on both form factors, so daily is usually enough.
+                    </span>
+                    <span asp-validation-for="PageAuditIntervalHours"></span>
+                </div>
             </div>
         </div>
     </div>
@@ -215,26 +221,5 @@
 
 @if (Model.IsProduction)
 {
-    <fieldset class="form-section">
-        <legend class="form-section__title">Production HTTP exception</legend>
-        <p class="form-section__hint">
-            Only needed for a production endpoint served over plain HTTP.
-        </p>
 
-        <div class="form-section__body">
-            <p class="form-notice">
-                @await Html.PartialAsync("_Icon", "warning")
-                <span>
-                    An HTTPS endpoint needs nothing here. A new or changed exception requires an
-                    Administrator and a reason that will be kept with the endpoint.
-                </span>
-            </p>
-
-            <div class="form-field">
-                <label asp-for="HttpExceptionReason"></label>
-                <textarea asp-for="HttpExceptionReason" rows="4" readonly="@(!Model.CanApproveHttp ? "readonly" : null)"></textarea>
-                <span asp-validation-for="HttpExceptionReason"></span>
-            </div>
-        </div>
-    </fieldset>
 }

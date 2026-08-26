@@ -347,19 +347,6 @@
             </div>
         </fieldset>
 
-        <fieldset class="form-section">
-            <legend class="form-section__title">Production HTTP exception</legend>
-            <p class="form-section__hint">Only used when a new Production environment points at plain HTTP.</p>
-            <div class="form-section__body">
-                <div class="form-field">
-                    <label asp-for="HttpExceptionReason">
-                        @Html.DisplayNameFor(model => model.HttpExceptionReason)
-                        <span class="form-field__optional">Optional</span>
-                    </label>
-                    <textarea asp-for="HttpExceptionReason" rows="3" readonly="@(!Model.CanApproveHttp ? "readonly" : null)"></textarea>
-                    <span asp-validation-for="HttpExceptionReason"></span>
-                </div>
-            </div>
-        </fieldset>
+
     </div>
 </details>

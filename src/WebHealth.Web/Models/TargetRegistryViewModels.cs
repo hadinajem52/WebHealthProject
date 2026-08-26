@@ -61,7 +61,6 @@ public sealed class EndpointFormViewModel
     public Guid WebsiteId { get; set; }
     public string WebsiteName { get; set; } = string.Empty;
     public bool IsProduction { get; set; }
-    public bool CanApproveHttp { get; set; }
 
     [Required(ErrorMessage = "Enter the endpoint URL to watch, such as https://example.com/health.")]
     [StringLength(2048, ErrorMessage = "This URL is too long. Use 2048 characters or fewer.")]
@@ -76,10 +75,6 @@ public sealed class EndpointFormViewModel
 
     [Display(Name = "Run scheduled checks")]
     public bool SchedulingEnabled { get; set; } = true;
-
-    [StringLength(500, ErrorMessage = "This reason is too long. Use 500 characters or fewer.")]
-    [Display(Name = "Production HTTP exception reason")]
-    public string? HttpExceptionReason { get; set; }
 
     [Range(1, 1440,
         ErrorMessage = "Enter between 1 and 1440 minutes (24 hours), or leave blank for the default: "
@@ -208,10 +203,6 @@ public sealed class EndpointRegistrationFormViewModel : IValidatableObject
     [Display(Name = "Run scheduled checks")]
     public bool SchedulingEnabled { get; set; } = true;
 
-    [StringLength(500, ErrorMessage = "This reason is too long. Use 500 characters or fewer.")]
-    [Display(Name = "Production HTTP exception reason")]
-    public string? HttpExceptionReason { get; set; }
-
     [Range(1, 1440,
         ErrorMessage = "Enter between 1 and 1440 minutes (24 hours), or leave blank for the environment default.")]
     [Display(Name = "Monitoring interval override (minutes)")]
@@ -250,7 +241,6 @@ public sealed class EndpointRegistrationFormViewModel : IValidatableObject
     public int PageAuditIntervalHours { get; set; } = PageAuditCadence.DefaultIntervalHours;
 
     public bool AdvancedSettingsOpen { get; set; }
-    public bool CanApproveHttp { get; set; }
     public bool CanConfigureInterval { get; set; }
     public IReadOnlyList<ClientListItem> Clients { get; set; } = [];
     public IReadOnlyList<WebsiteListItem> Websites { get; set; } = [];
