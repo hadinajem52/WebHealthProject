@@ -162,7 +162,7 @@ public sealed class EndpointRegistrationFormViewModel : IValidatableObject
 
     [StringLength(200, ErrorMessage = "This name is too long. Use 200 characters or fewer.")]
     [Display(Name = "Client name")]
-    public string ClientName { get; set; } = string.Empty;
+    public string? ClientName { get; set; }
 
     [Display(Name = "Client owner")]
     public Guid? ClientOwnerSubjectId { get; set; }
@@ -173,7 +173,7 @@ public sealed class EndpointRegistrationFormViewModel : IValidatableObject
 
     [StringLength(200, ErrorMessage = "This name is too long. Use 200 characters or fewer.")]
     [Display(Name = "Website name")]
-    public string WebsiteName { get; set; } = string.Empty;
+    public string? WebsiteName { get; set; }
 
     [Display(Name = "Website owner")]
     public Guid? WebsiteOwnerSubjectId { get; set; }
@@ -189,7 +189,7 @@ public sealed class EndpointRegistrationFormViewModel : IValidatableObject
 
     [StringLength(200, ErrorMessage = "This name is too long. Use 200 characters or fewer.")]
     [Display(Name = "Environment name")]
-    public string EnvironmentName { get; set; } = string.Empty;
+    public string? EnvironmentName { get; set; }
 
     [Display(Name = "Environment type")]
     public string EnvironmentType { get; set; } = EnvironmentTypes.Production;

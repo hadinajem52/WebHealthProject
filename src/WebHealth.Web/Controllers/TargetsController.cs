@@ -549,7 +549,7 @@ public sealed class TargetsController(
             EndpointRegistrationModes.NewClient =>
                 new NewClient(
                     new EndpointRegistrationClient(
-                        model.ClientName,
+                        Required(model.ClientName),
                         Required(model.ClientOwnerSubjectId),
                         model.ClientNotes),
                     BuildWebsite(model),
@@ -559,14 +559,14 @@ public sealed class TargetsController(
 
     private static EndpointRegistrationWebsite BuildWebsite(
         EndpointRegistrationFormViewModel model) => new(
-        model.WebsiteName,
+        Required(model.WebsiteName),
         Required(model.WebsiteOwnerSubjectId),
         model.WebsiteTechnologyCms,
         TagNormalizer.Split(model.WebsiteTags));
 
     private static EndpointRegistrationEnvironment BuildEnvironment(
         EndpointRegistrationFormViewModel model) => new(
-        model.EnvironmentName,
+        Required(model.EnvironmentName),
         model.EnvironmentType,
         model.EnvironmentBaseUrl);
 
@@ -598,6 +598,9 @@ public sealed class TargetsController(
             : message;
 
     private static Guid Required(Guid? value) =>
+        value ?? throw new InvalidOperationException("A validated registration field is missing.");
+
+    private static string Required(string? value) =>
         value ?? throw new InvalidOperationException("A validated registration field is missing.");
 
     private async Task<EndpointFormViewModel> BuildEndpointFormAsync(EndpointFormViewModel model, CancellationToken cancellationToken)
