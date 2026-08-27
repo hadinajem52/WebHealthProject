@@ -71,26 +71,32 @@ public sealed class PngAuditExecutionService(
             return;
         }
 
-        var started = timeProvider.GetTimestamp();
         var snapshot = claim.Snapshot;
+        var runDeadline = claim.StartedAt + snapshot.DiscoveryProfile.Fetch.MaxDuration;
         var scope = new PngSiteDiscoveryScope(
             target.SeedUrl!,
             snapshot.AllowedPageHosts,
             snapshot.AllowedPagePathPrefixes,
             snapshot.AllowedAssetHosts,
             snapshot.UrlOptions);
+        var stored = await runReader.ReadProgressAsync(claim.RunId, cancellationToken);
         var discovery = await crawler.DiscoverAsync(
             new(
                 claim.RunId,
                 snapshot.EndpointId,
                 snapshot.IsProduction,
                 scope,
-                snapshot.DiscoveryProfile),
+                snapshot.DiscoveryProfile)
+            {
+                ConsumedHttpAttempts = stored.HttpAttempts,
+                ConsumedPageBytes = stored.TotalPageBytes,
+                RunDeadline = runDeadline
+            },
             cancellationToken);
         ThrowIfLeaseLost(lease);
 
         var coverage = new PngCoverageTracker(discovery.CoverageReasons);
-        var stored = await runReader.ReadProgressAsync(claim.RunId, cancellationToken);
+        var pagesDiscovered = Math.Max(stored.PagesDiscovered, discovery.Pages.Count);
         var discoveredNewImages = discovery.Images
             .Where(image => !stored.ImageIdentityHashes.Contains(image.IdentityHash))
             .ToArray();
@@ -134,18 +140,19 @@ public sealed class PngAuditExecutionService(
             .Where(image => stored.ImageIdentityHashes.Contains(image.IdentityHash))
             .SelectMany(image => MappingsFor(image.IdentityHash, mappingsByImage))
             .ToArray();
-        await RecordAsync(
-            claim,
-            new([], existingMappings, discovery.Skips, coverage.Records),
-            cancellationToken);
-
         var httpAttempts = discovery.HttpAttempts;
         var totalImageBytes = stored.TotalImageBytes;
+        PngAuditCrawlProgress Progress() =>
+            new(pagesDiscovered, httpAttempts, discovery.TotalPageBytes);
+        await RecordAsync(
+            claim,
+            new([], existingMappings, discovery.Skips, coverage.Records, Progress()),
+            cancellationToken);
+
         for (var index = 0; index < newImages.Length; index++)
         {
             ThrowIfLeaseLost(lease);
-            var remainingDuration = snapshot.DiscoveryProfile.Fetch.MaxDuration
-                - timeProvider.GetElapsedTime(started);
+            var remainingDuration = runDeadline - timeProvider.GetUtcNow();
             if (remainingDuration <= TimeSpan.Zero)
             {
                 coverage.Add(PngCoverageArea.ImageAnalysis, PngCoverageReasonCode.DurationLimit);
@@ -155,6 +162,7 @@ public sealed class PngAuditExecutionService(
                     mappingsByImage,
                     PngCoverageReasonCode.DurationLimit.ToString(),
                     coverage,
+                    Progress(),
                     cancellationToken);
                 break;
             }
@@ -167,6 +175,7 @@ public sealed class PngAuditExecutionService(
                     mappingsByImage,
                     PngCoverageReasonCode.HttpAttemptLimit.ToString(),
                     coverage,
+                    Progress(),
                     cancellationToken);
                 break;
             }
@@ -181,6 +190,7 @@ public sealed class PngAuditExecutionService(
                     mappingsByImage,
                     PngCoverageReasonCode.TotalImageBytesLimit.ToString(),
                     coverage,
+                    Progress(),
                     cancellationToken);
                 break;
             }
@@ -199,10 +209,17 @@ public sealed class PngAuditExecutionService(
                     snapshot.IsProduction,
                     Math.Min(SafeHttpTransportDefaults.MaxRedirects, remainingAttempts - 1),
                     checked((int)Math.Min(snapshot.AnalysisLimits.MaxEncodedBytes, remainingBytes)),
-                    snapshot.DiscoveryProfile.Fetch.TimeoutSeconds,
-                    snapshot.DiscoveryProfile.Fetch.RequestsPerSecondPerHost)
+                    snapshot.DiscoveryProfile.Fetch.TimeoutSeconds)
                 {
-                    HopPolicy = new PngAssetRedirectPolicy(snapshot.AllowedAssetHosts)
+                    HopPolicy = new PngAssetRedirectPolicy(snapshot.AllowedAssetHosts),
+                    RequestsPerSecondPerHost =
+                        snapshot.DiscoveryProfile.Fetch.RequestsPerSecondPerHost,
+                    MaxOutboundRequests = remainingAttempts,
+                    TransientRetryCount = Math.Max(
+                        0,
+                        Math.Min(
+                            snapshot.DiscoveryProfile.Fetch.TransientRetryCount,
+                            remainingAttempts - 1))
                 },
                 operation.Token);
             httpAttempts = checked(httpAttempts + response.OutboundRequestCount);
@@ -256,7 +273,8 @@ public sealed class PngAuditExecutionService(
                     [record],
                     MappingsFor(image.IdentityHash, mappingsByImage),
                     [],
-                    coverage.Records),
+                    coverage.Records,
+                    Progress()),
                 cancellationToken);
 
             if (deadline.IsCancellationRequested)
@@ -267,6 +285,7 @@ public sealed class PngAuditExecutionService(
                     mappingsByImage,
                     PngCoverageReasonCode.DurationLimit.ToString(),
                     coverage,
+                    Progress(),
                     cancellationToken);
                 break;
             }
@@ -284,7 +303,7 @@ public sealed class PngAuditExecutionService(
             claim.RunId,
             claim.LeaseToken,
             new(
-                discovery.Pages.Count,
+                pagesDiscovered,
                 finalProgress.ImageCount,
                 finalProgress.AnalyzedCount,
                 finalProgress.RecommendationCount,
@@ -380,6 +399,7 @@ public sealed class PngAuditExecutionService(
         IReadOnlyDictionary<string, IReadOnlyList<PngImageSourceMapping>> mappingsByImage,
         string reasonCode,
         PngCoverageTracker coverage,
+        PngAuditCrawlProgress crawlProgress,
         CancellationToken cancellationToken)
     {
         if (images.Count == 0) return;
@@ -391,7 +411,8 @@ public sealed class PngAuditExecutionService(
                     reasonCode)).ToArray(),
                 images.SelectMany(image => MappingsFor(image.IdentityHash, mappingsByImage)).ToArray(),
                 [],
-                coverage.Records),
+                coverage.Records,
+                crawlProgress),
             cancellationToken);
     }
 

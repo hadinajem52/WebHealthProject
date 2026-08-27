@@ -28,9 +28,6 @@ internal sealed class PngSiteCrawler(
 
 internal sealed class PngSiteDiscoveryExecution
 {
-    private static readonly TimeSpan RetryBaseDelay = TimeSpan.FromMilliseconds(250);
-    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromSeconds(30);
-
     private readonly PngSiteCrawlRequest _request;
     private readonly ISiteAnalysisFetcher _fetcher;
     private readonly IHtmlDocumentDiscoveryExtractor _discoveryExtractor;
@@ -66,6 +63,8 @@ internal sealed class PngSiteDiscoveryExecution
         _robotsReader = robotsReader;
         _userAgent = userAgent;
         _timeProvider = timeProvider;
+        _httpAttempts = Math.Max(0, request.ConsumedHttpAttempts);
+        _totalPageBytes = Math.Max(0, request.ConsumedPageBytes);
 
         var seed = CrawlUrlNormalizer.Normalize(request.Scope.SeedUrl, request.Scope.UrlOptions).Url
             ?? throw new ArgumentException("The PNG discovery seed URL is invalid.", nameof(request));
@@ -86,13 +85,15 @@ internal sealed class PngSiteDiscoveryExecution
         });
         _assetScope = new(request.Scope.AllowedAssetHosts);
         _imageLedger = new(request.Profile.Images);
-        _deadline = timeProvider.GetUtcNow() + request.Profile.Fetch.MaxDuration;
+        _deadline = request.RunDeadline
+            ?? timeProvider.GetUtcNow() + request.Profile.Fetch.MaxDuration;
     }
 
     public async Task<PngSiteDiscoveryResult> RunAsync(CancellationToken cancellationToken)
     {
+        var remainingDuration = _deadline - _timeProvider.GetUtcNow();
         using var deadlineCancellation = new CancellationTokenSource(
-            _request.Profile.Fetch.MaxDuration,
+            remainingDuration > TimeSpan.Zero ? remainingDuration : TimeSpan.Zero,
             _timeProvider);
         using var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
@@ -223,8 +224,8 @@ internal sealed class PngSiteDiscoveryExecution
             _request.Profile.Fetch.TimeoutSeconds,
             _request.Profile.Fetch.RequestsPerSecondPerHost,
             retries,
-            RetryBaseDelay,
-            MaxRetryDelay);
+            PngAuditFetchRetry.BaseDelay,
+            PngAuditFetchRetry.MaxDelay);
         return await _fetcher.FetchAsync(
             new(_request.RunId, _request.EndpointId, url.Value, _request.IsProduction)
             {

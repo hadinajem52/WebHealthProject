@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WebHealth.Application.PngAudits;
 using WebHealth.Domain.Crawling;
-using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Domain.PngAudits;
 using WebHealth.Infrastructure.Persistence;
 using WebHealth.Infrastructure.Registry;
 
@@ -64,6 +64,9 @@ internal sealed record PngAuditExecutionTarget(
 
 internal sealed record PngAuditStoredProgress(
     IReadOnlySet<string> ImageIdentityHashes,
+    int PagesDiscovered,
+    int HttpAttempts,
+    long TotalPageBytes,
     int ImageCount,
     int AnalyzedCount,
     int RecommendationCount,
@@ -115,6 +118,15 @@ public sealed class PngAuditQueuedRunReader(ApplicationDbContext database)
         Guid runId,
         CancellationToken cancellationToken)
     {
+        var run = await database.PngAuditRuns.AsNoTracking()
+            .Where(candidate => candidate.Id == runId)
+            .Select(candidate => new
+            {
+                candidate.PagesDiscovered,
+                candidate.HttpAttempts,
+                candidate.TotalPageBytes
+            })
+            .SingleAsync(cancellationToken);
         var images = database.PngAuditImageResults.AsNoTracking()
             .Where(result => result.RunId == runId);
         var storedImages = await images
@@ -140,27 +152,30 @@ public sealed class PngAuditQueuedRunReader(ApplicationDbContext database)
             storedImages
                 .Select(image => Convert.ToHexString(image.Hash).ToLowerInvariant())
                 .ToHashSet(StringComparer.Ordinal),
+            run.PagesDiscovered,
+            run.HttpAttempts,
+            run.TotalPageBytes,
             storedImages.Length,
             storedImages.Count(image =>
-                image.Classification != WebHealth.Domain.PngAudits.PngAuditImageClassifications.FetchFailed
-                && image.Classification != WebHealth.Domain.PngAudits.PngAuditImageClassifications.HttpNonSuccess
-                && image.Classification != WebHealth.Domain.PngAudits.PngAuditImageClassifications.ResponseTruncated),
+                image.Classification != PngAuditImageClassifications.FetchFailed
+                && image.Classification != PngAuditImageClassifications.HttpNonSuccess
+                && image.Classification != PngAuditImageClassifications.ResponseTruncated),
             storedImages.Count(image =>
-                image.Recommendation == WebHealth.Domain.PngAudits.PngAuditRecommendations.LosslessWebp),
+                image.Recommendation == PngAuditRecommendations.LosslessWebp),
             discoverySkipCount,
             sourceMappingCount,
             storedImages.Sum(image => image.ResponseBytes),
             storedImages.Any(image => image.Classification is
-                WebHealth.Domain.PngAudits.PngAuditImageClassifications.FetchFailed
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.HttpNonSuccess
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.ResponseTruncated
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.IdentificationFailed
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.UnsupportedBitDepth
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.DimensionsExceeded
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.PixelLimitExceeded
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.DecodedMemoryExceeded
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.DecodeFailed
-                or WebHealth.Domain.PngAudits.PngAuditImageClassifications.WebpComparisonFailed),
+                PngAuditImageClassifications.FetchFailed
+                or PngAuditImageClassifications.HttpNonSuccess
+                or PngAuditImageClassifications.ResponseTruncated
+                or PngAuditImageClassifications.IdentificationFailed
+                or PngAuditImageClassifications.UnsupportedBitDepth
+                or PngAuditImageClassifications.DimensionsExceeded
+                or PngAuditImageClassifications.PixelLimitExceeded
+                or PngAuditImageClassifications.DecodedMemoryExceeded
+                or PngAuditImageClassifications.DecodeFailed
+                or PngAuditImageClassifications.WebpComparisonFailed),
             coverageAreas.Contains(PngCoverageArea.Crawl.ToString(), StringComparer.Ordinal),
             coverageAreas.Contains(PngCoverageArea.ImageAnalysis.ToString(), StringComparer.Ordinal),
             coverageAreas.Contains(PngCoverageArea.SourceMappings.ToString(), StringComparer.Ordinal));

@@ -10,7 +10,8 @@ internal sealed class PngImageTransport(
     SafeHttpTransport transport,
     SiteAnalysisRequestBudget requestBudget,
     SiteAnalysisHostRateLimiter rateLimiter,
-    PngImageRequestGate imageRequestGate) : IPngImageTransport
+    PngImageRequestGate imageRequestGate,
+    TimeProvider timeProvider) : IPngImageTransport
 {
     public async Task<SafeHttpTransportResult> SendAsync(
         PngImageTransportRequest request,
@@ -22,31 +23,65 @@ internal sealed class PngImageTransport(
         {
             throw new ArgumentOutOfRangeException(nameof(request));
         }
-
-        var normalized = EndpointUrlNormalizer.Normalize(request.Url);
-        if (normalized.Succeeded)
+        if (request.TransientRetryCount < 0 || request.MaxOutboundRequests < 1)
         {
-            await rateLimiter.WaitAsync(
-                normalized.NormalizedHost!,
-                request.RequestsPerSecondPerHost,
-                cancellationToken);
+            throw new ArgumentOutOfRangeException(nameof(request));
         }
 
+        var normalized = EndpointUrlNormalizer.Normalize(request.Url);
+        var host = normalized.Succeeded ? normalized.NormalizedHost : null;
+
         using (await imageRequestGate.AcquireAsync(cancellationToken))
-        using (await requestBudget.AcquireAsync(cancellationToken))
         {
-            return await transport.SendExtendedAsync(
-                new(
+            var outboundRequestCount = 0;
+            for (var attempt = 0; ; attempt++)
+            {
+                var remainingRequests = request.MaxOutboundRequests - outboundRequestCount;
+                if (host is not null)
+                {
+                    await rateLimiter.WaitAsync(
+                        host,
+                        request.RequestsPerSecondPerHost,
+                        cancellationToken);
+                }
+
+                SafeHttpTransportResult response;
+                using (await requestBudget.AcquireAsync(cancellationToken))
+                {
+                    response = await transport.SendExtendedAsync(
+                        new(
+                            request.EndpointId,
+                            request.Url,
+                            request.IsProduction,
+                            Math.Min(request.MaxRedirects, remainingRequests - 1),
+                            request.MaxResponseBodyBytes,
+                            request.TimeoutSeconds)
+                        {
+                            HopPolicy = new RateLimitedHopPolicy(request, rateLimiter)
+                        },
+                        cancellationToken);
+                }
+
+                outboundRequestCount = checked(outboundRequestCount + response.OutboundRequestCount);
+                if (attempt >= request.TransientRetryCount
+                    || outboundRequestCount >= request.MaxOutboundRequests
+                    || !SiteAnalysisRetryPolicy.IsTransient(response))
+                {
+                    return response with { OutboundRequestCount = outboundRequestCount };
+                }
+
+                var delay = SiteAnalysisRetryPolicy.Delay(
                     request.EndpointId,
                     request.Url,
-                    request.IsProduction,
-                    request.MaxRedirects,
-                    request.MaxResponseBodyBytes,
-                    request.TimeoutSeconds)
+                    attempt,
+                    response.RetryAfter,
+                    PngAuditFetchRetry.BaseDelay,
+                    PngAuditFetchRetry.MaxDelay);
+                if (delay > TimeSpan.Zero)
                 {
-                    HopPolicy = new RateLimitedHopPolicy(request, rateLimiter)
-                },
-                cancellationToken);
+                    await Task.Delay(delay, timeProvider, cancellationToken);
+                }
+            }
         }
     }
 

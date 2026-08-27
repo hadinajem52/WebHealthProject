@@ -10,7 +10,8 @@ public interface IPngImageAnalyzer
         ReadOnlyMemory<byte> encodedImage,
         PngImageAnalysisLimits limits,
         PngRecommendationThresholds recommendationThresholds,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default) =>
+        AnalyzeAsync(encodedImage, cancellationToken);
 }
 
 public enum PngImageAnalysisClassification

@@ -308,14 +308,35 @@ public sealed record PngAuditImageRecord
     }
 }
 
+public sealed record PngAuditCrawlProgress
+{
+    public PngAuditCrawlProgress(int pagesDiscovered, int httpAttempts, long totalPageBytes)
+    {
+        if (pagesDiscovered < 0 || httpAttempts < 0 || totalPageBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pagesDiscovered));
+        }
+
+        PagesDiscovered = pagesDiscovered;
+        HttpAttempts = httpAttempts;
+        TotalPageBytes = totalPageBytes;
+    }
+
+    public int PagesDiscovered { get; }
+    public int HttpAttempts { get; }
+    public long TotalPageBytes { get; }
+}
+
 public sealed record PngAuditResultBatch
 {
     public PngAuditResultBatch(
         IReadOnlyList<PngAuditImageRecord> images,
         IReadOnlyList<PngImageSourceMapping> sourceMappings,
         IReadOnlyList<PngDiscoverySkip> discoverySkips,
-        IReadOnlyList<PngCoverageReason> coverageReasons)
+        IReadOnlyList<PngCoverageReason> coverageReasons,
+        PngAuditCrawlProgress crawlProgress)
     {
+        ArgumentNullException.ThrowIfNull(crawlProgress);
         ArgumentNullException.ThrowIfNull(images);
         ArgumentNullException.ThrowIfNull(sourceMappings);
         ArgumentNullException.ThrowIfNull(discoverySkips);
@@ -332,12 +353,14 @@ public sealed record PngAuditResultBatch
         SourceMappings = [.. sourceMappings];
         DiscoverySkips = [.. discoverySkips];
         CoverageReasons = [.. coverageReasons];
+        CrawlProgress = crawlProgress;
     }
 
     public IReadOnlyList<PngAuditImageRecord> Images { get; }
     public IReadOnlyList<PngImageSourceMapping> SourceMappings { get; }
     public IReadOnlyList<PngDiscoverySkip> DiscoverySkips { get; }
     public IReadOnlyList<PngCoverageReason> CoverageReasons { get; }
+    public PngAuditCrawlProgress CrawlProgress { get; }
 }
 
 public sealed record PngAuditRunTotals

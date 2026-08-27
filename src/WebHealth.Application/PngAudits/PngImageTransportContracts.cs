@@ -15,10 +15,15 @@ public sealed record PngImageTransportRequest(
     bool IsProduction,
     int MaxRedirects = SafeHttpTransportDefaults.MaxRedirects,
     int MaxResponseBodyBytes = SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes,
-    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds,
-    double RequestsPerSecondPerHost = 1)
+    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds)
 {
     public ISafeHttpRequestHopPolicy? HopPolicy { get; init; }
+
+    public double RequestsPerSecondPerHost { get; init; } = 1;
+
+    public int TransientRetryCount { get; init; }
+
+    public int MaxOutboundRequests { get; init; } = SafeHttpTransportDefaults.MaxRedirects + 1;
 }
 
 public enum PngImageFetchClassification

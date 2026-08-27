@@ -81,6 +81,9 @@ internal static class PngAuditPersistenceAssertions
         partial.ImagesAnalyzed.Should().Be(12);
         partial.RecommendationCount.Should().Be(1);
         partial.DiscoverySkipCount.Should().Be(5);
+        partial.PagesDiscovered.Should().Be(3);
+        partial.HttpAttempts.Should().Be(18, "run-level crawl budgets are checkpointed with results");
+        partial.TotalPageBytes.Should().Be(4096);
         partial.TotalImageBytes.Should().Be(batch.Images.Sum(image => image.ResponseBytes));
         partial.CrawlCoverageLimited.Should().BeTrue();
         partial.ImageAnalysisCoverageLimited.Should().BeTrue();
@@ -146,6 +149,8 @@ internal static class PngAuditPersistenceAssertions
             testGate,
             endpointId,
             access);
+        await VerifyLeaseRecoveryBudgetCarryOverAsync(
+            database, sink, endpointId, administratorId, endpointUrl);
         await VerifyEndToEndExecutionAsync(
             database,
             sink,
@@ -340,7 +345,8 @@ internal static class PngAuditPersistenceAssertions
             [
                 new(PngCoverageArea.Crawl, PngCoverageReasonCode.PageLimit, 2),
                 new(PngCoverageArea.ImageAnalysis, PngCoverageReasonCode.TotalImageBytesLimit, 1)
-            ]);
+            ],
+            new(3, 18, 4096));
     }
 
     private static PngAuditResultBatch CollisionBatch(byte[] imageIdentityHash, string endpointUrl)
@@ -362,7 +368,8 @@ internal static class PngAuditPersistenceAssertions
                 new(sourceUrl, sourceHash, "NullDescriptor", null, "D", PngDiscoverySkipReason.DataUrl),
                 new(sourceUrl, sourceHash, "NullDescriptor", string.Empty, "D", PngDiscoverySkipReason.DataUrl)
             ],
-            []);
+            [],
+            new(3, 18, 4096));
     }
 
     private static async Task VerifyBoundaryHardeningAsync(
@@ -404,7 +411,8 @@ internal static class PngAuditPersistenceAssertions
             [image],
             [new(image.Image.IdentityHash, sourceUrl, Hash(sourceUrl), "ImgSrc", null)],
             [new(sourceUrl, Hash(sourceUrl), "ImgSrc", null, rawValue, PngDiscoverySkipReason.MalformedUrl)],
-            []);
+            [],
+            new(1, 1, 0));
         (await sink.RecordBatchAsync(runId, claim.LeaseToken, batch)).Should().BeTrue();
 
         database.ChangeTracker.Clear();
@@ -532,6 +540,81 @@ internal static class PngAuditPersistenceAssertions
         failed.FailureCode.Should().Be(PngAuditFailureCodes.WorkerUnavailable);
     }
 
+    private static async Task VerifyLeaseRecoveryBudgetCarryOverAsync(
+        ApplicationDbContext database,
+        IPngAuditResultSink sink,
+        Guid endpointId,
+        Guid administratorId,
+        string endpointUrl)
+    {
+        var isProduction = await database.Endpoints.AsNoTracking()
+            .Where(endpoint => endpoint.Id == endpointId)
+            .Select(endpoint => endpoint.Environment.IsProduction)
+            .SingleAsync();
+        var seedUrl = CrawlUrlNormalizer.Normalize(endpointUrl, CrawlUrlOptions.Default).Url!.Value;
+        var snapshot = Snapshot(endpointId, seedUrl, isProduction: isProduction);
+        var runId = Guid.NewGuid();
+        await sink.CreateQueuedRunAsync(new(
+            runId,
+            PngAuditSources.Manual,
+            administratorId,
+            snapshot,
+            DateTimeOffset.UtcNow));
+
+        var abandoned = await sink.TryClaimAsync(runId);
+        abandoned.Should().NotBeNull();
+        (await sink.RecordBatchAsync(
+            runId,
+            abandoned!.LeaseToken,
+            new([], [], [], [], new(5, 40, 100_000)))).Should().BeTrue();
+
+        await database.PngAuditRuns
+            .Where(run => run.Id == runId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(run => run.LeaseExpiresAt, DateTimeOffset.UtcNow.AddMinutes(-1)));
+        database.ChangeTracker.Clear();
+        var expired = await database.PngAuditRuns.AsNoTracking().SingleAsync(run => run.Id == runId);
+        expired.HttpAttempts.Should().Be(40, "the abandoned attempt checkpointed its crawl budget");
+        expired.TotalPageBytes.Should().Be(100_000);
+        expired.PagesDiscovered.Should().Be(5);
+
+        var crawler = new RecordingPngCrawler(new(
+            [new(seedUrl, Hash(seedUrl), 0)],
+            [],
+            [],
+            [],
+            [],
+            42,
+            100_128));
+        var execution = new PngAuditExecutionService(
+            sink,
+            new PngAuditQueuedRunReader(database),
+            crawler,
+            new CompletedPngImageTransport(seedUrl),
+            new SnapshotPngAnalyzer(),
+            new PngAuditOptions(),
+            TimeProvider.System,
+            NullLogger<PngAuditExecutionService>.Instance);
+
+        await execution.ExecuteAsync(runId, CancellationToken.None);
+
+        crawler.Request.Should().NotBeNull("the expired lease must be reclaimed");
+        crawler.Request!.ConsumedHttpAttempts.Should().Be(
+            40, "a recovered attempt may only spend the remaining HTTP budget");
+        crawler.Request.ConsumedPageBytes.Should().Be(
+            100_000, "a recovered attempt may only spend the remaining page-byte budget");
+        crawler.Request.RunDeadline.Should().Be(
+            expired.StartedAt!.Value + snapshot.DiscoveryProfile.Fetch.MaxDuration,
+            "the wall-clock budget runs from the original start, not from the new attempt");
+
+        database.ChangeTracker.Clear();
+        var completed = await database.PngAuditRuns.AsNoTracking().SingleAsync(run => run.Id == runId);
+        completed.AttemptCount.Should().Be(2);
+        completed.HttpAttempts.Should().Be(42, "run totals stay cumulative across attempts");
+        completed.TotalPageBytes.Should().Be(100_128);
+        completed.PagesDiscovered.Should().Be(5, "the recovered crawl re-walked the same page space");
+    }
+
     private static async Task VerifyEndToEndExecutionAsync(
         ApplicationDbContext database,
         IPngAuditResultSink sink,
@@ -614,6 +697,19 @@ internal static class PngAuditPersistenceAssertions
     private sealed class FailingPngAuditQueue : IPngAuditRunQueue
     {
         public void Enqueue(Guid runId) => throw new InvalidOperationException("Queue unavailable.");
+    }
+
+    private sealed class RecordingPngCrawler(PngSiteDiscoveryResult result) : IPngSiteCrawler
+    {
+        public PngSiteCrawlRequest? Request { get; private set; }
+
+        public Task<PngSiteDiscoveryResult> DiscoverAsync(
+            PngSiteCrawlRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Request = request;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class CompletedPngCrawler(PngSiteDiscoveryResult result) : IPngSiteCrawler

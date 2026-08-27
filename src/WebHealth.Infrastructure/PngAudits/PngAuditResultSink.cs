@@ -265,8 +265,9 @@ internal sealed class PngAuditResultSink(
 
         await database.SaveChangesAsync(cancellationToken);
         var persisted = await ReadPersistedTotalsAsync(database, runId, cancellationToken);
-        ValidatePersistedLimits(persisted, persistencePolicy);
-        await UpdatePartialSummariesAsync(database, runId, leaseToken, persisted, cancellationToken);
+        ValidatePersistedLimits(persisted, batch.CrawlProgress, persistencePolicy);
+        await UpdatePartialSummariesAsync(
+            database, runId, leaseToken, persisted, batch.CrawlProgress, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return true;
     }
@@ -613,7 +614,10 @@ internal sealed class PngAuditResultSink(
                 run.MaxUniqueImages,
                 run.MaxTotalImageSourceMappings,
                 run.MaxImageBytes,
-                run.MaxTotalImageBytes
+                run.MaxTotalImageBytes,
+                run.MaxPages,
+                run.MaxTotalHttpAttempts,
+                run.MaxTotalPageBytes
             })
             .SingleAsync(cancellationToken);
         return new(
@@ -621,7 +625,10 @@ internal sealed class PngAuditResultSink(
             stored.MaxUniqueImages,
             stored.MaxTotalImageSourceMappings,
             stored.MaxImageBytes,
-            stored.MaxTotalImageBytes);
+            stored.MaxTotalImageBytes,
+            stored.MaxPages,
+            stored.MaxTotalHttpAttempts,
+            stored.MaxTotalPageBytes);
     }
 
     private static CrawlUrlOptions ToUrlOptions(PersistedUrlOptions stored) => new()
@@ -676,12 +683,16 @@ internal sealed class PngAuditResultSink(
 
     private static void ValidatePersistedLimits(
         PersistedResultTotals persisted,
+        PngAuditCrawlProgress crawlProgress,
         PngRunPersistencePolicy policy)
     {
         if (persisted.ImageCount > policy.MaxUniqueImages
             || persisted.SourceMappingCount > policy.MaxTotalImageSourceMappings
             || persisted.MaximumImageBytes > policy.MaxImageBytes
-            || persisted.TotalImageBytes > policy.MaxTotalImageBytes)
+            || persisted.TotalImageBytes > policy.MaxTotalImageBytes
+            || crawlProgress.PagesDiscovered > policy.MaxPages
+            || crawlProgress.HttpAttempts > policy.MaxTotalHttpAttempts
+            || crawlProgress.TotalPageBytes > policy.MaxTotalPageBytes)
         {
             throw new InvalidOperationException("PNG audit results exceed the snapshotted limits.");
         }
@@ -692,6 +703,7 @@ internal sealed class PngAuditResultSink(
         Guid runId,
         Guid leaseToken,
         PersistedResultTotals persisted,
+        PngAuditCrawlProgress crawlProgress,
         CancellationToken cancellationToken)
     {
         var updated = await database.PngAuditRuns
@@ -699,6 +711,9 @@ internal sealed class PngAuditResultSink(
                 && run.Status == PngAuditRunStatuses.Running
                 && run.LeaseToken == leaseToken)
             .ExecuteUpdateAsync(setters => setters
+                .SetProperty(run => run.PagesDiscovered, crawlProgress.PagesDiscovered)
+                .SetProperty(run => run.HttpAttempts, crawlProgress.HttpAttempts)
+                .SetProperty(run => run.TotalPageBytes, crawlProgress.TotalPageBytes)
                 .SetProperty(run => run.ImagesDiscovered, persisted.ImageCount)
                 .SetProperty(run => run.ImagesAnalyzed, persisted.AnalyzedCount)
                 .SetProperty(run => run.RecommendationCount, persisted.RecommendationCount)
@@ -792,7 +807,10 @@ internal sealed class PngAuditResultSink(
         int MaxUniqueImages,
         int MaxTotalImageSourceMappings,
         int MaxImageBytes,
-        long MaxTotalImageBytes);
+        long MaxTotalImageBytes,
+        int MaxPages,
+        int MaxTotalHttpAttempts,
+        long MaxTotalPageBytes);
 
     private sealed record PngRunCompletionPolicy(
         int MaxPages,

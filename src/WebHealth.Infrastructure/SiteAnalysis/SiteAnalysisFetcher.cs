@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.SiteAnalysis;
 
@@ -32,7 +30,8 @@ internal sealed class SiteAnalysisFetcher(
             outboundRequestCount = checked(outboundRequestCount + response.OutboundRequestCount);
             var redirectBudgetReached = response.Failure == SafeHttpFailureKind.RedirectLimit
                 && remainingRequests <= SafeHttpTransportDefaults.MaxRedirects;
-            if (attempt >= profile.TransientRetryCount || !IsTransient(response))
+            if (attempt >= profile.TransientRetryCount
+                || !SiteAnalysisRetryPolicy.IsTransient(response))
             {
                 return new(response, attempt + 1, outboundRequestCount, redirectBudgetReached);
             }
@@ -81,47 +80,18 @@ internal sealed class SiteAnalysisFetcher(
         int attempt,
         CancellationToken cancellationToken)
     {
-        var delay = RetryDelay(request, profile, response.RetryAfter, attempt);
+        var delay = SiteAnalysisRetryPolicy.Delay(
+            request.ExecutionId,
+            request.Url,
+            attempt,
+            response.RetryAfter,
+            profile.RetryBaseDelay,
+            profile.MaxRetryDelay);
         if (delay > TimeSpan.Zero)
         {
             await Task.Delay(delay, timeProvider, cancellationToken);
         }
     }
-
-    private static TimeSpan RetryDelay(
-        SiteAnalysisFetchRequest request,
-        SiteAnalysisFetchProfile profile,
-        TimeSpan? retryAfter,
-        int attempt)
-    {
-        if (retryAfter is { } requested)
-        {
-            return Min(requested, profile.MaxRetryDelay);
-        }
-
-        var multiplier = 1 << attempt;
-        var jitter = RetryJitter(request, attempt);
-        return Min(profile.RetryBaseDelay * multiplier + jitter, profile.MaxRetryDelay);
-    }
-
-    private static TimeSpan RetryJitter(SiteAnalysisFetchRequest request, int attempt)
-    {
-        var value = $"{request.ExecutionId:N}:{attempt}:{request.Url}";
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        return TimeSpan.FromMilliseconds(BitConverter.ToUInt32(bytes, 0) % 100);
-    }
-
-    private static TimeSpan Min(TimeSpan value, TimeSpan maximum) =>
-        value > maximum ? maximum : value;
-
-    private static bool IsTransient(SafeHttpTransportResult result) =>
-        result.StatusCode is 408 or 425 or 429 or >= 500
-        || result.Failure is SafeHttpFailureKind.NameResolution
-            or SafeHttpFailureKind.Connection
-            or SafeHttpFailureKind.Tls
-            or SafeHttpFailureKind.Timeout
-            or SafeHttpFailureKind.ResponseHeadersTooLarge
-            or SafeHttpFailureKind.Protocol;
 
     private sealed class RateLimitedHopPolicy(
         SiteAnalysisFetchRequest request,

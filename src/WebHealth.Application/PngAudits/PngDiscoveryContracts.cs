@@ -11,6 +11,13 @@ public interface IPngSiteCrawler
         CancellationToken cancellationToken = default);
 }
 
+public static class PngAuditFetchRetry
+{
+    public static readonly TimeSpan BaseDelay = TimeSpan.FromMilliseconds(250);
+
+    public static readonly TimeSpan MaxDelay = TimeSpan.FromSeconds(30);
+}
+
 public sealed record PngSiteCrawlRequest
 {
     public PngSiteCrawlRequest(
@@ -46,6 +53,12 @@ public sealed record PngSiteCrawlRequest
     public PngSiteDiscoveryScope Scope { get; }
 
     public PngSiteDiscoveryProfile Profile { get; }
+
+    public int ConsumedHttpAttempts { get; init; }
+
+    public long ConsumedPageBytes { get; init; }
+
+    public DateTimeOffset? RunDeadline { get; init; }
 }
 
 public sealed record PngSiteDiscoveryScope
