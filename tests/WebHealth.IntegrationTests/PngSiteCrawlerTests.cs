@@ -1,5 +1,4 @@
 using FluentAssertions;
-using WebHealth.Application.Crawling;
 using WebHealth.Application.PngAudits;
 using WebHealth.Application.SiteAnalysis;
 using WebHealth.Domain.Crawling;
@@ -151,45 +150,34 @@ public sealed class PngSiteCrawlerTests
     }
 
     [Fact]
-    public async Task DiscoverAsync_ReportsPageDepthAndRobotsCoverageLimits()
+    public async Task DiscoverAsync_ReportsPageAndDepthCoverageLimits()
     {
         var transport = new FakeSiteTransport()
             .Page(Seed,
                 "<html><body><a href=\"/app/one\">one</a>"
-                + "<a href=\"/app/two\">two</a><a href=\"/private\">private</a></body></html>")
+                + "<a href=\"/app/two\">two</a></body></html>")
             .Page("https://site.test/app/one",
                 "<html><body><a href=\"/app/deep\">deep</a></body></html>");
         var profile = Profile(maxPages: 2, maxDepth: 1);
-        var robots = new FakeRobotsReader(new(
-            true,
-            "User-agent: *\nDisallow: /private",
-            false));
 
-        var result = await DiscoverAsync(transport, profile, robotsReader: robots);
+        var result = await DiscoverAsync(transport, profile);
 
         result.Pages.Should().HaveCount(2);
         result.CoverageReasons.Should().Contain(reason => reason.Reason == PngCoverageReasonCode.PageLimit);
         result.CoverageReasons.Should().Contain(reason => reason.Reason == PngCoverageReasonCode.DepthLimit);
-        transport.Requested.Should().NotContain("https://site.test/private");
     }
 
     [Fact]
-    public async Task DiscoverAsync_DoesNotFetchARobotsDisallowedPage()
+    public async Task DiscoverAsync_FetchesAPageRobotsWouldHaveDisallowed()
     {
         var transport = new FakeSiteTransport()
             .Page(Seed, "<html><body><a href=\"/app/private\">private</a></body></html>")
             .Page("https://site.test/app/private", "<html></html>");
-        var robots = new FakeRobotsReader(new(
-            true,
-            "User-agent: *\nDisallow: /app/private",
-            false));
 
-        var result = await DiscoverAsync(transport, robotsReader: robots);
+        var result = await DiscoverAsync(transport);
 
-        result.Pages.Should().ContainSingle();
-        result.CoverageReasons.Should().ContainSingle(reason =>
-            reason.Reason == PngCoverageReasonCode.RobotsDisallowed);
-        transport.Requested.Should().Equal(Seed);
+        result.Pages.Should().HaveCount(2);
+        transport.Requested.Should().Contain("https://site.test/app/private");
     }
 
     [Fact]
@@ -290,7 +278,6 @@ public sealed class PngSiteCrawlerTests
         FakeSiteTransport transport,
         PngSiteDiscoveryProfile? profile = null,
         IReadOnlyList<CrawlHostRule>? assetHosts = null,
-        ICrawlRobotsReader? robotsReader = null,
         IHtmlDocumentDiscoveryExtractor? discoveryExtractor = null)
     {
         var timeProvider = TimeProvider.System;
@@ -300,26 +287,17 @@ public sealed class PngSiteCrawlerTests
             new SiteAnalysisRequestBudget(transportOptions),
             new SiteAnalysisHostRateLimiter(timeProvider),
             timeProvider);
-        var crawler = Crawler(
-            fetcher,
-            robotsReader,
-            transportOptions,
-            timeProvider,
-            discoveryExtractor);
+        var crawler = Crawler(fetcher, timeProvider, discoveryExtractor);
         return await crawler.DiscoverAsync(Request(profile ?? Profile(), assetHosts));
     }
 
     private static PngSiteCrawler Crawler(
         ISiteAnalysisFetcher fetcher,
-        ICrawlRobotsReader? robotsReader = null,
-        SafeHttpTransportOptions? transportOptions = null,
         TimeProvider? timeProvider = null,
         IHtmlDocumentDiscoveryExtractor? discoveryExtractor = null) =>
         new(
             fetcher,
             discoveryExtractor ?? new HtmlDocumentDiscoveryExtractor(),
-            robotsReader ?? new FakeRobotsReader(),
-            transportOptions ?? new SafeHttpTransportOptions(),
             timeProvider ?? TimeProvider.System);
 
     private static PngSiteCrawlRequest Request(

@@ -274,8 +274,12 @@ flowchart TD
 ```
 
 The HTTP-attempt budget counts every outbound exchange, including redirects and retries. The run
-deadline also applies while waiting for a rate-limit slot, waiting between retries, performing
-robots lookups, and making requests.
+deadline also applies while waiting for a rate-limit slot, waiting between retries, and making
+requests.
+
+The PNG crawler ignores `robots.txt` entirely. It never fetches or evaluates it, so a disallowed
+path is still crawled when it is inside the configured page scope. Page traversal is bounded by
+that scope and by the discovery limits below.
 
 ## 8. Bounded discovery
 

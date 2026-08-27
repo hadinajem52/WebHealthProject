@@ -14,7 +14,17 @@ public sealed record CrawlIndexViewModel(
     EndpointTestBlock RunBlock = EndpointTestBlock.None,
     bool CrawlingAvailable = true);
 
-public sealed record EndpointOption(Guid Id, string Label);
+public sealed record EndpointOption(Guid Id, string Label, string FullLabel)
+{
+    private const int LabelLimit = 70;
+
+    public static EndpointOption For(RegistryEndpointItem endpoint)
+    {
+        var full = $"{endpoint.WebsiteName} · {endpoint.EnvironmentName} · {endpoint.DisplayUrl}";
+        var label = full.Length <= LabelLimit ? full : $"{full[..LabelLimit].TrimEnd()}…";
+        return new(endpoint.Id, label, full);
+    }
+}
 
 public sealed record CrawlRunViewModel(
     CrawlRunSummary Run,

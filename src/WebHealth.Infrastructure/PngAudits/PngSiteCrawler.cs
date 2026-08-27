@@ -1,17 +1,13 @@
-using WebHealth.Application.Crawling;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.PngAudits;
 using WebHealth.Application.SiteAnalysis;
 using WebHealth.Domain.Crawling;
-using WebHealth.Infrastructure.Monitoring;
 
 namespace WebHealth.Infrastructure.PngAudits;
 
 internal sealed class PngSiteCrawler(
     ISiteAnalysisFetcher fetcher,
     IHtmlDocumentDiscoveryExtractor discoveryExtractor,
-    ICrawlRobotsReader robotsReader,
-    SafeHttpTransportOptions transportOptions,
     TimeProvider timeProvider) : IPngSiteCrawler
 {
     public Task<PngSiteDiscoveryResult> DiscoverAsync(
@@ -21,8 +17,6 @@ internal sealed class PngSiteCrawler(
             request,
             fetcher,
             discoveryExtractor,
-            robotsReader,
-            transportOptions.UserAgentHeader,
             timeProvider).RunAsync(cancellationToken);
 }
 
@@ -31,14 +25,11 @@ internal sealed class PngSiteDiscoveryExecution
     private readonly PngSiteCrawlRequest _request;
     private readonly ISiteAnalysisFetcher _fetcher;
     private readonly IHtmlDocumentDiscoveryExtractor _discoveryExtractor;
-    private readonly ICrawlRobotsReader _robotsReader;
-    private readonly string _userAgent;
     private readonly TimeProvider _timeProvider;
     private readonly CrawlFrontier _frontier;
     private readonly PngAssetScope _assetScope;
     private readonly PngImageLedger _imageLedger;
     private readonly DateTimeOffset _deadline;
-    private readonly Dictionary<string, CrawlRobotsFacts> _robotsByOrigin = new(StringComparer.Ordinal);
     private readonly HashSet<string> _inspectedPageIdentities = new(StringComparer.Ordinal);
     private readonly List<PngDiscoveredPage> _pages = [];
     private readonly List<PngDiscoverySkip> _skips = [];
@@ -52,16 +43,12 @@ internal sealed class PngSiteDiscoveryExecution
         PngSiteCrawlRequest request,
         ISiteAnalysisFetcher fetcher,
         IHtmlDocumentDiscoveryExtractor discoveryExtractor,
-        ICrawlRobotsReader robotsReader,
-        string userAgent,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(request);
         _request = request;
         _fetcher = fetcher;
         _discoveryExtractor = discoveryExtractor;
-        _robotsReader = robotsReader;
-        _userAgent = userAgent;
         _timeProvider = timeProvider;
         _httpAttempts = Math.Max(0, request.ConsumedHttpAttempts);
         _totalPageBytes = Math.Max(0, request.ConsumedPageBytes);
@@ -123,11 +110,6 @@ internal sealed class PngSiteDiscoveryExecution
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!CanStartRequest()) break;
-            if (!await IsRobotsAllowedAsync(item.Url, cancellationToken))
-            {
-                AddCoverage(PngCoverageArea.Crawl, PngCoverageReasonCode.RobotsDisallowed);
-                continue;
-            }
 
             await VisitAsync(item, cancellationToken);
         }
@@ -385,35 +367,18 @@ internal sealed class PngSiteDiscoveryExecution
         }
     }
 
-    private async Task<bool> IsRobotsAllowedAsync(
-        CrawlUrl page,
-        CancellationToken cancellationToken)
-    {
-        if (!_robotsByOrigin.TryGetValue(page.Origin, out var facts))
-        {
-            facts = await _robotsReader.GetAsync(page.Origin, cancellationToken);
-            _robotsByOrigin.Add(page.Origin, facts);
-        }
-
-        return CrawlRobotsGate.IsAllowed(facts, _userAgent, page.Path, overrideGranted: false);
-    }
-
-    private async Task<SafeHttpRequestHopDecision> BeforeRedirectAsync(
-        SafeHttpRequestHop hop,
-        CancellationToken cancellationToken)
+    private SafeHttpRequestHopDecision RedirectDecision(SafeHttpRequestHop hop)
     {
         if (hop.RedirectCount == 0) return new(true);
         var destination = CrawlUrlNormalizer.Normalize(hop.Url, _request.Scope.UrlOptions).Url;
-        if (destination is null
-            || _frontier.Scope.Decide(destination) != CrawlScopeDecision.Internal)
+        if (destination is not null
+            && _frontier.Scope.Decide(destination) == CrawlScopeDecision.Internal)
         {
-            AddCoverage(PngCoverageArea.Crawl, PngCoverageReasonCode.RedirectOutOfScope);
-            return new(false, PngCoverageReasonCode.RedirectOutOfScope.ToString());
+            return new(true);
         }
-        if (await IsRobotsAllowedAsync(destination, cancellationToken)) return new(true);
 
-        AddCoverage(PngCoverageArea.Crawl, PngCoverageReasonCode.RobotsDisallowed);
-        return new(false, PngCoverageReasonCode.RobotsDisallowed.ToString());
+        AddCoverage(PngCoverageArea.Crawl, PngCoverageReasonCode.RedirectOutOfScope);
+        return new(false, PngCoverageReasonCode.RedirectOutOfScope.ToString());
     }
 
     private void AddSkip(
@@ -453,6 +418,6 @@ internal sealed class PngSiteDiscoveryExecution
         public Task<SafeHttpRequestHopDecision> EvaluateAsync(
             SafeHttpRequestHop hop,
             CancellationToken cancellationToken = default) =>
-            execution.BeforeRedirectAsync(hop, cancellationToken);
+            Task.FromResult(execution.RedirectDecision(hop));
     }
 }

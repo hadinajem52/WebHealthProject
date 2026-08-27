@@ -1027,7 +1027,7 @@ code,
     cursor: not-allowed;
 }
 
-.form-field input:not([type="checkbox"]),
+.form-field input:not([type="checkbox"]):not([type="radio"]),
 .form-field select,
 .form-field textarea {
     width: 100%;

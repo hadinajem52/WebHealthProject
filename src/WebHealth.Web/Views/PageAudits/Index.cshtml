@@ -53,7 +53,7 @@
                         <option value="">Select an endpoint</option>
                         @foreach (var option in Model.Endpoints)
                         {
-                            <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
+                            <option value="@option.Id" title="@option.FullLabel" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
                         }
                     </select>
                 </div>

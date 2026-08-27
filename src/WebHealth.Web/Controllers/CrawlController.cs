@@ -27,9 +27,7 @@ public sealed class CrawlController(
         var access = GetAccess();
         var endpoints = await targetReader.ListAllEndpointsAsync(access, cancellationToken: cancellationToken);
         var options = endpoints
-            .Select(endpoint => new EndpointOption(
-                endpoint.Id,
-                $"{endpoint.WebsiteName} · {endpoint.EnvironmentName} · {endpoint.DisplayUrl}"))
+            .Select(EndpointOption.For)
             .ToArray();
 
         if (endpointId is not { } selected)

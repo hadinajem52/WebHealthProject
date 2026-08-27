@@ -29,7 +29,7 @@ The shared host limiter admits requests through per-host gates, advances pacing 
 
 ## Increment 3 bounded discovery
 
-`IPngSiteCrawler` now produces the in-memory discovery result required by the later analyzer and persistence increments. It sequentially fetches internal HTML pages through `ISiteAnalysisFetcher`, applies the snapshotted PNG request rate, timeout and retry policy, obeys robots rules, and rejects redirects outside the page scope.
+`IPngSiteCrawler` now produces the in-memory discovery result required by the later analyzer and persistence increments. It sequentially fetches internal HTML pages through `ISiteAnalysisFetcher`, applies the snapshotted PNG request rate, timeout and retry policy, and rejects redirects outside the page scope. It does not read or honour `robots.txt`: PNG audits run against endpoints the operator registered and owns, so page traversal is bounded by the configured page scope and limits alone.
 
 Page traversal and image asset scope are separate. Pages require both an allowed host and an allowed path prefix. Image references require only an allowed asset host, so a page under `/application/` may validly discover `/assets/image.png`. External asset hosts, `data:`, `blob:`, unsupported schemes, credentials, malformed URLs and overlong values are recorded as typed discovery skips and are not fetched.
 
@@ -39,7 +39,7 @@ The crawler resolves image and navigation references against the redirected docu
 
 Discovery is bounded by page count, depth, page bytes, total page bytes, per-page image references, unique image requests, source mappings, HTTP attempts and duration. Coverage reasons remain separated across crawl, image-analysis and source-mapping areas. Reaching one limit does not falsely report complete coverage in another area.
 
-The HTTP-attempt budget counts every outbound exchange, including redirect hops and retries. The remaining run budget constrains redirect traversal before each transport call, so a single redirect chain cannot exceed it. The run duration is also a linked cancellation deadline for active requests, robots lookups, rate-limit waits and retry delays; deadline cancellation returns partial discovery with `DurationLimit`, while caller cancellation still propagates.
+The HTTP-attempt budget counts every outbound exchange, including redirect hops and retries. The remaining run budget constrains redirect traversal before each transport call, so a single redirect chain cannot exceed it. The run duration is also a linked cancellation deadline for active requests, rate-limit waits and retry delays; deadline cancellation returns partial discovery with `DurationLimit`, while caller cancellation still propagates.
 
 Safe transport exposes the exact normalized final request URL only in memory while retaining its query-free final destination for logs and display. Page identity uses the requested URL when no redirect occurred and the exact final request URL after redirects. Asset fetch URLs retain their resolved authored form, while identity hashes use the same canonical request representation that transport sends, preserving query order and values while consolidating equivalent host, port and escape spellings.
 

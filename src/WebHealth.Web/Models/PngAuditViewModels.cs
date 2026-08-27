@@ -149,7 +149,6 @@ public static class PngAuditDisplay
         "TotalPageBytesLimit" => "page-byte budget reached",
         "TotalImageBytesLimit" => "image-byte budget reached",
         "SourceMappingLimit" => "source-mapping limit reached",
-        "RobotsDisallowed" => "robots.txt disallowed a page",
         "DurationLimit" => "run duration reached",
         "HttpAttemptLimit" => "HTTP request budget reached",
         "PageFetchFailed" => "a page could not be fetched",

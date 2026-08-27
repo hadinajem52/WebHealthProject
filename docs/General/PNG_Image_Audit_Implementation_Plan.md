@@ -923,7 +923,6 @@ UniqueImageLimit
 TotalPageBytesLimit
 TotalImageBytesLimit
 SourceMappingLimit
-RobotsDisallowed
 DurationLimit
 ```
 
@@ -1085,8 +1084,9 @@ Reuse for HTML pages:
 CrawlFrontier
 CrawlScope
 CrawlUrlNormalizer
-robots handling
 ```
+
+Robots handling is deliberately not reused: the PNG crawler ignores `robots.txt`.
 
 Implement separately:
 

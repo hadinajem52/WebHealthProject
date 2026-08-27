@@ -317,7 +317,6 @@ public enum PngCoverageReasonCode
     TotalPageBytesLimit,
     TotalImageBytesLimit,
     SourceMappingLimit,
-    RobotsDisallowed,
     DurationLimit,
     HttpAttemptLimit,
     PageFetchFailed,

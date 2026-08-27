@@ -169,9 +169,7 @@ public sealed class PngAuditsController(
             access,
             cancellationToken: cancellationToken);
         var options = endpoints
-            .Select(endpoint => new EndpointOption(
-                endpoint.Id,
-                $"{endpoint.WebsiteName} · {endpoint.EnvironmentName} · {endpoint.DisplayUrl}"))
+            .Select(EndpointOption.For)
             .ToArray();
         var canExecute = CanExecute();
         if (endpointId is not { } selected)
