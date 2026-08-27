@@ -42,6 +42,10 @@ public sealed record PngImageFacts
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelCount);
+        if (pixelCount != checked((long)width * height))
+        {
+            throw new ArgumentException("The pixel count must match the image dimensions.", nameof(pixelCount));
+        }
         if (transparentPixelCount is < 0 || transparentPixelCount > pixelCount)
         {
             throw new ArgumentOutOfRangeException(nameof(transparentPixelCount));

@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("6bcf1089-649f-4d32-b6a3-f8f5846bf594"), entityTypeCount: 49)
+            : base(skipDetectChanges: false, modelId: new Guid("ce9d9dba-6ca0-4b77-b298-338a5f4a524b"), entityTypeCount: 54)
         {
         }
 
@@ -56,6 +56,11 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var pageAuditItem = PageAuditItemEntityType.Create(this);
             var pageAuditRun = PageAuditRunEntityType.Create(this);
             var pageAuditTarget = PageAuditTargetEntityType.Create(this);
+            var pngAuditCoverageReasonEntity = PngAuditCoverageReasonEntityEntityType.Create(this);
+            var pngAuditDiscoverySkipEntity = PngAuditDiscoverySkipEntityEntityType.Create(this);
+            var pngAuditImageResult = PngAuditImageResultEntityType.Create(this);
+            var pngAuditImageSource = PngAuditImageSourceEntityType.Create(this);
+            var pngAuditRun = PngAuditRunEntityType.Create(this);
             var accessGrant = AccessGrantEntityType.Create(this);
             var client = ClientEntityType.Create(this);
             var endpoint = EndpointEntityType.Create(this);
@@ -132,6 +137,12 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             PageAuditItemEntityType.CreateForeignKey1(pageAuditItem, pageAuditRun);
             PageAuditRunEntityType.CreateForeignKey1(pageAuditRun, pageAuditTarget);
             PageAuditTargetEntityType.CreateForeignKey1(pageAuditTarget, endpoint);
+            PngAuditCoverageReasonEntityEntityType.CreateForeignKey1(pngAuditCoverageReasonEntity, pngAuditRun);
+            PngAuditDiscoverySkipEntityEntityType.CreateForeignKey1(pngAuditDiscoverySkipEntity, pngAuditRun);
+            PngAuditImageResultEntityType.CreateForeignKey1(pngAuditImageResult, pngAuditRun);
+            PngAuditImageSourceEntityType.CreateForeignKey1(pngAuditImageSource, pngAuditImageResult);
+            PngAuditRunEntityType.CreateForeignKey1(pngAuditRun, endpoint);
+            PngAuditRunEntityType.CreateForeignKey2(pngAuditRun, applicationUser);
             AccessGrantEntityType.CreateForeignKey1(accessGrant, client);
             AccessGrantEntityType.CreateForeignKey2(accessGrant, applicationUser);
             AccessGrantEntityType.CreateForeignKey3(accessGrant, endpoint);
@@ -209,6 +220,11 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             PageAuditItemEntityType.CreateAnnotations(pageAuditItem);
             PageAuditRunEntityType.CreateAnnotations(pageAuditRun);
             PageAuditTargetEntityType.CreateAnnotations(pageAuditTarget);
+            PngAuditCoverageReasonEntityEntityType.CreateAnnotations(pngAuditCoverageReasonEntity);
+            PngAuditDiscoverySkipEntityEntityType.CreateAnnotations(pngAuditDiscoverySkipEntity);
+            PngAuditImageResultEntityType.CreateAnnotations(pngAuditImageResult);
+            PngAuditImageSourceEntityType.CreateAnnotations(pngAuditImageSource);
+            PngAuditRunEntityType.CreateAnnotations(pngAuditRun);
             AccessGrantEntityType.CreateAnnotations(accessGrant);
             ClientEntityType.CreateAnnotations(client);
             EndpointEntityType.CreateAnnotations(endpoint);

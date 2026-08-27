@@ -12,6 +12,7 @@ using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Notifications;
+using WebHealth.Infrastructure.PngAudits;
 
 namespace WebHealth.Infrastructure.Persistence;
 
@@ -101,6 +102,16 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<PageAuditItem> PageAuditItems => Set<PageAuditItem>();
 
     public DbSet<PageAuditIncidentPolicyEntity> PageAuditIncidentPolicies => Set<PageAuditIncidentPolicyEntity>();
+
+    public DbSet<PngAuditRun> PngAuditRuns => Set<PngAuditRun>();
+
+    public DbSet<PngAuditImageResult> PngAuditImageResults => Set<PngAuditImageResult>();
+
+    public DbSet<PngAuditImageSource> PngAuditImageSources => Set<PngAuditImageSource>();
+
+    public DbSet<PngAuditDiscoverySkipEntity> PngAuditDiscoverySkips => Set<PngAuditDiscoverySkipEntity>();
+
+    public DbSet<PngAuditCoverageReasonEntity> PngAuditCoverageReasons => Set<PngAuditCoverageReasonEntity>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

@@ -106,6 +106,26 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
             .Where(check => monitors.Contains(check.EndpointMonitorId))
             .ExecuteDeleteAsync(cancellationToken);
 
+        var pngAuditRuns = dbContext.PngAuditRuns
+            .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
+        var pngImageResults = dbContext.PngAuditImageResults
+            .Where(result => pngAuditRuns.Contains(result.RunId)).Select(result => result.Id);
+        await dbContext.PngAuditImageSources
+            .Where(source => pngImageResults.Contains(source.ImageResultId))
+            .ExecuteDeleteAsync(cancellationToken);
+        await dbContext.PngAuditImageResults
+            .Where(result => pngAuditRuns.Contains(result.RunId))
+            .ExecuteDeleteAsync(cancellationToken);
+        await dbContext.PngAuditDiscoverySkips
+            .Where(skip => pngAuditRuns.Contains(skip.RunId))
+            .ExecuteDeleteAsync(cancellationToken);
+        await dbContext.PngAuditCoverageReasons
+            .Where(reason => pngAuditRuns.Contains(reason.RunId))
+            .ExecuteDeleteAsync(cancellationToken);
+        await dbContext.PngAuditRuns
+            .Where(run => run.EndpointId == endpointId)
+            .ExecuteDeleteAsync(cancellationToken);
+
         var pageAuditRuns = dbContext.PageAuditRuns
             .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
         await dbContext.PageAuditItems

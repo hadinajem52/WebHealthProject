@@ -818,8 +818,9 @@ The operations document records these decisions as already established:
   coverage reasons.
 - Bounded PNG analysis rejects 16-bit comparisons, validates APNG structure, scans decoded alpha,
   and measures normalized PNG and lossless WebP candidates without retaining encoded bodies.
-- Image bodies, durable audit results, background execution, and the UI belong to later
-  increments in the implementation plan.
+- Durable PNG runs now snapshot their complete policy, use lease-owned idempotent result batches,
+  retain separate coverage areas, expose paginated authorized reads, and participate in endpoint
+  purge. Background execution and the UI belong to later increments in the implementation plan.
 
 One implementation detail is especially important: the known APNG fixture is accepted by full
 decoding, but `Image.Identify` alone rejects it. The analyzer therefore uses bounded PNG chunk

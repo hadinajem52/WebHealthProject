@@ -42,6 +42,9 @@ using WebHealth.Application.Notifications;
 using WebHealth.Application.Seo;
 using WebHealth.Domain.Notifications;
 using WebHealth.Infrastructure.Notifications;
+using WebHealth.Application.PngAudits;
+using WebHealth.Domain.PngAudits;
+using WebHealth.Infrastructure.PngAudits;
 using Xunit;
 using System.Text.Json;
 using System.Collections.Concurrent;
@@ -90,7 +93,8 @@ internal static class DatabaseFoundationAssertions
         "20260825090421_MaintenanceWindowArchive",
         "20260826072635_DropTargetAuthorization",
         "20260826093318_NotificationEmailRouting",
-        "20260826103956_SlowResponseIncidentSeverityDemotion"
+        "20260826103956_SlowResponseIncidentSeverityDemotion",
+        "20260827082158_PngAuditPersistenceFoundation"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -144,6 +148,11 @@ internal static class DatabaseFoundationAssertions
         ,"page_audit_run"
         ,"page_audit_item"
         ,"page_audit_incident_policy"
+        ,"png_audit_run"
+        ,"png_audit_image_result"
+        ,"png_audit_image_source"
+        ,"png_audit_discovery_skip"
+        ,"png_audit_coverage_reason"
     ];
 
     private static readonly string[] TablesAddedAfterPhaseThree =
@@ -153,7 +162,9 @@ internal static class DatabaseFoundationAssertions
         "notification_event", "notification_delivery", "notification_attempt",
         "notification_read_marker", "certificate_observation", "seo_observation", "robots_snapshot",
         "crawl_run", "crawl_link_result",
-        "page_audit_target", "page_audit_run", "page_audit_item", "page_audit_incident_policy"
+        "page_audit_target", "page_audit_run", "page_audit_item", "page_audit_incident_policy",
+        "png_audit_run", "png_audit_image_result", "png_audit_image_source",
+        "png_audit_discovery_skip", "png_audit_coverage_reason"
     ];
 
     private static readonly string[] TablesRemovedAfterPhaseThree =
@@ -211,7 +222,12 @@ internal static class DatabaseFoundationAssertions
         "PageAuditRun",
         "PageAuditItem",
         "PageAuditIncidentPolicyEntity",
-        "CrawlLinkResult"
+        "CrawlLinkResult",
+        "PngAuditRun",
+        "PngAuditImageResult",
+        "PngAuditImageSource",
+        "PngAuditDiscoverySkipEntity",
+        "PngAuditCoverageReasonEntity"
     ];
 
     public static async Task VerifyAsync(string harnessConnectionString)
@@ -262,6 +278,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyPageAuditContractAsync(connectionString);
         await VerifyPageAuditExecutionAsync(connectionString);
         await VerifyPageAuditReadModelAsync(connectionString);
+        await VerifyPngAuditPersistenceAsync(connectionString);
         await ReportingQueryCoreAssertions.VerifyAsync(connectionString);
         await VerifyEndpointPurgeRemovesEveryReferenceAsync(connectionString);
         await EndpointRegistrationAssertions.VerifyAsync(connectionString);
@@ -4006,6 +4023,8 @@ internal static class DatabaseFoundationAssertions
             Title = "Document does not have a meta description"
         });
 
+        PngAuditPersistenceAssertions.SeedPurgeFixture(database, endpointId, now);
+
         var windowId = Guid.NewGuid();
         database.MaintenanceWindows.Add(new MaintenanceWindow
         {
@@ -4182,6 +4201,10 @@ internal static class DatabaseFoundationAssertions
             .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
         var pageAuditRuns = database.PageAuditRuns
             .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
+        var pngAuditRuns = database.PngAuditRuns
+            .Where(run => run.EndpointId == endpointId).Select(run => run.Id);
+        var pngImageResults = database.PngAuditImageResults
+            .Where(result => pngAuditRuns.Contains(result.RunId)).Select(result => result.Id);
 
         return new Dictionary<string, int>
         {
@@ -4212,6 +4235,11 @@ internal static class DatabaseFoundationAssertions
             ["page_audit_run"] = await database.PageAuditRuns.CountAsync(item => item.EndpointId == endpointId),
             ["page_audit_item"] = await database.PageAuditItems.CountAsync(item => pageAuditRuns.Contains(item.RunId)),
             ["page_audit_incident_policy"] = await database.PageAuditIncidentPolicies.CountAsync(item => item.EndpointId == endpointId),
+            ["png_audit_run"] = await database.PngAuditRuns.CountAsync(item => item.EndpointId == endpointId),
+            ["png_audit_image_result"] = await database.PngAuditImageResults.CountAsync(item => pngAuditRuns.Contains(item.RunId)),
+            ["png_audit_image_source"] = await database.PngAuditImageSources.CountAsync(item => pngImageResults.Contains(item.ImageResultId)),
+            ["png_audit_discovery_skip"] = await database.PngAuditDiscoverySkips.CountAsync(item => pngAuditRuns.Contains(item.RunId)),
+            ["png_audit_coverage_reason"] = await database.PngAuditCoverageReasons.CountAsync(item => pngAuditRuns.Contains(item.RunId)),
             ["maintenance_window"] = await database.MaintenanceWindows.CountAsync(item => item.Id == maintenanceWindowId),
             ["maintenance_target"] = await database.MaintenanceTargets.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId),
             ["maintenance_occurrence"] = await database.MaintenanceOccurrences.CountAsync(item => item.MaintenanceWindowId == maintenanceWindowId)
@@ -4239,6 +4267,32 @@ internal static class DatabaseFoundationAssertions
             scope.ServiceProvider.GetRequiredService<IPageAuditReader>(),
             administrator.Id,
             monitor.EndpointId);
+    }
+
+    private static async Task VerifyPngAuditPersistenceAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging()
+            .AddInfrastructure(configuration).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var monitor = await CreateOwnedMonitorAsync(
+            scope, database, "https://png-audit-persistence.example.com/status");
+        var administrator = await database.Users.AsNoTracking()
+            .SingleAsync(user => user.Email == "bootstrap@example.test");
+
+        await PngAuditPersistenceAssertions.VerifyAsync(
+            connectionString,
+            database,
+            scope.ServiceProvider.GetRequiredService<IPngAuditResultSink>(),
+            scope.ServiceProvider.GetRequiredService<IPngAuditReader>(),
+            scope.ServiceProvider.GetRequiredService<IPngAuditReconciler>(),
+            administrator.Id,
+            monitor.EndpointId,
+            monitor.Endpoint.NormalizedUrl);
     }
 
     private static async Task VerifyPageAuditExecutionAsync(string connectionString)

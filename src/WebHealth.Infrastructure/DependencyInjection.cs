@@ -190,6 +190,9 @@ public static class DependencyInjection
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
         services.AddScoped<IPngSiteCrawler, PngSiteCrawler>();
         services.AddSingleton<IPngImageAnalyzer, PngImageAnalyzer>();
+        services.TryAddScoped<IPngAuditResultSink, PngAuditResultSink>();
+        services.AddScoped<IPngAuditReader, PngAuditReader>();
+        services.AddScoped<IPngAuditReconciler, PngAuditReconciler>();
         services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlReconciler, CrawlReconciler>();
@@ -447,6 +450,14 @@ public static class DependencyInjection
             || options.TransientRetryCount is < 0 or > 3
             || options.ImageFetchConcurrency != 1
             || options.ImageDecodeConcurrency != 1
+            || options.MaximumAttempts is < 1 or > 5
+            || options.LeaseDuration < TimeSpan.FromSeconds(30)
+            || options.LeaseDuration > TimeSpan.FromMinutes(15)
+            || options.HeartbeatInterval < TimeSpan.FromSeconds(5)
+            || options.HeartbeatInterval >= options.LeaseDuration
+            || options.ReconciliationDelay < TimeSpan.FromSeconds(30)
+            || options.ReconciliationDelay > TimeSpan.FromHours(1)
+            || options.ReconciliationBatchSize is < 1 or > 500
             || options.MaxDuration < TimeSpan.FromMinutes(1)
             || options.MaxDuration > TimeSpan.FromHours(4)
             || options.MinSavingsPercent is < 0 or > 100

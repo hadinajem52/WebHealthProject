@@ -44,6 +44,16 @@ public sealed record PngAuditOptions
 
     public int ImageDecodeConcurrency { get; init; } = 1;
 
+    public int MaximumAttempts { get; init; } = 3;
+
+    public TimeSpan LeaseDuration { get; init; } = TimeSpan.FromMinutes(2);
+
+    public TimeSpan HeartbeatInterval { get; init; } = TimeSpan.FromSeconds(30);
+
+    public TimeSpan ReconciliationDelay { get; init; } = TimeSpan.FromMinutes(1);
+
+    public int ReconciliationBatchSize { get; init; } = 100;
+
     public TimeSpan MaxDuration { get; init; } = TimeSpan.FromMinutes(30);
 
     public decimal MinSavingsPercent { get; init; } = 10;

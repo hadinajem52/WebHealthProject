@@ -60,6 +60,16 @@ lossless WebP:   lossless mode, quality effort 100, method level 6, metadata ski
 
 Both encoders write into a discard-only counting stream, so candidate bodies are never retained in memory. The configured recommendation thresholds directly apply the absolute and percentage savings against both the fetched original and the normalized PNG. This prevents metadata removal alone from creating a WebP recommendation without adding a second policy wrapper.
 
+## Increment 5 persistence and durable lifecycle
+
+PNG audit runs now persist in five normalized tables for runs, unique image results, source mappings, discovery skips and coverage reasons. Each queued run stores the complete page scope, asset scope, query policy, discovery limits, image-analysis limits, recommendation thresholds and stable analyzer profiles needed to reconstruct the work without consulting mutable runtime settings.
+
+The lifecycle follows `Queued -> Running -> terminal` transitions with a partial unique index that permits only one active run per endpoint. Claims atomically assign a lease, increment the bounded attempt count and preserve the first start time. Heartbeats and every result batch extend the lease only while it is current, and stale workers cannot append results or complete a run after ownership moves to another attempt. Reconciliation identifies stale queued and expired running work and permanently fails attempts that have exhausted their configured limit.
+
+Image result batches are idempotent by request identity. A unique image may retain multiple distinct page and attribute source mappings, discovery skips are deduplicated, and accumulated coverage counts use replacement semantics on replay. The database enforces legal transport, analysis, transparency, comparison and recommendation state combinations, including unknown APNG transparency and signed savings.
+
+Reads apply the existing endpoint visibility boundary and paginate image results, source mappings and discovery skips with deterministic ordering. Endpoint purge explicitly removes all five PNG table layers before deleting the endpoint. The migration and compiled EF model are part of the same increment. PNG auditing remains disabled until Increment 6 connects the durable lifecycle to the queue and execution worker.
+
 ## ImageSharp dependency decision
 
 Reviewed on 2026-08-26.
@@ -96,4 +106,4 @@ ImageSharp 3.1.12 `Image.Identify` rejects the known-valid APNG fixture even tho
 
 Normal monitoring and crawling continue to default to 2 MB. `SafeHttpTransport` implements only `ISafeHttpTransport` and rejects requests above that standard ceiling. The PNG-specific `PngImageTransport` adapter uses an internal extended operation and may explicitly request up to the 8 MB absolute ceiling. Requests beyond the ceiling for either path are rejected before outbound execution.
 
-The `PngAudits` configuration snapshots the V1 defaults from the implementation plan and validates them during application startup. Since Increment 1 has no execution path, `Enabled: true` is rejected at startup instead of being accepted as a silent no-op. A later execution increment must remove that rejection only when it also wires scheduling, queue and worker activation.
+The `PngAudits` configuration snapshots the V1 defaults from the implementation plan and validates them during application startup. Increment 5 also configures maximum attempts, lease duration, heartbeat interval, reconciliation delay and reconciliation batch size. Since background execution is not connected yet, `Enabled: true` is rejected at startup instead of being accepted as a silent no-op. Increment 6 must remove that rejection only when it also wires scheduling, queue and worker activation.

@@ -302,6 +302,7 @@ public enum PngCoverageReasonCode
     ImageReferenceLimit,
     UniqueImageLimit,
     TotalPageBytesLimit,
+    TotalImageBytesLimit,
     SourceMappingLimit,
     RobotsDisallowed,
     DurationLimit,
