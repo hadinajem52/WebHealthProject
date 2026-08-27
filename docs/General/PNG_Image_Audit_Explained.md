@@ -231,7 +231,7 @@ Signed query parameters are not rewritten before fetching. The request must rema
 secret query values must never be persisted or written to logs. A display value may show a
 redacted value such as `token=REDACTED`.
 
-The display URL is never used to make a network request.
+The display URL is never used to make a network request. The queued seed follows the same rule: storage retains its redacted display value and SHA-256 identity, while execution must rehydrate the current endpoint URL and prove that its identity still matches before fetching.
 
 Redirect destinations receive the same treatment: the exact final request identity is kept only
 in memory where needed, while safe display and identity values are stored.
@@ -788,8 +788,9 @@ encoding, lossless WebP encoding, counting streams, and stable fixture expectati
 
 ### Increment 5 — Persistence
 
-Adds the five tables, constraints, indexes, immutable snapshots, leases, batching, pagination,
-endpoint purge behavior, migrations, and compiled EF model updates.
+Adds the five tables, constraints, indexes, immutable structured snapshots, persistence-boundary
+redaction, authoritative partial summaries, leases, batching, pagination, endpoint purge behavior,
+migrations, and compiled EF model updates.
 
 ### Increment 6 — Queue and execution
 

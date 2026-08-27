@@ -63,8 +63,11 @@ internal sealed class PngAuditReader(
                 result.FrameCount,
                 result.UsesTransparency,
                 result.Recommendation,
+                result.CandidateWebpBytes,
                 result.OriginalSavingsBytes,
                 result.OriginalSavingsPercent,
+                result.NormalizedSavingsBytes,
+                result.NormalizedSavingsPercent,
                 result.RecordedAt))
             .ToArrayAsync(cancellationToken);
         return ResultPage(items, page);
@@ -167,6 +170,7 @@ internal sealed class PngAuditReader(
             run.ImagesDiscovered,
             run.ImagesAnalyzed,
             run.RecommendationCount,
+            run.DiscoverySkipCount,
             run.CrawlCoverageLimited,
             run.ImageAnalysisCoverageLimited,
             run.SourceMappingCoverageLimited,

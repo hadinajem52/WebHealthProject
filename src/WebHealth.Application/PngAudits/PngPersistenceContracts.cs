@@ -127,6 +127,7 @@ public sealed record PngAuditRunClaim(
     Guid LeaseToken,
     int AttemptCount,
     PngAuditRunSnapshot Snapshot,
+    string SeedIdentityHash,
     DateTimeOffset QueuedAt,
     DateTimeOffset StartedAt);
 
@@ -426,6 +427,7 @@ public sealed record PngAuditRunView(
     int ImagesDiscovered,
     int ImagesAnalyzed,
     int RecommendationCount,
+    int DiscoverySkipCount,
     bool CrawlCoverageLimited,
     bool ImageAnalysisCoverageLimited,
     bool SourceMappingCoverageLimited,
@@ -448,8 +450,11 @@ public sealed record PngAuditImageResultView(
     int? FrameCount,
     bool? UsesTransparency,
     string Recommendation,
+    long? CandidateWebpBytes,
     long? OriginalSavingsBytes,
     decimal? OriginalSavingsPercent,
+    long? NormalizedSavingsBytes,
+    decimal? NormalizedSavingsPercent,
     DateTimeOffset RecordedAt);
 
 public sealed record PngAuditImageSourceView(

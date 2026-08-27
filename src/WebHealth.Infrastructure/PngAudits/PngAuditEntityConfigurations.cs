@@ -51,7 +51,11 @@ internal sealed class PngAuditRunConfiguration : IEntityTypeConfiguration<PngAud
                 + "AND finished_at IS NOT NULL AND lease_token IS NULL AND lease_expires_at IS NULL)");
             table.HasCheckConstraint(
                 "ck_png_audit_run_failure",
-                "(status IN ('Failed', 'Cancelled')) = (failure_code IS NOT NULL)");
+                "(status IN ('Failed', 'Cancelled')) = (failure_code IS NOT NULL) AND "
+                + "(failure_code IS NULL OR failure_code IN ('WorkerUnavailable', 'TargetChanged', "
+                + "'TargetIneligible', 'AttemptsExhausted', 'StorageUnavailable', 'Cancelled', "
+                + "'Unexpected')) AND (status <> 'Cancelled' OR failure_code = 'Cancelled') AND "
+                + "(status <> 'Failed' OR failure_code <> 'Cancelled')");
             table.HasCheckConstraint(
                 "ck_png_audit_run_times",
                 "updated_at >= queued_at "
@@ -64,7 +68,12 @@ internal sealed class PngAuditRunConfiguration : IEntityTypeConfiguration<PngAud
                 + "AND discovery_skip_count >= 0 AND http_attempts >= 0 "
                 + "AND total_page_bytes >= 0 AND total_image_bytes >= 0 "
                 + "AND images_analyzed <= images_discovered "
-                + "AND recommendation_count <= images_analyzed");
+                + "AND recommendation_count <= images_analyzed "
+                + "AND pages_discovered <= max_pages "
+                + "AND images_discovered <= max_unique_images "
+                + "AND http_attempts <= max_total_http_attempts "
+                + "AND total_page_bytes <= max_total_page_bytes "
+                + "AND total_image_bytes <= max_total_image_bytes");
             table.HasCheckConstraint(
                 "ck_png_audit_run_page_limits",
                 "max_pages BETWEEN 1 AND 1000 AND max_depth BETWEEN 0 AND 10 "
@@ -102,6 +111,7 @@ internal sealed class PngAuditRunConfiguration : IEntityTypeConfiguration<PngAud
         builder.Property(run => run.FailureCode).HasMaxLength(PngAuditTextBounds.FailureCode);
         builder.Property(run => run.SafeDiagnostic).HasMaxLength(PngAuditTextBounds.Diagnostic);
         builder.Property(run => run.SeedUrlSnapshot).HasMaxLength(CrawlUrlOptions.MaxUrlLength).IsRequired();
+        builder.Property(run => run.SeedUrlIdentityHash).IsRequired();
         builder.Property(run => run.AllowedPageHosts).HasMaxLength(PngAuditTextBounds.Scope).IsRequired();
         builder.Property(run => run.AllowedPagePathPrefixes).HasMaxLength(PngAuditTextBounds.Scope).IsRequired();
         builder.Property(run => run.AllowedAssetHosts).HasMaxLength(PngAuditTextBounds.Scope).IsRequired();
@@ -113,6 +123,9 @@ internal sealed class PngAuditRunConfiguration : IEntityTypeConfiguration<PngAud
         builder.Property(run => run.AnalyzerProfile).HasMaxLength(PngAuditTextBounds.Profile).IsRequired();
         builder.Property(run => run.ComparisonProfile).HasMaxLength(PngAuditTextBounds.Profile).IsRequired();
         builder.Property(run => run.MinSavingsPercent).HasPrecision(7, 4);
+        builder.ToTable(table => table.HasCheckConstraint(
+            "ck_png_audit_run_seed_hash",
+            "octet_length(seed_url_identity_hash) = 32"));
 
         builder.HasIndex(run => run.EndpointId)
             .IsUnique()

@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.PngAudits.PngAuditRun",
                 typeof(PngAuditRun),
                 baseEntityType,
-                propertyCount: 56,
+                propertyCount: 57,
                 navigationCount: 4,
                 foreignKeyCount: 2,
                 unnamedIndexCount: 4,
@@ -441,6 +441,14 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 maxLength: 1000);
             safeDiagnostic.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             safeDiagnostic.AddAnnotation("Relational:ColumnName", "safe_diagnostic");
+
+            var seedUrlIdentityHash = runtimeEntityType.AddProperty(
+                "SeedUrlIdentityHash",
+                typeof(byte[]),
+                propertyInfo: typeof(PngAuditRun).GetProperty("SeedUrlIdentityHash", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditRun).GetField("<SeedUrlIdentityHash>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            seedUrlIdentityHash.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            seedUrlIdentityHash.AddAnnotation("Relational:ColumnName", "seed_url_identity_hash");
 
             var seedUrlSnapshot = runtimeEntityType.AddProperty(
                 "SeedUrlSnapshot",

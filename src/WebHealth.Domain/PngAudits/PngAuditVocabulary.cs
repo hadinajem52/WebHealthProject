@@ -30,6 +30,10 @@ public static class PngAuditFailureCodes
     public const string StorageUnavailable = "StorageUnavailable";
     public const string Cancelled = "Cancelled";
     public const string Unexpected = "Unexpected";
+
+    public static bool IsDefined(string value) => value is
+        WorkerUnavailable or TargetChanged or TargetIneligible or AttemptsExhausted
+        or StorageUnavailable or Cancelled or Unexpected;
 }
 
 public static class PngAuditImageClassifications

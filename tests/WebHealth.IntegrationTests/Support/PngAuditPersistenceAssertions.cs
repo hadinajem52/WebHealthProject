@@ -56,10 +56,13 @@ internal static class PngAuditPersistenceAssertions
         var candidate = await database.PngAuditImageResults.AsNoTracking()
             .SingleAsync(result => result.RunId == runId
                 && result.Classification == PngAuditImageClassifications.OpaqueWebpCandidate);
+        var collisionBatch = CollisionBatch(candidate.ImageIdentityHash, endpointUrl);
+        (await sink.RecordBatchAsync(runId, claim.LeaseToken, collisionBatch)).Should().BeTrue();
+        (await sink.RecordBatchAsync(runId, claim.LeaseToken, collisionBatch)).Should().BeTrue();
         (await database.PngAuditImageSources.CountAsync(source => source.ImageResultId == candidate.Id))
-            .Should().Be(2, "one image can be discovered from multiple source references");
+            .Should().Be(6, "structurally distinct source mappings must not collide");
         (await database.PngAuditDiscoverySkips.CountAsync(skip => skip.RunId == runId))
-            .Should().Be(1);
+            .Should().Be(5, "structurally distinct discovery skips must not collide");
         (await database.PngAuditCoverageReasons.SingleAsync(reason =>
             reason.RunId == runId
             && reason.Area == PngCoverageArea.Crawl.ToString()
@@ -69,18 +72,40 @@ internal static class PngAuditPersistenceAssertions
         await VerifyDuplicateImageIdentityRejectedAsync(database, candidate);
         await VerifyStateInvariantsAsync(connectionString, runId);
 
+        database.ChangeTracker.Clear();
+        var partial = await database.PngAuditRuns.AsNoTracking().SingleAsync(run => run.Id == runId);
+        partial.ImagesDiscovered.Should().Be(15);
+        partial.ImagesAnalyzed.Should().Be(12);
+        partial.RecommendationCount.Should().Be(1);
+        partial.DiscoverySkipCount.Should().Be(5);
+        partial.TotalImageBytes.Should().Be(batch.Images.Sum(image => image.ResponseBytes));
+        partial.CrawlCoverageLimited.Should().BeTrue();
+        partial.ImageAnalysisCoverageLimited.Should().BeTrue();
+        partial.SourceMappingCoverageLimited.Should().BeFalse();
+
+        var totalImageBytes = batch.Images.Sum(image => image.ResponseBytes);
         var totals = new PngAuditRunTotals(
             3,
             15,
             12,
             1,
-            1,
+            5,
             18,
             4096,
-            18000,
+            totalImageBytes,
             true,
             true,
             false);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sink.CompleteAsync(
+            runId,
+            claim.LeaseToken,
+            new PngAuditRunTotals(
+                3, 14, 12, 1, 5, 18, 4096, totalImageBytes, true, true, false)));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sink.CompleteAsync(
+            runId,
+            claim.LeaseToken,
+            new PngAuditRunTotals(
+                21, 15, 12, 1, 5, 18, 4096, totalImageBytes, true, true, false)));
         (await sink.CompleteAsync(runId, claim.LeaseToken, totals)).Should().BeTrue();
         (await sink.HeartbeatAsync(runId, claim.LeaseToken)).Should().BeFalse(
             "a terminal run no longer has a lease");
@@ -92,16 +117,24 @@ internal static class PngAuditPersistenceAssertions
         storedRun.Should().NotBeNull();
         storedRun!.Status.Should().Be(PngAuditRunStatuses.CompletedWithWarnings);
         storedRun.ImagesDiscovered.Should().Be(15);
+        storedRun.DiscoverySkipCount.Should().Be(5);
         var firstPage = await reader.ListImagesAsync(runId, 0, 5, access);
         firstPage.Items.Should().HaveCount(5);
         firstPage.HasMore.Should().BeTrue();
         var secondPage = await reader.ListImagesAsync(runId, 5, 50, access);
         secondPage.Items.Should().HaveCount(10);
         secondPage.HasMore.Should().BeFalse();
-        (await reader.ListSourcesAsync(candidate.Id, 0, 10, access)).Items.Should().HaveCount(2);
-        (await reader.ListDiscoverySkipsAsync(runId, 0, 10, access)).Items.Should().ContainSingle();
+        var storedCandidate = firstPage.Items.Concat(secondPage.Items)
+            .Single(image => image.Classification == PngAuditImageClassifications.OpaqueWebpCandidate);
+        storedCandidate.CandidateWebpBytes.Should().Be(700);
+        storedCandidate.NormalizedSavingsBytes.Should().Be(200);
+        storedCandidate.NormalizedSavingsPercent.Should().Be(22.2222m);
+        (await reader.ListSourcesAsync(candidate.Id, 0, 10, access)).Items.Should().HaveCount(6);
+        (await reader.ListDiscoverySkipsAsync(runId, 0, 10, access)).Items.Should().HaveCount(5);
         (await reader.ListCoverageReasonsAsync(runId, access)).Should().HaveCount(2);
 
+        await VerifyBoundaryHardeningAsync(
+            database, sink, reader, endpointId, administratorId, endpointUrl, access);
         await VerifyLeaseRecoveryAndAttemptLimitAsync(
             database, sink, reconciler, endpointId, administratorId, endpointUrl);
     }
@@ -120,6 +153,7 @@ internal static class PngAuditPersistenceAssertions
             Source = PngAuditSources.Scheduled,
             Status = PngAuditRunStatuses.CompletedWithWarnings,
             SeedUrlSnapshot = "https://endpoint-purge.test/",
+            SeedUrlIdentityHash = HashBytes("https://endpoint-purge.test/"),
             IsProductionSnapshot = true,
             AllowedPageHosts = "endpoint-purge.test",
             AllowedPagePathPrefixes = string.Empty,
@@ -205,12 +239,15 @@ internal static class PngAuditPersistenceAssertions
         });
     }
 
-    private static PngAuditRunSnapshot Snapshot(Guid endpointId, string endpointUrl) => new(
+    private static PngAuditRunSnapshot Snapshot(
+        Guid endpointId,
+        string endpointUrl,
+        IReadOnlyList<string>? pathPrefixes = null) => new(
         endpointId,
         endpointUrl,
         true,
         [new CrawlHostRule(new Uri(endpointUrl).Host)],
-        [],
+        pathPrefixes ?? [],
         [new CrawlHostRule(new Uri(endpointUrl).Host)],
         CrawlUrlOptions.Default,
         new PngSiteDiscoveryProfile(
@@ -288,6 +325,104 @@ internal static class PngAuditPersistenceAssertions
                 new(PngCoverageArea.Crawl, PngCoverageReasonCode.PageLimit, 2),
                 new(PngCoverageArea.ImageAnalysis, PngCoverageReasonCode.TotalImageBytesLimit, 1)
             ]);
+    }
+
+    private static PngAuditResultBatch CollisionBatch(byte[] imageIdentityHash, string endpointUrl)
+    {
+        var imageHash = Convert.ToHexString(imageIdentityHash);
+        var sourceUrl = endpointUrl + "/collision";
+        var sourceHash = Hash("collision-source");
+        return new(
+            [],
+            [
+                new(imageHash, sourceUrl, sourceHash, "A|B", "C"),
+                new(imageHash, sourceUrl, sourceHash, "A", "B|C"),
+                new(imageHash, sourceUrl, sourceHash, "NullDescriptor", null),
+                new(imageHash, sourceUrl, sourceHash, "NullDescriptor", string.Empty)
+            ],
+            [
+                new(sourceUrl, sourceHash, "A|B", "C", "D", PngDiscoverySkipReason.DataUrl),
+                new(sourceUrl, sourceHash, "A", "B|C", "D", PngDiscoverySkipReason.DataUrl),
+                new(sourceUrl, sourceHash, "NullDescriptor", null, "D", PngDiscoverySkipReason.DataUrl),
+                new(sourceUrl, sourceHash, "NullDescriptor", string.Empty, "D", PngDiscoverySkipReason.DataUrl)
+            ],
+            []);
+    }
+
+    private static async Task VerifyBoundaryHardeningAsync(
+        ApplicationDbContext database,
+        IPngAuditResultSink sink,
+        IPngAuditReader reader,
+        Guid endpointId,
+        Guid administratorId,
+        string endpointUrl,
+        RegistryAccessContext access)
+    {
+        var seedUrl = endpointUrl.TrimEnd('/') + "/?token=seed-secret&view=full";
+        var pathPrefix = "/tenant-a\n/";
+        var runId = Guid.NewGuid();
+        await sink.CreateQueuedRunAsync(new(
+            runId,
+            PngAuditSources.Manual,
+            administratorId,
+            Snapshot(endpointId, seedUrl, [pathPrefix]),
+            DateTimeOffset.UtcNow));
+
+        database.ChangeTracker.Clear();
+        var queued = await database.PngAuditRuns.AsNoTracking().SingleAsync(run => run.Id == runId);
+        queued.SeedUrlSnapshot.Should().Contain("token=REDACTED").And.NotContain("seed-secret");
+        queued.SeedUrlIdentityHash.Should().Equal(HashBytes(seedUrl));
+
+        var claim = await sink.TryClaimAsync(runId);
+        claim.Should().NotBeNull();
+        claim!.Snapshot.AllowedPagePathPrefixes.Should().Equal(pathPrefix);
+        claim.SeedIdentityHash.Should().Be(Hash(seedUrl));
+
+        var imageUrl = endpointUrl + "/secret.png?token=image-secret";
+        var sourceUrl = endpointUrl + "/source?token=source-secret";
+        var rawValue = endpointUrl + "/skipped.png?token=skip-secret";
+        var image = PngAuditImageRecord.FetchFailed(
+            new PngAuditImageIdentity(imageUrl, Hash(imageUrl)),
+            "ConnectionFailed");
+        var batch = new PngAuditResultBatch(
+            [image],
+            [new(image.Image.IdentityHash, sourceUrl, Hash(sourceUrl), "ImgSrc", null)],
+            [new(sourceUrl, Hash(sourceUrl), "ImgSrc", null, rawValue, PngDiscoverySkipReason.MalformedUrl)],
+            []);
+        (await sink.RecordBatchAsync(runId, claim.LeaseToken, batch)).Should().BeTrue();
+
+        database.ChangeTracker.Clear();
+        var storedImage = await database.PngAuditImageResults.AsNoTracking()
+            .SingleAsync(result => result.RunId == runId);
+        var storedSource = await database.PngAuditImageSources.AsNoTracking()
+            .SingleAsync(source => source.ImageResultId == storedImage.Id);
+        var storedSkip = await database.PngAuditDiscoverySkips.AsNoTracking()
+            .SingleAsync(skip => skip.RunId == runId);
+        storedImage.ImageDisplayUrl.Should().Contain("token=REDACTED").And.NotContain("image-secret");
+        storedSource.SourcePageDisplayUrl.Should().Contain("token=REDACTED").And.NotContain("source-secret");
+        storedSkip.SourcePageDisplayUrl.Should().Contain("token=REDACTED").And.NotContain("source-secret");
+        storedSkip.BoundedSafeRawValue.Should().Contain("token=REDACTED").And.NotContain("skip-secret");
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => sink.FailAsync(
+            runId,
+            claim.LeaseToken,
+            PngAuditRunStatuses.Failed,
+            "MisspelledFailure",
+            null));
+        (await sink.FailAsync(
+            runId,
+            claim.LeaseToken,
+            PngAuditRunStatuses.Failed,
+            PngAuditFailureCodes.Unexpected,
+            $"Request failed for {sourceUrl}\nworker detail")).Should().BeTrue();
+
+        var view = await reader.FindRunAsync(runId, access);
+        view.Should().NotBeNull();
+        view!.ImagesDiscovered.Should().Be(1);
+        view.ImagesAnalyzed.Should().Be(0);
+        view.DiscoverySkipCount.Should().Be(1);
+        view.SafeDiagnostic.Should().Contain("token=REDACTED").And.NotContain("source-secret");
+        view.SafeDiagnostic.Should().NotContain("\n").And.NotContain("\r");
     }
 
     private static async Task VerifyDuplicateActiveRunRejectedAsync(
@@ -420,6 +555,18 @@ internal static class PngAuditPersistenceAssertions
         await ExpectConstraintAsync(connectionString,
             $"UPDATE web_health.png_audit_run SET status = 'Completed' WHERE id = '{runId}';",
             "ck_png_audit_run_lifecycle");
+        await ExpectConstraintAsync(connectionString,
+            $"UPDATE web_health.png_audit_run SET failure_code = 'MisspelledFailure' "
+            + $"WHERE id = '{runId}';",
+            "ck_png_audit_run_failure");
+        await ExpectConstraintAsync(connectionString,
+            $"UPDATE web_health.png_audit_run SET images_discovered = max_unique_images + 1 "
+            + $"WHERE id = '{runId}';",
+            "ck_png_audit_run_counts");
+        await ExpectConstraintAsync(connectionString,
+            $"UPDATE web_health.png_audit_run SET seed_url_identity_hash = decode('00', 'hex') "
+            + $"WHERE id = '{runId}';",
+            "ck_png_audit_run_seed_hash");
     }
 
     private static string ResultInsert(
@@ -500,7 +647,7 @@ internal static class PngAuditPersistenceAssertions
             "run_id", "area", "reason_code", "count");
         columns["png_audit_run"].Should().BeEquivalentTo(
             "id", "endpoint_id", "source", "initiated_by_user_id", "status", "failure_code",
-            "safe_diagnostic", "seed_url_snapshot", "is_production_snapshot",
+            "safe_diagnostic", "seed_url_snapshot", "seed_url_identity_hash", "is_production_snapshot",
             "allowed_page_hosts", "allowed_page_path_prefixes", "allowed_asset_hosts",
             "query_policy", "tracking_query_parameters", "sensitive_query_parameters",
             "max_query_parameters", "max_pages", "max_depth", "max_page_bytes",

@@ -13,6 +13,7 @@ public sealed class PngAuditRun
     public string? SafeDiagnostic { get; set; }
 
     public required string SeedUrlSnapshot { get; set; }
+    public required byte[] SeedUrlIdentityHash { get; set; }
     public bool IsProductionSnapshot { get; set; }
     public required string AllowedPageHosts { get; set; }
     public required string AllowedPagePathPrefixes { get; set; }

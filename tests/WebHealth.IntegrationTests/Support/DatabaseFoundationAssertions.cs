@@ -94,7 +94,8 @@ internal static class DatabaseFoundationAssertions
         "20260826072635_DropTargetAuthorization",
         "20260826093318_NotificationEmailRouting",
         "20260826103956_SlowResponseIncidentSeverityDemotion",
-        "20260827082158_PngAuditPersistenceFoundation"
+        "20260827082158_PngAuditPersistenceFoundation",
+        "20260827092012_PngAuditPersistenceHardening"
     ];
 
     private static readonly string[] ExpectedTables =
