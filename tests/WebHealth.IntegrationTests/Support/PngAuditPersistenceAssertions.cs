@@ -143,7 +143,13 @@ internal static class PngAuditPersistenceAssertions
             .Which.Classification.Should().Be(PngAuditImageClassifications.OpaqueWebpCandidate);
         var notAnalyzedPage = await reader.ListImagesByFilterAsync(
             runId, PngAuditImageFilters.NotAnalyzed, 0, 50, access);
-        notAnalyzedPage.Items.Should().HaveCount(10);
+        notAnalyzedPage.Items.Should().HaveCount(9);
+        notAnalyzedPage.Items.Should().NotContain(
+            image => image.Classification == PngAuditImageClassifications.WebpComparisonFailed,
+            "a failed WebP comparison still decoded and inspected the PNG");
+        var notPngPage = await reader.ListImagesByFilterAsync(
+            runId, PngAuditImageFilters.NotPng, 0, 50, access);
+        notPngPage.Items.Should().ContainSingle();
         var resultSummary = await reader.GetResultSummaryAsync(runId, access);
         resultSummary.Should().Be(new PngAuditResultSummaryView(
             11,
@@ -154,6 +160,9 @@ internal static class PngAuditPersistenceAssertions
             1,
             1,
             15));
+        (notAnalyzedPage.Items.Count + notPngPage.Items.Count).Should().Be(
+            resultSummary.SkippedOrNotAnalyzed - storedRun.DiscoverySkipCount,
+            "the two non-analyzed filters must partition the images the summary excludes");
         (await reader.ListSourcesAsync(candidate.Id, 0, 10, access)).Items.Should().HaveCount(6);
         (await reader.ListDiscoverySkipsAsync(runId, 0, 10, access)).Items.Should().HaveCount(5);
         (await reader.ListCoverageReasonsAsync(runId, access)).Should().HaveCount(2);

@@ -279,8 +279,7 @@ internal sealed class PngAuditReader(
                 || result.Classification == PngAuditImageClassifications.DimensionsExceeded
                 || result.Classification == PngAuditImageClassifications.PixelLimitExceeded
                 || result.Classification == PngAuditImageClassifications.DecodedMemoryExceeded
-                || result.Classification == PngAuditImageClassifications.DecodeFailed
-                || result.Classification == PngAuditImageClassifications.WebpComparisonFailed),
+                || result.Classification == PngAuditImageClassifications.DecodeFailed),
             PngAuditImageFilters.NotPng => results.Where(result =>
                 result.Classification == PngAuditImageClassifications.NotPng),
             _ => results
