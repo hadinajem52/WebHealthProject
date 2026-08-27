@@ -223,6 +223,21 @@ public sealed record PngAuditImageRecord
             null, 0, null, null, null, PngAuditRecommendations.None, null);
     }
 
+    public static PngAuditImageRecord ProcessingIncomplete(
+        PngAuditImageIdentity image,
+        string reasonCode,
+        string finalDisplayUrl,
+        string finalIdentityHash,
+        string? declaredContentType,
+        long responseBytes)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
+        ArgumentOutOfRangeException.ThrowIfNegative(responseBytes);
+        return new(image, PngAuditImageClassifications.FetchFailed, reasonCode,
+            finalDisplayUrl, finalIdentityHash, declaredContentType, null,
+            responseBytes, null, null, null, PngAuditRecommendations.None, null);
+    }
+
     public static PngAuditImageRecord HttpNonSuccess(
         PngAuditImageIdentity image,
         string finalDisplayUrl,

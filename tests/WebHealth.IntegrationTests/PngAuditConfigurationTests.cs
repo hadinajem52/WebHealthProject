@@ -22,6 +22,7 @@ public sealed class PngAuditConfigurationTests
         options.MaxImageBytes.Should().Be(SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes);
         options.ImageFetchConcurrency.Should().Be(1);
         options.ImageDecodeConcurrency.Should().Be(1);
+        options.RequestsPerSecondPerHost.Should().Be(1);
         options.MinSavingsPercent.Should().Be(10);
         options.MinSavingsBytes.Should().Be(4096);
     }
@@ -41,16 +42,20 @@ public sealed class PngAuditConfigurationTests
     }
 
     [Fact]
-    public void AddInfrastructure_RejectsEnablingPngAuditsBeforeExecutionExists()
+    public void AddInfrastructure_EnablesPngAuditsWithoutEnablingBrokenLinkCrawling()
     {
         var values = DisabledInfrastructure();
         values["PngAudits:Enabled"] = "true";
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
-        var act = () => new ServiceCollection().AddLogging().AddInfrastructure(configuration);
+        var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration);
 
-        act.Should().Throw<InvalidOperationException>()
-            .WithMessage("PNG audit options are outside their safe bounds.");
+        services.Should().ContainSingle(descriptor =>
+            descriptor.ServiceType == typeof(IPngAuditRunQueue)
+            && descriptor.ImplementationType == typeof(HangfirePngAuditRunQueue));
+        services.Should().ContainSingle(descriptor =>
+            descriptor.ServiceType == typeof(IPngAuditRunner)
+            && descriptor.ImplementationType == typeof(PngAuditRunner));
     }
 
     [Fact]

@@ -4291,6 +4291,7 @@ internal static class DatabaseFoundationAssertions
             scope.ServiceProvider.GetRequiredService<IPngAuditResultSink>(),
             scope.ServiceProvider.GetRequiredService<IPngAuditReader>(),
             scope.ServiceProvider.GetRequiredService<IPngAuditReconciler>(),
+            scope.ServiceProvider.GetRequiredService<IEndpointTestGate>(),
             administrator.Id,
             monitor.EndpointId,
             monitor.Endpoint.NormalizedUrl);

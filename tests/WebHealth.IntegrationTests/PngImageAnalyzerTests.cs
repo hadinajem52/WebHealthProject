@@ -233,6 +233,32 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_UsesTheRunSnapshotInsteadOfLiveAnalyzerPolicy()
+    {
+        var bytes = CreatePng(
+            PngColorType.Rgb,
+            byte.MaxValue,
+            PngCompressionLevel.NoCompression,
+            256);
+        using var analyzer = CreateAnalyzer(
+            new PngImageAnalysisLimits(100, 10, 10, 100, 400),
+            new PngRecommendationThresholds(100, long.MaxValue));
+
+        var result = await analyzer.AnalyzeAsync(
+            bytes,
+            new PngImageAnalysisLimits(
+                8 * 1024 * 1024,
+                10000,
+                10000,
+                40000000,
+                256L * 1024 * 1024),
+            new PngRecommendationThresholds(10, 1));
+
+        result.Classification.Should().Be(PngImageAnalysisClassification.OpaqueWebpCandidate);
+        result.Recommendation.Should().Be(PngRecommendation.LosslessWebp);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DoesNotRecommendALargerLosslessWebp()
     {
         var result = await CreateAnalyzer(

@@ -38,6 +38,8 @@ public sealed record PngAuditOptions
 
     public int FetchTimeoutSeconds { get; init; } = 15;
 
+    public double RequestsPerSecondPerHost { get; init; } = 1;
+
     public int TransientRetryCount { get; init; } = 1;
 
     public int ImageFetchConcurrency { get; init; } = 1;

@@ -35,12 +35,25 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
 
     public async Task<PngAnalysisResult> AnalyzeAsync(
         ReadOnlyMemory<byte> encodedImage,
+        CancellationToken cancellationToken = default) =>
+        await AnalyzeAsync(
+            encodedImage,
+            _limits,
+            _recommendationThresholds,
+            cancellationToken);
+
+    public async Task<PngAnalysisResult> AnalyzeAsync(
+        ReadOnlyMemory<byte> encodedImage,
+        PngImageAnalysisLimits limits,
+        PngRecommendationThresholds recommendationThresholds,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
+        ArgumentNullException.ThrowIfNull(limits);
+        ArgumentNullException.ThrowIfNull(recommendationThresholds);
         cancellationToken.ThrowIfCancellationRequested();
         var originalBytes = encodedImage.Length;
-        if (originalBytes == 0 || originalBytes > _limits.MaxEncodedBytes)
+        if (originalBytes == 0 || originalBytes > limits.MaxEncodedBytes)
         {
             return PngAnalysisResult.Failed(
                 PngImageAnalysisClassification.IdentificationFailed,
@@ -67,7 +80,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
                 originalBytes);
         }
 
-        var boundedResult = ApplyResourceLimits(preflight, originalBytes);
+        var boundedResult = ApplyResourceLimits(preflight, originalBytes, limits);
         if (boundedResult is not null)
         {
             return boundedResult;
@@ -79,6 +92,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
             return await AnalyzeDecodedImageAsync(
                 encodedImage,
                 preflight,
+                recommendationThresholds,
                 cancellationToken);
         }
         finally
@@ -120,16 +134,17 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
 
     private PngAnalysisResult? ApplyResourceLimits(
         PngChunkPreflight preflight,
-        long originalBytes)
+        long originalBytes,
+        PngImageAnalysisLimits limits)
     {
-        if (preflight.Width > _limits.MaxWidth || preflight.Height > _limits.MaxHeight)
+        if (preflight.Width > limits.MaxWidth || preflight.Height > limits.MaxHeight)
         {
             return PngAnalysisResult.Failed(
                 PngImageAnalysisClassification.DimensionsExceeded,
                 originalBytes);
         }
 
-        if (preflight.PixelCount > _limits.MaxDecodedPixels)
+        if (preflight.PixelCount > limits.MaxDecodedPixels)
         {
             return PngAnalysisResult.Failed(
                 PngImageAnalysisClassification.PixelLimitExceeded,
@@ -143,7 +158,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
                 originalBytes);
         }
 
-        if (preflight.PixelCount > _limits.MaxDecodedMemoryBytes / DecodedBytesPerPixel)
+        if (preflight.PixelCount > limits.MaxDecodedMemoryBytes / DecodedBytesPerPixel)
         {
             return PngAnalysisResult.Failed(
                 PngImageAnalysisClassification.DecodedMemoryExceeded,
@@ -158,6 +173,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
     private async Task<PngAnalysisResult> AnalyzeDecodedImageAsync(
         ReadOnlyMemory<byte> encodedImage,
         PngChunkPreflight preflight,
+        PngRecommendationThresholds recommendationThresholds,
         CancellationToken cancellationToken)
     {
         using var image = await DecodeAsync(encodedImage, cancellationToken);
@@ -179,6 +195,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
             image,
             imageFacts,
             encodedImage.Length,
+            recommendationThresholds,
             cancellationToken);
     }
 
@@ -228,6 +245,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
         Image<Rgba32> image,
         PngImageFacts imageFacts,
         long originalBytes,
+        PngRecommendationThresholds recommendationThresholds,
         CancellationToken cancellationToken)
     {
         try
@@ -241,7 +259,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
             return PngAnalysisResult.Compared(
                 imageFacts,
                 comparison,
-                _recommendationThresholds);
+                recommendationThresholds);
         }
         catch (InvalidImageContentException)
         {

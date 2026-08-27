@@ -821,7 +821,10 @@ The operations document records these decisions as already established:
   and measures normalized PNG and lossless WebP candidates without retaining encoded bodies.
 - Durable PNG runs now snapshot their complete policy, use lease-owned idempotent result batches,
   retain separate coverage areas, expose paginated authorized reads, and participate in endpoint
-  purge. Background execution and the UI belong to later increments in the implementation plan.
+  purge.
+- The dedicated one-worker `image-audits` queue now runs the full crawl, fetch, analysis and
+  persistence flow with heartbeats and reconciliation independently of broken-link scheduling.
+- The Tools UI remains disabled until Increment 7.
 
 One implementation detail is especially important: the known APNG fixture is accepted by full
 decoding, but `Image.Identify` alone rejects it. The analyzer therefore uses bounded PNG chunk

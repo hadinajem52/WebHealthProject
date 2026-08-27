@@ -2,9 +2,11 @@ using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using WebHealth.Application.PngAudits;
 using WebHealth.Application.Registry;
+using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Crawling;
 using WebHealth.Domain.PngAudits;
 using WebHealth.Infrastructure.Identity;
@@ -22,6 +24,7 @@ internal static class PngAuditPersistenceAssertions
         IPngAuditResultSink sink,
         IPngAuditReader reader,
         IPngAuditReconciler reconciler,
+        IEndpointTestGate testGate,
         Guid administratorId,
         Guid endpointId,
         string endpointUrl)
@@ -137,6 +140,18 @@ internal static class PngAuditPersistenceAssertions
             database, sink, reader, endpointId, administratorId, endpointUrl, access);
         await VerifyLeaseRecoveryAndAttemptLimitAsync(
             database, sink, reconciler, endpointId, administratorId, endpointUrl);
+        await VerifyQueueFailureRetiresRunAsync(
+            database,
+            sink,
+            testGate,
+            endpointId,
+            access);
+        await VerifyEndToEndExecutionAsync(
+            database,
+            sink,
+            endpointId,
+            administratorId,
+            endpointUrl);
     }
 
     public static void SeedPurgeFixture(
@@ -242,10 +257,11 @@ internal static class PngAuditPersistenceAssertions
     private static PngAuditRunSnapshot Snapshot(
         Guid endpointId,
         string endpointUrl,
-        IReadOnlyList<string>? pathPrefixes = null) => new(
+        IReadOnlyList<string>? pathPrefixes = null,
+        bool isProduction = true) => new(
         endpointId,
         endpointUrl,
-        true,
+        isProduction,
         [new CrawlHostRule(new Uri(endpointUrl).Host)],
         pathPrefixes ?? [],
         [new CrawlHostRule(new Uri(endpointUrl).Host)],
@@ -486,6 +502,93 @@ internal static class PngAuditPersistenceAssertions
         exhausted.LeaseToken.Should().BeNull();
     }
 
+    private static async Task VerifyQueueFailureRetiresRunAsync(
+        ApplicationDbContext database,
+        IPngAuditResultSink sink,
+        IEndpointTestGate testGate,
+        Guid endpointId,
+        RegistryAccessContext access)
+    {
+        var runner = new PngAuditRunner(
+            database,
+            sink,
+            testGate,
+            new PngAuditOptions { Enabled = true },
+            TimeProvider.System,
+            NullLogger<PngAuditRunner>.Instance,
+            new FailingPngAuditQueue());
+
+        var result = await runner.QueueManualAsync(endpointId, access);
+
+        result.Succeeded.Should().BeFalse();
+        result.Error.Should().NotBeNullOrWhiteSpace();
+        database.ChangeTracker.Clear();
+        var failed = await database.PngAuditRuns.AsNoTracking()
+            .Where(run => run.EndpointId == endpointId)
+            .OrderByDescending(run => run.QueuedAt)
+            .ThenByDescending(run => run.Id)
+            .FirstAsync();
+        failed.Status.Should().Be(PngAuditRunStatuses.Failed);
+        failed.FailureCode.Should().Be(PngAuditFailureCodes.WorkerUnavailable);
+    }
+
+    private static async Task VerifyEndToEndExecutionAsync(
+        ApplicationDbContext database,
+        IPngAuditResultSink sink,
+        Guid endpointId,
+        Guid administratorId,
+        string endpointUrl)
+    {
+        var isProduction = await database.Endpoints.AsNoTracking()
+            .Where(endpoint => endpoint.Id == endpointId)
+            .Select(endpoint => endpoint.Environment.IsProduction)
+            .SingleAsync();
+        var seedUrl = CrawlUrlNormalizer.Normalize(endpointUrl, CrawlUrlOptions.Default).Url!.Value;
+        var runId = Guid.NewGuid();
+        await sink.CreateQueuedRunAsync(new(
+            runId,
+            PngAuditSources.Manual,
+            administratorId,
+            Snapshot(endpointId, seedUrl, isProduction: isProduction),
+            DateTimeOffset.UtcNow));
+        var imageUrl = seedUrl.TrimEnd('/') + "/asset.png";
+        var imageHash = Hash(imageUrl);
+        var crawler = new CompletedPngCrawler(new(
+            [new(seedUrl, Hash(seedUrl), 0)],
+            [new(imageUrl, imageUrl, imageHash)],
+            [new(imageHash, seedUrl, Hash(seedUrl), "img.src", null)],
+            [],
+            [],
+            1,
+            128));
+        var analyzer = new SnapshotPngAnalyzer();
+        var execution = new PngAuditExecutionService(
+            sink,
+            new PngAuditQueuedRunReader(database),
+            crawler,
+            new CompletedPngImageTransport(imageUrl),
+            analyzer,
+            new PngAuditOptions(),
+            TimeProvider.System,
+            NullLogger<PngAuditExecutionService>.Instance);
+
+        await execution.ExecuteAsync(runId, CancellationToken.None);
+
+        database.ChangeTracker.Clear();
+        var completed = await database.PngAuditRuns.AsNoTracking()
+            .SingleAsync(run => run.Id == runId);
+        completed.Status.Should().Be(
+            PngAuditRunStatuses.Completed,
+            $"{completed.FailureCode}: {completed.SafeDiagnostic}");
+        completed.PagesDiscovered.Should().Be(1);
+        completed.ImagesDiscovered.Should().Be(1);
+        completed.ImagesAnalyzed.Should().Be(1);
+        completed.HttpAttempts.Should().Be(2);
+        completed.TotalPageBytes.Should().Be(128);
+        completed.TotalImageBytes.Should().Be(1);
+        analyzer.SnapshotCallCount.Should().Be(1);
+    }
+
     private static async Task VerifyDuplicateImageIdentityRejectedAsync(
         ApplicationDbContext database,
         PngAuditImageResult existing)
@@ -506,6 +609,60 @@ internal static class PngAuditPersistenceAssertions
         duplicate.InnerException.Should().BeOfType<PostgresException>()
             .Which.ConstraintName.Should().Be("ux_png_audit_image_result_identity");
         database.ChangeTracker.Clear();
+    }
+
+    private sealed class FailingPngAuditQueue : IPngAuditRunQueue
+    {
+        public void Enqueue(Guid runId) => throw new InvalidOperationException("Queue unavailable.");
+    }
+
+    private sealed class CompletedPngCrawler(PngSiteDiscoveryResult result) : IPngSiteCrawler
+    {
+        public Task<PngSiteDiscoveryResult> DiscoverAsync(
+            PngSiteCrawlRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(result);
+    }
+
+    private sealed class CompletedPngImageTransport(string finalUrl) : IPngImageTransport
+    {
+        public Task<SafeHttpTransportResult> SendAsync(
+            PngImageTransportRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SafeHttpTransportResult(
+                null,
+                200,
+                new(finalUrl),
+                TimeSpan.Zero,
+                1,
+                false,
+                new byte[] { 1 },
+                [],
+                ContentType: "image/png")
+            {
+                FinalRequestUrl = finalUrl,
+                OutboundRequestCount = 1
+            });
+    }
+
+    private sealed class SnapshotPngAnalyzer : IPngImageAnalyzer
+    {
+        public int SnapshotCallCount { get; private set; }
+
+        public Task<PngAnalysisResult> AnalyzeAsync(
+            ReadOnlyMemory<byte> encodedImage,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Execution must use the snapshotted policy.");
+
+        public Task<PngAnalysisResult> AnalyzeAsync(
+            ReadOnlyMemory<byte> encodedImage,
+            PngImageAnalysisLimits limits,
+            PngRecommendationThresholds recommendationThresholds,
+            CancellationToken cancellationToken = default)
+        {
+            SnapshotCallCount++;
+            return Task.FromResult(PngAnalysisResult.NotPng(encodedImage.Length, "Webp"));
+        }
     }
 
     private static async Task VerifyStateInvariantsAsync(string connectionString, Guid runId)

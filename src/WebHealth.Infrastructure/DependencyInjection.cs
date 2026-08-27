@@ -193,6 +193,11 @@ public static class DependencyInjection
         services.TryAddScoped<IPngAuditResultSink, PngAuditResultSink>();
         services.AddScoped<IPngAuditReader, PngAuditReader>();
         services.AddScoped<IPngAuditReconciler, PngAuditReconciler>();
+        services.AddScoped<IPngAuditRunner, PngAuditRunner>();
+        services.AddScoped<PngAuditQueuedRunReader>();
+        services.AddScoped<PngAuditExecutionService>();
+        services.AddScoped<PngAuditRunJob>();
+        services.AddScoped<PngAuditReconciliationJob>();
         services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlReconciler, CrawlReconciler>();
@@ -232,7 +237,7 @@ public static class DependencyInjection
         services.AddScoped<NotificationDispatchJob>();
         var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled
             || maintenanceOptions.Enabled || seoOptions.Enabled || crawlOptions.Enabled
-            || pageAuditOptions.Enabled;
+            || pageAuditOptions.Enabled || pngAuditOptions.Enabled;
         if (hangfireEnabled)
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -308,6 +313,16 @@ public static class DependencyInjection
                     options.WorkerCount = pageAuditOptions.WorkerCount;
                 });
             }
+
+            if (pngAuditOptions.Enabled)
+            {
+                services.AddHangfireServer(options =>
+                {
+                    options.ServerName = $"{Environment.MachineName}-image-audits";
+                    options.Queues = [PngAuditQueueNames.ImageAudits];
+                    options.WorkerCount = pngAuditOptions.WorkerCount;
+                });
+            }
         }
 
         if (schedulingOptions.Enabled)
@@ -327,6 +342,15 @@ public static class DependencyInjection
         {
             services.AddScoped<IPageAuditQueue, DisabledPageAuditQueue>();
         }
+
+        if (pngAuditOptions.Enabled)
+        {
+            services.AddScoped<IPngAuditRunQueue, HangfirePngAuditRunQueue>();
+        }
+        else
+        {
+            services.AddScoped<IPngAuditRunQueue, DisabledPngAuditRunQueue>();
+        }
         var configuredUserAgent = configuration[$"{SafeHttpTransportOptions.SectionName}:UserAgent"];
         var configuredContact = configuration[$"{SafeHttpTransportOptions.SectionName}:Contact"];
         var safeHttpOptions = new SafeHttpTransportOptions
@@ -343,6 +367,7 @@ public static class DependencyInjection
         services.AddSingleton<IMonitoringDnsResolver, SystemMonitoringDnsResolver>();
         services.AddSingleton<IDestinationAddressPolicy, StrictDestinationAddressPolicy>();
         services.AddSingleton<SafeHttpConcurrencyLimiter>();
+        services.AddSingleton<PngImageRequestGate>();
         services.AddScoped<SafeHttpTransport>();
         services.AddScoped<ISafeHttpTransport>(provider =>
             provider.GetRequiredService<SafeHttpTransport>());
@@ -423,8 +448,7 @@ public static class DependencyInjection
 
     private static void ValidatePngAuditOptions(PngAuditOptions options)
     {
-        if (options.Enabled
-            || options.WorkerCount != 1
+        if (options.WorkerCount != 1
             || options.MaxPages is < 1 or > 1000
             || options.MaxDepth is < 0 or > 10
             || options.MaxPageBytes < 1
@@ -447,6 +471,8 @@ public static class DependencyInjection
             || options.MaxDecodedMemoryBytes > 4L * 1024 * 1024 * 1024
             || options.MaxTotalHttpAttempts is < 1 or > 100000
             || options.FetchTimeoutSeconds is < 1 or > SafeHttpTransportDefaults.MaxTimeoutSeconds
+            || !double.IsFinite(options.RequestsPerSecondPerHost)
+            || options.RequestsPerSecondPerHost is <= 0 or > 10
             || options.TransientRetryCount is < 0 or > 3
             || options.ImageFetchConcurrency != 1
             || options.ImageDecodeConcurrency != 1
@@ -455,7 +481,7 @@ public static class DependencyInjection
             || options.LeaseDuration > TimeSpan.FromMinutes(15)
             || options.HeartbeatInterval < TimeSpan.FromSeconds(5)
             || options.HeartbeatInterval >= options.LeaseDuration
-            || options.ReconciliationDelay < TimeSpan.FromSeconds(30)
+            || options.ReconciliationDelay < TimeSpan.FromMinutes(1)
             || options.ReconciliationDelay > TimeSpan.FromHours(1)
             || options.ReconciliationBatchSize is < 1 or > 500
             || options.MaxDuration < TimeSpan.FromMinutes(1)

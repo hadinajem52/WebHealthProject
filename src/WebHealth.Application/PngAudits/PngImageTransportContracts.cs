@@ -15,7 +15,8 @@ public sealed record PngImageTransportRequest(
     bool IsProduction,
     int MaxRedirects = SafeHttpTransportDefaults.MaxRedirects,
     int MaxResponseBodyBytes = SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes,
-    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds)
+    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds,
+    double RequestsPerSecondPerHost = 1)
 {
     public ISafeHttpRequestHopPolicy? HopPolicy { get; init; }
 }

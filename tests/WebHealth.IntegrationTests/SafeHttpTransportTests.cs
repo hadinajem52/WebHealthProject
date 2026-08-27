@@ -13,6 +13,7 @@ using WebHealth.Application.PngAudits;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.PngAudits;
+using WebHealth.Infrastructure.SiteAnalysis;
 using Xunit;
 
 namespace WebHealth.IntegrationTests;
@@ -583,6 +584,9 @@ public sealed class SafeHttpTransportTests
         services.AddSingleton<IMonitoringDnsResolver>(resolver);
         services.AddSingleton<IDestinationAddressPolicy>(addressPolicy ?? new ExactLoopbackPolicy());
         services.AddSingleton<SafeHttpConcurrencyLimiter>();
+        services.AddSingleton<SiteAnalysisRequestBudget>();
+        services.AddSingleton<SiteAnalysisHostRateLimiter>();
+        services.AddSingleton<PngImageRequestGate>();
         services.AddSingleton(TimeProvider.System);
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
             {

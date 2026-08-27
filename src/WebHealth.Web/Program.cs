@@ -16,6 +16,7 @@ using WebHealth.Infrastructure.Maintenance;
 using WebHealth.Infrastructure.Notifications;
 using WebHealth.Infrastructure.Seo;
 using WebHealth.Infrastructure.Crawling;
+using WebHealth.Infrastructure.PngAudits;
 using WebHealth.Web.Ajax;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -176,6 +177,7 @@ app.UseMaintenanceScheduling();
 app.UseSeoScheduling();
 app.UsePageAuditScheduling();
 app.UseCrawlScheduling();
+app.UsePngAuditScheduling();
 
 app.Run();
 

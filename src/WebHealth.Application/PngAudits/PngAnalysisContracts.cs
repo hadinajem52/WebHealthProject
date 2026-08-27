@@ -5,6 +5,12 @@ public interface IPngImageAnalyzer
     Task<PngAnalysisResult> AnalyzeAsync(
         ReadOnlyMemory<byte> encodedImage,
         CancellationToken cancellationToken = default);
+
+    Task<PngAnalysisResult> AnalyzeAsync(
+        ReadOnlyMemory<byte> encodedImage,
+        PngImageAnalysisLimits limits,
+        PngRecommendationThresholds recommendationThresholds,
+        CancellationToken cancellationToken = default);
 }
 
 public enum PngImageAnalysisClassification
