@@ -330,19 +330,21 @@ flowchart TD
     A[Bounded encoded response] --> B[Detect actual format from bytes]
     B --> C{Actual format is PNG?}
     C -->|No| D[NotPng]
-    C -->|Yes| E[Read dimensions and frame information]
+    C -->|Yes| E[Read dimensions, bit depth, and frame information]
     E --> F{Resource preflight passes?}
     F -->|No| G[DimensionsExceeded, PixelLimitExceeded, or DecodedMemoryExceeded]
-    F -->|Yes| H[Decode bounded image]
-    H --> I{More than one frame?}
-    I -->|Yes| J[AnimatedPng: no static recommendation]
-    I -->|No| K[Scan decoded alpha values]
-    K --> L{Any pixel alpha below 255?}
-    L -->|Yes| M[UsesTransparency: stop comparison]
-    L -->|No| N[Encode normalized metadata-stripped PNG]
-    N --> O[Encode lossless WebP to counting stream]
-    O --> P[Apply byte and percentage thresholds]
-    P --> Q[Candidate or below threshold]
+    F -->|Yes| H{Uses 16-bit samples?}
+    H -->|Yes| I[UnsupportedBitDepth: stop comparison]
+    H -->|No| J{Validated multi-frame APNG?}
+    J -->|Yes| K[AnimatedPng: transparency unknown, no static recommendation]
+    J -->|No| L[Decode bounded static image]
+    L --> M[Scan decoded alpha values]
+    M --> N{Any pixel alpha below 255?}
+    N -->|Yes| O[UsesTransparency: stop comparison]
+    N -->|No| P[Encode normalized metadata-stripped PNG]
+    P --> Q[Encode lossless WebP to counting stream]
+    Q --> R[Apply byte and percentage thresholds]
+    R --> S[Candidate or below threshold]
 ```
 
 ### 9.1 Format and resource checks
@@ -356,6 +358,7 @@ Before decoding, it checks the image against:
 - maximum height: 10,000;
 - maximum decoded pixels: 40,000,000;
 - maximum decoded memory: 256 MB;
+- 8-bit-or-lower sample precision for the V1 WebP comparison;
 - frame limits and the encoded body limit.
 
 These checks reduce the risk of decompression bombs and excessive memory use.
@@ -384,8 +387,10 @@ transparent background.”
 
 ### 9.3 APNG and other result states
 
-If the PNG has multiple frames, it is classified as `AnimatedPng`. V1 gives it no static WebP
-conversion recommendation.
+If a structurally valid PNG has multiple frames, it is classified as `AnimatedPng`. Its chunks,
+CRCs, frame count, sequence numbers, frame bounds and terminal `IEND` are validated before that
+classification. V1 does not decode its frames, so transparency remains unknown and it receives no
+static WebP conversion recommendation.
 
 Other possible result states include:
 
@@ -395,6 +400,7 @@ HttpNonSuccess
 ResponseTruncated
 NotPng
 IdentificationFailed
+UnsupportedBitDepth
 DimensionsExceeded
 PixelLimitExceeded
 DecodedMemoryExceeded
@@ -606,7 +612,8 @@ flags remain separate so the report can explain exactly where completeness was l
 
 Stores one row per unique image request identity. It contains safe URLs, hashes, HTTP facts,
 dimensions, frame count, transparency facts, classification, reason code, and comparison metrics.
-It does not contain image binaries.
+The transparency fields are nullable because APNG pixels are not decoded in V1. It does not
+contain image binaries.
 
 ### `png_audit_image_source`
 
@@ -633,6 +640,7 @@ UsesTransparency
 
 AnimatedPng
     -> frame_count > 1
+    -> uses_transparency is null
 
 OpaqueWebpCandidate
     -> uses_transparency = false
@@ -808,12 +816,14 @@ The operations document records these decisions as already established:
   architecture.
 - Bounded PNG discovery produces in-memory pages, image identities, source mappings, skips, and
   coverage reasons.
+- Bounded PNG analysis rejects 16-bit comparisons, validates APNG structure, scans decoded alpha,
+  and measures normalized PNG and lossless WebP candidates without retaining encoded bodies.
 - Image bodies, durable audit results, background execution, and the UI belong to later
   increments in the implementation plan.
 
 One implementation detail is especially important: the known APNG fixture is accepted by full
-decoding, but `Image.Identify` alone rejects it. The analyzer therefore must use bounded PNG chunk
-inspection or another proven preflight path instead of relying only on `Image.Identify` for APNG.
+decoding, but `Image.Identify` alone rejects it. The analyzer therefore uses bounded PNG chunk
+inspection and validation instead of relying on `Image.Identify` for APNG.
 
 ## 18. The simplest mental model
 

@@ -64,9 +64,11 @@ public sealed class PngAuditConfigurationTests
 
         using var provider = services.BuildServiceProvider();
         var thresholds = provider.GetRequiredService<PngRecommendationThresholds>();
+        var analyzer = provider.GetRequiredService<IPngImageAnalyzer>();
 
         thresholds.MinSavingsPercent.Should().Be(15);
         thresholds.MinSavingsBytes.Should().Be(1024);
+        analyzer.Should().BeOfType<PngImageAnalyzer>();
     }
 
     private static Dictionary<string, string?> DisabledInfrastructure() => new()

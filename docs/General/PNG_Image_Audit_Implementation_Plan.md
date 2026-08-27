@@ -151,6 +151,7 @@ Inspect the actual decoded pixels.
 | Situation                           | Classification             | User-facing result                                                      |
 | ----------------------------------- | -------------------------- | ----------------------------------------------------------------------- |
 | Bytes are not PNG                   | `NotPng`                   | Downloaded resource is not actually PNG                                 |
+| PNG uses 16-bit samples             | `UnsupportedBitDepth`      | 16-bit PNG — not eligible for the 8-bit V1 comparison                    |
 | PNG has multiple frames             | `AnimatedPng`              | Animated PNG — no static conversion recommendation                      |
 | Any pixel has alpha < 255           | `UsesTransparency`         | Uses transparency — not eligible for the opaque-PNG V1 recommendation   |
 | Fully opaque, WebP threshold passes | `OpaqueWebpCandidate`      | Opaque PNG — lossless WebP candidate                                    |
@@ -803,9 +804,9 @@ height
 frame_count
 pixel_count
 
-uses_transparency
-transparent_pixel_count
-transparent_pixel_percent
+uses_transparency                 nullable; unknown for APNG
+transparent_pixel_count           nullable; unknown for APNG
+transparent_pixel_percent         nullable; unknown for APNG
 
 classification
 reason_code
@@ -942,6 +943,7 @@ HttpNonSuccess
 ResponseTruncated
 NotPng
 IdentificationFailed
+UnsupportedBitDepth
 DimensionsExceeded
 PixelLimitExceeded
 DecodedMemoryExceeded
@@ -969,6 +971,7 @@ OpaqueWebpCandidate
 
 AnimatedPng
     => frame_count > 1
+    => uses_transparency IS NULL
 
 NotPng
     => detected_format IS NOT NULL
@@ -1134,7 +1137,6 @@ Implement:
 
 ```text
 PngImageAnalyzer
-PngRecommendationPolicy
 CountingStream
 ```
 
@@ -1145,9 +1147,15 @@ encoded bytes
    |
 detect actual format
    |
-identify dimensions/frame count
+identify dimensions/bit depth/frame count
    |
 resource preflight
+   |
+if 16-bit -> stop
+   |
+validate APNG structure and CRCs through IEND
+   |
+if animated -> stop
    |
 decode first/static frame
    |
@@ -1176,6 +1184,8 @@ Tests include:
 * one alpha pixel;
 * semitransparent shadow;
 * APNG;
+* truncated and corrupt APNG;
+* 16-bit PNG;
 * corrupt PNG;
 * truncated PNG;
 * extensionless PNG;
@@ -1694,6 +1704,7 @@ V1 is finished only when:
 41. migrations and compiled EF models are current.
 42. package locks and dependency checks pass.
 43. the final documentation lives under `docs/General`.
+44. A 16-bit PNG cannot receive an 8-bit lossless WebP recommendation.
 
 ---
 

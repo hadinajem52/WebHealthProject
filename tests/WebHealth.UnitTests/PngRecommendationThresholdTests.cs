@@ -56,8 +56,41 @@ public sealed class PngRecommendationThresholdTests
     {
         var act = () => PngAnalysisResult.Animated(
             100,
-            new PngImageFacts(1, 1, 1, 1, 0));
+            new PngImageFacts(1, 1, 1, 1, null));
 
         Assert.Throws<ArgumentException>(act);
+    }
+
+    [Fact]
+    public void Animated_RejectsManufacturedTransparencyFacts()
+    {
+        var act = () => PngAnalysisResult.Animated(
+            100,
+            new PngImageFacts(1, 1, 2, 1, 0));
+
+        Assert.Throws<ArgumentException>(act);
+    }
+
+    [Theory]
+    [InlineData(0, 1, 1, 1, 1)]
+    [InlineData(1, 0, 1, 1, 1)]
+    [InlineData(1, 1, 0, 1, 1)]
+    [InlineData(1, 1, 1, 0, 1)]
+    [InlineData(1, 1, 1, 1, 0)]
+    public void AnalysisLimits_RejectNonPositiveValues(
+        int maxEncodedBytes,
+        int maxWidth,
+        int maxHeight,
+        long maxDecodedPixels,
+        long maxDecodedMemoryBytes)
+    {
+        var act = () => new PngImageAnalysisLimits(
+            maxEncodedBytes,
+            maxWidth,
+            maxHeight,
+            maxDecodedPixels,
+            maxDecodedMemoryBytes);
+
+        Assert.Throws<ArgumentOutOfRangeException>(act);
     }
 }

@@ -72,6 +72,12 @@ public static class DependencyInjection
         services.AddSingleton(new PngRecommendationThresholds(
             pngAuditOptions.MinSavingsPercent,
             pngAuditOptions.MinSavingsBytes));
+        services.AddSingleton(new PngImageAnalysisLimits(
+            pngAuditOptions.MaxImageBytes,
+            pngAuditOptions.MaxWidth,
+            pngAuditOptions.MaxHeight,
+            pngAuditOptions.MaxDecodedPixels,
+            pngAuditOptions.MaxDecodedMemoryBytes));
 
         var pageAuditOptions = configuration.GetSection(PageAuditSchedulingOptions.SectionName)
             .Get<PageAuditSchedulingOptions>() ?? new PageAuditSchedulingOptions();
@@ -183,6 +189,7 @@ public static class DependencyInjection
         services.AddScoped<ISiteAnalysisFetcher, SiteAnalysisFetcher>();
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
         services.AddScoped<IPngSiteCrawler, PngSiteCrawler>();
+        services.AddSingleton<IPngImageAnalyzer, PngImageAnalyzer>();
         services.TryAddScoped<ICrawlResultSink, CrawlResultSink>();
         services.AddScoped<ICrawlReportReader, CrawlReportReader>();
         services.AddScoped<ICrawlReconciler, CrawlReconciler>();

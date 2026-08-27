@@ -19,7 +19,8 @@ public enum PngImageAnalysisClassification
     UsesTransparency,
     WebpComparisonFailed,
     OpaqueWebpCandidate,
-    OpaqueBelowWebpThreshold
+    OpaqueBelowWebpThreshold,
+    UnsupportedBitDepth
 }
 
 public enum PngRecommendation
@@ -35,14 +36,13 @@ public sealed record PngImageFacts
         int height,
         int frameCount,
         long pixelCount,
-        long transparentPixelCount)
+        long? transparentPixelCount)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(transparentPixelCount);
-        if (transparentPixelCount > pixelCount)
+        if (transparentPixelCount is < 0 || transparentPixelCount > pixelCount)
         {
             throw new ArgumentOutOfRangeException(nameof(transparentPixelCount));
         }
@@ -62,11 +62,15 @@ public sealed record PngImageFacts
 
     public long PixelCount { get; }
 
-    public bool UsesTransparency => TransparentPixelCount > 0;
+    public bool? UsesTransparency => TransparentPixelCount is null
+        ? null
+        : TransparentPixelCount > 0;
 
-    public long TransparentPixelCount { get; }
+    public long? TransparentPixelCount { get; }
 
-    public decimal TransparentPixelPercent => TransparentPixelCount * 100m / PixelCount;
+    public decimal? TransparentPixelPercent => TransparentPixelCount is null
+        ? null
+        : TransparentPixelCount * 100m / PixelCount;
 }
 
 public sealed record PngComparisonMetrics
@@ -157,9 +161,11 @@ public sealed record PngAnalysisResult
     public static PngAnalysisResult Animated(long originalBytes, PngImageFacts image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        if (image.FrameCount <= 1)
+        if (image.FrameCount <= 1 || image.TransparentPixelCount is not null)
         {
-            throw new ArgumentException("An animated PNG must have multiple frames.", nameof(image));
+            throw new ArgumentException(
+                "An animated PNG must have multiple frames and unknown transparency.",
+                nameof(image));
         }
 
         return new(PngImageAnalysisClassification.AnimatedPng, originalBytes, image: image);
@@ -168,7 +174,7 @@ public sealed record PngAnalysisResult
     public static PngAnalysisResult Transparent(long originalBytes, PngImageFacts image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        if (image.FrameCount != 1 || !image.UsesTransparency)
+        if (image.FrameCount != 1 || image.UsesTransparency is not true)
         {
             throw new ArgumentException("The image must be static and use transparency.", nameof(image));
         }
@@ -207,7 +213,7 @@ public sealed record PngAnalysisResult
     private static void EnsureStaticOpaque(PngImageFacts image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        if (image.FrameCount != 1 || image.UsesTransparency)
+        if (image.FrameCount != 1 || image.UsesTransparency is not false)
         {
             throw new ArgumentException("The image must be static and opaque.", nameof(image));
         }
@@ -215,6 +221,7 @@ public sealed record PngAnalysisResult
 
     private static bool IsFailureClassification(PngImageAnalysisClassification classification) =>
         classification is PngImageAnalysisClassification.IdentificationFailed
+            or PngImageAnalysisClassification.UnsupportedBitDepth
             or PngImageAnalysisClassification.DimensionsExceeded
             or PngImageAnalysisClassification.PixelLimitExceeded
             or PngImageAnalysisClassification.DecodedMemoryExceeded

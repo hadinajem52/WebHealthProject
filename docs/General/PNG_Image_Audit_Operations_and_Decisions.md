@@ -43,6 +43,23 @@ The HTTP-attempt budget counts every outbound exchange, including redirect hops 
 
 Safe transport exposes the exact normalized final request URL only in memory while retaining its query-free final destination for logs and display. Page identity uses the requested URL when no redirect occurred and the exact final request URL after redirects. Asset fetch URLs retain their resolved authored form, while identity hashes use the same canonical request representation that transport sends, preserving query order and values while consolidating equivalent host, port and escape spellings.
 
+## Increment 4 bounded image analysis
+
+`IPngImageAnalyzer` now detects the encoded format from bytes and applies an immutable analysis-limit snapshot before allocating a decoded image. PNG dimensions, bit depth and APNG frame metadata come from bounded signature, `IHDR` and `acTL` inspection. Oversized dimensions, pixel counts and decoded RGBA memory estimates are rejected before decode. Valid 16-bit PNGs receive `UnsupportedBitDepth` instead of being reduced to 8-bit for a falsely lossless comparison.
+
+Before a multi-frame PNG receives `AnimatedPng`, every chunk through the terminal `IEND` must be structurally bounded and CRC-valid. The validator checks APNG frame counts, sequence numbers, frame bounds and frame data. APNG pixels are not decoded in V1, so their transparency count, percentage and boolean state remain unknown rather than being manufactured as zero or false.
+
+Static PNG files decode one frame with metadata skipped and ImageSharp parallelism fixed at one. Every decoded pixel is inspected; any alpha value below 255 classifies the image as using transparency and stops comparison. The singleton analyzer also serializes complete decode and encode work, matching the configured V1 decode concurrency of one.
+
+Opaque images are compared using these stable `normalized-png-vs-lossless-webp-v1` settings:
+
+```text
+normalized PNG: 8-bit RGB, adaptive filter, compression level 9, metadata skipped
+lossless WebP:   lossless mode, quality effort 100, method level 6, metadata skipped
+```
+
+Both encoders write into a discard-only counting stream, so candidate bodies are never retained in memory. The configured recommendation thresholds directly apply the absolute and percentage savings against both the fetched original and the normalized PNG. This prevents metadata removal alone from creating a WebP recommendation without adding a second policy wrapper.
+
 ## ImageSharp dependency decision
 
 Reviewed on 2026-08-26.
@@ -73,7 +90,7 @@ The fixture suite proves that ImageSharp 3.1.12 can:
 
 The APNG fixture is the ImageSharp 3.1.12 upstream `tests/Images/Input/Png/animated/apng.png` test asset with SHA-256 `7C15E4670DA1826D1CC25555BD6CBE287ECC70327CD029A7613334A39A283021`. The other fixtures are locally generated PNGs with fixed decoded-pixel expectations.
 
-ImageSharp 3.1.12 `Image.Identify` rejects the known-valid APNG fixture even though `Image.DetectFormat` and full decoding succeed. Increment 4 must not rely on `Image.Identify` alone for APNG preflight. It must use bounded PNG chunk inspection for dimensions and animation metadata before full pixel decoding, or re-evaluate the dependency version and license decision.
+ImageSharp 3.1.12 `Image.Identify` rejects the known-valid APNG fixture even though `Image.DetectFormat` and full decoding succeed. Increment 4 therefore uses bounded PNG chunk inspection for dimensions and animation metadata before full pixel decoding instead of relying on `Image.Identify`.
 
 ## Transport limits
 
