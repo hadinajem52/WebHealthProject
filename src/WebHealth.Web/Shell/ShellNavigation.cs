@@ -43,6 +43,15 @@ public static class ShellNavigation
                 "Index",
                 ["Administrator", "Operations", "Developer/Support", "Viewer"])
         ]),
+        new("Tools",
+        [
+            new NavigationItem(
+                "PNG image audit",
+                "reports",
+                "PngAudits",
+                "Index",
+                ["Administrator", "Operations", "Developer/Support", "Viewer"])
+        ]),
         new("Administration",
         [
             new NavigationItem("Users", "users", "Administration", "Users", ["Administrator"]),

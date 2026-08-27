@@ -1,0 +1,203 @@
+@model PngAuditIndexViewModel
+@using WebHealth.Domain.PngAudits
+@{
+    ViewData.SetTitle("PNG image audit");
+    ViewData.SetBreadcrumbs(new BreadcrumbItem("PNG image audit"));
+    var activeRun = Model.ActiveRun;
+    var statusUrl = Model.SelectedEndpointId is { } endpointId && activeRun is not null
+        ? Url.Action("Status", "PngAudits", new { endpointId, runId = activeRun.RunId })
+        : null;
+}
+
+<div id="ajax-page" class="stack" data-ajax-region data-run-scope="#png-audit-results">
+    <section class="card" aria-labelledby="png-audit-scope-label">
+        <p class="card__subtitle" id="png-audit-scope-label">
+            Inspect one endpoint's site scope for PNG image references, alpha usage, and opaque
+            images that may become smaller as lossless WebP. The report records URLs only and does
+            not load target-hosted images in your browser.
+        </p>
+
+        <div class="filter-inline filter-inline--wide">
+            <form method="get"
+                  class="filter-inline__group"
+                  data-ajax-form
+                  data-ajax-target="#ajax-page"
+                  data-ajax-history="push">
+                <div class="form-field">
+                    <label for="endpointId">Endpoint</label>
+                    <select id="endpointId" name="endpointId">
+                        <option value="">Select an endpoint</option>
+                        @foreach (var option in Model.Endpoints)
+                        {
+                            <option value="@option.Id" selected="@(option.Id == Model.SelectedEndpointId)">@option.Label</option>
+                        }
+                    </select>
+                </div>
+                <button class="button button--primary" type="submit">
+                    @await Html.PartialAsync("_Icon", "search")
+                    <span>Show audits</span>
+                </button>
+            </form>
+
+            <div id="png-audit-run-action" class="filter-inline__action">
+                @if (activeRun is not null)
+                {
+                    <a class="button button--secondary"
+                       asp-action="Run"
+                       asp-route-id="@activeRun.RunId">
+                        @await Html.PartialAsync("_Spinner", $"png-audit-action-{activeRun.RunId}")
+                        <span>Audit in progress</span>
+                    </a>
+                }
+                else if (Model.SelectedEndpointId is { } runTarget && Model.CanRunNow)
+                {
+                    <form method="post"
+                          asp-action="RunNow"
+                          data-ajax-form
+                          data-ajax-target="#ajax-page">
+                        <input type="hidden" name="endpointId" value="@runTarget" />
+                        <button class="button button--secondary" type="submit"
+                                title="Crawls the endpoint's allowed site scope and analyzes each unique discovered image within the configured limits.">
+                            @await Html.PartialAsync("_Icon", "play")
+                            <span>Run audit</span>
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+
+        @if (Model.SelectedEndpointId is { } selectedEndpoint && !Model.AuditAvailable)
+        {
+            <p class="card__status" data-status="warning">
+                @await Html.PartialAsync("_Icon", "warning")
+                <span>PNG auditing is switched off on this instance. Enable PngAudits to run it.</span>
+            </p>
+        }
+        else if (Model.SelectedEndpointId is { } blockedEndpoint
+            && Model.CanExecute
+            && Model.RunBlock != EndpointTestBlock.None
+            && EndpointTestBlockDisplay.Describe(Model.RunBlock, "a PNG image audit") is { } blockedReason)
+        {
+            <p class="card__status" data-status="warning">
+                @await Html.PartialAsync("_Icon", "warning")
+                <span>
+                    @blockedReason
+                    @if (Model.Endpoints.Any(option => option.Id == blockedEndpoint))
+                    {
+                        <a asp-controller="Targets" asp-action="Endpoint" asp-route-id="@blockedEndpoint">Open endpoint</a>
+                    }
+                </span>
+            </p>
+        }
+    </section>
+
+    <div id="png-audit-results"
+         class="stack"
+         data-run-status
+         data-run-active="@(activeRun is null ? "false" : "true")"
+         data-run-url="@statusUrl"
+         data-run-also="#png-audit-run-action"
+         data-run-lifetime="1860000">
+        @if (Model.SelectedEndpointId is null)
+        {
+            <section class="card">
+                @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                    "Select an endpoint",
+                    "PNG image audit history is recorded per endpoint. Choose one to see its runs.",
+                    "reports"))
+            </section>
+        }
+        else if (Model.Runs.Count == 0)
+        {
+            <section class="card">
+                @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                    "No PNG image audits yet",
+                    Model.CanExecute
+                        ? "Run the first audit to discover PNG use across this endpoint's allowed site scope."
+                        : "No PNG image audit has been recorded for this endpoint.",
+                    "reports"))
+            </section>
+        }
+        else
+        {
+            <section class="card" aria-labelledby="png-audit-history-heading">
+                <div class="page-intro">
+                    <div>
+                        <h2 class="card__title" id="png-audit-history-heading">Audit history</h2>
+                        <p class="card__status" data-status="@(activeRun is null ? "neutral" : "info")">
+                            @if (activeRun is not null)
+                            {
+                                @await Html.PartialAsync("_Spinner", $"png-audit-history-{activeRun.RunId}")
+                            }
+                            else
+                            {
+                                @await Html.PartialAsync("_Icon", "clock")
+                            }
+                            <span>
+                                @Model.Runs.Count run@(Model.Runs.Count == 1 ? null : "s") recorded@(activeRun is null
+                                    ? null
+                                    : " · the active run updates automatically")
+                            </span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="table-scroll table-scroll--flush">
+                    <table class="data-table data-table--history">
+                        <caption class="visually-hidden">PNG image audit runs for the selected endpoint</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Run</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Pages</th>
+                                <th scope="col">Unique images</th>
+                                <th scope="col">WebP candidates</th>
+                                <th scope="col"><span class="visually-hidden">Details</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var run in Model.Runs)
+                            {
+                                var tone = PngAuditDisplay.StatusTone(run);
+                                <tr>
+                                    <td data-label="Run">
+                                        <span class="history-cell">
+                                            @if (PngAuditRunStatuses.IsActive(run.Status))
+                                            {
+                                                <span class="history-cell__mark">
+                                                    @await Html.PartialAsync("_Spinner", $"png-audit-row-{run.RunId}")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                @await Html.PartialAsync("_HistoryMark", tone)
+                                            }
+                                            <span class="history-cell__subject">PNG image audit</span>
+                                            <span class="history-cell__time">Queued @Html.Timestamp(run.QueuedAt)</span>
+                                        </span>
+                                    </td>
+                                    <td data-label="Status">
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                            tone,
+                                            PngAuditDisplay.DescribeStatus(run)))
+                                    </td>
+                                    <td data-label="Pages">@run.PagesDiscovered</td>
+                                    <td data-label="Unique images">@run.ImagesDiscovered</td>
+                                    <td data-label="WebP candidates">@run.RecommendationCount</td>
+                                    <td class="data-table__action">
+                                        <a asp-action="Run" asp-route-id="@run.RunId">Open run</a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/poller.js" asp-append-version="true"></script>
+    <script src="~/js/run-status.js" asp-append-version="true"></script>
+}

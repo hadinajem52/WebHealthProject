@@ -113,7 +113,7 @@ with `PGPASSWORD`, before it exits — including when it fails.
 | `-Seed` | `Snapshot` | `Snapshot` restores the development data. `Empty` builds the schema from migrations and leaves only the roles and the administrator. |
 | `-AdminEmail` | `admin@example.test` | Administrator sign-in address. |
 | `-AdminPassword` | `Hnjm1hnjm23_` | Administrator password. Applies only when the account is being created — see below. |
-| `-EnableScheduling` | off | Enable live background monitoring, crawling, maintenance, page audits and notifications. |
+| `-EnableScheduling` | off | Enable live background monitoring, crawling, maintenance, PageSpeed audits, PNG image audits and notifications. |
 | `-NoScheduling` | off | Explicitly keep background work disabled; retained for existing setup commands. |
 | `-Force` | off | Replace an existing database without the confirmation prompt. |
 | `-Run` | off | Start the application when setup finishes. |
@@ -130,7 +130,7 @@ password that would not work. To choose your own password, either use `-Seed Emp
 
 ### About scheduling
 
-By default all six scheduling switches are off, so nothing runs in the background and the seeded
+By default all seven background-work switches are off, so nothing runs in the background and the seeded
 data stays exactly as it was captured. This is the predictable supervisor-demo mode.
 
 Pass `-EnableScheduling` to monitor the four seeded websites and watch the system work. Every seeded

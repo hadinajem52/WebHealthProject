@@ -80,6 +80,16 @@ The worker heartbeats while page discovery, image fetching and analysis run. It 
 
 PNG image transport is the only 8 MB path. It now acquires a one-slot PNG child gate and the shared site-analysis request budget, while the parent budget remains capped at half of global safe-transport concurrency. The other half stays reserved for normal monitoring, and remaining site-analysis slots stay available to broken-link work. PNG page and image requests use the run's own snapshotted `RequestsPerSecondPerHost` value. The singleton analyzer continues to serialize decode and encode work, but each execution supplies its snapshotted resource limits and recommendation thresholds rather than mutable startup values.
 
+Lease recovery restores cumulative page-discovery, page-byte and outbound-request progress before rediscovery. The run deadline remains anchored to the first claim time across later lease claims, while rediscovered pages remain idempotent work rather than consuming the page-count limit twice. Image fetches apply the run's snapshotted transient retry policy, including bounded `Retry-After` handling, and every retry and redirect hop consumes the same cumulative outbound-request budget.
+
+## Increment 7 tools UI
+
+The feature is exposed at `/Tools/PngImages` under a new **Tools** sidebar section. All four application personas can read runs through the existing registry-visibility boundary. Administrator, Operations and Developer/Support can queue a run only when the existing endpoint test gate permits it; Viewer cannot queue work. The manual POST is anti-forgery protected and returns `202 Accepted` to the existing AJAX run poller. Status reads return `202` while the durable run is queued or running and `200` after a terminal transition.
+
+The run screen separates recorded result totals from site-crawl, image-analysis and source-mapping coverage. Image filters execute in the database before deterministic pagination. Each row shows the redacted image URL, first recorded source page and source count, dimensions, response size, alpha-use state, classification, measured lossless WebP size and original-file saving. It never embeds a target-hosted image or persists a new preview artifact.
+
+`PngAudits:Enabled` is now `true` in the normal committed runtime settings because queue execution and its authorized UI are both delivered. `appsettings.Testing.json` and the fresh-machine setup keep it off unless background work is explicitly enabled, preserving deterministic tests and the setup script's non-mutating demo mode. No schema change is part of this increment; `20260827092012_PngAuditPersistenceHardening` remains the latest required PNG migration.
+
 ## ImageSharp dependency decision
 
 Reviewed on 2026-08-26.
@@ -116,4 +126,4 @@ ImageSharp 3.1.12 `Image.Identify` rejects the known-valid APNG fixture even tho
 
 Normal monitoring and crawling continue to default to 2 MB. `SafeHttpTransport` implements only `ISafeHttpTransport` and rejects requests above that standard ceiling. The PNG-specific `PngImageTransport` adapter uses an internal extended operation and may explicitly request up to the 8 MB absolute ceiling. Requests beyond the ceiling for either path are rejected before outbound execution.
 
-The `PngAudits` configuration snapshots the V1 defaults from the implementation plan and validates them during application startup. It includes the PNG-specific host request rate, maximum attempts, lease duration, heartbeat interval, reconciliation delay and reconciliation batch size. `Enabled: true` is accepted only because queue, worker and reconciliation activation are now connected. The feature remains disabled in committed defaults until the Increment 7 UI is delivered.
+The `PngAudits` configuration snapshots the V1 defaults from the implementation plan and validates them during application startup. It includes the PNG-specific host request rate, maximum attempts, lease duration, heartbeat interval, reconciliation delay and reconciliation batch size. `Enabled: true` is accepted because queue, worker, reconciliation and the authorized Tools UI are connected. Normal runtime settings enable the feature; testing and fresh-machine setup keep it disabled unless background work is explicitly requested.

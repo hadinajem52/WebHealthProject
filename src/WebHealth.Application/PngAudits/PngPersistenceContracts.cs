@@ -493,7 +493,46 @@ public sealed record PngAuditImageResultView(
     decimal? OriginalSavingsPercent,
     long? NormalizedSavingsBytes,
     decimal? NormalizedSavingsPercent,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    int SourceCount = 0,
+    string? FirstSourcePageDisplayUrl = null);
+
+public sealed record PngAuditResultSummaryView(
+    int ImageReferencesDiscovered,
+    int UniqueImages,
+    int PngsAnalyzed,
+    int UsesTransparency,
+    int OpaquePngs,
+    int WebpCandidates,
+    int BelowThreshold,
+    int SkippedOrNotAnalyzed);
+
+public static class PngAuditImageFilters
+{
+    public const string All = "all";
+    public const string WebpCandidates = "webp-candidates";
+    public const string UsesTransparency = "uses-transparency";
+    public const string BelowWebpThreshold = "below-webp-threshold";
+    public const string AnimatedPng = "animated-png";
+    public const string NotAnalyzed = "not-analyzed";
+    public const string NotPng = "not-png";
+
+    public static IReadOnlyList<string> Values { get; } =
+    [
+        All,
+        WebpCandidates,
+        UsesTransparency,
+        BelowWebpThreshold,
+        AnimatedPng,
+        NotAnalyzed,
+        NotPng
+    ];
+
+    public static string Normalize(string? value) =>
+        Values.Contains(value ?? string.Empty, StringComparer.Ordinal)
+            ? value!
+            : All;
+}
 
 public sealed record PngAuditImageSourceView(
     Guid SourceId,
@@ -531,6 +570,19 @@ public interface IPngAuditReader
         Guid runId,
         int offset,
         int limit,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
+    Task<PngAuditPage<PngAuditImageResultView>> ListImagesByFilterAsync(
+        Guid runId,
+        string filter,
+        int offset,
+        int limit,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
+    Task<PngAuditResultSummaryView?> GetResultSummaryAsync(
+        Guid runId,
         RegistryAccessContext access,
         CancellationToken cancellationToken = default);
 

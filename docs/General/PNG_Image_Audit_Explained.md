@@ -658,7 +658,7 @@ being stored as if it were a valid result.
 
 ## 14. How users see the feature
 
-The sidebar will contain:
+The sidebar contains:
 
 ```text
 Tools
@@ -807,7 +807,7 @@ and final integration tests. Only after this increment is the feature exposed to
 
 The operations document records these decisions as already established:
 
-- PNG auditing is disabled by default.
+- PNG auditing is enabled in normal runtime settings and disabled in tests and fresh-machine setup unless background work is explicitly requested.
 - The stable analyzer and comparison profiles are defined.
 - The comparison policy validates both byte and percentage thresholds.
 - Fetch outcomes and image-analysis outcomes use separate typed classifications.
@@ -824,7 +824,8 @@ The operations document records these decisions as already established:
   purge.
 - The dedicated one-worker `image-audits` queue now runs the full crawl, fetch, analysis and
   persistence flow with heartbeats and reconciliation independently of broken-link scheduling.
-- The Tools UI remains disabled until Increment 7.
+- The Tools UI now exposes authorized run history, live status, coverage, filtering, pagination,
+  source counts, and measured recommendations without embedding target-hosted images.
 
 One implementation detail is especially important: the known APNG fixture is accepted by full
 decoding, but `Image.Identify` alone rejects it. The analyzer therefore uses bounded PNG chunk

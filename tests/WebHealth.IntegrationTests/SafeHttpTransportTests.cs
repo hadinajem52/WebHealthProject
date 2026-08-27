@@ -132,6 +132,56 @@ public sealed class SafeHttpTransportTests
     }
 
     [Fact]
+    public async Task PngSendAsync_RetriesTransientFailuresWithinTheSnapshottedPolicy()
+    {
+        await using var server = await HttpFixture.Start(
+            contact => contact == 1
+                ? "HTTP/1.1 503 Service Unavailable\r\nRetry-After: 0\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                : "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+            repeat: true);
+        await using var harness = CreateHarness(
+            new HostResolver(("retry.test", [IPAddress.Loopback])));
+
+        var result = await harness.PngImageTransport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://retry.test:{server.Port}/asset.png",
+            false)
+        {
+            TransientRetryCount = 1,
+            MaxOutboundRequests = 4
+        });
+
+        result.StatusCode.Should().Be(200);
+        result.OutboundRequestCount.Should().Be(
+            2, "every outbound attempt must count against the run budget");
+        server.ContactCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task PngSendAsync_StopsRetryingWhenTheOutboundBudgetIsSpent()
+    {
+        await using var server = await HttpFixture.Start(
+            "HTTP/1.1 503 Service Unavailable\r\nRetry-After: 0\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            repeat: true);
+        await using var harness = CreateHarness(
+            new HostResolver(("budget.test", [IPAddress.Loopback])));
+
+        var result = await harness.PngImageTransport.SendAsync(new(
+            Guid.NewGuid(),
+            $"http://budget.test:{server.Port}/asset.png",
+            false)
+        {
+            TransientRetryCount = 3,
+            MaxOutboundRequests = 2
+        });
+
+        result.StatusCode.Should().Be(503);
+        result.OutboundRequestCount.Should().Be(2);
+        server.ContactCount.Should().Be(
+            2, "the outbound budget bounds retries even when the policy allows more");
+    }
+
+    [Fact]
     public async Task SendAsync_RejectsElevatedLimitForGenericRequestsBeforeOutboundExecution()
     {
         await using var server = await HttpFixture.Start(

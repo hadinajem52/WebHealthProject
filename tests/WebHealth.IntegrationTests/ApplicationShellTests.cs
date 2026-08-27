@@ -121,15 +121,13 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
     }
 
     [Fact]
-    public async Task Navigation_MarksTheCurrentPageAndDoesNotLinkPlannedDestinations()
+    public async Task Navigation_MarksTheCurrentPageAndUsesValidDestinations()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
         var content = await client.GetStringAsync("/");
 
         Assert.Contains("aria-current=\"page\"", content, StringComparison.Ordinal);
-        Assert.Contains("aria-disabled=\"true\"", content, StringComparison.Ordinal);
-        Assert.Contains(">Planned<", content, StringComparison.Ordinal);
         Assert.DoesNotContain("href=\"\"", content, StringComparison.Ordinal);
     }
 
@@ -349,7 +347,7 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
         var content = await response.Content.ReadAsStringAsync();
 
         Assert.Contains("class=\"error-state\"", content, StringComparison.Ordinal);
-        Assert.DoesNotContain("Try again", content, StringComparison.Ordinal);
+        Assert.DoesNotContain(">Try again</a>", content, StringComparison.Ordinal);
     }
 
     [GeneratedRegex("(?:href|src)=\"(?<url>/[^\"]+\\.(?:css|js|ico)(?:\\?[^\"]*)?)\"")]

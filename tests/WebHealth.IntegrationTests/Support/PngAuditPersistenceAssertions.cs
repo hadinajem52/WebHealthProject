@@ -135,6 +135,25 @@ internal static class PngAuditPersistenceAssertions
         storedCandidate.CandidateWebpBytes.Should().Be(700);
         storedCandidate.NormalizedSavingsBytes.Should().Be(200);
         storedCandidate.NormalizedSavingsPercent.Should().Be(22.2222m);
+        storedCandidate.SourceCount.Should().Be(6);
+        storedCandidate.FirstSourcePageDisplayUrl.Should().Be(endpointUrl + "/");
+        var candidatePage = await reader.ListImagesByFilterAsync(
+            runId, PngAuditImageFilters.WebpCandidates, 0, 50, access);
+        candidatePage.Items.Should().ContainSingle()
+            .Which.Classification.Should().Be(PngAuditImageClassifications.OpaqueWebpCandidate);
+        var notAnalyzedPage = await reader.ListImagesByFilterAsync(
+            runId, PngAuditImageFilters.NotAnalyzed, 0, 50, access);
+        notAnalyzedPage.Items.Should().HaveCount(10);
+        var resultSummary = await reader.GetResultSummaryAsync(runId, access);
+        resultSummary.Should().Be(new PngAuditResultSummaryView(
+            11,
+            15,
+            5,
+            1,
+            3,
+            1,
+            1,
+            15));
         (await reader.ListSourcesAsync(candidate.Id, 0, 10, access)).Items.Should().HaveCount(6);
         (await reader.ListDiscoverySkipsAsync(runId, 0, 10, access)).Items.Should().HaveCount(5);
         (await reader.ListCoverageReasonsAsync(runId, access)).Should().HaveCount(2);

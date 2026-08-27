@@ -13,6 +13,7 @@ using WebHealth.Application.Notifications;
 using WebHealth.Application.Seo;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.PageAudits;
+using WebHealth.Application.PngAudits;
 using WebHealth.Application.Registry;
 using WebHealth.Application.Reporting;
 using WebHealth.Application.Monitoring;
@@ -52,6 +53,8 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddScoped<ICrawlReportReader, EmptyCrawlReportReader>();
             services.RemoveAll<IPageAuditReader>();
             services.AddScoped<IPageAuditReader, EmptyPageAuditReader>();
+            services.RemoveAll<IPngAuditReader>();
+            services.AddScoped<IPngAuditReader, EmptyPngAuditReader>();
             services.RemoveAll<IPageAuditIncidentPolicyService>();
             services.AddSingleton<EmptyPageAuditIncidentPolicyService>();
             services.AddScoped<IPageAuditIncidentPolicyService>(provider =>
@@ -92,6 +95,10 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddSingleton<RecordingCrawlRunner>();
             services.AddScoped<ICrawlRunner>(provider =>
                 provider.GetRequiredService<RecordingCrawlRunner>());
+            services.RemoveAll<IPngAuditRunner>();
+            services.AddSingleton<RecordingPngAuditRunner>();
+            services.AddScoped<IPngAuditRunner>(provider =>
+                provider.GetRequiredService<RecordingPngAuditRunner>());
             services.RemoveAll<IEndpointTestGate>();
             services.AddScoped<IEndpointTestGate, PermissiveEndpointTestGate>();
 

@@ -1,0 +1,362 @@
+@model PngAuditRunViewModel
+@using WebHealth.Application.PngAudits
+@using WebHealth.Domain.PngAudits
+@{
+    var run = Model.Run;
+    var summary = Model.Summary;
+    var isActive = PngAuditRunStatuses.IsActive(run.Status);
+    var runTone = PngAuditDisplay.StatusTone(run);
+    var statusUrl = Url.Action("Status", "PngAudits", new
+    {
+        endpointId = run.EndpointId,
+        runId = run.RunId,
+        details = true,
+        filter = Model.Filter,
+        offset = Model.Images.Offset
+    });
+    ViewData.SetTitle("PNG image audit run");
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem("PNG image audit", Url.Action("Index", "PngAudits", new { endpointId = run.EndpointId })),
+        new BreadcrumbItem("Audit run"));
+    var coverage = new[]
+    {
+        (Label: "Site crawl coverage", Area: PngCoverageArea.Crawl.ToString(), Limited: run.CrawlCoverageLimited),
+        (Label: "Image-analysis coverage", Area: PngCoverageArea.ImageAnalysis.ToString(), Limited: run.ImageAnalysisCoverageLimited),
+        (Label: "Source-mapping coverage", Area: PngCoverageArea.SourceMappings.ToString(), Limited: run.SourceMappingCoverageLimited)
+    };
+}
+
+<div id="ajax-page"
+     class="stack"
+     data-ajax-region
+     data-run-scope="#ajax-page"
+     data-run-status
+     data-run-active="@(isActive ? "true" : "false")"
+     data-run-url="@statusUrl"
+     data-run-lifetime="1860000">
+    <section class="card" aria-labelledby="png-run-status">
+        <div class="page-intro">
+            <div>
+                <p class="card__status" data-status="@runTone" id="png-run-status">
+                    @if (isActive)
+                    {
+                        @await Html.PartialAsync("_Spinner", $"png-audit-run-{run.RunId}")
+                    }
+                    else
+                    {
+                        @await Html.PartialAsync("_Icon", PngAuditDisplay.StatusIcon(runTone))
+                    }
+                    <span>@PngAuditDisplay.DescribeStatus(run) · @run.SeedUrl</span>
+                </p>
+            </div>
+            <div class="form-actions">
+                <a class="button button--secondary"
+                   asp-action="Index"
+                   asp-route-endpointId="@run.EndpointId">
+                    @await Html.PartialAsync("_Icon", "arrow-left")
+                    <span>Back to audit history</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="detail-list">
+            <div class="detail-list__head" aria-hidden="true">
+                <span>Subject</span>
+                <span>Status</span>
+            </div>
+            <ul class="detail-list__items">
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
+                            <span>Queued</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(run.QueuedAt)</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "play")</span>
+                            <span>Started</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(run.StartedAt, "Waiting for a worker")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "check")</span>
+                            <span>Finished</span>
+                        </span>
+                        <span class="detail-list__value">@Html.TimestampWithSeconds(run.FinishedAt, "Still running")</span>
+                    </div>
+                </li>
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "restore")</span>
+                            <span>Execution attempts</span>
+                        </span>
+                        <span class="detail-list__value">@run.AttemptCount</span>
+                    </div>
+                </li>
+                @if (run.Status == PngAuditRunStatuses.Failed)
+                {
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "error")</span>
+                                <span>Why it failed</span>
+                            </span>
+                            <span class="detail-list__value">@PngAuditDisplay.DescribeFailure(run)</span>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="png-summary-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="png-summary-heading">Audit summary</h2>
+                <p class="card__status" data-status="@(isActive ? "info" : "neutral")">
+                    @if (isActive)
+                    {
+                        @await Html.PartialAsync("_Spinner", $"png-audit-summary-{run.RunId}")
+                    }
+                    else
+                    {
+                        @await Html.PartialAsync("_Icon", "reports")
+                    }
+                    <span>@(isActive ? "Partial totals recorded so far" : "Final recorded totals")</span>
+                </p>
+            </div>
+        </div>
+
+        <div class="stat-grid">
+            <div class="stat">
+                <p class="stat__label">Pages inspected</p>
+                <p class="stat__value">@run.PagesDiscovered</p>
+                <p class="stat__detail">Pages admitted to this run's crawl scope</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Images discovered</p>
+                <p class="stat__value">@summary.ImageReferencesDiscovered</p>
+                <p class="stat__detail">Recorded image references, including skipped values</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Unique images</p>
+                <p class="stat__value">@summary.UniqueImages</p>
+                <p class="stat__detail">Distinct image requests after canonical deduplication</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">PNGs analyzed</p>
+                <p class="stat__value">@summary.PngsAnalyzed</p>
+                <p class="stat__detail">PNG files with a completed structural or pixel outcome</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Uses transparency</p>
+                <p class="stat__value">@summary.UsesTransparency</p>
+                <p class="stat__detail">Static PNGs where at least one alpha value is below 255</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Opaque PNGs</p>
+                <p class="stat__value">@summary.OpaquePngs</p>
+                <p class="stat__detail">Static opaque PNGs sent to lossless WebP comparison</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">WebP candidates</p>
+                <p class="stat__value">@summary.WebpCandidates</p>
+                <p class="stat__detail">Passed both byte and percentage thresholds</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Below threshold</p>
+                <p class="stat__value">@summary.BelowThreshold</p>
+                <p class="stat__detail">Compared successfully without meeting both thresholds</p>
+            </div>
+            <div class="stat">
+                <p class="stat__label">Skipped / not analyzed</p>
+                <p class="stat__value">@summary.SkippedOrNotAnalyzed</p>
+                <p class="stat__detail">Skipped references and images without a completed PNG outcome</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="png-coverage-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="png-coverage-heading">Coverage</h2>
+                <p class="card__status" data-status="@(isActive ? "info" : coverage.Any(item => item.Limited) ? "warning" : "success")">
+                    @await Html.PartialAsync("_Icon", isActive ? "information" : coverage.Any(item => item.Limited) ? "warning" : "success")
+                    <span>
+                        @(isActive
+                            ? "Coverage is not final while the run is active"
+                            : coverage.Any(item => item.Limited)
+                                ? "At least one coverage area was limited"
+                                : "No coverage limits were recorded")
+                    </span>
+                </p>
+            </div>
+        </div>
+
+        <div class="stat-grid">
+            @foreach (var item in coverage)
+            {
+                var reasons = Model.CoverageFor(item.Area);
+                var detail = reasons.Count == 0
+                    ? isActive ? "No limit recorded so far" : "No limit was recorded"
+                    : string.Join(", ", reasons.Select(reason =>
+                        $"{PngAuditDisplay.DescribeCoverageReason(reason.ReasonCode)} ({reason.Count})"));
+                <div class="stat">
+                    <p class="stat__label">@item.Label</p>
+                    <p class="stat__value">
+                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                            isActive ? "info" : item.Limited ? "warning" : "success",
+                            isActive ? "In progress" : item.Limited ? "Limited" : "Complete"))
+                    </p>
+                    <p class="stat__detail">@detail</p>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="png-results-heading">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title" id="png-results-heading">Image results</h2>
+                <p class="card__status" data-status="neutral">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>@PngAuditDisplay.DescribeFilter(Model.Filter)</span>
+                </p>
+            </div>
+        </div>
+
+        <nav class="segmented" aria-label="Image result filters">
+            @foreach (var filter in PngAuditImageFilters.Values)
+            {
+                var selected = filter == Model.Filter;
+                <a class="segmented__option"
+                   aria-current="@(selected ? "page" : null)"
+                   asp-action="Run"
+                   asp-route-id="@run.RunId"
+                   asp-route-filter="@filter"
+                   data-ajax-link
+                   data-ajax-target="#ajax-page">
+                    @PngAuditDisplay.DescribeFilter(filter)
+                </a>
+            }
+        </nav>
+
+        @if (Model.Images.Items.Count == 0)
+        {
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                Model.Images.Offset == 0 ? "No images match this filter" : "No more image results",
+                Model.Images.Offset == 0
+                    ? "Choose another filter to see the other recorded image outcomes."
+                    : "You have reached the end of this result list.",
+                "reports"))
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="data-table audit-table">
+                    <caption class="visually-hidden">Image results recorded by this PNG audit</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Image</th>
+                            <th scope="col">Used on</th>
+                            <th scope="col">Dimensions</th>
+                            <th scope="col">Current size</th>
+                            <th scope="col">Transparency</th>
+                            <th scope="col">Recommendation</th>
+                            <th scope="col">Lossless WebP size</th>
+                            <th scope="col">Potential saving</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var image in Model.Images.Items)
+                        {
+                            <tr>
+                                <td data-label="Image">
+                                    <span class="target-url">@image.ImageDisplayUrl</span>
+                                    @if (image.FinalDisplayUrl is { } finalUrl
+                                        && !string.Equals(finalUrl, image.ImageDisplayUrl, StringComparison.Ordinal))
+                                    {
+                                        <span class="data-table__secondary target-url">Fetched as @finalUrl</span>
+                                    }
+                                </td>
+                                <td data-label="Used on">
+                                    @if (image.SourceCount == 0)
+                                    {
+                                        <span>Not recorded</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="target-url">@image.FirstSourcePageDisplayUrl</span>
+                                        @if (image.SourceCount > 1)
+                                        {
+                                            <span class="data-table__secondary">+ @(image.SourceCount - 1) more reference@(image.SourceCount == 2 ? null : "s")</span>
+                                        }
+                                    }
+                                </td>
+                                <td data-label="Dimensions">
+                                    @(image.Width is { } width && image.Height is { } height
+                                        ? $"{width:N0} × {height:N0}"
+                                        : "Not measured")
+                                </td>
+                                <td data-label="Current size">@PngAuditDisplay.FormatBytes(image.ResponseBytes > 0 ? image.ResponseBytes : null)</td>
+                                <td data-label="Transparency">@PngAuditDisplay.DescribeTransparency(image)</td>
+                                <td data-label="Recommendation">
+                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                        PngAuditDisplay.ClassificationTone(image),
+                                        PngAuditDisplay.DescribeClassification(image)))
+                                </td>
+                                <td data-label="Lossless WebP size">@PngAuditDisplay.FormatBytes(image.CandidateWebpBytes)</td>
+                                <td data-label="Potential saving">@PngAuditDisplay.FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="pagination" aria-label="Image result pages">
+                <span>Showing @(Model.Images.Offset + 1)–@(Model.Images.Offset + Model.Images.Items.Count)</span>
+                <span class="pagination__actions">
+                    @if (Model.Images.Offset > 0)
+                    {
+                        <a class="button button--secondary"
+                           asp-action="Run"
+                           asp-route-id="@run.RunId"
+                           asp-route-filter="@Model.Filter"
+                           asp-route-offset="@Model.PreviousOffset"
+                           data-ajax-link
+                           data-ajax-target="#ajax-page">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (Model.Images.HasMore)
+                    {
+                        <a class="button button--secondary"
+                           asp-action="Run"
+                           asp-route-id="@run.RunId"
+                           asp-route-filter="@Model.Filter"
+                           asp-route-offset="@Model.NextOffset"
+                           data-ajax-link
+                           data-ajax-target="#ajax-page">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
+        }
+    </section>
+</div>
+
+@section Scripts {
+    <script src="~/js/poller.js" asp-append-version="true"></script>
+    <script src="~/js/run-status.js" asp-append-version="true"></script>
+}
