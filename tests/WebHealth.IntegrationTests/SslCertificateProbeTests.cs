@@ -120,7 +120,8 @@ public sealed class SslCertificateProbeTests
     [Fact]
     public async Task ProbeAsync_ReportsConnectionFailureWhenNothingIsListening()
     {
-        var closedPort = FindClosedPort();
+        using var reservation = ReserveNonListeningPort();
+        var closedPort = ((IPEndPoint)reservation.LocalEndPoint!).Port;
 
         var result = await CreateProbe().ProbeAsync(
             new(Guid.NewGuid(), $"https://allowed.test:{closedPort}/"));
@@ -206,13 +207,11 @@ public sealed class SslCertificateProbeTests
         result.Failure.Should().Be(SslProbeFailureKind.Timeout);
     }
 
-    private static int FindClosedPort()
+    private static Socket ReserveNonListeningPort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        var reservation = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        reservation.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        return reservation;
     }
 
     private static ISslCertificateProbe CreateProbe(

@@ -150,7 +150,7 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
     }
 
     [Fact]
-    public async Task StandaloneHierarchyCreationActionsAreSecondary()
+    public async Task RegistryCreationActionsUseTheSharedActionMenu()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Administrator);
 
@@ -158,10 +158,10 @@ public sealed class EndpointFirstRegistryTests(WebHealthWebApplicationFactory fa
         var websites = await client.GetStringAsync("/Registry/Websites");
 
         Assert.Matches(
-            "<a(?=[^>]*class=\"button button--secondary\")(?=[^>]*href=\"/Registry/CreateClient\")[^>]*>",
+            "<a(?=[^>]*class=\"action-menu__item\")(?=[^>]*href=\"/Registry/CreateClient\")[^>]*>",
             clients);
         Assert.Matches(
-            "<a(?=[^>]*class=\"button button--secondary\")(?=[^>]*href=\"/Registry/CreateWebsite\")[^>]*>",
+            "<a(?=[^>]*class=\"action-menu__item\")(?=[^>]*href=\"/Registry/CreateWebsite\")[^>]*>",
             websites);
     }
 

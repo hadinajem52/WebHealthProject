@@ -48,11 +48,11 @@ public sealed class RuntimeFoundationTests(WebHealthWebApplicationFactory factor
     {
         using var client = factory.CreateHttpsClient();
 
-        var response = await client.GetAsync("/Home/HttpStatusCode?code=404");
+        var response = await client.GetAsync("/Home/HttpStatusCode?code=500");
         var content = await response.Content.ReadAsStringAsync();
         var correlationId = Assert.Single(response.Headers.GetValues(CorrelationIdMiddleware.HeaderName));
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Contains(correlationId, content);
         Assert.DoesNotContain("Development Mode", content);
     }
