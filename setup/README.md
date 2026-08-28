@@ -22,6 +22,10 @@ build the schema from migrations instead.
 
 Node.js is **not** required.
 
+The PNG audit's Phase 3 reference optimizer is bundled with the application. The repository pins
+the official oxipng 10.2.0 Windows x64 and Linux x64-musl executables, so no machine-level oxipng
+installation is required.
+
 ## Run it
 
 From the repository root:
