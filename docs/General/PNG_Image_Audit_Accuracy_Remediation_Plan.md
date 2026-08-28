@@ -4,7 +4,7 @@
 **Current baseline:** `b43c9fa132875e116b8e91296684d932abd3bbd4`
 **Audited baseline:** `cb149a317e98e9db6b19718044c891856685920b`
 **Suggested path:** `docs/General/PNG_Image_Audit_Accuracy_Remediation_Plan.md`
-**Status:** **Phase 2 in progress**
+**Status:** **Phase 2 complete; Phase 3 not started**
 **Feature:** `Tools → PNG image audit`
 **Supersedes:** section 4 (Format-comparison policy) and section 15 (Legal result-state matrix) of
 [PNG_Image_Audit_Implementation_Plan.md](PNG_Image_Audit_Implementation_Plan.md)
@@ -521,6 +521,11 @@ The UI must **not** yet say "change format".
 **Gate:** all 15 corpus images produce verified candidates or an explicit unavailable reason; zero
 recommendations emitted without passing all six checks; acceptance corpus verified through an
 independent decoder (section 3.4).
+
+**Gate result:** passed on 28 August 2026. The production discovery path reproduced 28 pages, 124
+unique image requests, and the exact 15-PNG corpus. All 15 produced independently decoded,
+byte-exact VP8L candidates. Every result withheld a format-change recommendation with
+`OptimizedPngReferencePending`, as required before Phase 3.
 
 ---
 
