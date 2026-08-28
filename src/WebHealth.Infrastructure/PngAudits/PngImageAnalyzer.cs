@@ -10,6 +10,7 @@ namespace WebHealth.Infrastructure.PngAudits;
 public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
 {
     private const int DecodedBytesPerPixel = 4;
+    private const int HighBitDepthDecodedBytesPerPixel = 8;
     private readonly PngImageAnalysisLimits _limits;
     private readonly PngRecommendationThresholds _recommendationThresholds;
     private readonly DecoderOptions _decoderOptions;
@@ -94,7 +95,6 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
             return await AnalyzeDecodedImageAsync(
                 encodedImage,
                 preflight,
-                recommendationThresholds,
                 cancellationToken);
         }
         finally
@@ -134,7 +134,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
         }
     }
 
-    private PngAnalysisResult? ApplyResourceLimits(
+    private static PngAnalysisResult? ApplyResourceLimits(
         PngChunkPreflight preflight,
         long originalBytes,
         PngImageAnalysisLimits limits)
@@ -153,14 +153,10 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
                 originalBytes);
         }
 
-        if (!preflight.HasSupportedBitDepth)
-        {
-            return PngAnalysisResult.Failed(
-                PngImageAnalysisClassification.UnsupportedBitDepth,
-                originalBytes);
-        }
-
-        if (preflight.PixelCount > limits.MaxDecodedMemoryBytes / DecodedBytesPerPixel)
+        var bytesPerPixel = preflight.IsHighBitDepth
+            ? HighBitDepthDecodedBytesPerPixel
+            : DecodedBytesPerPixel;
+        if (preflight.PixelCount > limits.MaxDecodedMemoryBytes / bytesPerPixel)
         {
             return PngAnalysisResult.Failed(
                 PngImageAnalysisClassification.DecodedMemoryExceeded,
@@ -175,40 +171,52 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
     private async Task<PngAnalysisResult> AnalyzeDecodedImageAsync(
         ReadOnlyMemory<byte> encodedImage,
         PngChunkPreflight preflight,
-        PngRecommendationThresholds recommendationThresholds,
         CancellationToken cancellationToken)
     {
-        using var image = await DecodeAsync(encodedImage, cancellationToken);
+        var originalBytes = encodedImage.Length;
+        if (preflight.IsHighBitDepth)
+        {
+            using var wide = await DecodeAsync<Rgba64>(encodedImage, cancellationToken);
+            if (wide is null || wide.Width != preflight.Width || wide.Height != preflight.Height)
+            {
+                return PngAnalysisResult.Failed(
+                    PngImageAnalysisClassification.DecodeFailed,
+                    originalBytes);
+            }
+
+            var wideTransparency = MeasureWideTransparency(wide, cancellationToken);
+            return PngAnalysisResult.HighBitDepth(
+                originalBytes,
+                preflight.CreateFacts(wideTransparency));
+        }
+
+        using var image = await DecodeAsync<Rgba32>(encodedImage, cancellationToken);
         if (image is null || image.Width != preflight.Width || image.Height != preflight.Height)
         {
             return PngAnalysisResult.Failed(
                 PngImageAnalysisClassification.DecodeFailed,
-                encodedImage.Length);
+                originalBytes);
         }
 
-        var transparentPixelCount = CountTransparentPixels(image, cancellationToken);
-        var imageFacts = preflight.CreateFacts(transparentPixelCount);
-        if (imageFacts.UsesTransparency is true)
+        var transparency = MeasureTransparency(image, cancellationToken);
+        var facts = preflight.CreateFacts(transparency);
+        if (!preflight.CanTransferColorMeaning)
         {
-            return PngAnalysisResult.Transparent(encodedImage.Length, imageFacts);
+            return PngAnalysisResult.ColorProfileUnsupported(originalBytes, facts);
         }
 
-        return await CompareEncodingsAsync(
-            image,
-            imageFacts,
-            encodedImage.Length,
-            recommendationThresholds,
-            cancellationToken);
+        return await MeasureEncodingsAsync(image, facts, originalBytes, cancellationToken);
     }
 
-    private async Task<Image<Rgba32>?> DecodeAsync(
+    private async Task<Image<TPixel>?> DecodeAsync<TPixel>(
         ReadOnlyMemory<byte> encodedImage,
         CancellationToken cancellationToken)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         try
         {
             await using var stream = new MemoryStream(encodedImage.ToArray(), writable: false);
-            return await Image.LoadAsync<Rgba32>(_decoderOptions, stream, cancellationToken);
+            return await Image.LoadAsync<TPixel>(_decoderOptions, stream, cancellationToken);
         }
         catch (InvalidImageContentException)
         {
@@ -224,64 +232,197 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
         }
     }
 
-    private static long CountTransparentPixels(
+    private static PngTransparencyFacts MeasureTransparency(
         Image<Rgba32> image,
         CancellationToken cancellationToken)
     {
-        long transparentPixelCount = 0;
+        var width = image.Width;
+        var height = image.Height;
+        long pixelCount = (long)width * height;
+        long semiTransparent = 0;
+        long fullyTransparent = 0;
+        var minAlpha = byte.MaxValue;
+        byte[]? fullyTransparentMap = null;
+
         image.ProcessPixelRows(accessor =>
         {
             for (var y = 0; y < accessor.Height; y++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (var pixel in accessor.GetRowSpan(y))
+                var row = accessor.GetRowSpan(y);
+                for (var x = 0; x < row.Length; x++)
                 {
-                    transparentPixelCount += pixel.A < byte.MaxValue ? 1 : 0;
+                    var alpha = row[x].A;
+                    if (alpha == byte.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha < minAlpha)
+                    {
+                        minAlpha = alpha;
+                    }
+                    if (alpha == 0)
+                    {
+                        fullyTransparent++;
+                        fullyTransparentMap ??= new byte[pixelCount];
+                        fullyTransparentMap[(y * (long)width) + x] = 1;
+                    }
+                    else
+                    {
+                        semiTransparent++;
+                    }
                 }
             }
         });
-        return transparentPixelCount;
+
+        var background = fullyTransparentMap is null
+            ? 0
+            : CountBorderConnected(fullyTransparentMap, width, height, cancellationToken);
+        return new(
+            pixelCount,
+            semiTransparent,
+            fullyTransparent,
+            background,
+            fullyTransparent - background,
+            minAlpha);
     }
 
-    private async Task<PngAnalysisResult> CompareEncodingsAsync(
+    private static PngTransparencyFacts MeasureWideTransparency(
+        Image<Rgba64> image,
+        CancellationToken cancellationToken)
+    {
+        var width = image.Width;
+        var height = image.Height;
+        long pixelCount = (long)width * height;
+        long semiTransparent = 0;
+        long fullyTransparent = 0;
+        var minAlpha = ushort.MaxValue;
+        byte[]? fullyTransparentMap = null;
+
+        image.ProcessPixelRows(accessor =>
+        {
+            for (var y = 0; y < accessor.Height; y++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var row = accessor.GetRowSpan(y);
+                for (var x = 0; x < row.Length; x++)
+                {
+                    var alpha = row[x].A;
+                    if (alpha == ushort.MaxValue)
+                    {
+                        continue;
+                    }
+                    if (alpha < minAlpha)
+                    {
+                        minAlpha = alpha;
+                    }
+                    if (alpha == 0)
+                    {
+                        fullyTransparent++;
+                        fullyTransparentMap ??= new byte[pixelCount];
+                        fullyTransparentMap[(y * (long)width) + x] = 1;
+                    }
+                    else
+                    {
+                        semiTransparent++;
+                    }
+                }
+            }
+        });
+
+        var background = fullyTransparentMap is null
+            ? 0
+            : CountBorderConnected(fullyTransparentMap, width, height, cancellationToken);
+        return new(
+            pixelCount,
+            semiTransparent,
+            fullyTransparent,
+            background,
+            fullyTransparent - background,
+            (byte)(minAlpha >> 8));
+    }
+
+    private static long CountBorderConnected(
+        byte[] fullyTransparentMap,
+        int width,
+        int height,
+        CancellationToken cancellationToken)
+    {
+        var pending = new Queue<int>();
+        void Offer(int x, int y)
+        {
+            var index = (y * width) + x;
+            if (fullyTransparentMap[index] == 1)
+            {
+                fullyTransparentMap[index] = 2;
+                pending.Enqueue(index);
+            }
+        }
+
+        for (var x = 0; x < width; x++)
+        {
+            Offer(x, 0);
+            Offer(x, height - 1);
+        }
+        for (var y = 0; y < height; y++)
+        {
+            Offer(0, y);
+            Offer(width - 1, y);
+        }
+
+        long connected = 0;
+        while (pending.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var index = pending.Dequeue();
+            connected++;
+            var x = index % width;
+            var y = index / width;
+            if (x > 0) Offer(x - 1, y);
+            if (x < width - 1) Offer(x + 1, y);
+            if (y > 0) Offer(x, y - 1);
+            if (y < height - 1) Offer(x, y + 1);
+        }
+
+        return connected;
+    }
+
+    private static async Task<PngAnalysisResult> MeasureEncodingsAsync(
         Image<Rgba32> image,
-        PngImageFacts imageFacts,
+        PngImageFacts facts,
         long originalBytes,
-        PngRecommendationThresholds recommendationThresholds,
         CancellationToken cancellationToken)
     {
         try
         {
-            var normalizedPngBytes = await CountNormalizedPngBytesAsync(image, cancellationToken);
-            var losslessWebpBytes = await CountLosslessWebpBytesAsync(image, cancellationToken);
-            var comparison = new PngComparisonMetrics(
+            var hasAlpha = facts.Transparency?.UsesTransparency ?? false;
+            var optimizedPngBytes = await CountPngBytesAsync(image, hasAlpha, cancellationToken);
+            var candidateWebpBytes = await CountLosslessWebpBytesAsync(image, cancellationToken);
+            return PngAnalysisResult.ComparisonUnavailable(
                 originalBytes,
-                normalizedPngBytes,
-                losslessWebpBytes);
-            return PngAnalysisResult.Compared(
-                imageFacts,
-                comparison,
-                recommendationThresholds);
+                facts,
+                new PngComparisonMetrics(originalBytes, optimizedPngBytes, candidateWebpBytes));
         }
         catch (InvalidImageContentException)
         {
-            return PngAnalysisResult.ComparisonFailed(originalBytes, imageFacts);
+            return PngAnalysisResult.ComparisonUnavailable(originalBytes, facts);
         }
         catch (NotSupportedException)
         {
-            return PngAnalysisResult.ComparisonFailed(originalBytes, imageFacts);
+            return PngAnalysisResult.ComparisonUnavailable(originalBytes, facts);
         }
     }
 
-    private static async Task<long> CountNormalizedPngBytesAsync(
+    private static async Task<long> CountPngBytesAsync(
         Image<Rgba32> image,
+        bool hasAlpha,
         CancellationToken cancellationToken)
     {
         await using var output = new CountingStream();
         await image.SaveAsPngAsync(output, new PngEncoder
         {
             BitDepth = PngBitDepth.Bit8,
-            ColorType = PngColorType.Rgb,
+            ColorType = hasAlpha ? PngColorType.RgbWithAlpha : PngColorType.Rgb,
             CompressionLevel = PngCompressionLevel.BestCompression,
             FilterMethod = PngFilterMethod.Adaptive,
             SkipMetadata = true

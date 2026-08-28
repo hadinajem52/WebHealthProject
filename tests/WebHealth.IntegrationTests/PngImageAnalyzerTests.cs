@@ -22,25 +22,28 @@ public sealed class PngImageAnalyzerTests
 
         var result = await CreateAnalyzer().AnalyzeAsync(bytes);
 
-        result.Classification.Should().Be(PngImageAnalysisClassification.OpaqueBelowWebpThreshold);
+        result.Classification.Should().Be(PngImageAnalysisClassification.ComparisonUnavailable);
         result.Image.Should().NotBeNull();
         result.Image!.UsesTransparency.Should().BeFalse();
         result.Image.FrameCount.Should().Be(1);
         result.Comparison.Should().NotBeNull();
-        result.Comparison!.NormalizedPngBytes.Should().BePositive();
-        result.Comparison.LosslessWebpBytes.Should().BePositive();
+        result.Comparison!.OptimizedPngBytes.Should().BePositive();
+        result.Comparison.CandidateWebpBytes.Should().BePositive();
     }
 
     [Fact]
-    public async Task AnalyzeAsync_DetectsTransparencyInAnIndexedPng()
+    public async Task AnalyzeAsync_ComparesATransparentIndexedPngInsteadOfExcludingIt()
     {
         var bytes = CreatePng(PngColorType.Palette, 0);
 
         var result = await CreateAnalyzer().AnalyzeAsync(bytes);
 
-        result.Classification.Should().Be(PngImageAnalysisClassification.UsesTransparency);
+        result.Classification.Should().Be(PngImageAnalysisClassification.ComparisonUnavailable);
         result.Image!.TransparentPixelCount.Should().Be(1);
-        result.Comparison.Should().BeNull();
+        result.Image.UsesTransparency.Should().BeTrue();
+        result.Comparison.Should().NotBeNull(
+            "transparency must no longer terminate the comparison path");
+        result.Comparison!.CandidateWebpBytes.Should().BePositive();
     }
 
     [Theory]
@@ -57,9 +60,9 @@ public sealed class PngImageAnalyzerTests
         result.Image!.TransparentPixelCount.Should().Be(expectedTransparentPixels);
         result.Image.Width.Should().Be(expectedWidth);
         result.Image.Height.Should().Be(expectedHeight);
-        result.Classification.Should().Be(expectedTransparentPixels > 0
-            ? PngImageAnalysisClassification.UsesTransparency
-            : PngImageAnalysisClassification.OpaqueBelowWebpThreshold);
+        result.Image.UsesTransparency.Should().Be(expectedTransparentPixels > 0);
+        result.Classification.Should().Be(
+            PngImageAnalysisClassification.ComparisonUnavailable);
     }
 
     [Fact]
@@ -68,8 +71,13 @@ public sealed class PngImageAnalyzerTests
         var result = await CreateAnalyzer().AnalyzeAsync(
             CreatePng(PngColorType.RgbWithAlpha, 128));
 
-        result.Classification.Should().Be(PngImageAnalysisClassification.UsesTransparency);
+        result.Classification.Should().Be(PngImageAnalysisClassification.ComparisonUnavailable);
         result.Image!.TransparentPixelCount.Should().Be(1);
+        result.Image.Transparency!.SemiTransparentPixelCount.Should().Be(1);
+        result.Image.Transparency.FullyTransparentPixelCount.Should().Be(0);
+        result.Image.Transparency.BackgroundTransparentPixelCount.Should().Be(0);
+        result.Image.Transparency.MinAlpha.Should().Be(128);
+        result.Image.Transparency.HasTransparentBackground(1.0m).Should().BeFalse();
     }
 
     [Fact]
@@ -139,7 +147,7 @@ public sealed class PngImageAnalyzerTests
         var webpResult = await CreateAnalyzer().AnalyzeAsync(CreateLosslessWebp());
 
         pngResult.Classification.Should().Be(
-            PngImageAnalysisClassification.OpaqueBelowWebpThreshold);
+            PngImageAnalysisClassification.ComparisonUnavailable);
         webpResult.Classification.Should().Be(PngImageAnalysisClassification.NotPng);
         webpResult.DetectedFormat.Should().Be("Webp");
     }
@@ -204,7 +212,7 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
-    public async Task AnalyzeAsync_RejectsSixteenBitPngBeforeLosslessComparison()
+    public async Task AnalyzeAsync_ReportsSixteenBitFactsWithoutAWebpRecommendation()
     {
         using var analyzer = CreateAnalyzer(
             thresholds: new PngRecommendationThresholds(0, 0));
@@ -212,9 +220,12 @@ public sealed class PngImageAnalyzerTests
         var result = await analyzer.AnalyzeAsync(CreateSixteenBitPng());
 
         result.Classification.Should().Be(
-            PngImageAnalysisClassification.UnsupportedBitDepth);
-        result.Image.Should().BeNull();
-        result.Comparison.Should().BeNull();
+            PngImageAnalysisClassification.HighBitDepthPng);
+        result.Image.Should().NotBeNull("16-bit facts are reported, not discarded");
+        result.Image!.BitDepth.Should().Be(16);
+        result.Image.Transparency.Should().NotBeNull();
+        result.Comparison.Should().BeNull(
+            "lossless WebP stores 8-bit channels, so no exact equivalent exists");
         result.Recommendation.Should().Be(PngRecommendation.None);
     }
 
@@ -230,19 +241,19 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
-    public async Task AnalyzeAsync_RequiresSavingsAgainstTheNormalizedPng()
+    public async Task AnalyzeAsync_MeasuresAnOptimizedPngBaselineBelowTheOriginal()
     {
         var result = await CreateAnalyzer().AnalyzeAsync(LoadFixture("metadata-heavy.png"));
 
         result.Classification.Should().Be(
-            PngImageAnalysisClassification.OpaqueBelowWebpThreshold);
-        result.Comparison!.OriginalBytes.Should().Be(43831);
-        result.Comparison.NormalizedPngBytes.Should().BeLessThan(result.Comparison.OriginalBytes);
+            PngImageAnalysisClassification.ComparisonUnavailable);
+        result.Comparison!.OriginalPngBytes.Should().Be(43831);
+        result.Comparison.OptimizedPngBytes.Should().BeLessThan(result.Comparison.OriginalPngBytes);
         result.Recommendation.Should().Be(PngRecommendation.None);
     }
 
     [Fact]
-    public async Task AnalyzeAsync_RecommendsARealSmallerLosslessWebp()
+    public async Task AnalyzeAsync_MeasuresASmallerWebpButWithholdsTheRecommendation()
     {
         var bytes = CreatePng(
             PngColorType.Rgb,
@@ -253,11 +264,13 @@ public sealed class PngImageAnalyzerTests
 
         var result = await CreateAnalyzer(thresholds: thresholds).AnalyzeAsync(bytes);
 
-        result.Classification.Should().Be(PngImageAnalysisClassification.OpaqueWebpCandidate);
-        result.Comparison!.LosslessWebpBytes.Should().BeLessThan(result.Comparison.OriginalBytes);
-        result.Comparison.LosslessWebpBytes.Should().BeLessThan(
-            result.Comparison.NormalizedPngBytes);
-        result.Recommendation.Should().Be(PngRecommendation.LosslessWebp);
+        result.Classification.Should().Be(PngImageAnalysisClassification.ComparisonUnavailable);
+        result.Comparison!.CandidateWebpBytes.Should().BeLessThan(result.Comparison.OriginalPngBytes);
+        result.Comparison.CandidateWebpBytes.Should().BeLessThan(
+            result.Comparison.OptimizedPngBytes);
+        result.Recommendation.Should().Be(
+            PngRecommendation.None,
+            "no recommendation is issued until a verified comparison engine exists");
     }
 
     [Fact]
@@ -282,23 +295,25 @@ public sealed class PngImageAnalyzerTests
                 256L * 1024 * 1024),
             new PngRecommendationThresholds(10, 1));
 
-        result.Classification.Should().Be(PngImageAnalysisClassification.OpaqueWebpCandidate);
-        result.Recommendation.Should().Be(PngRecommendation.LosslessWebp);
+        result.Classification.Should().Be(PngImageAnalysisClassification.ComparisonUnavailable);
+        result.Comparison.Should().NotBeNull(
+            "the per-call limits must override the analyzer's own limits");
+        result.Recommendation.Should().Be(PngRecommendation.None);
     }
 
     [Fact]
-    public async Task AnalyzeAsync_DoesNotRecommendALargerLosslessWebp()
+    public async Task AnalyzeAsync_RecordsALargerWebpCandidateWithoutRecommendingIt()
     {
         var result = await CreateAnalyzer(
             thresholds: new PngRecommendationThresholds(0, 0))
             .AnalyzeAsync(CreateGradientPng(8));
 
         result.Classification.Should().Be(
-            PngImageAnalysisClassification.OpaqueBelowWebpThreshold);
-        result.Comparison!.LosslessWebpBytes.Should().BeGreaterThan(
-            result.Comparison.OriginalBytes);
-        result.Comparison.LosslessWebpBytes.Should().BeGreaterThan(
-            result.Comparison.NormalizedPngBytes);
+            PngImageAnalysisClassification.ComparisonUnavailable);
+        result.Comparison!.CandidateWebpBytes.Should().BeGreaterThan(
+            result.Comparison.OriginalPngBytes);
+        result.Comparison.CandidateWebpBytes.Should().BeGreaterThan(
+            result.Comparison.OptimizedPngBytes);
         result.Recommendation.Should().Be(PngRecommendation.None);
     }
 

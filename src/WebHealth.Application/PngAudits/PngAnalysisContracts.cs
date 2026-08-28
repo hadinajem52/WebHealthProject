@@ -23,17 +23,96 @@ public enum PngImageAnalysisClassification
     DecodedMemoryExceeded,
     AnimatedPng,
     DecodeFailed,
-    UsesTransparency,
-    WebpComparisonFailed,
-    OpaqueWebpCandidate,
-    OpaqueBelowWebpThreshold,
-    UnsupportedBitDepth
+    HighBitDepthPng,
+    ColorProfileUnsupported,
+    ComparisonUnavailable,
+    VerifiedWebpCandidate,
+    OptimizedPngPreferred,
+    BelowWebpThreshold
 }
 
 public enum PngRecommendation
 {
     None,
+    OptimizePng,
     LosslessWebp
+}
+
+public enum PngColorMeaning
+{
+    AssumedSrgb,
+    DeclaredSrgb,
+    IccProfile,
+    NotTransferable
+}
+
+public sealed record PngTransparencyFacts
+{
+    public PngTransparencyFacts(
+        long pixelCount,
+        long semiTransparentPixelCount,
+        long fullyTransparentPixelCount,
+        long backgroundTransparentPixelCount,
+        long interiorTransparentPixelCount,
+        byte minAlpha)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(semiTransparentPixelCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(fullyTransparentPixelCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(backgroundTransparentPixelCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(interiorTransparentPixelCount);
+        if (backgroundTransparentPixelCount + interiorTransparentPixelCount
+            != fullyTransparentPixelCount)
+        {
+            throw new ArgumentException(
+                "Background and interior transparent pixels must sum to the fully transparent count.",
+                nameof(backgroundTransparentPixelCount));
+        }
+        if (semiTransparentPixelCount + fullyTransparentPixelCount > pixelCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(semiTransparentPixelCount));
+        }
+        if (minAlpha == byte.MaxValue
+            && semiTransparentPixelCount + fullyTransparentPixelCount > 0)
+        {
+            throw new ArgumentException(
+                "A fully opaque minimum alpha cannot accompany transparent pixels.",
+                nameof(minAlpha));
+        }
+
+        PixelCount = pixelCount;
+        SemiTransparentPixelCount = semiTransparentPixelCount;
+        FullyTransparentPixelCount = fullyTransparentPixelCount;
+        BackgroundTransparentPixelCount = backgroundTransparentPixelCount;
+        InteriorTransparentPixelCount = interiorTransparentPixelCount;
+        MinAlpha = minAlpha;
+    }
+
+    public long PixelCount { get; }
+
+    public long SemiTransparentPixelCount { get; }
+
+    public long FullyTransparentPixelCount { get; }
+
+    public long BackgroundTransparentPixelCount { get; }
+
+    public long InteriorTransparentPixelCount { get; }
+
+    public byte MinAlpha { get; }
+
+    public long TransparentPixelCount =>
+        SemiTransparentPixelCount + FullyTransparentPixelCount;
+
+    public bool UsesTransparency => TransparentPixelCount > 0;
+
+    public decimal TransparentPixelPercent => TransparentPixelCount * 100m / PixelCount;
+
+    public decimal BackgroundCoveragePercent =>
+        BackgroundTransparentPixelCount * 100m / PixelCount;
+
+    public bool HasTransparentBackground(decimal minCoveragePercent) =>
+        BackgroundTransparentPixelCount > 0
+        && BackgroundCoveragePercent >= minCoveragePercent;
 }
 
 public sealed record PngImageFacts
@@ -43,7 +122,9 @@ public sealed record PngImageFacts
         int height,
         int frameCount,
         long pixelCount,
-        long? transparentPixelCount)
+        byte bitDepth,
+        byte colorType,
+        PngTransparencyFacts? transparency)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
@@ -51,18 +132,24 @@ public sealed record PngImageFacts
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pixelCount);
         if (pixelCount != checked((long)width * height))
         {
-            throw new ArgumentException("The pixel count must match the image dimensions.", nameof(pixelCount));
+            throw new ArgumentException(
+                "The pixel count must match the image dimensions.",
+                nameof(pixelCount));
         }
-        if (transparentPixelCount is < 0 || transparentPixelCount > pixelCount)
+        if (transparency is not null && transparency.PixelCount != pixelCount)
         {
-            throw new ArgumentOutOfRangeException(nameof(transparentPixelCount));
+            throw new ArgumentException(
+                "Transparency facts must describe the same pixel count.",
+                nameof(transparency));
         }
 
         Width = width;
         Height = height;
         FrameCount = frameCount;
         PixelCount = pixelCount;
-        TransparentPixelCount = transparentPixelCount;
+        BitDepth = bitDepth;
+        ColorType = colorType;
+        Transparency = transparency;
     }
 
     public int Width { get; }
@@ -73,45 +160,49 @@ public sealed record PngImageFacts
 
     public long PixelCount { get; }
 
-    public bool? UsesTransparency => TransparentPixelCount is null
-        ? null
-        : TransparentPixelCount > 0;
+    public byte BitDepth { get; }
 
-    public long? TransparentPixelCount { get; }
+    public byte ColorType { get; }
 
-    public decimal? TransparentPixelPercent => TransparentPixelCount is null
-        ? null
-        : TransparentPixelCount * 100m / PixelCount;
+    public PngTransparencyFacts? Transparency { get; }
+
+    public bool? UsesTransparency => Transparency?.UsesTransparency;
+
+    public long? TransparentPixelCount => Transparency?.TransparentPixelCount;
+
+    public decimal? TransparentPixelPercent => Transparency?.TransparentPixelPercent;
 }
 
 public sealed record PngComparisonMetrics
 {
     public PngComparisonMetrics(
-        long originalBytes,
-        long normalizedPngBytes,
-        long losslessWebpBytes)
+        long originalPngBytes,
+        long optimizedPngBytes,
+        long candidateWebpBytes)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(originalBytes);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(normalizedPngBytes);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(losslessWebpBytes);
-        OriginalBytes = originalBytes;
-        NormalizedPngBytes = normalizedPngBytes;
-        LosslessWebpBytes = losslessWebpBytes;
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(originalPngBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(optimizedPngBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(candidateWebpBytes);
+        OriginalPngBytes = originalPngBytes;
+        OptimizedPngBytes = optimizedPngBytes;
+        CandidateWebpBytes = candidateWebpBytes;
     }
 
-    public long OriginalBytes { get; }
+    public long OriginalPngBytes { get; }
 
-    public long NormalizedPngBytes { get; }
+    public long OptimizedPngBytes { get; }
 
-    public long LosslessWebpBytes { get; }
+    public long CandidateWebpBytes { get; }
 
-    public long OriginalSavingsBytes => OriginalBytes - LosslessWebpBytes;
+    public long ReferencePngBytes => Math.Min(OriginalPngBytes, OptimizedPngBytes);
 
-    public decimal OriginalSavingsPercent => OriginalSavingsBytes * 100m / OriginalBytes;
+    public long OriginalSavingsBytes => OriginalPngBytes - CandidateWebpBytes;
 
-    public long NormalizedSavingsBytes => NormalizedPngBytes - LosslessWebpBytes;
+    public decimal OriginalSavingsPercent => OriginalSavingsBytes * 100m / OriginalPngBytes;
 
-    public decimal NormalizedSavingsPercent => NormalizedSavingsBytes * 100m / NormalizedPngBytes;
+    public long ReferenceSavingsBytes => ReferencePngBytes - CandidateWebpBytes;
+
+    public decimal ReferenceSavingsPercent => ReferenceSavingsBytes * 100m / ReferencePngBytes;
 }
 
 public sealed record PngAnalysisResult
@@ -151,7 +242,9 @@ public sealed record PngAnalysisResult
         var normalizedFormat = detectedFormat.Trim();
         if (string.Equals(normalizedFormat, "PNG", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("The detected format must not be PNG.", nameof(detectedFormat));
+            throw new ArgumentException(
+                "The detected format must not be PNG.",
+                nameof(detectedFormat));
         }
 
         return new(PngImageAnalysisClassification.NotPng, originalBytes, normalizedFormat);
@@ -172,67 +265,64 @@ public sealed record PngAnalysisResult
     public static PngAnalysisResult Animated(long originalBytes, PngImageFacts image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        if (image.FrameCount <= 1 || image.TransparentPixelCount is not null)
+        if (image.FrameCount <= 1 || image.Transparency is not null)
         {
             throw new ArgumentException(
-                "An animated PNG must have multiple frames and unknown transparency.",
+                "An animated PNG must have multiple frames and unmeasured transparency.",
                 nameof(image));
         }
 
         return new(PngImageAnalysisClassification.AnimatedPng, originalBytes, image: image);
     }
 
-    public static PngAnalysisResult Transparent(long originalBytes, PngImageFacts image)
+    public static PngAnalysisResult HighBitDepth(long originalBytes, PngImageFacts image)
     {
-        ArgumentNullException.ThrowIfNull(image);
-        if (image.FrameCount != 1 || image.UsesTransparency is not true)
+        EnsureStaticMeasured(image);
+        if (image.BitDepth <= 8)
         {
-            throw new ArgumentException("The image must be static and use transparency.", nameof(image));
+            throw new ArgumentException(
+                "A high-bit-depth result requires a bit depth above eight.",
+                nameof(image));
         }
 
-        return new(PngImageAnalysisClassification.UsesTransparency, originalBytes, image: image);
+        return new(PngImageAnalysisClassification.HighBitDepthPng, originalBytes, image: image);
     }
 
-    public static PngAnalysisResult ComparisonFailed(long originalBytes, PngImageFacts image)
+    public static PngAnalysisResult ColorProfileUnsupported(long originalBytes, PngImageFacts image)
     {
-        EnsureStaticOpaque(image);
-        return new(PngImageAnalysisClassification.WebpComparisonFailed, originalBytes, image: image);
-    }
-
-    public static PngAnalysisResult Compared(
-        PngImageFacts image,
-        PngComparisonMetrics comparison,
-        PngRecommendationThresholds thresholds)
-    {
-        EnsureStaticOpaque(image);
-        ArgumentNullException.ThrowIfNull(comparison);
-        ArgumentNullException.ThrowIfNull(thresholds);
-        var recommendsWebp = thresholds.RecommendsLosslessWebp(
-            comparison.OriginalBytes,
-            comparison.NormalizedPngBytes,
-            comparison.LosslessWebpBytes);
+        EnsureStaticMeasured(image);
         return new(
-            recommendsWebp
-                ? PngImageAnalysisClassification.OpaqueWebpCandidate
-                : PngImageAnalysisClassification.OpaqueBelowWebpThreshold,
-            comparison.OriginalBytes,
-            image: image,
-            comparison: comparison,
-            recommendation: recommendsWebp ? PngRecommendation.LosslessWebp : PngRecommendation.None);
+            PngImageAnalysisClassification.ColorProfileUnsupported,
+            originalBytes,
+            image: image);
     }
 
-    private static void EnsureStaticOpaque(PngImageFacts image)
+    public static PngAnalysisResult ComparisonUnavailable(
+        long originalBytes,
+        PngImageFacts image,
+        PngComparisonMetrics? comparison = null)
+    {
+        EnsureStaticMeasured(image);
+        return new(
+            PngImageAnalysisClassification.ComparisonUnavailable,
+            originalBytes,
+            image: image,
+            comparison: comparison);
+    }
+
+    private static void EnsureStaticMeasured(PngImageFacts image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        if (image.FrameCount != 1 || image.UsesTransparency is not false)
+        if (image.FrameCount != 1 || image.Transparency is null)
         {
-            throw new ArgumentException("The image must be static and opaque.", nameof(image));
+            throw new ArgumentException(
+                "The image must be static with measured transparency.",
+                nameof(image));
         }
     }
 
     private static bool IsFailureClassification(PngImageAnalysisClassification classification) =>
         classification is PngImageAnalysisClassification.IdentificationFailed
-            or PngImageAnalysisClassification.UnsupportedBitDepth
             or PngImageAnalysisClassification.DimensionsExceeded
             or PngImageAnalysisClassification.PixelLimitExceeded
             or PngImageAnalysisClassification.DecodedMemoryExceeded
@@ -257,14 +347,7 @@ public sealed record PngRecommendationThresholds
 
     public long MinSavingsBytes { get; }
 
-    public bool RecommendsLosslessWebp(
-        long originalBytes,
-        long normalizedPngBytes,
-        long losslessWebpBytes) =>
-        MeetsThreshold(originalBytes, losslessWebpBytes)
-        && MeetsThreshold(normalizedPngBytes, losslessWebpBytes);
-
-    private bool MeetsThreshold(long baselineBytes, long candidateBytes)
+    public bool MeetsThreshold(long baselineBytes, long candidateBytes)
     {
         if (baselineBytes <= 0 || candidateBytes < 0)
         {
@@ -279,6 +362,8 @@ public sealed record PngRecommendationThresholds
 
 public static class PngAnalysisProfiles
 {
-    public const string Analyzer = "png-alpha-v1";
-    public const string Comparison = "normalized-png-vs-lossless-webp-v1";
+    public const string Analyzer = "png-alpha-v2";
+    public const string Comparison = "libwebp-exact-vs-optimized-png-v2";
+    public const string LegacyAnalyzer = "png-alpha-v1";
+    public const string LegacyComparison = "normalized-png-vs-lossless-webp-v1";
 }

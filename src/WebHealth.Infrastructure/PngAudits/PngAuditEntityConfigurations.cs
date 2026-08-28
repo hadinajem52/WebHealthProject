@@ -156,11 +156,11 @@ internal sealed class PngAuditImageResultConfiguration
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_classification",
                 "classification IN ('FetchFailed', 'HttpNonSuccess', 'ResponseTruncated', "
-                + "'NotPng', 'IdentificationFailed', 'UnsupportedBitDepth', "
-                + "'DimensionsExceeded', 'PixelLimitExceeded', 'DecodedMemoryExceeded', "
-                + "'AnimatedPng', 'DecodeFailed', 'UsesTransparency', "
-                + "'WebpComparisonFailed', 'OpaqueWebpCandidate', "
-                + "'OpaqueBelowWebpThreshold')");
+                + "'NotPng', 'IdentificationFailed', 'DimensionsExceeded', "
+                + "'PixelLimitExceeded', 'DecodedMemoryExceeded', 'AnimatedPng', "
+                + "'DecodeFailed', 'HighBitDepthPng', 'ColorProfileUnsupported', "
+                + "'ComparisonUnavailable', 'VerifiedWebpCandidate', "
+                + "'OptimizedPngPreferred', 'BelowWebpThreshold')");
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_hashes",
                 "octet_length(image_identity_hash) = 32 AND "
@@ -175,84 +175,105 @@ internal sealed class PngAuditImageResultConfiguration
                 + "(classification <> 'HttpNonSuccess' OR "
                 + "(http_status_code IS NOT NULL AND http_status_code NOT BETWEEN 200 AND 299)) AND "
                 + "(classification NOT IN ('ResponseTruncated', 'NotPng', 'IdentificationFailed', "
-                + "'UnsupportedBitDepth', 'DimensionsExceeded', 'PixelLimitExceeded', "
-                + "'DecodedMemoryExceeded', 'AnimatedPng', 'DecodeFailed', 'UsesTransparency', "
-                + "'WebpComparisonFailed', 'OpaqueWebpCandidate', 'OpaqueBelowWebpThreshold') "
+                + "'DimensionsExceeded', 'PixelLimitExceeded', 'DecodedMemoryExceeded', "
+                + "'AnimatedPng', 'DecodeFailed', 'HighBitDepthPng', 'ColorProfileUnsupported', "
+                + "'ComparisonUnavailable', 'VerifiedWebpCandidate', 'OptimizedPngPreferred', "
+                + "'BelowWebpThreshold') "
                 + "OR (http_status_code IS NOT NULL AND http_status_code BETWEEN 200 AND 299))");
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_facts",
-                "(width IS NULL AND height IS NULL AND frame_count IS NULL AND pixel_count IS NULL) OR "
+                "(width IS NULL AND height IS NULL AND frame_count IS NULL "
+                + "AND pixel_count IS NULL AND bit_depth IS NULL AND color_type IS NULL) OR "
                 + "(width IS NOT NULL AND height IS NOT NULL AND frame_count IS NOT NULL "
-                + "AND pixel_count IS NOT NULL AND width > 0 AND height > 0 AND frame_count > 0 "
+                + "AND pixel_count IS NOT NULL AND bit_depth IS NOT NULL AND color_type IS NOT NULL "
+                + "AND width > 0 AND height > 0 AND frame_count > 0 "
+                + "AND bit_depth IN (1, 2, 4, 8, 16) AND color_type IN (0, 2, 3, 4, 6) "
                 + "AND pixel_count = width::bigint * height::bigint)");
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_transparency",
                 "(uses_transparency IS NULL AND transparent_pixel_count IS NULL "
-                + "AND transparent_pixel_percent IS NULL) OR "
-                + "(uses_transparency IS TRUE AND transparent_pixel_count IS NOT NULL "
+                + "AND transparent_pixel_percent IS NULL "
+                + "AND semi_transparent_pixel_count IS NULL "
+                + "AND fully_transparent_pixel_count IS NULL "
+                + "AND background_transparent_pixel_count IS NULL "
+                + "AND interior_transparent_pixel_count IS NULL AND min_alpha IS NULL) OR "
+                + "(uses_transparency IS NOT NULL AND transparent_pixel_count IS NOT NULL "
                 + "AND transparent_pixel_percent IS NOT NULL AND pixel_count IS NOT NULL "
-                + "AND transparent_pixel_count > 0 "
+                + "AND semi_transparent_pixel_count IS NOT NULL "
+                + "AND fully_transparent_pixel_count IS NOT NULL "
+                + "AND background_transparent_pixel_count IS NOT NULL "
+                + "AND interior_transparent_pixel_count IS NOT NULL AND min_alpha IS NOT NULL "
+                + "AND semi_transparent_pixel_count >= 0 AND fully_transparent_pixel_count >= 0 "
+                + "AND background_transparent_pixel_count >= 0 "
+                + "AND interior_transparent_pixel_count >= 0 "
+                + "AND min_alpha BETWEEN 0 AND 255 "
+                + "AND transparent_pixel_count = "
+                + "semi_transparent_pixel_count + fully_transparent_pixel_count "
+                + "AND fully_transparent_pixel_count = "
+                + "background_transparent_pixel_count + interior_transparent_pixel_count "
                 + "AND transparent_pixel_count <= pixel_count "
+                + "AND uses_transparency = (transparent_pixel_count > 0) "
+                + "AND (min_alpha = 255) = (transparent_pixel_count = 0) "
                 + "AND transparent_pixel_percent = "
-                + "round(transparent_pixel_count * 100.0 / pixel_count, 4)) OR "
-                + "(uses_transparency IS FALSE AND transparent_pixel_count IS NOT NULL "
-                + "AND transparent_pixel_percent IS NOT NULL AND transparent_pixel_count = 0 "
-                + "AND transparent_pixel_percent = 0)");
+                + "round(transparent_pixel_count * 100.0 / pixel_count, 4))");
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_comparison",
-                "(normalized_png_bytes IS NULL AND candidate_webp_bytes IS NULL "
+                "(optimized_png_bytes IS NULL AND candidate_webp_bytes IS NULL "
                 + "AND original_savings_bytes IS NULL AND original_savings_percent IS NULL "
-                + "AND normalized_savings_bytes IS NULL AND normalized_savings_percent IS NULL) OR "
-                + "(normalized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL "
+                + "AND reference_savings_bytes IS NULL AND reference_savings_percent IS NULL) OR "
+                + "(optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL "
                 + "AND original_savings_bytes IS NOT NULL "
                 + "AND original_savings_percent IS NOT NULL "
-                + "AND normalized_savings_bytes IS NOT NULL "
-                + "AND normalized_savings_percent IS NOT NULL "
-                + "AND response_bytes > 0 AND normalized_png_bytes > 0 AND candidate_webp_bytes > 0 "
+                + "AND reference_savings_bytes IS NOT NULL "
+                + "AND reference_savings_percent IS NOT NULL "
+                + "AND response_bytes > 0 AND optimized_png_bytes > 0 AND candidate_webp_bytes > 0 "
                 + "AND original_savings_bytes = response_bytes - candidate_webp_bytes "
-                + "AND normalized_savings_bytes = normalized_png_bytes - candidate_webp_bytes "
+                + "AND reference_savings_bytes = "
+                + "least(response_bytes, optimized_png_bytes) - candidate_webp_bytes "
                 + "AND original_savings_percent = "
                 + "round(original_savings_bytes * 100.0 / response_bytes, 4) "
-                + "AND normalized_savings_percent = "
-                + "round(normalized_savings_bytes * 100.0 / normalized_png_bytes, 4))");
+                + "AND reference_savings_percent = round(reference_savings_bytes * 100.0 "
+                + "/ least(response_bytes, optimized_png_bytes), 4))");
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_recommendation",
                 "(recommendation = 'None' AND suggested_format IS NULL) OR "
-                + "(recommendation = 'LosslessWebp' AND suggested_format IS NOT NULL "
-                + "AND suggested_format = 'WebP')");
+                + "(recommendation = 'LosslessWebp' AND suggested_format = 'WebP') OR "
+                + "(recommendation = 'OptimizePng' AND suggested_format = 'PNG')");
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_state",
                 "(classification = 'AnimatedPng' AND frame_count IS NOT NULL AND frame_count > 1 "
-                + "AND uses_transparency IS NULL AND normalized_png_bytes IS NULL "
+                + "AND uses_transparency IS NULL AND optimized_png_bytes IS NULL "
                 + "AND recommendation = 'None') OR "
-                + "(classification = 'UsesTransparency' AND frame_count IS NOT NULL "
-                + "AND frame_count = 1 AND uses_transparency IS TRUE AND normalized_png_bytes IS NULL "
-                + "AND recommendation = 'None') OR "
-                + "(classification = 'WebpComparisonFailed' AND frame_count IS NOT NULL "
-                + "AND frame_count = 1 AND uses_transparency IS FALSE AND normalized_png_bytes IS NULL "
-                + "AND recommendation = 'None') OR "
-                + "(classification = 'OpaqueWebpCandidate' AND frame_count IS NOT NULL "
-                + "AND frame_count = 1 AND uses_transparency IS FALSE AND normalized_png_bytes IS NOT NULL "
+                + "(classification IN ('HighBitDepthPng', 'ColorProfileUnsupported') "
+                + "AND frame_count = 1 AND uses_transparency IS NOT NULL "
+                + "AND optimized_png_bytes IS NULL AND recommendation = 'None') OR "
+                + "(classification = 'ComparisonUnavailable' AND frame_count = 1 "
+                + "AND uses_transparency IS NOT NULL AND recommendation = 'None') OR "
+                + "(classification = 'VerifiedWebpCandidate' AND frame_count = 1 "
+                + "AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL "
                 + "AND candidate_webp_bytes IS NOT NULL AND recommendation = 'LosslessWebp') OR "
-                + "(classification = 'OpaqueBelowWebpThreshold' AND frame_count IS NOT NULL "
-                + "AND frame_count = 1 AND uses_transparency IS FALSE AND normalized_png_bytes IS NOT NULL "
+                + "(classification = 'OptimizedPngPreferred' AND frame_count = 1 "
+                + "AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL "
+                + "AND candidate_webp_bytes IS NOT NULL AND recommendation = 'OptimizePng') OR "
+                + "(classification = 'BelowWebpThreshold' AND frame_count = 1 "
+                + "AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL "
                 + "AND candidate_webp_bytes IS NOT NULL AND recommendation = 'None') OR "
                 + "(classification = 'NotPng' AND detected_format IS NOT NULL "
                 + "AND upper(detected_format) <> 'PNG' AND width IS NULL "
-                + "AND normalized_png_bytes IS NULL AND recommendation = 'None') OR "
+                + "AND optimized_png_bytes IS NULL AND recommendation = 'None') OR "
                 + "(classification = 'FetchFailed' AND http_status_code IS NULL "
                 + "AND reason_code IS NOT NULL AND width IS NULL "
-                + "AND normalized_png_bytes IS NULL AND recommendation = 'None') OR "
+                + "AND optimized_png_bytes IS NULL AND recommendation = 'None') OR "
                 + "(classification = 'HttpNonSuccess' AND http_status_code IS NOT NULL "
                 + "AND http_status_code NOT BETWEEN 200 AND 299 "
-                + "AND width IS NULL AND normalized_png_bytes IS NULL "
+                + "AND width IS NULL AND optimized_png_bytes IS NULL "
                 + "AND recommendation = 'None') OR "
                 + "(classification = 'ResponseTruncated' AND response_bytes > 0 "
-                + "AND width IS NULL AND normalized_png_bytes IS NULL "
+                + "AND width IS NULL AND optimized_png_bytes IS NULL "
                 + "AND recommendation = 'None') OR "
-                + "(classification IN ('IdentificationFailed', 'UnsupportedBitDepth', 'DimensionsExceeded', "
+                + "(classification IN ('IdentificationFailed', 'DimensionsExceeded', "
                 + "'PixelLimitExceeded', 'DecodedMemoryExceeded', 'DecodeFailed') "
-                + "AND width IS NULL AND normalized_png_bytes IS NULL AND recommendation = 'None')");
+                + "AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None')");
         });
 
         builder.HasKey(result => result.Id);
@@ -271,7 +292,7 @@ internal sealed class PngAuditImageResultConfiguration
         builder.Property(result => result.SuggestedFormat).HasMaxLength(PngAuditTextBounds.Format);
         builder.Property(result => result.TransparentPixelPercent).HasPrecision(7, 4);
         builder.Property(result => result.OriginalSavingsPercent).HasPrecision(14, 4);
-        builder.Property(result => result.NormalizedSavingsPercent).HasPrecision(14, 4);
+        builder.Property(result => result.ReferenceSavingsPercent).HasPrecision(14, 4);
 
         builder.HasIndex(result => new { result.RunId, result.ImageIdentityHash })
             .IsUnique()

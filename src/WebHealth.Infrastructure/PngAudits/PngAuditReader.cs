@@ -94,12 +94,17 @@ internal sealed class PngAuditReader(
                 result.Height,
                 result.FrameCount,
                 result.UsesTransparency,
+                result.SemiTransparentPixelCount,
+                result.FullyTransparentPixelCount,
+                result.BackgroundTransparentPixelCount,
+                result.PixelCount,
+                result.MinAlpha,
                 result.Recommendation,
                 result.CandidateWebpBytes,
                 result.OriginalSavingsBytes,
                 result.OriginalSavingsPercent,
-                result.NormalizedSavingsBytes,
-                result.NormalizedSavingsPercent,
+                result.ReferenceSavingsBytes,
+                result.ReferenceSavingsPercent,
                 result.RecordedAt,
                 result.Sources.Count,
                 result.Sources
@@ -147,21 +152,43 @@ internal sealed class PngAuditReader(
             .CountAsync(source => imageResultIds.Contains(source.ImageResultId), cancellationToken);
 
         int Count(string classification) => classifications.GetValueOrDefault(classification);
-        var transparent = Count(PngAuditImageClassifications.UsesTransparency);
-        var animated = Count(PngAuditImageClassifications.AnimatedPng);
-        var candidates = Count(PngAuditImageClassifications.OpaqueWebpCandidate);
-        var belowThreshold = Count(PngAuditImageClassifications.OpaqueBelowWebpThreshold);
-        var comparisonFailed = Count(PngAuditImageClassifications.WebpComparisonFailed);
-        var pngsAnalyzed = transparent + animated + candidates + belowThreshold + comparisonFailed;
+        var pngsAnalyzed = await results.CountAsync(
+            result => result.Width != null,
+            cancellationToken);
+        var transparent = await results.CountAsync(
+            result => result.UsesTransparency == true,
+            cancellationToken);
+        var transparentBackground = await results.CountAsync(
+            result => result.BackgroundTransparentPixelCount != null
+                && result.PixelCount != null
+                && result.BackgroundTransparentPixelCount > 0
+                && result.BackgroundTransparentPixelCount.Value * 100m
+                    / result.PixelCount!.Value
+                    >= PngTransparencyPolicy.MinBackgroundCoveragePercent,
+            cancellationToken);
+        var candidates = await results.CountAsync(
+            result => result.Recommendation == PngAuditRecommendations.LosslessWebp,
+            cancellationToken);
+        var optimizePng = await results.CountAsync(
+            result => result.Recommendation == PngAuditRecommendations.OptimizePng,
+            cancellationToken);
+        var belowThreshold = Count(PngAuditImageClassifications.BelowWebpThreshold);
+        var comparisonUnavailable = Count(PngAuditImageClassifications.ComparisonUnavailable);
+        var pngsCompared = Count(PngAuditImageClassifications.VerifiedWebpCandidate)
+            + Count(PngAuditImageClassifications.OptimizedPngPreferred)
+            + belowThreshold;
         var totalImageResults = classifications.Values.Sum();
         return new(
             sourceMappings + run.DiscoverySkipCount,
             run.ImagesDiscovered,
             pngsAnalyzed,
             transparent,
-            candidates + belowThreshold + comparisonFailed,
+            transparentBackground,
+            pngsCompared,
             candidates,
+            optimizePng,
             belowThreshold,
+            comparisonUnavailable,
             run.DiscoverySkipCount + totalImageResults - pngsAnalyzed);
     }
 
@@ -279,21 +306,22 @@ internal sealed class PngAuditReader(
             PngAuditImageFilters.WebpCandidates => results.Where(result =>
                 result.Recommendation == PngAuditRecommendations.LosslessWebp),
             PngAuditImageFilters.UsesTransparency => results.Where(result =>
-                result.Classification == PngAuditImageClassifications.UsesTransparency),
+                result.UsesTransparency == true),
+            PngAuditImageFilters.TransparentBackground => results.Where(result =>
+                result.BackgroundTransparentPixelCount != null
+                && result.PixelCount != null
+                && result.BackgroundTransparentPixelCount > 0
+                && result.BackgroundTransparentPixelCount.Value * 100m
+                    / result.PixelCount!.Value
+                    >= PngTransparencyPolicy.MinBackgroundCoveragePercent),
             PngAuditImageFilters.BelowWebpThreshold => results.Where(result =>
-                result.Classification == PngAuditImageClassifications.OpaqueBelowWebpThreshold),
+                result.Classification == PngAuditImageClassifications.BelowWebpThreshold),
+            PngAuditImageFilters.ComparisonUnavailable => results.Where(result =>
+                result.Classification == PngAuditImageClassifications.ComparisonUnavailable),
             PngAuditImageFilters.AnimatedPng => results.Where(result =>
                 result.Classification == PngAuditImageClassifications.AnimatedPng),
             PngAuditImageFilters.NotAnalyzed => results.Where(result =>
-                result.Classification == PngAuditImageClassifications.FetchFailed
-                || result.Classification == PngAuditImageClassifications.HttpNonSuccess
-                || result.Classification == PngAuditImageClassifications.ResponseTruncated
-                || result.Classification == PngAuditImageClassifications.IdentificationFailed
-                || result.Classification == PngAuditImageClassifications.UnsupportedBitDepth
-                || result.Classification == PngAuditImageClassifications.DimensionsExceeded
-                || result.Classification == PngAuditImageClassifications.PixelLimitExceeded
-                || result.Classification == PngAuditImageClassifications.DecodedMemoryExceeded
-                || result.Classification == PngAuditImageClassifications.DecodeFailed),
+                PngAuditImageClassifications.NotAnalyzed.Contains(result.Classification)),
             PngAuditImageFilters.NotPng => results.Where(result =>
                 result.Classification == PngAuditImageClassifications.NotPng),
             _ => results

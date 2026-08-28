@@ -43,20 +43,73 @@ public static class PngAuditImageClassifications
     public const string ResponseTruncated = "ResponseTruncated";
     public const string NotPng = "NotPng";
     public const string IdentificationFailed = "IdentificationFailed";
-    public const string UnsupportedBitDepth = "UnsupportedBitDepth";
     public const string DimensionsExceeded = "DimensionsExceeded";
     public const string PixelLimitExceeded = "PixelLimitExceeded";
     public const string DecodedMemoryExceeded = "DecodedMemoryExceeded";
     public const string AnimatedPng = "AnimatedPng";
     public const string DecodeFailed = "DecodeFailed";
-    public const string UsesTransparency = "UsesTransparency";
-    public const string WebpComparisonFailed = "WebpComparisonFailed";
-    public const string OpaqueWebpCandidate = "OpaqueWebpCandidate";
-    public const string OpaqueBelowWebpThreshold = "OpaqueBelowWebpThreshold";
+    public const string HighBitDepthPng = "HighBitDepthPng";
+    public const string ColorProfileUnsupported = "ColorProfileUnsupported";
+    public const string ComparisonUnavailable = "ComparisonUnavailable";
+    public const string VerifiedWebpCandidate = "VerifiedWebpCandidate";
+    public const string OptimizedPngPreferred = "OptimizedPngPreferred";
+    public const string BelowWebpThreshold = "BelowWebpThreshold";
+
+    public static IReadOnlyList<string> Values { get; } =
+    [
+        FetchFailed,
+        HttpNonSuccess,
+        ResponseTruncated,
+        NotPng,
+        IdentificationFailed,
+        DimensionsExceeded,
+        PixelLimitExceeded,
+        DecodedMemoryExceeded,
+        AnimatedPng,
+        DecodeFailed,
+        HighBitDepthPng,
+        ColorProfileUnsupported,
+        ComparisonUnavailable,
+        VerifiedWebpCandidate,
+        OptimizedPngPreferred,
+        BelowWebpThreshold
+    ];
+
+    public static IReadOnlyList<string> ComparisonOutcomes { get; } =
+    [
+        ComparisonUnavailable,
+        VerifiedWebpCandidate,
+        OptimizedPngPreferred,
+        BelowWebpThreshold
+    ];
+
+    public static IReadOnlyList<string> NotAnalyzed { get; } =
+    [
+        FetchFailed,
+        HttpNonSuccess,
+        ResponseTruncated,
+        IdentificationFailed,
+        DimensionsExceeded,
+        PixelLimitExceeded,
+        DecodedMemoryExceeded,
+        DecodeFailed
+    ];
 }
 
 public static class PngAuditRecommendations
 {
     public const string None = "None";
+    public const string OptimizePng = "OptimizePng";
     public const string LosslessWebp = "LosslessWebp";
+}
+
+public static class PngAuditSuggestedFormats
+{
+    public const string Webp = "WebP";
+    public const string Png = "PNG";
+}
+
+public static class PngTransparencyPolicy
+{
+    public const decimal MinBackgroundCoveragePercent = 1.0m;
 }

@@ -165,17 +165,10 @@ public sealed class PngAuditQueuedRunReader(ApplicationDbContext database)
             discoverySkipCount,
             sourceMappingCount,
             storedImages.Sum(image => image.ResponseBytes),
-            storedImages.Any(image => image.Classification is
-                PngAuditImageClassifications.FetchFailed
-                or PngAuditImageClassifications.HttpNonSuccess
-                or PngAuditImageClassifications.ResponseTruncated
-                or PngAuditImageClassifications.IdentificationFailed
-                or PngAuditImageClassifications.UnsupportedBitDepth
-                or PngAuditImageClassifications.DimensionsExceeded
-                or PngAuditImageClassifications.PixelLimitExceeded
-                or PngAuditImageClassifications.DecodedMemoryExceeded
-                or PngAuditImageClassifications.DecodeFailed
-                or PngAuditImageClassifications.WebpComparisonFailed),
+            storedImages.Any(image =>
+                PngAuditImageClassifications.NotAnalyzed.Contains(
+                    image.Classification,
+                    StringComparer.Ordinal)),
             coverageAreas.Contains(PngCoverageArea.Crawl.ToString(), StringComparer.Ordinal),
             coverageAreas.Contains(PngCoverageArea.ImageAnalysis.ToString(), StringComparer.Ordinal),
             coverageAreas.Contains(PngCoverageArea.SourceMappings.ToString(), StringComparer.Ordinal));

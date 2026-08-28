@@ -500,24 +500,42 @@ public sealed record PngAuditImageResultView(
     int? Height,
     int? FrameCount,
     bool? UsesTransparency,
+    long? SemiTransparentPixelCount,
+    long? FullyTransparentPixelCount,
+    long? BackgroundTransparentPixelCount,
+    long? PixelCount,
+    int? MinAlpha,
     string Recommendation,
     long? CandidateWebpBytes,
     long? OriginalSavingsBytes,
     decimal? OriginalSavingsPercent,
-    long? NormalizedSavingsBytes,
-    decimal? NormalizedSavingsPercent,
+    long? ReferenceSavingsBytes,
+    decimal? ReferenceSavingsPercent,
     DateTimeOffset RecordedAt,
     int SourceCount = 0,
-    string? FirstSourcePageDisplayUrl = null);
+    string? FirstSourcePageDisplayUrl = null)
+{
+    public decimal? BackgroundCoveragePercent =>
+        BackgroundTransparentPixelCount is { } background && PixelCount is > 0
+            ? background * 100m / PixelCount.Value
+            : null;
+
+    public bool HasTransparentBackground(decimal minCoveragePercent) =>
+        BackgroundTransparentPixelCount is > 0
+        && BackgroundCoveragePercent >= minCoveragePercent;
+}
 
 public sealed record PngAuditResultSummaryView(
     int ImageReferencesDiscovered,
     int UniqueImages,
     int PngsAnalyzed,
     int UsesTransparency,
-    int OpaquePngs,
+    int TransparentBackground,
+    int PngsCompared,
     int WebpCandidates,
+    int OptimizePngPreferred,
     int BelowThreshold,
+    int ComparisonUnavailable,
     int SkippedOrNotAnalyzed);
 
 public static class PngAuditImageFilters
@@ -525,7 +543,9 @@ public static class PngAuditImageFilters
     public const string All = "all";
     public const string WebpCandidates = "webp-candidates";
     public const string UsesTransparency = "uses-transparency";
+    public const string TransparentBackground = "transparent-background";
     public const string BelowWebpThreshold = "below-webp-threshold";
+    public const string ComparisonUnavailable = "comparison-unavailable";
     public const string AnimatedPng = "animated-png";
     public const string NotAnalyzed = "not-analyzed";
     public const string NotPng = "not-png";
@@ -535,7 +555,9 @@ public static class PngAuditImageFilters
         All,
         WebpCandidates,
         UsesTransparency,
+        TransparentBackground,
         BelowWebpThreshold,
+        ComparisonUnavailable,
         AnimatedPng,
         NotAnalyzed,
         NotPng

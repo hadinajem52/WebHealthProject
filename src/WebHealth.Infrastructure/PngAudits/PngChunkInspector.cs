@@ -8,14 +8,17 @@ internal readonly record struct PngChunkPreflight(
     int Height,
     int FrameCount,
     byte BitDepth,
-    byte ColorType)
+    byte ColorType,
+    PngColorMeaning ColorMeaning = PngColorMeaning.AssumedSrgb)
 {
     public long PixelCount => (long)Width * Height;
 
-    public bool HasSupportedBitDepth => BitDepth <= 8;
+    public bool IsHighBitDepth => BitDepth > 8;
 
-    public PngImageFacts CreateFacts(long? transparentPixelCount = null) =>
-        new(Width, Height, FrameCount, PixelCount, transparentPixelCount);
+    public bool CanTransferColorMeaning => ColorMeaning != PngColorMeaning.NotTransferable;
+
+    public PngImageFacts CreateFacts(PngTransparencyFacts? transparency = null) =>
+        new(Width, Height, FrameCount, PixelCount, BitDepth, ColorType, transparency);
 }
 
 internal static class PngChunkInspector
@@ -108,6 +111,7 @@ internal static class PngChunkInspector
         out PngChunkPreflight preflight)
     {
         var declaredFrameCount = 0;
+        var colorMeaning = PngColorMeaning.AssumedSrgb;
         for (var chunkCount = 0; chunkCount < MaxChunksBeforeImageData; chunkCount++)
         {
             if (!PngChunkReader.TryRead(encoded, offset, out var chunk))
@@ -121,9 +125,15 @@ internal static class PngChunkInspector
                 break;
             }
 
+            colorMeaning = ReadColorMeaning(chunk, colorMeaning);
+
             if (chunk.HasType("IDAT"u8))
             {
-                return TryCreatePreflight(encoded, header, declaredFrameCount, out preflight);
+                return TryCreatePreflight(
+                    encoded,
+                    header with { ColorMeaning = colorMeaning },
+                    declaredFrameCount,
+                    out preflight);
             }
 
             if (chunk.HasType("IEND"u8))
@@ -136,6 +146,28 @@ internal static class PngChunkInspector
 
         preflight = default;
         return false;
+    }
+
+    private static PngColorMeaning ReadColorMeaning(PngChunk chunk, PngColorMeaning current)
+    {
+        if (chunk.HasType("iCCP"u8))
+        {
+            return PngColorMeaning.IccProfile;
+        }
+        if (chunk.HasType("sRGB"u8))
+        {
+            return current == PngColorMeaning.IccProfile
+                ? current
+                : PngColorMeaning.DeclaredSrgb;
+        }
+        if (chunk.HasType("gAMA"u8) || chunk.HasType("cHRM"u8) || chunk.HasType("cICP"u8))
+        {
+            return current == PngColorMeaning.AssumedSrgb
+                ? PngColorMeaning.NotTransferable
+                : current;
+        }
+
+        return current;
     }
 
     private static bool TryReadAnimationControl(PngChunk chunk, ref int declaredFrameCount)

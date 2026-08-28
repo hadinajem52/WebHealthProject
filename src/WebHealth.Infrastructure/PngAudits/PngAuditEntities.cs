@@ -88,19 +88,26 @@ public sealed class PngAuditImageResult
     public int? Height { get; set; }
     public int? FrameCount { get; set; }
     public long? PixelCount { get; set; }
+    public int? BitDepth { get; set; }
+    public int? ColorType { get; set; }
     public bool? UsesTransparency { get; set; }
     public long? TransparentPixelCount { get; set; }
     public decimal? TransparentPixelPercent { get; set; }
+    public long? SemiTransparentPixelCount { get; set; }
+    public long? FullyTransparentPixelCount { get; set; }
+    public long? BackgroundTransparentPixelCount { get; set; }
+    public long? InteriorTransparentPixelCount { get; set; }
+    public int? MinAlpha { get; set; }
     public required string Classification { get; set; }
     public string? ReasonCode { get; set; }
     public required string Recommendation { get; set; }
     public string? SuggestedFormat { get; set; }
-    public long? NormalizedPngBytes { get; set; }
+    public long? OptimizedPngBytes { get; set; }
     public long? CandidateWebpBytes { get; set; }
     public long? OriginalSavingsBytes { get; set; }
     public decimal? OriginalSavingsPercent { get; set; }
-    public long? NormalizedSavingsBytes { get; set; }
-    public decimal? NormalizedSavingsPercent { get; set; }
+    public long? ReferenceSavingsBytes { get; set; }
+    public decimal? ReferenceSavingsPercent { get; set; }
     public DateTimeOffset RecordedAt { get; set; }
 
     public PngAuditRun Run { get; set; } = null!;

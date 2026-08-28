@@ -6,22 +6,18 @@ namespace WebHealth.UnitTests;
 public sealed class PngRecommendationThresholdTests
 {
     [Theory]
-    [InlineData(50000, 50000, 45000, true)]
-    [InlineData(100000, 44000, 40000, false)]
-    [InlineData(10000, 10000, 8000, false)]
-    [InlineData(50000, 50000, 51000, false)]
-    public void RecommendsLosslessWebp_RequiresBothThresholdsAgainstBothBaselines(
-        long originalBytes,
-        long normalizedPngBytes,
-        long losslessWebpBytes,
+    [InlineData(50000, 45000, true)]
+    [InlineData(44000, 40000, false)]
+    [InlineData(10000, 8000, false)]
+    [InlineData(50000, 51000, false)]
+    public void MeetsThreshold_RequiresBothByteAndPercentageSavings(
+        long baselineBytes,
+        long candidateBytes,
         bool expected)
     {
         var thresholds = new PngRecommendationThresholds(10, 4096);
 
-        Assert.Equal(expected, thresholds.RecommendsLosslessWebp(
-            originalBytes,
-            normalizedPngBytes,
-            losslessWebpBytes));
+        Assert.Equal(expected, thresholds.MeetsThreshold(baselineBytes, candidateBytes));
     }
 
     [Theory]
@@ -38,17 +34,85 @@ public sealed class PngRecommendationThresholdTests
     }
 
     [Fact]
-    public void Compared_DerivesAConsistentCandidateResult()
+    public void ReferencePngBytes_UsesTheSmallerOfTheOriginalAndOptimizedPng()
     {
-        var result = PngAnalysisResult.Compared(
-            new PngImageFacts(100, 100, 1, 10000, 0),
-            new PngComparisonMetrics(50000, 50000, 40000),
-            new PngRecommendationThresholds(10, 4096));
+        var comparison = new PngComparisonMetrics(50000, 44000, 40000);
 
-        Assert.Equal(PngImageAnalysisClassification.OpaqueWebpCandidate, result.Classification);
-        Assert.Equal(PngRecommendation.LosslessWebp, result.Recommendation);
-        Assert.NotNull(result.Image);
+        Assert.Equal(44000, comparison.ReferencePngBytes);
+        Assert.Equal(10000, comparison.OriginalSavingsBytes);
+        Assert.Equal(4000, comparison.ReferenceSavingsBytes);
+    }
+
+    [Fact]
+    public void ComparisonUnavailable_AcceptsATransparentImage()
+    {
+        var facts = new PngImageFacts(
+            100, 100, 1, 10000, 8, 6,
+            new PngTransparencyFacts(10000, 500, 2000, 1800, 200, 0));
+
+        var result = PngAnalysisResult.ComparisonUnavailable(
+            50000,
+            facts,
+            new PngComparisonMetrics(50000, 44000, 40000));
+
+        Assert.Equal(PngImageAnalysisClassification.ComparisonUnavailable, result.Classification);
+        Assert.Equal(PngRecommendation.None, result.Recommendation);
+        Assert.True(result.Image!.UsesTransparency);
         Assert.NotNull(result.Comparison);
+    }
+
+    [Fact]
+    public void TransparencyFacts_RejectMismatchedRegionCounts()
+    {
+        var act = () => new PngTransparencyFacts(10000, 500, 2000, 1800, 100, 0);
+
+        Assert.Throws<ArgumentException>(act);
+    }
+
+    [Fact]
+    public void TransparencyFacts_RejectOpaqueMinimumAlphaWithTransparentPixels()
+    {
+        var act = () => new PngTransparencyFacts(10000, 500, 0, 0, 0, byte.MaxValue);
+
+        Assert.Throws<ArgumentException>(act);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0.0)]
+    [InlineData(9305, 8941, 60.5759)]
+    public void BackgroundCoverage_IsMeasuredAgainstThePixelCount(
+        long fullyTransparent,
+        long background,
+        double expectedPercent)
+    {
+        var facts = new PngTransparencyFacts(
+            14760,
+            0,
+            fullyTransparent,
+            background,
+            fullyTransparent - background,
+            fullyTransparent > 0 ? (byte)0 : byte.MaxValue);
+
+        Assert.Equal((decimal)expectedPercent, Math.Round(facts.BackgroundCoveragePercent, 4));
+    }
+
+    [Fact]
+    public void AntiAliasedEdges_AreNotATransparentBackground()
+    {
+        var facts = new PngTransparencyFacts(106150, 772, 0, 0, 0, 241);
+
+        Assert.True(facts.UsesTransparency);
+        Assert.Equal(0m, facts.BackgroundCoveragePercent);
+        Assert.False(facts.HasTransparentBackground(1.0m));
+    }
+
+    [Fact]
+    public void ACutOutLogo_IsATransparentBackground()
+    {
+        var facts = new PngTransparencyFacts(14760, 2832, 9305, 8941, 364, 0);
+
+        Assert.True(facts.HasTransparentBackground(1.0m));
+        Assert.Equal(364, facts.InteriorTransparentPixelCount);
     }
 
     [Fact]
@@ -56,7 +120,7 @@ public sealed class PngRecommendationThresholdTests
     {
         var act = () => PngAnalysisResult.Animated(
             100,
-            new PngImageFacts(1, 1, 1, 1, null));
+            new PngImageFacts(1, 1, 1, 1, 8, 6, null));
 
         Assert.Throws<ArgumentException>(act);
     }
@@ -66,7 +130,9 @@ public sealed class PngRecommendationThresholdTests
     {
         var act = () => PngAnalysisResult.Animated(
             100,
-            new PngImageFacts(1, 1, 2, 1, 0));
+            new PngImageFacts(
+                1, 1, 2, 1, 8, 6,
+                new PngTransparencyFacts(1, 0, 0, 0, 0, byte.MaxValue)));
 
         Assert.Throws<ArgumentException>(act);
     }

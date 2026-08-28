@@ -150,7 +150,9 @@ public static class PngAuditDisplay
     {
         PngAuditImageFilters.WebpCandidates => "WebP candidates",
         PngAuditImageFilters.UsesTransparency => "Uses transparency",
+        PngAuditImageFilters.TransparentBackground => "Transparent background",
         PngAuditImageFilters.BelowWebpThreshold => "Below WebP threshold",
+        PngAuditImageFilters.ComparisonUnavailable => "Comparison unavailable",
         PngAuditImageFilters.AnimatedPng => "Animated PNG",
         PngAuditImageFilters.NotAnalyzed => "Not analyzed",
         PngAuditImageFilters.NotPng => "Not PNG",
@@ -160,22 +162,27 @@ public static class PngAuditDisplay
     public static string DescribeClassification(PngAuditImageResultView image) =>
         image.Classification switch
         {
-            PngAuditImageClassifications.OpaqueWebpCandidate =>
-                "Opaque PNG — lossless WebP candidate",
-            PngAuditImageClassifications.OpaqueBelowWebpThreshold =>
-                "Opaque PNG — lossless WebP below threshold",
-            PngAuditImageClassifications.UsesTransparency => "Uses transparency",
+            PngAuditImageClassifications.VerifiedWebpCandidate =>
+                "Verified lossless WebP candidate",
+            PngAuditImageClassifications.OptimizedPngPreferred =>
+                "PNG optimization preferred",
+            PngAuditImageClassifications.BelowWebpThreshold =>
+                "No material verified saving",
+            PngAuditImageClassifications.ComparisonUnavailable =>
+                "Comparison unavailable — pending verified engine",
+            PngAuditImageClassifications.HighBitDepthPng =>
+                "16-bit PNG — no exact WebP equivalent",
+            PngAuditImageClassifications.ColorProfileUnsupported =>
+                "Color profile not safely transferable",
             PngAuditImageClassifications.AnimatedPng => "Animated PNG",
             PngAuditImageClassifications.NotPng => "Not a PNG",
             PngAuditImageClassifications.FetchFailed => "Image could not be fetched",
             PngAuditImageClassifications.HttpNonSuccess =>
                 image.HttpStatusCode is { } status ? $"Image returned HTTP {status}" : "Image request failed",
             PngAuditImageClassifications.ResponseTruncated => "Image exceeded the response limit",
-            PngAuditImageClassifications.UnsupportedBitDepth => "16-bit PNG is not compared",
             PngAuditImageClassifications.DimensionsExceeded => "Image dimensions exceeded the limit",
             PngAuditImageClassifications.PixelLimitExceeded => "Decoded pixel limit exceeded",
             PngAuditImageClassifications.DecodedMemoryExceeded => "Decoded memory limit exceeded",
-            PngAuditImageClassifications.WebpComparisonFailed => "WebP comparison could not finish",
             PngAuditImageClassifications.DecodeFailed => "PNG could not be decoded",
             _ => "Image format could not be identified"
         };
@@ -183,22 +190,64 @@ public static class PngAuditDisplay
     public static string ClassificationTone(PngAuditImageResultView image) =>
         image.Classification switch
         {
-            PngAuditImageClassifications.OpaqueWebpCandidate => "info",
-            PngAuditImageClassifications.OpaqueBelowWebpThreshold => "neutral",
-            PngAuditImageClassifications.UsesTransparency => "neutral",
+            PngAuditImageClassifications.VerifiedWebpCandidate => "info",
+            PngAuditImageClassifications.OptimizedPngPreferred => "info",
+            PngAuditImageClassifications.BelowWebpThreshold => "neutral",
+            PngAuditImageClassifications.ComparisonUnavailable => "neutral",
+            PngAuditImageClassifications.HighBitDepthPng => "neutral",
+            PngAuditImageClassifications.ColorProfileUnsupported => "neutral",
             PngAuditImageClassifications.AnimatedPng => "neutral",
             PngAuditImageClassifications.NotPng => "neutral",
             _ => "warning"
         };
 
-    public static string DescribeTransparency(PngAuditImageResultView image) =>
-        image.UsesTransparency switch
+    public static string DescribeTransparency(PngAuditImageResultView image)
+    {
+        if (image.UsesTransparency is null)
         {
-            true => "Alpha used",
-            false => "Opaque",
-            null when image.Classification == PngAuditImageClassifications.AnimatedPng => "Unknown for animation",
-            _ => "Not measured"
-        };
+            return image.Classification == PngAuditImageClassifications.AnimatedPng
+                ? "Unknown for animation"
+                : "Not measured";
+        }
+
+        if (image.UsesTransparency is false)
+        {
+            return "Opaque";
+        }
+
+        return image.HasTransparentBackground(PngTransparencyPolicy.MinBackgroundCoveragePercent)
+            ? "Transparent background"
+            : "Alpha at edges only";
+    }
+
+    public static string? DescribeTransparencyEvidence(PngAuditImageResultView image)
+    {
+        if (image.UsesTransparency is not true)
+        {
+            return null;
+        }
+
+        var parts = new List<string>(3);
+        if (image.BackgroundTransparentPixelCount is > 0
+            && image.BackgroundCoveragePercent is { } coverage)
+        {
+            parts.Add($"{image.BackgroundTransparentPixelCount:N0} background pixels ({coverage:0.##}%)");
+        }
+        if (image.SemiTransparentPixelCount is > 0)
+        {
+            parts.Add($"{image.SemiTransparentPixelCount:N0} semi-transparent");
+        }
+        if (image.FullyTransparentPixelCount is > 0)
+        {
+            parts.Add($"{image.FullyTransparentPixelCount:N0} fully transparent");
+        }
+        if (image.MinAlpha is { } minAlpha)
+        {
+            parts.Add($"min alpha {minAlpha}");
+        }
+
+        return parts.Count == 0 ? null : string.Join(" · ", parts);
+    }
 
     public static string DescribeCoverageReason(string reason) => reason switch
     {
