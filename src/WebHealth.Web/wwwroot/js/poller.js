@@ -139,6 +139,9 @@
             stop: stop,
             pause: pause,
             resume: resume,
+            resetBackoff: function () {
+                attempt = 0;
+            },
             isPending: function () {
                 return pending;
             },

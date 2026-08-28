@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "vendor": "node scripts/vendor-frontend-assets.mjs",
-    "check:js": "node --check src/WebHealth.Web/wwwroot/js/shell.js && node --check src/WebHealth.Web/wwwroot/js/ajax.js && node --check src/WebHealth.Web/wwwroot/js/dashboard.js && node --check src/WebHealth.Web/wwwroot/js/poller.js && node --check src/WebHealth.Web/wwwroot/js/run-status.js && node --check src/WebHealth.Web/wwwroot/js/checks.js",
+    "check:js": "node --check src/WebHealth.Web/wwwroot/js/shell.js && node --check src/WebHealth.Web/wwwroot/js/ajax.js && node --check src/WebHealth.Web/wwwroot/js/dashboard.js && node --check src/WebHealth.Web/wwwroot/js/poller.js && node --check src/WebHealth.Web/wwwroot/js/run-status.js && node --check src/WebHealth.Web/wwwroot/js/live-run-status.js && node --check src/WebHealth.Web/wwwroot/js/checks.js",
     "test": "npm run check:js && node --test tests/javascript/*.test.cjs"
   },
   "dependencies": {

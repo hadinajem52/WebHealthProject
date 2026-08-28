@@ -5,12 +5,15 @@
     ViewData.SetBreadcrumbs(new BreadcrumbItem("Broken links"));
     var comparison = Model.Comparison;
     var isRunning = Model.ActiveRunId is not null;
-    var statusUrl = Model.SelectedEndpointId is { } polled
+    var activeRun = Model.ActiveRunId is { } polledRunId
+        ? Model.Runs.FirstOrDefault(run => run.RunId == polledRunId)
+        : null;
+    var finalUrl = Model.SelectedEndpointId is { } polled
         ? Url.Action("Index", new { endpointId = polled })
         : null;
 }
 
-<div id="ajax-page" class="stack" data-ajax-region data-run-scope="#crawl-results">
+<div id="ajax-page" class="stack" data-ajax-region data-live-run-scope="#crawl-results">
     <section class="card" aria-labelledby="crawl-scope-label">
         <p class="card__subtitle" id="crawl-scope-label">
             Crawl history for one endpoint, and how its latest full-scope crawl compares to the
@@ -89,11 +92,12 @@
 
     <div id="crawl-results"
          class="stack"
-         data-run-status
-         data-run-active="@(isRunning ? "true" : "false")"
-         data-run-url="@statusUrl"
+         data-live-run-status-url="@(activeRun is null ? null : Url.Action("LiveStatus", new { id = activeRun.RunId }))"
+         data-live-run-final-url="@finalUrl"
+         data-live-run-version="@(activeRun is null ? null : $"{activeRun.Status}:{activeRun.PagesFetched}:{activeRun.LinksRecorded}")"
+         data-live-run-lifetime="1860000"
          data-run-also="#crawl-run-action"
-         data-run-lifetime="1860000">
+         data-run-active="@(isRunning ? "true" : "false")">
     @if (Model.SelectedEndpointId is null)
     {
         <section class="card">
@@ -316,5 +320,5 @@
 
 @section Scripts {
     <script src="~/js/poller.js" asp-append-version="true"></script>
-    <script src="~/js/run-status.js" asp-append-version="true"></script>
+    <script src="~/js/live-run-status.js" asp-append-version="true"></script>
 }

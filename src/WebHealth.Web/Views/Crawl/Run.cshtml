@@ -23,11 +23,13 @@
 <div id="ajax-page"
      class="stack"
      data-ajax-region
-     data-run-scope="#ajax-page"
-     data-run-status
-     data-run-active="@(isRunning ? "true" : "false")"
-     data-run-url="@Url.Action("Run", new { id = run.RunId, offset = Model.Offset })"
-     data-run-lifetime="1860000">
+     data-live-run-scope="#ajax-page"
+     data-live-run-status-url="@(isRunning ? Url.Action("LiveStatus", new { id = run.RunId }) : null)"
+     data-live-run-final-url="@Url.Action("Run", new { id = run.RunId, offset = Model.Offset })"
+     data-live-run-results-url="@Url.Action("Results", new { id = run.RunId, offset = Model.Offset })"
+     data-live-run-results-selector="#crawl-broken-links-results"
+     data-live-run-version="@run.Status:@run.PagesFetched:@run.LinksRecorded"
+     data-live-run-lifetime="1860000">
     
     <section class="card" aria-labelledby="crawl-run-label">
         <div class="page-intro">
@@ -238,5 +240,5 @@
 
 @section Scripts {
     <script src="~/js/poller.js" asp-append-version="true"></script>
-    <script src="~/js/run-status.js" asp-append-version="true"></script>
+    <script src="~/js/live-run-status.js" asp-append-version="true"></script>
 }

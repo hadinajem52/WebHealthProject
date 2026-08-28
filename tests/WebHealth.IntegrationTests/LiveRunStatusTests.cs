@@ -49,13 +49,18 @@ public sealed class LiveRunStatusTests(WebHealthWebApplicationFactory factory)
         var html = await client.GetStringAsync(
             $"/Crawl/Run?id={EmptyCrawlReportReader.RunningRunId}");
 
-        html.Should().Contain("data-run-active=\"true\"");
-        html.Should().Contain("data-run-url=\"/Crawl/Run", "the poller refreshes this run's own page");
+        html.Should().Contain($"data-live-run-status-url=\"/Crawl/Runs/{EmptyCrawlReportReader.RunningRunId}/Status\"");
+        html.Should().Contain("data-live-run-final-url=\"/Crawl/Run", "completion refreshes the whole run page once");
+        html.Should().Contain($"data-live-run-results-url=\"/Crawl/Runs/{EmptyCrawlReportReader.RunningRunId}/Results?");
+        html.Should().Contain("data-live-run-results-selector=\"#crawl-broken-links-results\"");
+        html.Should().Contain("data-live-run-version=\"Running:3:12\"");
         html.Should().Contain("class=\"spinner\"");
         html.Should().Contain("id=\"crawl-broken-links-results\"");
         html.Should().Contain("data-live=\"pages\"");
         html.Should().Contain("data-live=\"links\"");
         html.Should().Contain("data-live=\"broken\"");
+        html.Should().Contain("/js/live-run-status.js");
+        html.Should().NotContain("/js/run-status.js");
     }
 
     [Fact]
@@ -129,6 +134,9 @@ public sealed class LiveRunStatusTests(WebHealthWebApplicationFactory factory)
 
         html.Should().Contain("data-live=\"pages\"");
         html.Should().Contain("data-live=\"broken\"");
+        html.Should().Contain($"data-live-run-status-url=\"/Crawl/Runs/{EmptyCrawlReportReader.RunningRunId}/Status\"");
+        html.Should().Contain("data-live-run-final-url=\"/Crawl?endpointId=");
+        html.Should().Contain("/js/live-run-status.js");
     }
 
     [Fact]
