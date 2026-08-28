@@ -145,6 +145,20 @@ public sealed class PngAuditAuthorizationTests(WebHealthWebApplicationFactory fa
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task ActiveRunPageBindsEveryLiveSummaryValue()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var html = await client.GetStringAsync(
+            $"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}");
+
+        html.Should().Contain("data-live=\"pages\"");
+        html.Should().Contain("data-live=\"resultCount\"");
+        html.Should().Contain("data-live=\"analyzed\"");
+        html.Should().Contain("data-live=\"recommendations\"");
+    }
+
     [Theory]
     [MemberData(nameof(EveryRole))]
     public async Task LiveRunEndpointsAreReadableByEveryRegistryPersona(string role)
