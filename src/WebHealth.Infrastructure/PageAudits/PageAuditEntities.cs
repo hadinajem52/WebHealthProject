@@ -74,6 +74,8 @@ public sealed class PageAuditRun
 
     public DateTimeOffset UpdatedAt { get; set; }
 
+    public DateTimeOffset? ArchivedAt { get; set; }
+
     public PageAuditTarget Target { get; set; } = null!;
     public ICollection<PageAuditItem> Items { get; } = [];
 }

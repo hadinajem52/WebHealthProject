@@ -27,7 +27,7 @@ public sealed class PngImageAnalyzerTests
         result.Image!.UsesTransparency.Should().BeFalse();
         result.Image.FrameCount.Should().Be(1);
         result.Comparison.Should().NotBeNull();
-        result.Comparison!.OptimizedPngBytes.Should().BePositive();
+        result.Comparison!.OptimizedPngBytes.Should().BeNull();
         result.Comparison.CandidateWebpBytes.Should().BePositive();
     }
 
@@ -275,6 +275,18 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_VerifiesAnIccProfiledPng()
+    {
+        var result = await CreateAnalyzer(
+                thresholds: new PngRecommendationThresholds(0, 0))
+            .AnalyzeAsync(PngFixtureFactory.CreateIccProfilePng());
+
+        result.Comparison.Should().NotBeNull(result.UnavailableReason);
+        result.Comparison!.CandidateWebpBytes.Should().BePositive();
+        result.Recommendation.Should().Be(PngRecommendation.None);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_RejectsAnEncodedBodyAboveItsLimit()
     {
         var limits = new PngImageAnalysisLimits(100, 1000, 1000, 1000, 4000);
@@ -286,14 +298,14 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
-    public async Task AnalyzeAsync_MeasuresAnOptimizedPngBaselineBelowTheOriginal()
+    public async Task AnalyzeAsync_DoesNotManufactureAnOptimizedPngReference()
     {
         var result = await CreateAnalyzer().AnalyzeAsync(LoadFixture("metadata-heavy.png"));
 
         result.Classification.Should().Be(
             PngImageAnalysisClassification.ComparisonUnavailable);
         result.Comparison!.OriginalPngBytes.Should().Be(43831);
-        result.Comparison.OptimizedPngBytes.Should().BeLessThan(result.Comparison.OriginalPngBytes);
+        result.Comparison.OptimizedPngBytes.Should().BeNull();
         result.Recommendation.Should().Be(PngRecommendation.None);
     }
 
@@ -311,8 +323,7 @@ public sealed class PngImageAnalyzerTests
 
         result.Classification.Should().Be(PngImageAnalysisClassification.ComparisonUnavailable);
         result.Comparison!.CandidateWebpBytes.Should().BeLessThan(result.Comparison.OriginalPngBytes);
-        result.Comparison.CandidateWebpBytes.Should().BeLessThan(
-            result.Comparison.OptimizedPngBytes);
+        result.Comparison.OptimizedPngBytes.Should().BeNull();
         result.Recommendation.Should().Be(
             PngRecommendation.None,
             "no recommendation is issued until a verified comparison engine exists");
@@ -347,18 +358,16 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
-    public async Task AnalyzeAsync_RecordsALargerWebpCandidateWithoutRecommendingIt()
+    public async Task AnalyzeAsync_WithholdsAWebpCandidateBelowTheConfiguredThreshold()
     {
         var result = await CreateAnalyzer(
-            thresholds: new PngRecommendationThresholds(0, 0))
+            thresholds: new PngRecommendationThresholds(90, 0))
             .AnalyzeAsync(CreateGradientPng(8));
 
         result.Classification.Should().Be(
-            PngImageAnalysisClassification.ComparisonUnavailable);
-        result.Comparison!.CandidateWebpBytes.Should().BeGreaterThan(
-            result.Comparison.OriginalPngBytes);
-        result.Comparison.CandidateWebpBytes.Should().BeGreaterThan(
-            result.Comparison.OptimizedPngBytes);
+            PngImageAnalysisClassification.BelowWebpThreshold);
+        result.Comparison!.CandidateWebpBytes.Should().BePositive();
+        result.Comparison.OptimizedPngBytes.Should().BeNull();
         result.Recommendation.Should().Be(PngRecommendation.None);
     }
 
@@ -385,7 +394,8 @@ public sealed class PngImageAnalyzerTests
                 10000,
                 40000000,
                 256L * 1024 * 1024),
-            thresholds ?? new PngRecommendationThresholds(10, 4096));
+            thresholds ?? new PngRecommendationThresholds(10, 1),
+            new MagickPngFormatComparisonEngine(new PngAuditOptions()));
 
     private static byte[] LoadFixture(string name) =>
         File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "PngAudits", name));

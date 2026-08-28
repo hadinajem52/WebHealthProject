@@ -36,7 +36,7 @@ public sealed class PngRecommendationThresholdTests
     [Fact]
     public void ReferencePngBytes_UsesTheSmallerOfTheOriginalAndOptimizedPng()
     {
-        var comparison = new PngComparisonMetrics(50000, 44000, 40000);
+        var comparison = new PngComparisonMetrics(50000, 40000, 44000);
 
         Assert.Equal(44000, comparison.ReferencePngBytes);
         Assert.Equal(10000, comparison.OriginalSavingsBytes);
@@ -53,7 +53,7 @@ public sealed class PngRecommendationThresholdTests
         var result = PngAnalysisResult.ComparisonUnavailable(
             50000,
             facts,
-            new PngComparisonMetrics(50000, 44000, 40000));
+            new PngComparisonMetrics(50000, 40000, 44000));
 
         Assert.Equal(PngImageAnalysisClassification.ComparisonUnavailable, result.Classification);
         Assert.Equal(PngRecommendation.None, result.Recommendation);

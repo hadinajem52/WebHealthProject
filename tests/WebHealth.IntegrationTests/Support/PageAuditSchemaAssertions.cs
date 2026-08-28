@@ -68,7 +68,7 @@ internal static class PageAuditSchemaAssertions
             "provider", "category", "strategy", "locale", "lighthouse_version",
             "warning_summary", "attempt_count", "failure_category", "safe_diagnostic",
             "queued_at", "analysis_at", "finished_at", "lease_token", "lease_expires_at",
-            "updated_at");
+            "updated_at", "archived_at");
         columns["page_audit_item"].Should().BeEquivalentTo(
             "id", "run_id", "audit_id", "status", "score", "score_display_mode",
             "numeric_value", "numeric_unit", "weight", "group_name", "title", "description",

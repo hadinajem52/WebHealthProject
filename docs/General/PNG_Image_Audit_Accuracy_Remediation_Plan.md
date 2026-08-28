@@ -4,7 +4,7 @@
 **Current baseline:** `b43c9fa132875e116b8e91296684d932abd3bbd4`
 **Audited baseline:** `cb149a317e98e9db6b19718044c891856685920b`
 **Suggested path:** `docs/General/PNG_Image_Audit_Accuracy_Remediation_Plan.md`
-**Status:** **Ready for implementation**
+**Status:** **Phase 2 in progress**
 **Feature:** `Tools → PNG image audit`
 **Supersedes:** section 4 (Format-comparison policy) and section 15 (Legal result-state matrix) of
 [PNG_Image_Audit_Implementation_Plan.md](PNG_Image_Audit_Implementation_Plan.md)
@@ -455,6 +455,9 @@ transparent background**; the cut-out logo fixture reports background coverage `
 ---
 
 ## Phase 2 — Replace the WebP size oracle
+
+Implementation evidence is recorded in
+[PNG_Image_Audit_Accuracy_Phase_2_Evidence.md](PNG_Image_Audit_Accuracy_Phase_2_Evidence.md).
 
 Introduce the engine boundary:
 

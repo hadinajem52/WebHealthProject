@@ -10,6 +10,7 @@ public sealed record PngAuditIndexViewModel(
     IReadOnlyList<PngAuditRunView> Runs,
     bool CanExecute,
     bool AuditAvailable,
+    bool CanArchive,
     EndpointTestBlock RunBlock = EndpointTestBlock.None)
 {
     public PngAuditRunView? ActiveRun => Runs.FirstOrDefault(run =>
@@ -169,7 +170,7 @@ public static class PngAuditDisplay
             PngAuditImageClassifications.BelowWebpThreshold =>
                 "No material verified saving",
             PngAuditImageClassifications.ComparisonUnavailable =>
-                "Comparison unavailable — pending verified engine",
+                DescribeComparisonUnavailable(image),
             PngAuditImageClassifications.HighBitDepthPng =>
                 "16-bit PNG — no exact WebP equivalent",
             PngAuditImageClassifications.ColorProfileUnsupported =>
@@ -226,14 +227,32 @@ public static class PngAuditDisplay
     }
 
     public static string DescribeComparisonSize(PngAuditImageResultView image) =>
-        image.Classification == PngAuditImageClassifications.ComparisonUnavailable
+        image.CandidateWebpBytes is null
             ? "Not verified"
             : FormatBytes(image.CandidateWebpBytes);
 
     public static string DescribeComparisonSaving(PngAuditImageResultView image) =>
-        image.Classification == PngAuditImageClassifications.ComparisonUnavailable
-            ? "Pending verified engine"
+        image.CandidateWebpBytes is null
+            ? "Unavailable"
             : FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent);
+
+    private static string DescribeComparisonUnavailable(PngAuditImageResultView image) =>
+        image.ReasonCode switch
+        {
+            "OptimizedPngReferencePending" =>
+                "Verified against current PNG — optimized reference pending",
+            "OriginalTooSmallForThreshold" =>
+                "Comparison skipped — thresholds cannot be met",
+            "FidelityVerificationFailed" =>
+                "Candidate failed exact pixel verification",
+            "ColorProfileVerificationFailed" =>
+                "Candidate failed color-profile verification",
+            "InvalidWebpPayload" =>
+                "Encoder did not produce lossless WebP",
+            "OutputLimitExceeded" =>
+                "Candidate exceeded the output limit",
+            _ => "Verified comparison unavailable"
+        };
 
     public static string? DescribeTransparencyEvidence(PngAuditImageResultView image)
     {

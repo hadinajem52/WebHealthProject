@@ -136,6 +136,7 @@ public interface IPageAuditReader
         string strategy,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PageAuditItemView>> ListAuditItemsAsync(

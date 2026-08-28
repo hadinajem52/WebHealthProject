@@ -143,6 +143,14 @@
                             </span>
                         </p>
                     </div>
+                    @await Html.PartialAsync("_ClearHistoryAction", new ClearHistoryActionViewModel(
+                        Url.Action("ClearHistory", new { endpointId = Model.SelectedEndpointId })!,
+                        Url.Action("Archived", new { endpointId = Model.SelectedEndpointId })!,
+                        Model.CanArchive,
+                        Model.Runs.Any(run => !PngAuditRunStatuses.IsActive(run.Status)),
+                        "Moves every finished audit run for this endpoint out of this list into the archive. Nothing is deleted, and each run can be restored.",
+                        "Move every finished audit run for this endpoint to the archive?",
+                        "#ajax-page"))
                 </div>
 
                 <div class="table-scroll table-scroll--flush">

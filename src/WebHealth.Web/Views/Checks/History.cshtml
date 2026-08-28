@@ -37,6 +37,14 @@
                     <span>Back to endpoint</span>
                 </a>
             </div>
+            @await Html.PartialAsync("_ClearHistoryAction", new ClearHistoryActionViewModel(
+                    Url.Action("ClearHistory", new { id = history.EndpointId })!,
+                    Url.Action("Archived", new { id = history.EndpointId })!,
+                    Model.CanArchive,
+                    history.Items.Any(item => item.State == LogicalCheckStates.Completed),
+                    "Moves every completed check for this endpoint out of this list into the archive. Nothing is deleted, archived checks still count towards uptime, and each one can be restored.",
+                "Move every completed check for this endpoint to the archive?",
+                "#ajax-page"))
         </div>
 
         @if (history.Items.Count == 0)

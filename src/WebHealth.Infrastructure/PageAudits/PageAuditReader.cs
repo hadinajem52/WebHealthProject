@@ -98,8 +98,10 @@ internal sealed class PageAuditReader(
         string strategy,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default) =>
-        await Project(Ordered(RunsOf(access, endpointId, category, strategy))
+        await Project(Ordered(RunsOf(access, endpointId, category, strategy)
+                    .Where(run => archivedOnly ? run.ArchivedAt != null : run.ArchivedAt == null))
                 .Take(Math.Clamp(limit, 1, MaxRunsListed)))
             .ToArrayAsync(cancellationToken);
 

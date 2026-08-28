@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WebHealth.Application.Archiving;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.PageAudits;
 using WebHealth.Application.Registry;
@@ -17,7 +18,8 @@ public sealed class PageAuditsController(
     IPageAuditReader pageAuditReader,
     ITargetRegistryReader targetReader,
     IEndpointTestGate testGate,
-    IPageAuditRunner pageAuditRunner) : Controller
+    IPageAuditRunner pageAuditRunner,
+    IRunHistoryArchive runHistoryArchive) : Controller
 {
     private const int RunsListed = 20;
 
@@ -163,7 +165,7 @@ public sealed class PageAuditsController(
             .ToArray();
         if (endpointId is not { } selected)
         {
-            return new(options, null, category, strategy, null, [], [], [], false);
+            return new(options, null, category, strategy, null, [], [], [], false, CanArchive());
         }
 
         var summary = await pageAuditReader.GetEndpointSummaryAsync(
@@ -184,7 +186,7 @@ public sealed class PageAuditsController(
             strategy,
             RunsListed,
             access,
-            cancellationToken);
+            cancellationToken: cancellationToken);
         var items = summary.LatestRun is null
             ? []
             : await pageAuditReader.ListAuditItemsAsync(
@@ -203,8 +205,139 @@ public sealed class PageAuditsController(
             return null;
         }
 
-        return new(options, selected, category, strategy, summary, categorySummaries, runs, items, canRun, block);
+        return new(
+            options,
+            selected,
+            category,
+            strategy,
+            summary,
+            categorySummaries,
+            runs,
+            items,
+            canRun,
+            CanArchive(),
+            block);
     }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring), HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClearHistory(
+        Guid endpointId,
+        string? category,
+        string? strategy,
+        CancellationToken cancellationToken = default)
+    {
+        var selectedCategory = PageAuditCategories.Normalize(category);
+        var selectedStrategy = PageAuditStrategies.Normalize(strategy);
+        var result = await runHistoryArchive.ArchiveFinishedAsync(
+            RunHistoryArea.PageAudit,
+            new(endpointId, selectedCategory, selectedStrategy),
+            GetAccess(),
+            cancellationToken);
+        return this.ArchiveOutcome(
+            result,
+            Url.Action(
+                nameof(Index),
+                new { endpointId, category = selectedCategory, strategy = selectedStrategy })!,
+            "audit run");
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring), HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestoreRun(
+        Guid endpointId,
+        string? category,
+        string? strategy,
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await runHistoryArchive.RestoreAsync(
+            RunHistoryArea.PageAudit, id, GetAccess(), cancellationToken);
+        return this.RestoreOutcome(
+            result,
+            Url.Action(
+                nameof(Archived),
+                new
+                {
+                    endpointId,
+                    category = PageAuditCategories.Normalize(category),
+                    strategy = PageAuditStrategies.Normalize(strategy)
+                })!,
+            "audit run");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Archived(
+        Guid endpointId,
+        string? category,
+        string? strategy,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccess();
+        var endpoints = await targetReader.ListAllEndpointsAsync(
+            access, cancellationToken: cancellationToken);
+        if (!endpoints.Any(endpoint => endpoint.Id == endpointId))
+        {
+            return this.NotFoundRecord("endpoint");
+        }
+
+        var selectedCategory = PageAuditCategories.Normalize(category);
+        var selectedStrategy = PageAuditStrategies.Normalize(strategy);
+        var runs = await pageAuditReader.ListRunsAsync(
+            endpointId,
+            selectedCategory,
+            selectedStrategy,
+            RunsListed,
+            access,
+            archivedOnly: true,
+            cancellationToken);
+        var route = new
+        {
+            endpointId,
+            category = selectedCategory,
+            strategy = selectedStrategy
+        };
+        return View(
+            "RunHistoryArchiveScreen",
+            new RunHistoryArchiveScreenViewModel(
+                "PageSpeed archive",
+                $"{PageAuditDisplay.DescribeStrategy(selectedStrategy)} "
+                + $"{PageAuditDisplay.DescribeCategory(selectedCategory)} runs cleared from the "
+                + "history list. Nothing is deleted: every run keeps its recorded audits, and "
+                + "restoring one puts it back on the run history unchanged.",
+                "Subject",
+                ["Score", "Lighthouse"],
+                [.. runs.Select(run => new RunHistoryArchiveRow(
+                    run.RunId,
+                    $"{run.Source} run",
+                    run.QueuedAt.ToLocalTime().ToString("d MMM yyyy HH:mm"),
+                    new StatusBadgeViewModel(
+                        PageAuditDisplay.StatusTone(run),
+                        PageAuditDisplay.DescribeStatus(run)),
+                    [
+                        run.HasScore ? run.Score!.Value.ToString() : "—",
+                        run.LighthouseVersion ?? "—"
+                    ],
+                    Url.Action(
+                        nameof(Index),
+                        new
+                        {
+                            endpointId,
+                            category = selectedCategory,
+                            strategy = selectedStrategy,
+                            runId = run.RunId
+                        })!))],
+                "run",
+                "PageSpeed runs",
+                Url.Action(nameof(Index), route)!,
+                Url.Action(nameof(RestoreRun), route)!,
+                CanArchive(),
+                "The archive is empty",
+                "Clearing the run history for this endpoint moves its finished runs here.",
+                "#ajax-page"));
+    }
+
+    private bool CanArchive() =>
+        User.IsInRole(ApplicationRoles.Administrator)
+        || User.IsInRole(ApplicationRoles.Operations);
 
     private RegistryAccessContext GetAccess()
     {

@@ -17,6 +17,8 @@ internal readonly record struct PngChunkPreflight(
 
     public bool CanTransferColorMeaning => ColorMeaning != PngColorMeaning.NotTransferable;
 
+    public PngSourceEncodingFacts SourceEncodingFacts => new(ColorMeaning);
+
     public PngImageFacts CreateFacts(PngTransparencyFacts? transparency = null) =>
         new(Width, Height, FrameCount, PixelCount, BitDepth, ColorType, transparency);
 }

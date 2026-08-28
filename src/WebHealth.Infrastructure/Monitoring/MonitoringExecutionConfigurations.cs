@@ -37,11 +37,16 @@ internal sealed class LogicalCheckConfiguration : IEntityTypeConfiguration<Logic
         builder.ToTable("logical_check", table => table.HasCheckConstraint(
             "ck_logical_check_policy_fingerprint",
             "length(policy_fingerprint) = 64"));
+        builder.ToTable("logical_check", table => table.HasCheckConstraint(
+            "ck_logical_check_archived_state",
+            "archived_at IS NULL OR state = 'Completed'"));
         builder.HasAlternateKey(check => new { check.Id, check.EndpointMonitorId })
             .HasName("ak_logical_check_id_endpoint_monitor_id");
         builder.HasIndex(check => new { check.EndpointMonitorId, check.CadenceKey })
             .IsUnique().HasFilter("source = 'Scheduled'");
         builder.HasIndex(check => new { check.EndpointMonitorId, check.CreatedAt });
+        builder.HasIndex(check => new { check.EndpointMonitorId, check.ArchivedAt })
+            .HasDatabaseName("ix_logical_check_endpoint_monitor_archived");
         builder.HasIndex(check => new { check.State, check.CreatedAt });
         builder.HasOne(check => check.EndpointMonitor).WithMany(monitor => monitor.LogicalChecks)
             .HasForeignKey(check => check.EndpointMonitorId).OnDelete(DeleteBehavior.Restrict);

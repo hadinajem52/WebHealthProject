@@ -46,6 +46,8 @@ public sealed record PngAuditOptions
 
     public int ImageDecodeConcurrency { get; init; } = 1;
 
+    public int ComparisonTimeoutSeconds { get; init; } = 60;
+
     public int MaximumAttempts { get; init; } = 3;
 
     public TimeSpan LeaseDuration { get; init; } = TimeSpan.FromMinutes(2);

@@ -12,7 +12,8 @@ public sealed record CrawlIndexViewModel(
     bool CanRunNow = false,
     Guid? ActiveRunId = null,
     EndpointTestBlock RunBlock = EndpointTestBlock.None,
-    bool CrawlingAvailable = true);
+    bool CrawlingAvailable = true,
+    bool CanArchive = false);
 
 public sealed record EndpointOption(Guid Id, string Label, string FullLabel)
 {

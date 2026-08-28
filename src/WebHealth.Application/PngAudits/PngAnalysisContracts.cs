@@ -14,6 +14,56 @@ public interface IPngImageAnalyzer
         AnalyzeAsync(encodedImage, cancellationToken);
 }
 
+public interface IPngFormatComparisonEngine
+{
+    Task<PngFormatComparisonResult> CompareAsync(
+        ReadOnlyMemory<byte> sourcePng,
+        PngSourceEncodingFacts sourceFacts,
+        PngRecommendationThresholds thresholds,
+        CancellationToken cancellationToken);
+}
+
+public sealed record PngSourceEncodingFacts(PngColorMeaning ColorMeaning);
+
+public sealed record PngFormatComparisonResult
+{
+    private PngFormatComparisonResult(
+        long? verifiedWebpBytes,
+        string profileVersion,
+        string? unavailableReason)
+    {
+        if (verifiedWebpBytes is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(verifiedWebpBytes.Value);
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(profileVersion);
+        if (verifiedWebpBytes is null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(unavailableReason);
+        }
+
+        VerifiedWebpBytes = verifiedWebpBytes;
+        ProfileVersion = profileVersion;
+        UnavailableReason = unavailableReason;
+    }
+
+    public long? VerifiedWebpBytes { get; }
+
+    public string ProfileVersion { get; }
+
+    public string? UnavailableReason { get; }
+
+    public bool Verified => VerifiedWebpBytes is not null;
+
+    public static PngFormatComparisonResult Success(long verifiedWebpBytes, string profileVersion) =>
+        new(verifiedWebpBytes, profileVersion, null);
+
+    public static PngFormatComparisonResult Unavailable(
+        string reason,
+        string profileVersion) =>
+        new(null, profileVersion, reason);
+}
+
 public enum PngImageAnalysisClassification
 {
     NotPng,
@@ -177,12 +227,15 @@ public sealed record PngComparisonMetrics
 {
     public PngComparisonMetrics(
         long originalPngBytes,
-        long optimizedPngBytes,
-        long candidateWebpBytes)
+        long candidateWebpBytes,
+        long? optimizedPngBytes = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(originalPngBytes);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(optimizedPngBytes);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(candidateWebpBytes);
+        if (optimizedPngBytes is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(optimizedPngBytes.Value);
+        }
         OriginalPngBytes = originalPngBytes;
         OptimizedPngBytes = optimizedPngBytes;
         CandidateWebpBytes = candidateWebpBytes;
@@ -190,19 +243,22 @@ public sealed record PngComparisonMetrics
 
     public long OriginalPngBytes { get; }
 
-    public long OptimizedPngBytes { get; }
+    public long? OptimizedPngBytes { get; }
 
     public long CandidateWebpBytes { get; }
 
-    public long ReferencePngBytes => Math.Min(OriginalPngBytes, OptimizedPngBytes);
+    public long? ReferencePngBytes => OptimizedPngBytes is { } optimized
+        ? Math.Min(OriginalPngBytes, optimized)
+        : null;
 
     public long OriginalSavingsBytes => OriginalPngBytes - CandidateWebpBytes;
 
     public decimal OriginalSavingsPercent => OriginalSavingsBytes * 100m / OriginalPngBytes;
 
-    public long ReferenceSavingsBytes => ReferencePngBytes - CandidateWebpBytes;
+    public long? ReferenceSavingsBytes => ReferencePngBytes - CandidateWebpBytes;
 
-    public decimal ReferenceSavingsPercent => ReferenceSavingsBytes * 100m / ReferencePngBytes;
+    public decimal? ReferenceSavingsPercent =>
+        ReferenceSavingsBytes * 100m / ReferencePngBytes;
 }
 
 public sealed record PngAnalysisResult
@@ -213,7 +269,8 @@ public sealed record PngAnalysisResult
         string? detectedFormat = null,
         PngImageFacts? image = null,
         PngComparisonMetrics? comparison = null,
-        PngRecommendation recommendation = PngRecommendation.None)
+        PngRecommendation recommendation = PngRecommendation.None,
+        string? unavailableReason = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(originalBytes);
         Classification = classification;
@@ -222,6 +279,7 @@ public sealed record PngAnalysisResult
         Image = image;
         Comparison = comparison;
         Recommendation = recommendation;
+        UnavailableReason = unavailableReason;
     }
 
     public PngImageAnalysisClassification Classification { get; }
@@ -235,6 +293,8 @@ public sealed record PngAnalysisResult
     public PngComparisonMetrics? Comparison { get; }
 
     public PngRecommendation Recommendation { get; }
+
+    public string? UnavailableReason { get; }
 
     public static PngAnalysisResult NotPng(long originalBytes, string detectedFormat)
     {
@@ -300,14 +360,43 @@ public sealed record PngAnalysisResult
     public static PngAnalysisResult ComparisonUnavailable(
         long originalBytes,
         PngImageFacts image,
-        PngComparisonMetrics? comparison = null)
+        PngComparisonMetrics? comparison = null,
+        string unavailableReason = "ComparisonEngineUnavailable")
     {
         EnsureStaticMeasured(image);
+        ArgumentException.ThrowIfNullOrWhiteSpace(unavailableReason);
         return new(
             PngImageAnalysisClassification.ComparisonUnavailable,
             originalBytes,
             image: image,
-            comparison: comparison);
+            comparison: comparison,
+            unavailableReason: unavailableReason);
+    }
+
+    public static PngAnalysisResult ComparedAgainstOriginal(
+        long originalBytes,
+        PngImageFacts image,
+        long verifiedWebpBytes,
+        PngRecommendationThresholds thresholds)
+    {
+        EnsureStaticMeasured(image);
+        ArgumentNullException.ThrowIfNull(thresholds);
+        var comparison = new PngComparisonMetrics(originalBytes, verifiedWebpBytes);
+        if (!thresholds.MeetsThreshold(originalBytes, verifiedWebpBytes))
+        {
+            return new(
+                PngImageAnalysisClassification.BelowWebpThreshold,
+                originalBytes,
+                image: image,
+                comparison: comparison);
+        }
+
+        return new(
+            PngImageAnalysisClassification.ComparisonUnavailable,
+            originalBytes,
+            image: image,
+            comparison: comparison,
+            unavailableReason: "OptimizedPngReferencePending");
     }
 
     private static void EnsureStaticMeasured(PngImageFacts image)
@@ -364,7 +453,7 @@ public static class PngAnalysisProfiles
 {
     public const string Analyzer = "png-alpha-v2";
 
-    public const string Comparison = UnverifiedComparison;
+    public const string Comparison = VerifiedComparison;
 
     public const string UnverifiedComparison = "normalized-png-vs-lossless-webp-v1";
 

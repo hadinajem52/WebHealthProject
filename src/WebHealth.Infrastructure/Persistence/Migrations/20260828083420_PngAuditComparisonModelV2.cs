@@ -8,8 +8,6 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
     public partial class PngAuditComparisonModelV2 : Migration
     {
         /// <inheritdoc />
-        private const string LegacyComparisonProfile = "normalized-png-vs-lossless-webp-v1";
-
         private const string LegacyClassifications =
             "'FetchFailed', 'HttpNonSuccess', 'ResponseTruncated', 'NotPng', "
             + "'IdentificationFailed', 'UnsupportedBitDepth', 'DimensionsExceeded', "
@@ -24,17 +22,14 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 $"""
                 DELETE FROM web_health.png_audit_image_source
                 WHERE image_result_id IN (
-                    SELECT result.id
-                    FROM web_health.png_audit_image_result result
-                    JOIN web_health.png_audit_run run ON run.id = result.run_id
-                    WHERE run.comparison_profile = '{LegacyComparisonProfile}');
+                    SELECT id
+                    FROM web_health.png_audit_image_result
+                    WHERE classification IN ({LegacyClassifications}));
                 """);
             migrationBuilder.Sql(
                 $"""
-                DELETE FROM web_health.png_audit_image_result result
-                USING web_health.png_audit_run run
-                WHERE run.id = result.run_id
-                  AND run.comparison_profile = '{LegacyComparisonProfile}';
+                DELETE FROM web_health.png_audit_image_result
+                WHERE classification IN ({LegacyClassifications});
                 """);
 
             migrationBuilder.DropCheckConstraint(
@@ -82,13 +77,13 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 name: "normalized_savings_bytes",
                 schema: "web_health",
                 table: "png_audit_image_result",
-                newName: "semi_transparent_pixel_count");
+                newName: "reference_savings_bytes");
 
             migrationBuilder.RenameColumn(
                 name: "normalized_png_bytes",
                 schema: "web_health",
                 table: "png_audit_image_result",
-                newName: "reference_savings_bytes");
+                newName: "optimized_png_bytes");
 
             migrationBuilder.AddColumn<long>(
                 name: "background_transparent_pixel_count",
@@ -133,7 +128,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 nullable: true);
 
             migrationBuilder.AddColumn<long>(
-                name: "optimized_png_bytes",
+                name: "semi_transparent_pixel_count",
                 schema: "web_health",
                 table: "png_audit_image_result",
                 type: "bigint",
@@ -265,12 +260,12 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 table: "png_audit_image_result");
 
             migrationBuilder.DropColumn(
-                name: "optimized_png_bytes",
+                name: "semi_transparent_pixel_count",
                 schema: "web_health",
                 table: "png_audit_image_result");
 
             migrationBuilder.RenameColumn(
-                name: "semi_transparent_pixel_count",
+                name: "reference_savings_bytes",
                 schema: "web_health",
                 table: "png_audit_image_result",
                 newName: "normalized_savings_bytes");
@@ -282,7 +277,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                 newName: "normalized_savings_percent");
 
             migrationBuilder.RenameColumn(
-                name: "reference_savings_bytes",
+                name: "optimized_png_bytes",
                 schema: "web_health",
                 table: "png_audit_image_result",
                 newName: "normalized_png_bytes");

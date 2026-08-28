@@ -70,8 +70,9 @@ internal static class PngAuditPersistenceAssertions
             .SingleAsync(result => result.RunId == runId
                 && result.Classification == PngAuditImageClassifications.ComparisonUnavailable
                 && result.UsesTransparency == true);
-        candidate.OptimizedPngBytes.Should().NotBeNull(
-            "a transparent PNG must reach the comparison path");
+        candidate.OptimizedPngBytes.Should().BeNull(
+            "the optimized PNG reference is introduced in phase three");
+        candidate.CandidateWebpBytes.Should().Be(800);
         candidate.BackgroundTransparentPixelCount.Should().Be(36);
         candidate.InteriorTransparentPixelCount.Should().Be(4);
         var collisionBatch = CollisionBatch(candidate.ImageIdentityHash, endpointUrl);
@@ -153,7 +154,8 @@ internal static class PngAuditPersistenceAssertions
                     == PngAuditImageClassifications.ComparisonUnavailable
                 && image.UsesTransparency == true);
         storedCandidate.CandidateWebpBytes.Should().Be(800);
-        storedCandidate.ReferenceSavingsBytes.Should().Be(400);
+        storedCandidate.OriginalSavingsBytes.Should().Be(500);
+        storedCandidate.ReferenceSavingsBytes.Should().BeNull();
         storedCandidate.BackgroundTransparentPixelCount.Should().Be(36);
         storedCandidate.HasTransparentBackground(
             PngTransparencyPolicy.MinBackgroundCoveragePercent).Should().BeTrue();
@@ -189,7 +191,7 @@ internal static class PngAuditPersistenceAssertions
             5,
             2,
             1,
-            0,
+            2,
             0,
             0,
             0,
@@ -370,11 +372,11 @@ internal static class PngAuditPersistenceAssertions
             PngAnalysisResult.ComparisonUnavailable(
                 1000,
                 factsOpaque,
-                new PngComparisonMetrics(1000, 900, 700)),
+                new PngComparisonMetrics(1000, 700, 900)),
             PngAnalysisResult.ComparisonUnavailable(
                 1300,
                 factsTransparentBackground,
-                new PngComparisonMetrics(1300, 1200, 800))
+                new PngComparisonMetrics(1300, 800))
         };
         var images = new List<PngAuditImageRecord>
         {
@@ -919,8 +921,12 @@ internal static class PngAuditPersistenceAssertions
         string identity,
         string classification,
         string values,
-        string detectedFormat = "NULL") =>
-        $"""
+        string detectedFormat = "NULL")
+    {
+        var reasonCode = classification == PngAuditImageClassifications.ComparisonUnavailable
+            ? "'FixtureReason'"
+            : "NULL";
+        return $"""
         INSERT INTO web_health.png_audit_image_result
             (id, run_id, image_display_url, image_identity_hash, final_display_url,
              final_identity_hash, declared_content_type, detected_format, http_status_code,
@@ -928,12 +934,13 @@ internal static class PngAuditPersistenceAssertions
              uses_transparency, transparent_pixel_count, transparent_pixel_percent,
              semi_transparent_pixel_count, fully_transparent_pixel_count,
              background_transparent_pixel_count, interior_transparent_pixel_count, min_alpha,
-             classification, recommendation, recorded_at)
+             classification, reason_code, recommendation, recorded_at)
         VALUES ('{Guid.NewGuid()}', '{runId}', 'https://invalid.example/{identity}.png',
                 decode('{Hash(identity)}', 'hex'), 'https://invalid.example/{identity}.png',
                 decode('{Hash("final-" + identity)}', 'hex'), 'image/png', {detectedFormat},
-                {values}, '{classification}', 'None', now());
+                {values}, '{classification}', {reasonCode}, 'None', now());
         """;
+    }
 
     private static async Task ExpectConstraintAsync(
         string connectionString,
@@ -1011,7 +1018,8 @@ internal static class PngAuditPersistenceAssertions
             "discovery_skip_count", "http_attempts", "total_page_bytes", "total_image_bytes",
             "crawl_coverage_limited", "image_analysis_coverage_limited",
             "source_mapping_coverage_limited", "attempt_count", "lease_token",
-            "lease_expires_at", "queued_at", "started_at", "updated_at", "finished_at");
+            "lease_expires_at", "queued_at", "started_at", "updated_at", "finished_at",
+            "archived_at");
     }
 
     private static PngAuditImageIdentity Identity(string endpointUrl, string name) =>

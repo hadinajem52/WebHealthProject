@@ -288,13 +288,16 @@ public sealed record PngAuditImageRecord
             throw new ArgumentOutOfRangeException(nameof(httpStatusCode));
         }
 
-        var recommendation = analysis.Recommendation == PngRecommendation.LosslessWebp
-            ? PngAuditRecommendations.LosslessWebp
-            : PngAuditRecommendations.None;
+        var recommendation = analysis.Recommendation switch
+        {
+            PngRecommendation.LosslessWebp => PngAuditRecommendations.LosslessWebp,
+            PngRecommendation.OptimizePng => PngAuditRecommendations.OptimizePng,
+            _ => PngAuditRecommendations.None
+        };
         return new(
             image,
             analysis.Classification.ToString(),
-            null,
+            analysis.UnavailableReason,
             finalDisplayUrl,
             finalIdentityHash,
             declaredContentType,
@@ -304,7 +307,12 @@ public sealed record PngAuditImageRecord
             analysis.Image,
             analysis.Comparison,
             recommendation,
-            recommendation == PngAuditRecommendations.LosslessWebp ? "WebP" : null);
+            recommendation switch
+            {
+                PngAuditRecommendations.LosslessWebp => "WebP",
+                PngAuditRecommendations.OptimizePng => "PNG",
+                _ => null
+            });
     }
 }
 
@@ -605,6 +613,7 @@ public interface IPngAuditReader
         Guid endpointId,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default);
 
     Task<PngAuditPage<PngAuditImageResultView>> ListImagesAsync(

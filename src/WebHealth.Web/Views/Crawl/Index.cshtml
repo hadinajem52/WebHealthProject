@@ -138,6 +138,14 @@
                         </span>
                     </p>
                 </div>
+                @await Html.PartialAsync("_ClearHistoryAction", new ClearHistoryActionViewModel(
+                    Url.Action("ClearHistory", new { endpointId = Model.SelectedEndpointId })!,
+                    Url.Action("Archived", new { endpointId = Model.SelectedEndpointId })!,
+                    Model.CanArchive,
+                    Model.Runs.Any(run => run.Status != CrawlRunStatuses.Running),
+                    "Moves every finished crawl for this endpoint out of this list into the archive. Nothing is deleted, and each crawl can be restored.",
+                    "Move every finished crawl for this endpoint to the archive?",
+                    "#ajax-page"))
             </div>
 
             <div class="table-scroll table-scroll--flush">

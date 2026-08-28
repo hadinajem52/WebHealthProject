@@ -56,6 +56,7 @@ internal sealed class CheckHistoryReader(
         Guid endpointId,
         RegistryAccessContext access,
         int page = 1,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -71,7 +72,8 @@ internal sealed class CheckHistoryReader(
         }
 
         var checksForEndpoint = dbContext.LogicalChecks.AsNoTracking()
-            .Where(check => check.EndpointMonitor.EndpointId == endpointId);
+            .Where(check => check.EndpointMonitor.EndpointId == endpointId
+                && (archivedOnly ? check.ArchivedAt != null : check.ArchivedAt == null));
         var totalCount = await checksForEndpoint.CountAsync(cancellationToken);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)PageSize));
         var boundedPage = Math.Clamp(page, 1, totalPages);

@@ -22,6 +22,7 @@ public sealed class PngAuditConfigurationTests
         options.MaxImageBytes.Should().Be(SafeHttpTransportDefaults.AbsoluteMaxResponseBodyBytes);
         options.ImageFetchConcurrency.Should().Be(1);
         options.ImageDecodeConcurrency.Should().Be(1);
+        options.ComparisonTimeoutSeconds.Should().Be(60);
         options.RequestsPerSecondPerHost.Should().Be(1);
         options.MinSavingsPercent.Should().Be(10);
         options.MinSavingsBytes.Should().Be(4096);
@@ -56,6 +57,9 @@ public sealed class PngAuditConfigurationTests
         services.Should().ContainSingle(descriptor =>
             descriptor.ServiceType == typeof(IPngAuditRunner)
             && descriptor.ImplementationType == typeof(PngAuditRunner));
+        services.Should().ContainSingle(descriptor =>
+            descriptor.ServiceType == typeof(IPngFormatComparisonEngine)
+            && descriptor.ImplementationType == typeof(MagickPngFormatComparisonEngine));
     }
 
     [Fact]

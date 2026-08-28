@@ -41,6 +41,7 @@ internal sealed class EmptyCrawlReportReader : ICrawlReportReader
         Guid endpointId,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<CrawlRunSummary>>(
             endpointId == RunningEndpointId ? [RunningRun()] : []);
@@ -172,6 +173,7 @@ internal sealed class EmptyPageAuditReader : IPageAuditReader
         string strategy,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PageAuditRunSummary>>([]);
 

@@ -24,10 +24,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Monitoring.LogicalCheck",
                 typeof(LogicalCheck),
                 baseEntityType,
-                propertyCount: 13,
+                propertyCount: 14,
                 navigationCount: 6,
                 foreignKeyCount: 2,
-                unnamedIndexCount: 4,
+                unnamedIndexCount: 5,
                 keyCount: 2);
 
             var id = runtimeEntityType.AddProperty(
@@ -40,6 +40,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
             id.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             id.AddAnnotation("Relational:ColumnName", "id");
+
+            var archivedAt = runtimeEntityType.AddProperty(
+                "ArchivedAt",
+                typeof(DateTimeOffset?),
+                propertyInfo: typeof(LogicalCheck).GetProperty("ArchivedAt", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(LogicalCheck).GetField("<ArchivedAt>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            archivedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            archivedAt.AddAnnotation("Relational:ColumnName", "archived_at");
+            archivedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
 
             var cadenceKey = runtimeEntityType.AddProperty(
                 "CadenceKey",
@@ -171,18 +181,22 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             index.AddAnnotation("Relational:Name", "ix_logical_check_initiated_by_user_id");
 
             var index0 = runtimeEntityType.AddIndex(
-                new[] { endpointMonitorId, cadenceKey },
-                unique: true);
-            index0.AddAnnotation("Relational:Filter", "source = 'Scheduled'");
-            index0.AddAnnotation("Relational:Name", "ix_logical_check_endpoint_monitor_id_cadence_key");
+                new[] { endpointMonitorId, archivedAt });
+            index0.AddAnnotation("Relational:Name", "ix_logical_check_endpoint_monitor_archived");
 
             var index1 = runtimeEntityType.AddIndex(
-                new[] { endpointMonitorId, createdAt });
-            index1.AddAnnotation("Relational:Name", "ix_logical_check_endpoint_monitor_id_created_at");
+                new[] { endpointMonitorId, cadenceKey },
+                unique: true);
+            index1.AddAnnotation("Relational:Filter", "source = 'Scheduled'");
+            index1.AddAnnotation("Relational:Name", "ix_logical_check_endpoint_monitor_id_cadence_key");
 
             var index2 = runtimeEntityType.AddIndex(
+                new[] { endpointMonitorId, createdAt });
+            index2.AddAnnotation("Relational:Name", "ix_logical_check_endpoint_monitor_id_created_at");
+
+            var index3 = runtimeEntityType.AddIndex(
                 new[] { state, createdAt });
-            index2.AddAnnotation("Relational:Name", "ix_logical_check_state_created_at");
+            index3.AddAnnotation("Relational:Name", "ix_logical_check_state_created_at");
 
             return runtimeEntityType;
         }

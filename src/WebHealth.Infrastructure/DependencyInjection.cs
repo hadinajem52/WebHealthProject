@@ -6,6 +6,8 @@ using WebHealth.Infrastructure.Diagnostics;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
 using WebHealth.Application.Administration;
+using WebHealth.Application.Archiving;
+using WebHealth.Infrastructure.Archiving;
 using WebHealth.Application.Auditing;
 using WebHealth.Infrastructure.Auditing;
 using WebHealth.Application.Assignments;
@@ -172,6 +174,7 @@ public static class DependencyInjection
         services.AddScoped<IMonitoringSchedulingService, MonitoringSchedulingService>();
         services.AddScoped<IManualCheckService, ManualCheckService>();
         services.AddScoped<ICheckHistoryReader, CheckHistoryReader>();
+        services.AddScoped<IRunHistoryArchive, RunHistoryArchive>();
         services.AddScoped<OwnerSubjectNames>();
         services.AddScoped<IReportingReader, ReportingReader>();
         services.AddScoped<IMaintenanceWindowService, MaintenanceWindowService>();
@@ -189,6 +192,7 @@ public static class DependencyInjection
         services.AddScoped<ISiteAnalysisFetcher, SiteAnalysisFetcher>();
         services.AddScoped<ICrawlRobotsReader, CrawlRobotsReader>();
         services.AddScoped<IPngSiteCrawler, PngSiteCrawler>();
+        services.AddSingleton<IPngFormatComparisonEngine, MagickPngFormatComparisonEngine>();
         services.AddSingleton<IPngImageAnalyzer, PngImageAnalyzer>();
         services.TryAddScoped<IPngAuditResultSink, PngAuditResultSink>();
         services.AddScoped<IPngAuditReader, PngAuditReader>();
@@ -476,6 +480,7 @@ public static class DependencyInjection
             || options.TransientRetryCount is < 0 or > 3
             || options.ImageFetchConcurrency != 1
             || options.ImageDecodeConcurrency != 1
+            || options.ComparisonTimeoutSeconds is < 1 or > 300
             || options.MaximumAttempts is < 1 or > 5
             || options.LeaseDuration < TimeSpan.FromSeconds(30)
             || options.LeaseDuration > TimeSpan.FromMinutes(15)

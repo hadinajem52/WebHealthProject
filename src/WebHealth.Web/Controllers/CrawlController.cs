@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WebHealth.Application.Archiving;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.Crawling;
 using WebHealth.Application.Registry;
@@ -16,7 +17,8 @@ public sealed class CrawlController(
     ICrawlReportReader crawlReader,
     ITargetRegistryReader targetReader,
     IEndpointTestGate testGate,
-    ICrawlRunner crawlRunner) : Controller
+    ICrawlRunner crawlRunner,
+    IRunHistoryArchive runHistoryArchive) : Controller
 {
     private const int RunsListed = 20;
     private const int BrokenLinksPerPage = 50;
@@ -32,10 +34,12 @@ public sealed class CrawlController(
 
         if (endpointId is not { } selected)
         {
-            return View(new CrawlIndexViewModel(options, null, [], CrawlComparison.Empty));
+            return View(new CrawlIndexViewModel(
+                options, null, [], CrawlComparison.Empty, CanArchive: CanArchive()));
         }
 
-        var runs = await crawlReader.ListRunsAsync(selected, RunsListed, access, cancellationToken);
+        var runs = await crawlReader.ListRunsAsync(
+            selected, RunsListed, access, cancellationToken: cancellationToken);
         var comparison = await crawlReader.CompareLatestAsync(selected, access, cancellationToken);
 
         var block = await testGate.DescribeTestBlockAsync(selected, access, cancellationToken);
@@ -51,7 +55,77 @@ public sealed class CrawlController(
             canRun,
             activeRun,
             block,
-            crawlRunner.CanQueue));
+            crawlRunner.CanQueue,
+            CanArchive()));
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring), HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClearHistory(
+        Guid endpointId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await runHistoryArchive.ArchiveFinishedAsync(
+            RunHistoryArea.Crawl, new(endpointId), GetAccess(), cancellationToken);
+        return this.ArchiveOutcome(
+            result, Url.Action(nameof(Index), new { endpointId })!, "crawl");
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring), HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestoreRun(
+        Guid endpointId,
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await runHistoryArchive.RestoreAsync(
+            RunHistoryArea.Crawl, id, GetAccess(), cancellationToken);
+        return this.RestoreOutcome(
+            result, Url.Action(nameof(Archived), new { endpointId })!, "crawl");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Archived(
+        Guid endpointId,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccess();
+        var endpoints = await targetReader.ListAllEndpointsAsync(
+            access, cancellationToken: cancellationToken);
+        if (!endpoints.Any(endpoint => endpoint.Id == endpointId))
+        {
+            return this.NotFoundRecord("endpoint");
+        }
+
+        var runs = await crawlReader.ListRunsAsync(
+            endpointId, RunsListed, access, archivedOnly: true, cancellationToken);
+        return View(
+            "RunHistoryArchiveScreen",
+            new RunHistoryArchiveScreenViewModel(
+                "Crawl archive",
+                "Crawls cleared from the history list. Nothing is deleted: every crawl keeps its "
+                + "recorded links, and restoring one puts it back on the crawl history unchanged.",
+                "Subject",
+                ["Broken links", "Robots override"],
+                [.. runs.Select(run => new RunHistoryArchiveRow(
+                    run.RunId,
+                    $"{run.PagesFetched} page{(run.PagesFetched == 1 ? null : "s")} crawled",
+                    run.StartedAt.ToLocalTime().ToString("d MMM yyyy HH:mm"),
+                    new StatusBadgeViewModel(
+                        CrawlRunDisplay.StatusTone(run),
+                        CrawlRunDisplay.DescribeStatus(run),
+                        CrawlRunDisplay.DescribeStopReason(run)),
+                    [
+                        run.BrokenLinkCount.ToString(),
+                        run.RobotsOverrideGranted ? "Granted" : "Not granted"
+                    ],
+                    Url.Action(nameof(Run), new { id = run.RunId })!))],
+                "crawl",
+                "Broken links",
+                Url.Action(nameof(Index), new { endpointId })!,
+                Url.Action(nameof(RestoreRun), new { endpointId })!,
+                CanArchive(),
+                "The archive is empty",
+                "Clearing the crawl history for this endpoint moves its finished crawls here.",
+                "#ajax-page"));
     }
 
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost, ValidateAntiForgeryToken]
@@ -141,6 +215,10 @@ public sealed class CrawlController(
         return PartialView("_BrokenLinksTable", new CrawlBrokenLinksRegionViewModel(
             id, brokenLinks, normalizedOffset, BrokenLinksPerPage, run.CoveredWholeScope));
     }
+
+    private bool CanArchive() =>
+        User.IsInRole(ApplicationRoles.Administrator)
+        || User.IsInRole(ApplicationRoles.Operations);
 
     private RegistryAccessContext GetAccess()
     {

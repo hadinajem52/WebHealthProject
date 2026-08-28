@@ -512,6 +512,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(4096)")
                         .HasColumnName("allowed_path_prefixes");
 
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
                     b.Property<bool>("CheckExternalLinks")
                         .HasColumnType("boolean")
                         .HasColumnName("check_external_links");
@@ -600,12 +604,17 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_crawl_run_active")
                         .HasFilter("status = 'Running'");
 
+                    b.HasIndex("EndpointId", "ArchivedAt")
+                        .HasDatabaseName("ix_crawl_run_endpoint_archived");
+
                     b.HasIndex("EndpointId", "StartedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_crawl_run_endpoint_id_started_at");
 
                     b.ToTable("crawl_run", "web_health", t =>
                         {
+                            t.HasCheckConstraint("ck_crawl_run_archived_status", "archived_at IS NULL OR status <> 'Running'");
+
                             t.HasCheckConstraint("ck_crawl_run_counts", "pages_fetched >= 0 AND links_recorded >= 0");
 
                             t.HasCheckConstraint("ck_crawl_run_failure_reason", "(status = 'Failed') OR (failure_reason IS NULL)");
@@ -1989,6 +1998,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
                     b.Property<string>("CadenceKey")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -2053,6 +2066,9 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasIndex("InitiatedByUserId")
                         .HasDatabaseName("ix_logical_check_initiated_by_user_id");
 
+                    b.HasIndex("EndpointMonitorId", "ArchivedAt")
+                        .HasDatabaseName("ix_logical_check_endpoint_monitor_archived");
+
                     b.HasIndex("EndpointMonitorId", "CadenceKey")
                         .IsUnique()
                         .HasDatabaseName("ix_logical_check_endpoint_monitor_id_cadence_key")
@@ -2066,6 +2082,8 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
                     b.ToTable("logical_check", "web_health", t =>
                         {
+                            t.HasCheckConstraint("ck_logical_check_archived_state", "archived_at IS NULL OR state = 'Completed'");
+
                             t.HasCheckConstraint("ck_logical_check_policy_fingerprint", "length(policy_fingerprint) = 64");
 
                             t.HasCheckConstraint("ck_logical_check_source", "source IN ('Scheduled', 'Manual', 'Urgent')");
@@ -2574,6 +2592,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("analysis_at");
 
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
+
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer")
                         .HasColumnName("attempt_count");
@@ -2699,6 +2721,9 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasIndex("BatchId", "Strategy")
                         .HasDatabaseName("ix_page_audit_run_batch_strategy");
 
+                    b.HasIndex("EndpointId", "ArchivedAt")
+                        .HasDatabaseName("ix_page_audit_run_endpoint_archived");
+
                     b.HasIndex("EndpointId", "FinishedAt")
                         .IsDescending(false, true)
                         .HasDatabaseName("ix_page_audit_run_endpoint_finished");
@@ -2712,6 +2737,8 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
                     b.ToTable("page_audit_run", "web_health", t =>
                         {
+                            t.HasCheckConstraint("ck_page_audit_run_archived_status", "archived_at IS NULL OR status IN ('Completed', 'CompletedWithWarnings', 'Failed', 'Cancelled')");
+
                             t.HasCheckConstraint("ck_page_audit_run_attempt_count", "attempt_count >= 0");
 
                             t.HasCheckConstraint("ck_page_audit_run_category", "category IN ('Performance', 'Accessibility', 'BestPractices', 'Seo')");
@@ -3105,7 +3132,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_png_audit_image_result_classification", "classification IN ('FetchFailed', 'HttpNonSuccess', 'ResponseTruncated', 'NotPng', 'IdentificationFailed', 'DimensionsExceeded', 'PixelLimitExceeded', 'DecodedMemoryExceeded', 'AnimatedPng', 'DecodeFailed', 'HighBitDepthPng', 'ColorProfileUnsupported', 'ComparisonUnavailable', 'VerifiedWebpCandidate', 'OptimizedPngPreferred', 'BelowWebpThreshold')");
 
-                            t.HasCheckConstraint("ck_png_audit_image_result_comparison", "(optimized_png_bytes IS NULL AND candidate_webp_bytes IS NULL AND original_savings_bytes IS NULL AND original_savings_percent IS NULL AND reference_savings_bytes IS NULL AND reference_savings_percent IS NULL) OR (optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND original_savings_bytes IS NOT NULL AND original_savings_percent IS NOT NULL AND reference_savings_bytes IS NOT NULL AND reference_savings_percent IS NOT NULL AND response_bytes > 0 AND optimized_png_bytes > 0 AND candidate_webp_bytes > 0 AND original_savings_bytes = response_bytes - candidate_webp_bytes AND reference_savings_bytes = least(response_bytes, optimized_png_bytes) - candidate_webp_bytes AND original_savings_percent = round(original_savings_bytes * 100.0 / response_bytes, 4) AND reference_savings_percent = round(reference_savings_bytes * 100.0 / least(response_bytes, optimized_png_bytes), 4))");
+                            t.HasCheckConstraint("ck_png_audit_image_result_comparison", "(optimized_png_bytes IS NULL AND candidate_webp_bytes IS NULL AND original_savings_bytes IS NULL AND original_savings_percent IS NULL AND reference_savings_bytes IS NULL AND reference_savings_percent IS NULL) OR (optimized_png_bytes IS NULL AND candidate_webp_bytes IS NOT NULL AND original_savings_bytes IS NOT NULL AND original_savings_percent IS NOT NULL AND reference_savings_bytes IS NULL AND reference_savings_percent IS NULL AND response_bytes > 0 AND candidate_webp_bytes > 0 AND original_savings_bytes = response_bytes - candidate_webp_bytes AND original_savings_percent = round(original_savings_bytes * 100.0 / response_bytes, 4)) OR (optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND original_savings_bytes IS NOT NULL AND original_savings_percent IS NOT NULL AND reference_savings_bytes IS NOT NULL AND reference_savings_percent IS NOT NULL AND response_bytes > 0 AND optimized_png_bytes > 0 AND candidate_webp_bytes > 0 AND original_savings_bytes = response_bytes - candidate_webp_bytes AND reference_savings_bytes = least(response_bytes, optimized_png_bytes) - candidate_webp_bytes AND original_savings_percent = round(original_savings_bytes * 100.0 / response_bytes, 4) AND reference_savings_percent = round(reference_savings_bytes * 100.0 / least(response_bytes, optimized_png_bytes), 4))");
 
                             t.HasCheckConstraint("ck_png_audit_image_result_facts", "(width IS NULL AND height IS NULL AND frame_count IS NULL AND pixel_count IS NULL AND bit_depth IS NULL AND color_type IS NULL) OR (width IS NOT NULL AND height IS NOT NULL AND frame_count IS NOT NULL AND pixel_count IS NOT NULL AND bit_depth IS NOT NULL AND color_type IS NOT NULL AND width > 0 AND height > 0 AND frame_count > 0 AND bit_depth IN (1, 2, 4, 8, 16) AND color_type IN (0, 2, 3, 4, 6) AND pixel_count = width::bigint * height::bigint)");
 
@@ -3113,7 +3140,7 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_png_audit_image_result_recommendation", "(recommendation = 'None' AND suggested_format IS NULL) OR (recommendation = 'LosslessWebp' AND suggested_format = 'WebP') OR (recommendation = 'OptimizePng' AND suggested_format = 'PNG')");
 
-                            t.HasCheckConstraint("ck_png_audit_image_result_state", "(classification = 'AnimatedPng' AND frame_count IS NOT NULL AND frame_count > 1 AND uses_transparency IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification IN ('HighBitDepthPng', 'ColorProfileUnsupported') AND frame_count = 1 AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'ComparisonUnavailable' AND frame_count = 1 AND uses_transparency IS NOT NULL AND recommendation = 'None') OR (classification = 'VerifiedWebpCandidate' AND frame_count = 1 AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND recommendation = 'LosslessWebp') OR (classification = 'OptimizedPngPreferred' AND frame_count = 1 AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND recommendation = 'OptimizePng') OR (classification = 'BelowWebpThreshold' AND frame_count = 1 AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND recommendation = 'None') OR (classification = 'NotPng' AND detected_format IS NOT NULL AND upper(detected_format) <> 'PNG' AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'FetchFailed' AND http_status_code IS NULL AND reason_code IS NOT NULL AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'HttpNonSuccess' AND http_status_code IS NOT NULL AND http_status_code NOT BETWEEN 200 AND 299 AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'ResponseTruncated' AND response_bytes > 0 AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification IN ('IdentificationFailed', 'DimensionsExceeded', 'PixelLimitExceeded', 'DecodedMemoryExceeded', 'DecodeFailed') AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None')");
+                            t.HasCheckConstraint("ck_png_audit_image_result_state", "(classification = 'AnimatedPng' AND frame_count IS NOT NULL AND frame_count > 1 AND uses_transparency IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification IN ('HighBitDepthPng', 'ColorProfileUnsupported') AND frame_count = 1 AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'ComparisonUnavailable' AND frame_count = 1 AND uses_transparency IS NOT NULL AND reason_code IS NOT NULL AND recommendation = 'None') OR (classification = 'VerifiedWebpCandidate' AND frame_count = 1 AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND recommendation = 'LosslessWebp') OR (classification = 'OptimizedPngPreferred' AND frame_count = 1 AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND recommendation = 'OptimizePng') OR (classification = 'BelowWebpThreshold' AND frame_count = 1 AND uses_transparency IS NOT NULL AND candidate_webp_bytes IS NOT NULL AND recommendation = 'None') OR (classification = 'NotPng' AND detected_format IS NOT NULL AND upper(detected_format) <> 'PNG' AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'FetchFailed' AND http_status_code IS NULL AND reason_code IS NOT NULL AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'HttpNonSuccess' AND http_status_code IS NOT NULL AND http_status_code NOT BETWEEN 200 AND 299 AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification = 'ResponseTruncated' AND response_bytes > 0 AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None') OR (classification IN ('IdentificationFailed', 'DimensionsExceeded', 'PixelLimitExceeded', 'DecodedMemoryExceeded', 'DecodeFailed') AND width IS NULL AND optimized_png_bytes IS NULL AND recommendation = 'None')");
 
                             t.HasCheckConstraint("ck_png_audit_image_result_transparency", "(uses_transparency IS NULL AND transparent_pixel_count IS NULL AND transparent_pixel_percent IS NULL AND semi_transparent_pixel_count IS NULL AND fully_transparent_pixel_count IS NULL AND background_transparent_pixel_count IS NULL AND interior_transparent_pixel_count IS NULL AND min_alpha IS NULL) OR (uses_transparency IS NOT NULL AND transparent_pixel_count IS NOT NULL AND transparent_pixel_percent IS NOT NULL AND pixel_count IS NOT NULL AND semi_transparent_pixel_count IS NOT NULL AND fully_transparent_pixel_count IS NOT NULL AND background_transparent_pixel_count IS NOT NULL AND interior_transparent_pixel_count IS NOT NULL AND min_alpha IS NOT NULL AND semi_transparent_pixel_count >= 0 AND fully_transparent_pixel_count >= 0 AND background_transparent_pixel_count >= 0 AND interior_transparent_pixel_count >= 0 AND min_alpha BETWEEN 0 AND 255 AND transparent_pixel_count = semi_transparent_pixel_count + fully_transparent_pixel_count AND fully_transparent_pixel_count = background_transparent_pixel_count + interior_transparent_pixel_count AND transparent_pixel_count <= pixel_count AND uses_transparency = (transparent_pixel_count > 0) AND (min_alpha = 255) = (transparent_pixel_count = 0) AND transparent_pixel_percent = round(transparent_pixel_count * 100.0 / pixel_count, 4))");
 
@@ -3199,6 +3226,10 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("analyzer_profile");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("archived_at");
 
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer")
@@ -3437,6 +3468,9 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
                     b.HasIndex("InitiatedByUserId")
                         .HasDatabaseName("ix_png_audit_run_initiated_by_user_id");
 
+                    b.HasIndex("EndpointId", "ArchivedAt")
+                        .HasDatabaseName("ix_png_audit_run_endpoint_archived");
+
                     b.HasIndex("EndpointId", "QueuedAt", "Id")
                         .IsDescending(false, true, true)
                         .HasDatabaseName("ix_png_audit_run_endpoint_queued");
@@ -3446,6 +3480,8 @@ namespace WebHealth.Infrastructure.Persistence.Migrations
 
                     b.ToTable("png_audit_run", "web_health", t =>
                         {
+                            t.HasCheckConstraint("ck_png_audit_run_archived_status", "archived_at IS NULL OR status IN ('Completed', 'CompletedWithWarnings', 'Failed', 'Cancelled')");
+
                             t.HasCheckConstraint("ck_png_audit_run_counts", "attempt_count >= 0 AND pages_discovered >= 0 AND images_discovered >= 0 AND images_analyzed >= 0 AND recommendation_count >= 0 AND discovery_skip_count >= 0 AND http_attempts >= 0 AND total_page_bytes >= 0 AND total_image_bytes >= 0 AND images_analyzed <= images_discovered AND recommendation_count <= images_analyzed AND pages_discovered <= max_pages AND images_discovered <= max_unique_images AND http_attempts <= max_total_http_attempts AND total_page_bytes <= max_total_page_bytes AND total_image_bytes <= max_total_image_bytes");
 
                             t.HasCheckConstraint("ck_png_audit_run_failure", "(status IN ('Failed', 'Cancelled')) = (failure_code IS NOT NULL) AND (failure_code IS NULL OR failure_code IN ('WorkerUnavailable', 'TargetChanged', 'TargetIneligible', 'AttemptsExhausted', 'StorageUnavailable', 'Cancelled', 'Unexpected')) AND (status <> 'Cancelled' OR failure_code = 'Cancelled') AND (status <> 'Failed' OR failure_code <> 'Cancelled')");

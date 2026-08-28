@@ -126,7 +126,13 @@ internal sealed class PngAuditRunConfiguration : IEntityTypeConfiguration<PngAud
         builder.ToTable(table => table.HasCheckConstraint(
             "ck_png_audit_run_seed_hash",
             "octet_length(seed_url_identity_hash) = 32"));
+        builder.ToTable(table => table.HasCheckConstraint(
+            "ck_png_audit_run_archived_status",
+            "archived_at IS NULL OR status IN ('Completed', 'CompletedWithWarnings', "
+            + "'Failed', 'Cancelled')"));
 
+        builder.HasIndex(run => new { run.EndpointId, run.ArchivedAt })
+            .HasDatabaseName("ix_png_audit_run_endpoint_archived");
         builder.HasIndex(run => run.EndpointId)
             .IsUnique()
             .HasFilter("status IN ('Queued', 'Running')")
@@ -221,6 +227,14 @@ internal sealed class PngAuditImageResultConfiguration
                 "(optimized_png_bytes IS NULL AND candidate_webp_bytes IS NULL "
                 + "AND original_savings_bytes IS NULL AND original_savings_percent IS NULL "
                 + "AND reference_savings_bytes IS NULL AND reference_savings_percent IS NULL) OR "
+                + "(optimized_png_bytes IS NULL AND candidate_webp_bytes IS NOT NULL "
+                + "AND original_savings_bytes IS NOT NULL "
+                + "AND original_savings_percent IS NOT NULL "
+                + "AND reference_savings_bytes IS NULL AND reference_savings_percent IS NULL "
+                + "AND response_bytes > 0 AND candidate_webp_bytes > 0 "
+                + "AND original_savings_bytes = response_bytes - candidate_webp_bytes "
+                + "AND original_savings_percent = "
+                + "round(original_savings_bytes * 100.0 / response_bytes, 4)) OR "
                 + "(optimized_png_bytes IS NOT NULL AND candidate_webp_bytes IS NOT NULL "
                 + "AND original_savings_bytes IS NOT NULL "
                 + "AND original_savings_percent IS NOT NULL "
@@ -248,7 +262,8 @@ internal sealed class PngAuditImageResultConfiguration
                 + "AND frame_count = 1 AND uses_transparency IS NOT NULL "
                 + "AND optimized_png_bytes IS NULL AND recommendation = 'None') OR "
                 + "(classification = 'ComparisonUnavailable' AND frame_count = 1 "
-                + "AND uses_transparency IS NOT NULL AND recommendation = 'None') OR "
+                + "AND uses_transparency IS NOT NULL AND reason_code IS NOT NULL "
+                + "AND recommendation = 'None') OR "
                 + "(classification = 'VerifiedWebpCandidate' AND frame_count = 1 "
                 + "AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL "
                 + "AND candidate_webp_bytes IS NOT NULL AND recommendation = 'LosslessWebp') OR "
@@ -256,8 +271,8 @@ internal sealed class PngAuditImageResultConfiguration
                 + "AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL "
                 + "AND candidate_webp_bytes IS NOT NULL AND recommendation = 'OptimizePng') OR "
                 + "(classification = 'BelowWebpThreshold' AND frame_count = 1 "
-                + "AND uses_transparency IS NOT NULL AND optimized_png_bytes IS NOT NULL "
-                + "AND candidate_webp_bytes IS NOT NULL AND recommendation = 'None') OR "
+                + "AND uses_transparency IS NOT NULL AND candidate_webp_bytes IS NOT NULL "
+                + "AND recommendation = 'None') OR "
                 + "(classification = 'NotPng' AND detected_format IS NOT NULL "
                 + "AND upper(detected_format) <> 'PNG' AND width IS NULL "
                 + "AND optimized_png_bytes IS NULL AND recommendation = 'None') OR "

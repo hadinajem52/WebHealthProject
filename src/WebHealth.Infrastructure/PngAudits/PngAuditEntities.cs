@@ -66,6 +66,8 @@ public sealed class PngAuditRun
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
 
+    public DateTimeOffset? ArchivedAt { get; set; }
+
     public Endpoint Endpoint { get; set; } = null!;
     public ICollection<PngAuditImageResult> ImageResults { get; } = [];
     public ICollection<PngAuditDiscoverySkipEntity> DiscoverySkips { get; } = [];

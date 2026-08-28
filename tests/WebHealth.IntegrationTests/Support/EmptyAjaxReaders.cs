@@ -32,6 +32,7 @@ internal sealed class EmptyCheckHistoryReader : ICheckHistoryReader
         Guid endpointId,
         RegistryAccessContext access,
         int page = 1,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<CheckHistoryPage?>(new(
             endpointId,

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WebHealth.Application.Archiving;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
@@ -16,6 +17,7 @@ namespace WebHealth.Web.Controllers;
 public sealed class ChecksController(
     IManualCheckService manualCheckService,
     ICheckHistoryReader checkHistoryReader,
+    IRunHistoryArchive runHistoryArchive,
     TimeProvider timeProvider) : Controller
 {
     [Authorize(Policy = AuthorizationPolicies.TestRegistryTargets), HttpPost]
@@ -99,15 +101,91 @@ public sealed class ChecksController(
     [HttpGet]
     public async Task<IActionResult> History(Guid id, int page = 1, CancellationToken cancellationToken = default)
     {
-        var result = await checkHistoryReader.ListForEndpointAsync(id, GetAccess(), page, cancellationToken);
+        var result = await checkHistoryReader.ListForEndpointAsync(
+            id, GetAccess(), page, cancellationToken: cancellationToken);
         return result is null
             ? this.NotFoundRecord("endpoint")
             : View(new CheckHistoryViewModel(
                 result,
                 new FilterSummaryViewModel(
                     timeProvider.GetUtcNow(),
-                    [new FilterSummaryItem("Endpoint", result.EndpointDisplayUrl)])));
+                    [new FilterSummaryItem("Endpoint", result.EndpointDisplayUrl)]),
+                CanArchive()));
     }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring), HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClearHistory(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await runHistoryArchive.ArchiveFinishedAsync(
+            RunHistoryArea.Check, new(id), GetAccess(), cancellationToken);
+        return this.ArchiveOutcome(
+            result, Url.Action(nameof(History), new { id })!, "check");
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring), HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestoreCheck(
+        Guid endpointId,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await runHistoryArchive.RestoreAsync(
+            RunHistoryArea.Check, id, GetAccess(), cancellationToken);
+        return this.RestoreOutcome(
+            result, Url.Action(nameof(Archived), new { id = endpointId })!, "check");
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Archived(
+        Guid id,
+        int page = 1,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await checkHistoryReader.ListForEndpointAsync(
+            id, GetAccess(), page, archivedOnly: true, cancellationToken);
+        if (result is null)
+        {
+            return this.NotFoundRecord("endpoint");
+        }
+
+        return View(
+            "RunHistoryArchiveScreen",
+            new RunHistoryArchiveScreenViewModel(
+                "Check archive",
+                "Checks cleared from the history list for "
+                + $"{result.EndpointDisplayUrl}. Nothing is deleted: every check keeps its "
+                + "recorded result and still counts towards uptime, and restoring one puts it "
+                + "back on the check history unchanged.",
+                "Subject",
+                ["Initiator", "Duration", "HTTP status", "Uptime"],
+                [.. result.Items.Select(item => new RunHistoryArchiveRow(
+                    item.LogicalCheckId,
+                    $"{item.Source} check",
+                    (item.ScheduledFor ?? item.RequestedAt)?.ToLocalTime()
+                        .ToString("d MMM yyyy HH:mm:ss"),
+                    new StatusBadgeViewModel(
+                        StatusBadges.ForOutcome(item.Outcome),
+                        item.Outcome ?? item.State,
+                        item.FailureCategory),
+                    [
+                        item.InitiatedByDisplayName ?? "—",
+                        item.TotalDurationMs is { } duration ? $"{duration} ms" : "—",
+                        item.HttpStatus?.ToString() ?? "—",
+                        item.CountsForUptime ? "Counts" : "Excluded"
+                    ],
+                    Url.Action(nameof(Check), new { id = item.LogicalCheckId })!))],
+                "check",
+                "Check history",
+                Url.Action(nameof(History), new { id })!,
+                Url.Action(nameof(RestoreCheck), new { endpointId = id })!,
+                CanArchive(),
+                "The archive is empty",
+                "Clearing the check history for this endpoint moves its completed checks here.",
+                "#ajax-page"));
+    }
+
+    private bool CanArchive() =>
+        User.IsInRole(ApplicationRoles.Administrator)
+        || User.IsInRole(ApplicationRoles.Operations);
 
     [HttpGet]
     public async Task<IActionResult> Check(Guid id, CancellationToken cancellationToken)

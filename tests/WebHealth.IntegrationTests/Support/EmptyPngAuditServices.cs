@@ -43,6 +43,7 @@ internal sealed class EmptyPngAuditReader : IPngAuditReader
         Guid endpointId,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PngAuditRunView>>(
             endpointId == EmptyTargetRegistryReader.Endpoint.Id

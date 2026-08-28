@@ -1,0 +1,25 @@
+@model ClearHistoryActionViewModel
+
+<div class="form-actions">
+    @if (Model.CanArchive && Model.HasClearableRows)
+    {
+        <form method="post"
+              action="@Model.ArchiveUrl"
+              asp-antiforgery="true"
+              data-shell-confirm="@Model.ConfirmPrompt"
+              data-ajax-form="@(Model.AjaxTarget is null ? null : "")"
+              data-ajax-target="@Model.AjaxTarget">
+            <button class="button button--secondary" type="submit" title="@Model.ButtonTitle">
+                @await Html.PartialAsync("_Icon", "archive")
+                <span>Clear history</span>
+            </button>
+        </form>
+    }
+    <a class="button button--secondary"
+       href="@Model.ArchivedUrl"
+       data-ajax-link="@(Model.AjaxTarget is null ? null : "")"
+       data-ajax-target="@Model.AjaxTarget">
+        <span>View archive</span>
+        @await Html.PartialAsync("_Icon", "arrow-right")
+    </a>
+</div>

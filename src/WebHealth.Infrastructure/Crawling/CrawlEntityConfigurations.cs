@@ -48,6 +48,10 @@ internal sealed class CrawlRunConfiguration : IEntityTypeConfiguration<CrawlRun>
                 "(status = 'Running') = (finished_at IS NULL)");
 
             table.HasCheckConstraint(
+                "ck_crawl_run_archived_status",
+                "archived_at IS NULL OR status <> 'Running'");
+
+            table.HasCheckConstraint(
                 "ck_crawl_run_counts",
                 "pages_fetched >= 0 AND links_recorded >= 0");
 
@@ -77,6 +81,9 @@ internal sealed class CrawlRunConfiguration : IEntityTypeConfiguration<CrawlRun>
 
         builder.HasIndex(run => new { run.EndpointId, run.StartedAt })
             .IsDescending(false, true);
+
+        builder.HasIndex(run => new { run.EndpointId, run.ArchivedAt })
+            .HasDatabaseName("ix_crawl_run_endpoint_archived");
 
         builder.HasIndex(run => run.EndpointId)
             .IsUnique()

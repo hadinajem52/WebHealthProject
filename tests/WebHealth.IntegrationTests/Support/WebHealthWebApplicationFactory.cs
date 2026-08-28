@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebHealth.Application.Auditing;
 using WebHealth.Application.Administration;
+using WebHealth.Application.Archiving;
 using WebHealth.Application.Assignments;
 using WebHealth.Application.Incidents;
 using WebHealth.Application.Maintenance;
@@ -63,6 +64,8 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
             services.AddScoped<IAuditTrailReader, EmptyAuditTrailReader>();
             services.RemoveAll<ICheckHistoryReader>();
             services.AddScoped<ICheckHistoryReader, EmptyCheckHistoryReader>();
+            services.RemoveAll<IRunHistoryArchive>();
+            services.AddScoped<IRunHistoryArchive, EmptyRunHistoryArchive>();
             services.RemoveAll<IClientRegistryService>();
             services.RemoveAll<IWebsiteRegistryService>();
             services.RemoveAll<IEnvironmentRegistryService>();

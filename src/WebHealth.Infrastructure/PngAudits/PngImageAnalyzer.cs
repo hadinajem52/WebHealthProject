@@ -1,7 +1,5 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.PixelFormats;
 using WebHealth.Application.PngAudits;
 
@@ -13,17 +11,21 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
     private const int HighBitDepthDecodedBytesPerPixel = 8;
     private readonly PngImageAnalysisLimits _limits;
     private readonly PngRecommendationThresholds _recommendationThresholds;
+    private readonly IPngFormatComparisonEngine _comparisonEngine;
     private readonly DecoderOptions _decoderOptions;
     private readonly SemaphoreSlim _analysisGate = new(1, 1);
     private bool _isDisposed;
 
     public PngImageAnalyzer(
         PngImageAnalysisLimits limits,
-        PngRecommendationThresholds recommendationThresholds)
+        PngRecommendationThresholds recommendationThresholds,
+        IPngFormatComparisonEngine comparisonEngine)
     {
         _limits = limits ?? throw new ArgumentNullException(nameof(limits));
         _recommendationThresholds = recommendationThresholds
             ?? throw new ArgumentNullException(nameof(recommendationThresholds));
+        _comparisonEngine = comparisonEngine
+            ?? throw new ArgumentNullException(nameof(comparisonEngine));
         var configuration = Configuration.Default.Clone();
         configuration.MaxDegreeOfParallelism = 1;
         _decoderOptions = new DecoderOptions
@@ -95,6 +97,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
             return await AnalyzeDecodedImageAsync(
                 encodedImage,
                 preflight,
+                recommendationThresholds,
                 cancellationToken);
         }
         finally
@@ -171,6 +174,7 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
     private async Task<PngAnalysisResult> AnalyzeDecodedImageAsync(
         ReadOnlyMemory<byte> encodedImage,
         PngChunkPreflight preflight,
+        PngRecommendationThresholds recommendationThresholds,
         CancellationToken cancellationToken)
     {
         var originalBytes = encodedImage.Length;
@@ -190,22 +194,40 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
                 preflight.CreateFacts(wideTransparency));
         }
 
-        using var image = await DecodeAsync<Rgba32>(encodedImage, cancellationToken);
-        if (image is null || image.Width != preflight.Width || image.Height != preflight.Height)
+        PngTransparencyFacts transparency;
+        using (var image = await DecodeAsync<Rgba32>(encodedImage, cancellationToken))
         {
-            return PngAnalysisResult.Failed(
-                PngImageAnalysisClassification.DecodeFailed,
-                originalBytes);
+            if (image is null || image.Width != preflight.Width || image.Height != preflight.Height)
+            {
+                return PngAnalysisResult.Failed(
+                    PngImageAnalysisClassification.DecodeFailed,
+                    originalBytes);
+            }
+
+            transparency = MeasureTransparency(image, cancellationToken);
         }
 
-        var transparency = MeasureTransparency(image, cancellationToken);
         var facts = preflight.CreateFacts(transparency);
         if (!preflight.CanTransferColorMeaning)
         {
             return PngAnalysisResult.ColorProfileUnsupported(originalBytes, facts);
         }
 
-        return await MeasureEncodingsAsync(image, facts, originalBytes, cancellationToken);
+        var comparison = await _comparisonEngine.CompareAsync(
+            encodedImage,
+            preflight.SourceEncodingFacts,
+            recommendationThresholds,
+            cancellationToken);
+        return comparison.VerifiedWebpBytes is { } verifiedWebpBytes
+            ? PngAnalysisResult.ComparedAgainstOriginal(
+                originalBytes,
+                facts,
+                verifiedWebpBytes,
+                recommendationThresholds)
+            : PngAnalysisResult.ComparisonUnavailable(
+                originalBytes,
+                facts,
+                unavailableReason: comparison.UnavailableReason!);
     }
 
     private async Task<Image<TPixel>?> DecodeAsync<TPixel>(
@@ -392,61 +414,4 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
         return connected;
     }
 
-    private static async Task<PngAnalysisResult> MeasureEncodingsAsync(
-        Image<Rgba32> image,
-        PngImageFacts facts,
-        long originalBytes,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var hasAlpha = facts.Transparency?.UsesTransparency ?? false;
-            var optimizedPngBytes = await CountPngBytesAsync(image, hasAlpha, cancellationToken);
-            var candidateWebpBytes = await CountLosslessWebpBytesAsync(image, cancellationToken);
-            return PngAnalysisResult.ComparisonUnavailable(
-                originalBytes,
-                facts,
-                new PngComparisonMetrics(originalBytes, optimizedPngBytes, candidateWebpBytes));
-        }
-        catch (InvalidImageContentException)
-        {
-            return PngAnalysisResult.ComparisonUnavailable(originalBytes, facts);
-        }
-        catch (NotSupportedException)
-        {
-            return PngAnalysisResult.ComparisonUnavailable(originalBytes, facts);
-        }
-    }
-
-    private static async Task<long> CountPngBytesAsync(
-        Image<Rgba32> image,
-        bool hasAlpha,
-        CancellationToken cancellationToken)
-    {
-        await using var output = new CountingStream();
-        await image.SaveAsPngAsync(output, new PngEncoder
-        {
-            BitDepth = PngBitDepth.Bit8,
-            ColorType = hasAlpha ? PngColorType.RgbWithAlpha : PngColorType.Rgb,
-            CompressionLevel = PngCompressionLevel.BestCompression,
-            FilterMethod = PngFilterMethod.Adaptive,
-            SkipMetadata = true
-        }, cancellationToken);
-        return output.Count;
-    }
-
-    private static async Task<long> CountLosslessWebpBytesAsync(
-        Image<Rgba32> image,
-        CancellationToken cancellationToken)
-    {
-        await using var output = new CountingStream();
-        await image.SaveAsWebpAsync(output, new WebpEncoder
-        {
-            FileFormat = WebpFileFormatType.Lossless,
-            Method = WebpEncodingMethod.BestQuality,
-            Quality = 100,
-            SkipMetadata = true
-        }, cancellationToken);
-        return output.Count;
-    }
 }

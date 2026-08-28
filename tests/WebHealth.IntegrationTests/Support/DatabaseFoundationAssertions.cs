@@ -96,7 +96,9 @@ internal static class DatabaseFoundationAssertions
         "20260826103956_SlowResponseIncidentSeverityDemotion",
         "20260827082158_PngAuditPersistenceFoundation",
         "20260827092012_PngAuditPersistenceHardening",
-        "20260828083420_PngAuditComparisonModelV2"
+        "20260828083420_PngAuditComparisonModelV2",
+        "20260828093443_RunHistoryArchive",
+        "20260828100053_PngAuditVerifiedWebpComparison"
     ];
 
     private static readonly string[] ExpectedTables =

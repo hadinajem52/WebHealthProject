@@ -14,6 +14,7 @@ public sealed record PageAuditIndexViewModel(
     IReadOnlyList<PageAuditRunSummary> Runs,
     IReadOnlyList<PageAuditItemView> Items,
     bool CanRunNow,
+    bool CanArchive,
     EndpointTestBlock RunBlock = EndpointTestBlock.None)
 {
     public bool AnyCategoryRunActive => CategorySummaries.Any(summary => summary.LatestRun?.IsActive == true);

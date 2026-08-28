@@ -22,10 +22,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Crawling.CrawlRun",
                 typeof(CrawlRun),
                 baseEntityType,
-                propertyCount: 20,
+                propertyCount: 21,
                 navigationCount: 2,
                 foreignKeyCount: 1,
-                unnamedIndexCount: 2,
+                unnamedIndexCount: 3,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -58,6 +58,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 maxLength: 4096);
             allowedPathPrefixes.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             allowedPathPrefixes.AddAnnotation("Relational:ColumnName", "allowed_path_prefixes");
+
+            var archivedAt = runtimeEntityType.AddProperty(
+                "ArchivedAt",
+                typeof(DateTimeOffset?),
+                propertyInfo: typeof(CrawlRun).GetProperty("ArchivedAt", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CrawlRun).GetField("<ArchivedAt>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            archivedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            archivedAt.AddAnnotation("Relational:ColumnName", "archived_at");
+            archivedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
 
             var checkExternalLinks = runtimeEntityType.AddProperty(
                 "CheckExternalLinks",
@@ -230,8 +240,12 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             index.AddAnnotation("Relational:Name", "ux_crawl_run_active");
 
             var index0 = runtimeEntityType.AddIndex(
+                new[] { endpointId, archivedAt });
+            index0.AddAnnotation("Relational:Name", "ix_crawl_run_endpoint_archived");
+
+            var index1 = runtimeEntityType.AddIndex(
                 new[] { endpointId, startedAt });
-            index0.AddAnnotation("Relational:Name", "ix_crawl_run_endpoint_id_started_at");
+            index1.AddAnnotation("Relational:Name", "ix_crawl_run_endpoint_id_started_at");
 
             return runtimeEntityType;
         }

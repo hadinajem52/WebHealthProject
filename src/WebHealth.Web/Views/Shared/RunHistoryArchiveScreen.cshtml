@@ -1,0 +1,111 @@
+@model RunHistoryArchiveScreenViewModel
+@{
+    ViewData.SetTitle(Model.Title);
+    ViewData.SetBreadcrumbs(
+        new BreadcrumbItem(Model.ParentLabel, Model.BackUrl),
+        new BreadcrumbItem("Archive"));
+}
+
+<div id="ajax-page" class="stack" data-ajax-region>
+    <section class="card">
+        <div class="page-intro">
+            <div>
+                <h2 class="card__title">@Model.Title</h2>
+                <p class="card__subtitle">@Model.Subtitle</p>
+            </div>
+            <div class="form-actions">
+                <a class="button button--secondary"
+                   href="@Model.BackUrl"
+                   data-ajax-link="@(Model.AjaxTarget is null ? null : "")"
+                   data-ajax-target="@Model.AjaxTarget">
+                    @await Html.PartialAsync("_Icon", "arrow-left")
+                    <span>Back to @Model.ParentLabel</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    @if (Model.Rows.Count == 0)
+    {
+        <section class="card">
+            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+                Model.EmptyTitle,
+                Model.EmptyDescription,
+                "archive"))
+        </section>
+    }
+    else
+    {
+        <section class="card">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title">Archived @Model.CountNoun@(Model.Rows.Count == 1 ? null : "s")</h3>
+                    <p class="card__status" data-status="neutral">
+                        @await Html.PartialAsync("_Icon", "archive")
+                        <span>@Model.Rows.Count archived @Model.CountNoun@(Model.Rows.Count == 1 ? null : "s")</span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table data-table--history">
+                    <caption class="visually-hidden">@Model.Title</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">@Model.PrimaryColumn</th>
+                            <th scope="col">Status</th>
+                            @foreach (var column in Model.Columns)
+                            {
+                                <th scope="col">@column</th>
+                            }
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Rows)
+                        {
+                            <tr>
+                                <td data-label="@Model.PrimaryColumn">
+                                    <span class="history-cell">
+                                        @await Html.PartialAsync("_HistoryMark", row.Status.Status)
+                                        <span class="history-cell__subject">@row.Primary</span>
+                                        @if (row.Secondary is not null)
+                                        {
+                                            <span class="history-cell__time">@row.Secondary</span>
+                                        }
+                                    </span>
+                                </td>
+                                <td data-label="Status">
+                                    @await Html.PartialAsync("_StatusBadge", row.Status)
+                                </td>
+                                @for (var index = 0; index < Model.Columns.Count; index++)
+                                {
+                                    <td data-label="@Model.Columns[index]">@(index < row.Cells.Count ? row.Cells[index] : string.Empty)</td>
+                                }
+                                <td class="data-table__action" data-label="Actions">
+                                    <div class="data-table__action-group">
+                                        <a href="@row.DetailsUrl">Open<span class="visually-hidden"> @row.Primary</span></a>
+                                        @if (Model.CanRestore)
+                                        {
+                                            <form method="post"
+                                                  action="@Model.RestoreUrl"
+                                                  asp-antiforgery="true"
+                                                  data-ajax-form="@(Model.AjaxTarget is null ? null : "")"
+                                                  data-ajax-target="@Model.AjaxTarget">
+                                                <input type="hidden" name="id" value="@row.Id" />
+                                                <button class="button button--secondary" type="submit">
+                                                    @await Html.PartialAsync("_Icon", "restore")
+                                                    <span>Restore<span class="visually-hidden"> @row.Primary</span></span>
+                                                </button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    }
+</div>

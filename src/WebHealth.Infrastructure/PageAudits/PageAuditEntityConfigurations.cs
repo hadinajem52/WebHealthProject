@@ -130,6 +130,11 @@ internal sealed class PageAuditRunConfiguration : IEntityTypeConfiguration<PageA
                 "finished_at IS NULL OR finished_at >= queued_at");
 
             table.HasCheckConstraint(
+                "ck_page_audit_run_archived_status",
+                "archived_at IS NULL OR status IN ('Completed', 'CompletedWithWarnings', "
+                + "'Failed', 'Cancelled')");
+
+            table.HasCheckConstraint(
                 "ck_page_audit_run_completed_contract",
                 "status NOT IN ('Completed', 'CompletedWithWarnings') "
                 + "OR (raw_score IS NOT NULL AND failure_category IS NULL "
@@ -181,6 +186,9 @@ internal sealed class PageAuditRunConfiguration : IEntityTypeConfiguration<PageA
         builder.HasIndex(run => new { run.EndpointId, run.FinishedAt })
             .IsDescending(false, true)
             .HasDatabaseName("ix_page_audit_run_endpoint_finished");
+
+        builder.HasIndex(run => new { run.EndpointId, run.ArchivedAt })
+            .HasDatabaseName("ix_page_audit_run_endpoint_archived");
 
         builder.HasIndex(run => new { run.Status, run.UpdatedAt })
             .HasDatabaseName("ix_page_audit_run_status_updated");

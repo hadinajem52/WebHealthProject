@@ -224,6 +224,7 @@ public interface ICrawlReportReader
         Guid endpointId,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CrawlBrokenLink>> ListBrokenLinksAsync(

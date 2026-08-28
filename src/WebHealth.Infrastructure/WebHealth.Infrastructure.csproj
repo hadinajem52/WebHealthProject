@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageReference Include="AngleSharp" />
     <PackageReference Include="MailKit" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
     <PackageReference Include="Hangfire.Core" />
     <PackageReference Include="Hangfire.AspNetCore" />

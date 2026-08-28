@@ -234,7 +234,7 @@ internal static class CrawlSchemaAssertions
             "links_recorded", "robots_override_granted", "robots_override_refused_because",
             "allowed_hosts", "allowed_path_prefixes", "query_policy", "max_pages", "max_depth",
             "check_external_links", "failure_reason", "coverage_limited", "started_at",
-            "finished_at", "execution_claim_id");
+            "finished_at", "execution_claim_id", "archived_at");
 
         (await ColumnsOfAsync(connectionString, "crawl_link_result")).Should().BeEquivalentTo(
             "id", "run_id", "source_url", "source_url_hash", "target_url", "target_url_hash",

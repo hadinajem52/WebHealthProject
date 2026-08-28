@@ -19,6 +19,7 @@ public sealed class LogicalCheck
     public DateTimeOffset? QueuedAt { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
     public EndpointMonitor EndpointMonitor { get; set; } = null!;
     public ApplicationUser? InitiatedByUser { get; set; }
     public CheckConfigurationSnapshot ConfigurationSnapshot { get; set; } = null!;

@@ -145,6 +145,11 @@
           "Microsoft.Extensions.Logging.Abstractions": "3.0.0"
         }
       },
+      "Magick.NET.Core": {
+        "type": "Transitive",
+        "resolved": "14.16.0",
+        "contentHash": "ddBX/Zb0sCsX4agqHdHeqUx+grfw8I7GFU+lgut3mtNl7roxbxemSQFGLIJXtzwPuAHxbaMtkXA+ijVl02EUhQ=="
+      },
       "Microsoft.AspNetCore.Cryptography.Internal": {
         "type": "Transitive",
         "resolved": "10.0.11",
@@ -728,6 +733,7 @@
           "Hangfire.AspNetCore": "[1.8.24, )",
           "Hangfire.Core": "[1.8.24, )",
           "Hangfire.PostgreSql": "[1.21.1, )",
+          "Magick.NET-Q8-AnyCPU": "[14.16.0, )",
           "MailKit": "[4.17.0, )",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.11, )",
           "Npgsql": "[10.0.3, )",
@@ -779,6 +785,15 @@
           "Dapper.AOT": "1.0.48",
           "Hangfire.Core": "1.8.0",
           "Npgsql": "6.0.11"
+        }
+      },
+      "Magick.NET-Q8-AnyCPU": {
+        "type": "CentralTransitive",
+        "requested": "[14.16.0, )",
+        "resolved": "14.16.0",
+        "contentHash": "mV5igNia0VyUtRAmqUpI/ZBEL78+0A+JxPoOs7clwlZEvPCsvk+uF0hLl10zaFYmH5I8BaqVpI2+R+td1bbNrg==",
+        "dependencies": {
+          "Magick.NET.Core": "14.16.0"
         }
       },
       "MailKit": {

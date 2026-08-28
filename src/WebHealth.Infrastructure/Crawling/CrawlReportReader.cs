@@ -44,8 +44,11 @@ internal sealed class CrawlReportReader(
         Guid endpointId,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default) =>
-        await Summaries(VisibleRuns(access).Where(run => run.EndpointId == endpointId))
+        await Summaries(VisibleRuns(access)
+                .Where(run => run.EndpointId == endpointId
+                    && (archivedOnly ? run.ArchivedAt != null : run.ArchivedAt == null)))
             .Take(Math.Clamp(limit, 1, MaxRunsListed))
             .ToArrayAsync(cancellationToken);
 

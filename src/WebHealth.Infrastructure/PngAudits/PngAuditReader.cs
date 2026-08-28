@@ -40,9 +40,11 @@ internal sealed class PngAuditReader(
         Guid endpointId,
         int limit,
         RegistryAccessContext access,
+        bool archivedOnly = false,
         CancellationToken cancellationToken = default) =>
         await ProjectRuns(VisibleRuns(access)
-                .Where(run => run.EndpointId == endpointId)
+                .Where(run => run.EndpointId == endpointId
+                    && (archivedOnly ? run.ArchivedAt != null : run.ArchivedAt == null))
                 .OrderByDescending(run => run.QueuedAt)
                 .ThenByDescending(run => run.Id)
                 .Take(Math.Clamp(limit, 1, MaxRunsListed)))
@@ -175,9 +177,9 @@ internal sealed class PngAuditReader(
             cancellationToken);
         var belowThreshold = Count(PngAuditImageClassifications.BelowWebpThreshold);
         var comparisonUnavailable = Count(PngAuditImageClassifications.ComparisonUnavailable);
-        var pngsCompared = Count(PngAuditImageClassifications.VerifiedWebpCandidate)
-            + Count(PngAuditImageClassifications.OptimizedPngPreferred)
-            + belowThreshold;
+        var pngsCompared = await results.CountAsync(
+            result => result.CandidateWebpBytes != null,
+            cancellationToken);
         var totalImageResults = classifications.Values.Sum();
         return new(
             sourceMappings + run.DiscoverySkipCount,

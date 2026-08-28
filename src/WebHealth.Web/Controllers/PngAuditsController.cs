@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using WebHealth.Application.Archiving;
 using WebHealth.Application.Authorization;
 using WebHealth.Application.PngAudits;
 using WebHealth.Application.Registry;
@@ -18,7 +19,8 @@ public sealed class PngAuditsController(
     IPngAuditReader pngAuditReader,
     ITargetRegistryReader targetReader,
     IEndpointTestGate testGate,
-    IPngAuditRunner pngAuditRunner) : Controller
+    IPngAuditRunner pngAuditRunner,
+    IRunHistoryArchive runHistoryArchive) : Controller
 {
     private const int RunsListed = 20;
     private const int ImagesPerPage = 50;
@@ -86,6 +88,80 @@ public sealed class PngAuditsController(
         }
 
         return RedirectToAction(nameof(Index), new { endpointId });
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring)]
+    [HttpPost("Archive")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClearHistory(
+        Guid endpointId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await runHistoryArchive.ArchiveFinishedAsync(
+            RunHistoryArea.PngAudit, new(endpointId), GetAccess(), cancellationToken);
+        return this.ArchiveOutcome(
+            result, Url.Action(nameof(Index), new { endpointId })!, "PNG image audit run");
+    }
+
+    [Authorize(Policy = AuthorizationPolicies.OperateMonitoring)]
+    [HttpPost("Archive/Restore")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestoreRun(
+        Guid endpointId,
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await runHistoryArchive.RestoreAsync(
+            RunHistoryArea.PngAudit, id, GetAccess(), cancellationToken);
+        return this.RestoreOutcome(
+            result, Url.Action(nameof(Archived), new { endpointId })!, "PNG image audit run");
+    }
+
+    [HttpGet("Archive")]
+    public async Task<IActionResult> Archived(
+        Guid endpointId,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccess();
+        var runs = await pngAuditReader.ListRunsAsync(
+            endpointId, RunsListed, access, archivedOnly: true, cancellationToken);
+        var endpoints = await targetReader.ListAllEndpointsAsync(
+            access, cancellationToken: cancellationToken);
+        if (!endpoints.Any(endpoint => endpoint.Id == endpointId))
+        {
+            return this.NotFoundRecord("endpoint");
+        }
+
+        return View(
+            "RunHistoryArchiveScreen",
+            new RunHistoryArchiveScreenViewModel(
+                "PNG image audit archive",
+                "Audit runs cleared from the history list. Nothing is deleted: every run keeps its "
+                + "image results, and restoring one puts it back on the audit history unchanged.",
+                "Run",
+                ["Pages", "Unique images", "WebP candidates"],
+                [.. runs.Select(run => new RunHistoryArchiveRow(
+                    run.RunId,
+                    "PNG image audit",
+                    $"Queued {run.QueuedAt.ToLocalTime():d MMM yyyy HH:mm}",
+                    new StatusBadgeViewModel(
+                        PngAuditDisplay.StatusTone(run),
+                        PngAuditDisplay.DescribeStatus(run),
+                        PngAuditDisplay.DescribeStatusDetail(run)),
+                    [
+                        run.PagesDiscovered.ToString(),
+                        run.ImagesDiscovered.ToString(),
+                        run.RecommendationCount.ToString()
+                    ],
+                    Url.Action(nameof(Run), new { id = run.RunId })!))],
+                "run",
+                "PNG image audits",
+                Url.Action(nameof(Index), new { endpointId })!,
+                Url.Action(nameof(RestoreRun), new { endpointId })!,
+                CanArchive(),
+                "The archive is empty",
+                "Clearing the audit history for this endpoint moves its finished runs here.",
+                "#ajax-page"));
     }
 
     [HttpGet("Status")]
@@ -228,7 +304,7 @@ public sealed class PngAuditsController(
         var canExecute = CanExecute();
         if (endpointId is not { } selected)
         {
-            return new(options, null, [], canExecute, pngAuditRunner.CanQueue);
+            return new(options, null, [], canExecute, pngAuditRunner.CanQueue, CanArchive());
         }
 
         if (!options.Any(option => option.Id == selected))
@@ -240,11 +316,12 @@ public sealed class PngAuditsController(
             selected,
             RunsListed,
             access,
-            cancellationToken);
+            cancellationToken: cancellationToken);
         var block = canExecute
             ? await testGate.DescribeTestBlockAsync(selected, access, cancellationToken)
             : EndpointTestBlock.None;
-        return new(options, selected, runs, canExecute, pngAuditRunner.CanQueue, block);
+        return new(
+            options, selected, runs, canExecute, pngAuditRunner.CanQueue, CanArchive(), block);
     }
 
     private async Task<PngAuditRunViewModel?> BuildRunModelAsync(
@@ -283,6 +360,10 @@ public sealed class PngAuditsController(
             cancellationToken);
         return new(run, summary, images, coverageReasons, selectedFilter);
     }
+
+    private bool CanArchive() =>
+        User.IsInRole(ApplicationRoles.Administrator)
+        || User.IsInRole(ApplicationRoles.Operations);
 
     private bool CanExecute() =>
         User.IsInRole(ApplicationRoles.Administrator)

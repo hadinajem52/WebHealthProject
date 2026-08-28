@@ -22,10 +22,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.PageAudits.PageAuditRun",
                 typeof(PageAuditRun),
                 baseEntityType,
-                propertyCount: 25,
+                propertyCount: 26,
                 navigationCount: 2,
                 foreignKeyCount: 1,
-                unnamedIndexCount: 5,
+                unnamedIndexCount: 6,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -48,6 +48,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             analysisAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             analysisAt.AddAnnotation("Relational:ColumnName", "analysis_at");
             analysisAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
+
+            var archivedAt = runtimeEntityType.AddProperty(
+                "ArchivedAt",
+                typeof(DateTimeOffset?),
+                propertyInfo: typeof(PageAuditRun).GetProperty("ArchivedAt", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PageAuditRun).GetField("<ArchivedAt>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            archivedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            archivedAt.AddAnnotation("Relational:ColumnName", "archived_at");
+            archivedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
 
             var attemptCount = runtimeEntityType.AddProperty(
                 "AttemptCount",
@@ -285,16 +295,20 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             index0.AddAnnotation("Relational:Name", "ix_page_audit_run_batch_strategy");
 
             var index1 = runtimeEntityType.AddIndex(
-                new[] { endpointId, finishedAt });
-            index1.AddAnnotation("Relational:Name", "ix_page_audit_run_endpoint_finished");
+                new[] { endpointId, archivedAt });
+            index1.AddAnnotation("Relational:Name", "ix_page_audit_run_endpoint_archived");
 
             var index2 = runtimeEntityType.AddIndex(
-                new[] { status, updatedAt });
-            index2.AddAnnotation("Relational:Name", "ix_page_audit_run_status_updated");
+                new[] { endpointId, finishedAt });
+            index2.AddAnnotation("Relational:Name", "ix_page_audit_run_endpoint_finished");
 
             var index3 = runtimeEntityType.AddIndex(
+                new[] { status, updatedAt });
+            index3.AddAnnotation("Relational:Name", "ix_page_audit_run_status_updated");
+
+            var index4 = runtimeEntityType.AddIndex(
                 new[] { pageAuditTargetId, finishedAt, id });
-            index3.AddAnnotation("Relational:Name", "ix_page_audit_run_target_finished");
+            index4.AddAnnotation("Relational:Name", "ix_page_audit_run_target_finished");
 
             return runtimeEntityType;
         }

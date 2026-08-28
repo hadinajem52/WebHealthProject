@@ -36,6 +36,8 @@ public sealed class CrawlRun
 
     public Guid? ExecutionClaimId { get; set; }
 
+    public DateTimeOffset? ArchivedAt { get; set; }
+
     public Endpoint Endpoint { get; set; } = null!;
     public ICollection<CrawlLinkResult> Links { get; set; } = [];
 }

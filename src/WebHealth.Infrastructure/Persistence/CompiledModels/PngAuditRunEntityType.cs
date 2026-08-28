@@ -22,10 +22,10 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.PngAudits.PngAuditRun",
                 typeof(PngAuditRun),
                 baseEntityType,
-                propertyCount: 57,
+                propertyCount: 58,
                 navigationCount: 4,
                 foreignKeyCount: 2,
-                unnamedIndexCount: 4,
+                unnamedIndexCount: 5,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -74,6 +74,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 maxLength: 100);
             analyzerProfile.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             analyzerProfile.AddAnnotation("Relational:ColumnName", "analyzer_profile");
+
+            var archivedAt = runtimeEntityType.AddProperty(
+                "ArchivedAt",
+                typeof(DateTimeOffset?),
+                propertyInfo: typeof(PngAuditRun).GetProperty("ArchivedAt", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditRun).GetField("<ArchivedAt>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            archivedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            archivedAt.AddAnnotation("Relational:ColumnName", "archived_at");
+            archivedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
 
             var attemptCount = runtimeEntityType.AddProperty(
                 "AttemptCount",
@@ -567,12 +577,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             index0.AddAnnotation("Relational:Name", "ix_png_audit_run_initiated_by_user_id");
 
             var index1 = runtimeEntityType.AddIndex(
-                new[] { endpointId, queuedAt, id });
-            index1.AddAnnotation("Relational:Name", "ix_png_audit_run_endpoint_queued");
+                new[] { endpointId, archivedAt });
+            index1.AddAnnotation("Relational:Name", "ix_png_audit_run_endpoint_archived");
 
             var index2 = runtimeEntityType.AddIndex(
+                new[] { endpointId, queuedAt, id });
+            index2.AddAnnotation("Relational:Name", "ix_png_audit_run_endpoint_queued");
+
+            var index3 = runtimeEntityType.AddIndex(
                 new[] { status, updatedAt, id });
-            index2.AddAnnotation("Relational:Name", "ix_png_audit_run_reconcile");
+            index3.AddAnnotation("Relational:Name", "ix_png_audit_run_reconcile");
 
             return runtimeEntityType;
         }
