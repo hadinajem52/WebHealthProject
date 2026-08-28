@@ -186,11 +186,7 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
             }
             catch (OperationCanceledException)
             {
-                if (!process.HasExited)
-                {
-                    process.Kill(true);
-                    await process.WaitForExitAsync(CancellationToken.None);
-                }
+                await StopProcessAsync(process);
                 throw;
             }
 
@@ -239,6 +235,18 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
             }
             OptimizerGate.Release();
         }
+    }
+
+    private static async Task StopProcessAsync(Process process)
+    {
+        try
+        {
+            process.Kill(true);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        await process.WaitForExitAsync(CancellationToken.None);
     }
 
     private ProcessStartInfo CreateOptimizerStartInfo(
