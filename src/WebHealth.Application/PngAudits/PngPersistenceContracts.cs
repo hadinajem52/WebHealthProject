@@ -516,6 +516,7 @@ public sealed record PngAuditImageResultView(
     int? MinAlpha,
     string Recommendation,
     long? CandidateWebpBytes,
+    long? OptimizedPngBytes,
     long? OriginalSavingsBytes,
     decimal? OriginalSavingsPercent,
     long? ReferenceSavingsBytes,
@@ -524,6 +525,10 @@ public sealed record PngAuditImageResultView(
     int SourceCount = 0,
     string? FirstSourcePageDisplayUrl = null)
 {
+    public long? ReferencePngBytes => OptimizedPngBytes is { } optimized
+        ? Math.Min(ResponseBytes, optimized)
+        : null;
+
     public decimal? BackgroundCoveragePercent =>
         BackgroundTransparentPixelCount is { } background && PixelCount is > 0
             ? background * 100m / PixelCount.Value

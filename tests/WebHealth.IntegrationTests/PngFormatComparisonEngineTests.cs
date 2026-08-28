@@ -27,8 +27,9 @@ public sealed class PngFormatComparisonEngineTests(ITestOutputHelper output)
 
         result.Verified.Should().BeTrue(result.UnavailableReason);
         result.VerifiedWebpBytes.Should().BeLessThanOrEqualTo(cwebpBytes + 16);
+        result.VerifiedOptimizedPngBytes.Should().BePositive();
         output.WriteLine(
-            $"{fixtureName}: Magick.NET {result.VerifiedWebpBytes} bytes, cwebp 1.6.0 {cwebpBytes} bytes");
+            $"{fixtureName}: WebP {result.VerifiedWebpBytes} bytes, optimized PNG {result.VerifiedOptimizedPngBytes} bytes, cwebp 1.6.0 {cwebpBytes} bytes");
     }
 
     [Fact]
@@ -44,6 +45,7 @@ public sealed class PngFormatComparisonEngineTests(ITestOutputHelper output)
 
         result.Verified.Should().BeTrue(result.UnavailableReason);
         result.VerifiedWebpBytes.Should().BePositive();
+        result.VerifiedOptimizedPngBytes.Should().BePositive();
     }
 
     [Fact]
@@ -71,6 +73,7 @@ public sealed class PngFormatComparisonEngineTests(ITestOutputHelper output)
 
         result.Verified.Should().BeTrue(result.UnavailableReason);
         result.VerifiedWebpBytes.Should().BePositive();
+        result.VerifiedOptimizedPngBytes.Should().BePositive();
     }
 
     [Fact]

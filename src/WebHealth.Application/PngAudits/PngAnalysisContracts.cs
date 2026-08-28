@@ -29,6 +29,7 @@ public sealed record PngFormatComparisonResult
 {
     private PngFormatComparisonResult(
         long? verifiedWebpBytes,
+        long? verifiedOptimizedPngBytes,
         string profileVersion,
         string? unavailableReason)
     {
@@ -40,28 +41,53 @@ public sealed record PngFormatComparisonResult
         if (verifiedWebpBytes is null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(unavailableReason);
+            if (verifiedOptimizedPngBytes is not null)
+            {
+                throw new ArgumentException(
+                    "An optimized PNG cannot be verified without a verified WebP candidate.",
+                    nameof(verifiedOptimizedPngBytes));
+            }
+        }
+        if (verifiedOptimizedPngBytes is not null)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(verifiedOptimizedPngBytes.Value);
         }
 
         VerifiedWebpBytes = verifiedWebpBytes;
+        VerifiedOptimizedPngBytes = verifiedOptimizedPngBytes;
         ProfileVersion = profileVersion;
         UnavailableReason = unavailableReason;
     }
 
     public long? VerifiedWebpBytes { get; }
 
+    public long? VerifiedOptimizedPngBytes { get; }
+
     public string ProfileVersion { get; }
 
     public string? UnavailableReason { get; }
 
-    public bool Verified => VerifiedWebpBytes is not null;
+    public bool Verified => VerifiedWebpBytes is not null && UnavailableReason is null;
 
-    public static PngFormatComparisonResult Success(long verifiedWebpBytes, string profileVersion) =>
-        new(verifiedWebpBytes, profileVersion, null);
+    public static PngFormatComparisonResult WebpOnly(long verifiedWebpBytes, string profileVersion) =>
+        new(verifiedWebpBytes, null, profileVersion, null);
+
+    public static PngFormatComparisonResult Complete(
+        long verifiedWebpBytes,
+        long verifiedOptimizedPngBytes,
+        string profileVersion) =>
+        new(verifiedWebpBytes, verifiedOptimizedPngBytes, profileVersion, null);
+
+    public static PngFormatComparisonResult PartialUnavailable(
+        long verifiedWebpBytes,
+        string reason,
+        string profileVersion) =>
+        new(verifiedWebpBytes, null, profileVersion, reason);
 
     public static PngFormatComparisonResult Unavailable(
         string reason,
         string profileVersion) =>
-        new(null, profileVersion, reason);
+        new(null, null, profileVersion, reason);
 }
 
 public enum PngImageAnalysisClassification
@@ -373,30 +399,55 @@ public sealed record PngAnalysisResult
             unavailableReason: unavailableReason);
     }
 
-    public static PngAnalysisResult ComparedAgainstOriginal(
+    public static PngAnalysisResult BelowWebpThreshold(
+        long originalBytes,
+        PngImageFacts image,
+        long verifiedWebpBytes)
+    {
+        EnsureStaticMeasured(image);
+        var comparison = new PngComparisonMetrics(originalBytes, verifiedWebpBytes);
+        return new(
+            PngImageAnalysisClassification.BelowWebpThreshold,
+            originalBytes,
+            image: image,
+            comparison: comparison);
+    }
+
+    public static PngAnalysisResult ComparedAgainstReference(
         long originalBytes,
         PngImageFacts image,
         long verifiedWebpBytes,
+        long verifiedOptimizedPngBytes,
         PngRecommendationThresholds thresholds)
     {
         EnsureStaticMeasured(image);
         ArgumentNullException.ThrowIfNull(thresholds);
-        var comparison = new PngComparisonMetrics(originalBytes, verifiedWebpBytes);
-        if (!thresholds.MeetsThreshold(originalBytes, verifiedWebpBytes))
+        var comparison = new PngComparisonMetrics(
+            originalBytes,
+            verifiedWebpBytes,
+            verifiedOptimizedPngBytes);
+        if (thresholds.MeetsThreshold(comparison.ReferencePngBytes!.Value, verifiedWebpBytes))
         {
             return new(
+                PngImageAnalysisClassification.VerifiedWebpCandidate,
+                originalBytes,
+                image: image,
+                comparison: comparison,
+                recommendation: PngRecommendation.LosslessWebp);
+        }
+
+        return verifiedOptimizedPngBytes < originalBytes
+            ? new(
+                PngImageAnalysisClassification.OptimizedPngPreferred,
+                originalBytes,
+                image: image,
+                comparison: comparison,
+                recommendation: PngRecommendation.OptimizePng)
+            : new(
                 PngImageAnalysisClassification.BelowWebpThreshold,
                 originalBytes,
                 image: image,
                 comparison: comparison);
-        }
-
-        return new(
-            PngImageAnalysisClassification.ComparisonUnavailable,
-            originalBytes,
-            image: image,
-            comparison: comparison,
-            unavailableReason: "OptimizedPngReferencePending");
     }
 
     private static void EnsureStaticMeasured(PngImageFacts image)

@@ -62,6 +62,45 @@ public sealed class PngRecommendationThresholdTests
     }
 
     [Fact]
+    public void ComparedAgainstReference_RecommendsWebpOnlyWhenItBeatsTheReference()
+    {
+        var result = PngAnalysisResult.ComparedAgainstReference(
+            50000,
+            StaticFacts(),
+            35000,
+            44000,
+            new PngRecommendationThresholds(10, 4096));
+
+        Assert.Equal(PngImageAnalysisClassification.VerifiedWebpCandidate, result.Classification);
+        Assert.Equal(PngRecommendation.LosslessWebp, result.Recommendation);
+        Assert.Equal(44000, result.Comparison!.ReferencePngBytes);
+    }
+
+    [Fact]
+    public void ComparedAgainstReference_PrefersTheOptimizedPngWhenWebpMissesTheReferenceThreshold()
+    {
+        var result = PngAnalysisResult.ComparedAgainstReference(
+            50000,
+            StaticFacts(),
+            41000,
+            42000,
+            new PngRecommendationThresholds(10, 4096));
+
+        Assert.Equal(PngImageAnalysisClassification.OptimizedPngPreferred, result.Classification);
+        Assert.Equal(PngRecommendation.OptimizePng, result.Recommendation);
+    }
+
+    private static PngImageFacts StaticFacts() =>
+        new(
+            100,
+            100,
+            1,
+            10000,
+            8,
+            6,
+            new PngTransparencyFacts(10000, 0, 0, 0, 0, byte.MaxValue));
+
+    [Fact]
     public void TransparencyFacts_RejectMismatchedRegionCounts()
     {
         var act = () => new PngTransparencyFacts(10000, 500, 2000, 1800, 100, 0);

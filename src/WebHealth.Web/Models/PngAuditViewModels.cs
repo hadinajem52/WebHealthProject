@@ -234,13 +234,20 @@ public static class PngAuditDisplay
     public static string DescribeComparisonSaving(PngAuditImageResultView image) =>
         image.CandidateWebpBytes is null
             ? "Unavailable"
-            : FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent);
+            : image.Classification == PngAuditImageClassifications.VerifiedWebpCandidate
+                ? $"{FormatSavings(image.ReferenceSavingsBytes, image.ReferenceSavingsPercent)} · Beats the pinned optimized-PNG reference"
+                : image.ReferencePngBytes is not null
+                    ? FormatSavings(image.ReferenceSavingsBytes, image.ReferenceSavingsPercent)
+                    : FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent);
+
+    public static string DescribeOptimizedPngSize(PngAuditImageResultView image) =>
+        image.OptimizedPngBytes is null
+            ? "Not required or unavailable"
+            : FormatBytes(image.OptimizedPngBytes);
 
     private static string DescribeComparisonUnavailable(PngAuditImageResultView image) =>
         image.ReasonCode switch
         {
-            "OptimizedPngReferencePending" =>
-                "Verified against current PNG — optimized reference pending",
             "OriginalTooSmallForThreshold" =>
                 "Comparison skipped — thresholds cannot be met",
             "FidelityVerificationFailed" =>
@@ -251,6 +258,18 @@ public static class PngAuditDisplay
                 "Encoder did not produce lossless WebP",
             "OutputLimitExceeded" =>
                 "Candidate exceeded the output limit",
+            "OptimizerUnavailable" =>
+                "Pinned PNG optimizer unavailable",
+            "OptimizerFailed" =>
+                "Pinned PNG optimization failed",
+            "OptimizerTimedOut" =>
+                "Pinned PNG optimization timed out",
+            "OptimizedPngOutputLimitExceeded" =>
+                "Optimized PNG exceeded the output limit",
+            "OptimizedPngFidelityVerificationFailed" =>
+                "Optimized PNG failed exact pixel verification",
+            "OptimizedPngColorProfileVerificationFailed" =>
+                "Optimized PNG failed color-profile verification",
             _ => "Verified comparison unavailable"
         };
 

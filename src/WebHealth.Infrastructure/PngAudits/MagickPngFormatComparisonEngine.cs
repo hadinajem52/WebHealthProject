@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using ImageMagick;
 using ImageMagick.Formats;
 using SixLabors.ImageSharp;
@@ -16,6 +18,13 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
     private const string InvalidWebpPayload = "InvalidWebpPayload";
     private const string OriginalTooSmallForThreshold = "OriginalTooSmallForThreshold";
     private const string OutputLimitExceeded = "OutputLimitExceeded";
+    private const string OptimizerUnavailable = "OptimizerUnavailable";
+    private const string OptimizerFailed = "OptimizerFailed";
+    private const string OptimizerTimedOut = "OptimizerTimedOut";
+    private const string OptimizedPngOutputLimitExceeded = "OptimizedPngOutputLimitExceeded";
+    private const string OptimizedPngFidelityVerificationFailed = "OptimizedPngFidelityVerificationFailed";
+    private const string OptimizedPngColorProfileVerificationFailed = "OptimizedPngColorProfileVerificationFailed";
+    private static readonly SemaphoreSlim OptimizerGate = new(1, 1);
     private readonly int _maxOutputBytes;
     private readonly TimeSpan _timeout;
     private readonly DecoderOptions _decoderOptions;
@@ -56,9 +65,11 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_timeout);
+        var optimizing = false;
+        ReadOnlyMemory<byte> encoded = default;
         try
         {
-            var encoded = await EncodeAsync(sourcePng, _maxOutputBytes, timeout.Token);
+            encoded = await EncodeAsync(sourcePng, _maxOutputBytes, timeout.Token);
             if (!WebpContainer.TryInspect(encoded.Span, out var hasLosslessPayload, out var iccProfile)
                 || !hasLosslessPayload)
             {
@@ -73,13 +84,53 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
                 return Unavailable(ColorProfileVerificationFailed);
             }
 
-            return PngFormatComparisonResult.Success(
+            if (!thresholds.MeetsThreshold(sourcePng.Length, encoded.Length))
+            {
+                return PngFormatComparisonResult.WebpOnly(
+                    encoded.Length,
+                    PngAnalysisProfiles.VerifiedComparison);
+            }
+
+            optimizing = true;
+            var optimized = await OptimizePngAsync(sourcePng, timeout.Token);
+            if (optimized.Bytes is null)
+            {
+                return PngFormatComparisonResult.PartialUnavailable(
+                    encoded.Length,
+                    optimized.UnavailableReason!,
+                    PngAnalysisProfiles.VerifiedComparison);
+            }
+            if (!await HasExactPixelsAsync(sourcePng, optimized.Bytes.Value, timeout.Token))
+            {
+                return PngFormatComparisonResult.PartialUnavailable(
+                    encoded.Length,
+                    OptimizedPngFidelityVerificationFailed,
+                    PngAnalysisProfiles.VerifiedComparison);
+            }
+            if (!HasExpectedOptimizedPngColorProfile(
+                optimized.Bytes.Value.Span,
+                sourcePng.Span,
+                sourceFacts))
+            {
+                return PngFormatComparisonResult.PartialUnavailable(
+                    encoded.Length,
+                    OptimizedPngColorProfileVerificationFailed,
+                    PngAnalysisProfiles.VerifiedComparison);
+            }
+
+            return PngFormatComparisonResult.Complete(
                 encoded.Length,
+                optimized.Bytes.Value.Length,
                 PngAnalysisProfiles.VerifiedComparison);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return Unavailable(EncodingFailed);
+            return optimizing && !encoded.IsEmpty
+                ? PngFormatComparisonResult.PartialUnavailable(
+                    encoded.Length,
+                    OptimizerTimedOut,
+                    PngAnalysisProfiles.VerifiedComparison)
+                : Unavailable(EncodingFailed);
         }
         catch (OutputLimitExceededException)
         {
@@ -101,6 +152,134 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
         {
             return Unavailable(FidelityVerificationFailed);
         }
+    }
+
+    private async Task<OptimizedPngResult> OptimizePngAsync(
+        ReadOnlyMemory<byte> sourcePng,
+        CancellationToken cancellationToken)
+    {
+        var executable = ResolveOptimizerPath();
+        if (executable is null)
+        {
+            return new(null, OptimizerUnavailable);
+        }
+
+        await OptimizerGate.WaitAsync(cancellationToken);
+        var directory = Path.Combine(Path.GetTempPath(), $"webhealth-oxipng-{Guid.NewGuid():N}");
+        var inputPath = Path.Combine(directory, "input.png");
+        var outputPath = Path.Combine(directory, "optimized.png");
+        try
+        {
+            Directory.CreateDirectory(directory);
+            await File.WriteAllBytesAsync(inputPath, sourcePng, cancellationToken);
+            using var process = new Process
+            {
+                StartInfo = CreateOptimizerStartInfo(executable, inputPath, outputPath)
+            };
+            if (!process.Start())
+            {
+                return new(null, OptimizerFailed);
+            }
+            try
+            {
+                await process.WaitForExitAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(true);
+                    await process.WaitForExitAsync(CancellationToken.None);
+                }
+                throw;
+            }
+
+            if (process.ExitCode != 0 || !File.Exists(outputPath))
+            {
+                return new(null, OptimizerFailed);
+            }
+            var length = new FileInfo(outputPath).Length;
+            if (length <= 0)
+            {
+                return new(null, OptimizerFailed);
+            }
+            if (length > _maxOutputBytes)
+            {
+                return new(null, OptimizedPngOutputLimitExceeded);
+            }
+
+            return new(await File.ReadAllBytesAsync(outputPath, cancellationToken), null);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return new(null, OptimizerUnavailable);
+        }
+        catch (IOException)
+        {
+            return new(null, OptimizerFailed);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return new(null, OptimizerUnavailable);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, true);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            OptimizerGate.Release();
+        }
+    }
+
+    private ProcessStartInfo CreateOptimizerStartInfo(
+        string executable,
+        string inputPath,
+        string outputPath)
+    {
+        var startInfo = new ProcessStartInfo(executable)
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("-o");
+        startInfo.ArgumentList.Add("max");
+        startInfo.ArgumentList.Add("--strip");
+        startInfo.ArgumentList.Add("safe");
+        startInfo.ArgumentList.Add("--quiet");
+        startInfo.ArgumentList.Add("--timeout");
+        startInfo.ArgumentList.Add(Math.Max(1, (int)_timeout.TotalSeconds).ToString());
+        startInfo.ArgumentList.Add("--out");
+        startInfo.ArgumentList.Add(outputPath);
+        startInfo.ArgumentList.Add(inputPath);
+        return startInfo;
+    }
+
+    private static string? ResolveOptimizerPath()
+    {
+        var relativePath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            && RuntimeInformation.ProcessArchitecture == Architecture.X64
+            ? Path.Combine("Tools", "Oxipng", "win-x64", "oxipng.exe")
+            : RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+                && RuntimeInformation.ProcessArchitecture == Architecture.X64
+                ? Path.Combine("Tools", "Oxipng", "linux-x64", "oxipng")
+                : null;
+        if (relativePath is null)
+        {
+            return null;
+        }
+
+        var path = Path.Combine(AppContext.BaseDirectory, relativePath);
+        return File.Exists(path) ? path : null;
     }
 
     private static bool CanMeetThreshold(
@@ -183,9 +362,35 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
             && sourceProfile.AsSpan().SequenceEqual(candidateIccProfile);
     }
 
+    private static bool HasExpectedOptimizedPngColorProfile(
+        ReadOnlySpan<byte> candidatePng,
+        ReadOnlySpan<byte> sourcePng,
+        PngSourceEncodingFacts sourceFacts)
+    {
+        if (!PngChunkInspector.TryInspect(candidatePng, out var candidateFacts)
+            || candidateFacts.SourceEncodingFacts.ColorMeaning != sourceFacts.ColorMeaning)
+        {
+            return false;
+        }
+        if (sourceFacts.ColorMeaning != PngColorMeaning.IccProfile)
+        {
+            return true;
+        }
+
+        using var source = new MagickImage(sourcePng);
+        using var candidate = new MagickImage(candidatePng);
+        var sourceProfile = (source.GetProfile("icc") ?? source.GetProfile("icm"))?.ToByteArray();
+        var candidateProfile = (candidate.GetProfile("icc") ?? candidate.GetProfile("icm"))?.ToByteArray();
+        return sourceProfile is not null
+            && candidateProfile is not null
+            && sourceProfile.AsSpan().SequenceEqual(candidateProfile);
+    }
+
     private static PngFormatComparisonResult Unavailable(string reason) =>
         PngFormatComparisonResult.Unavailable(reason, PngAnalysisProfiles.VerifiedComparison);
 }
+
+internal sealed record OptimizedPngResult(ReadOnlyMemory<byte>? Bytes, string? UnavailableReason);
 
 internal sealed class BoundedMemoryStream : MemoryStream
 {

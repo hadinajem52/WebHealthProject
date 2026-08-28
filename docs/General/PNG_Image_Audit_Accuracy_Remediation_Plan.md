@@ -4,7 +4,7 @@
 **Current baseline:** `b43c9fa132875e116b8e91296684d932abd3bbd4`
 **Audited baseline:** `cb149a317e98e9db6b19718044c891856685920b`
 **Suggested path:** `docs/General/PNG_Image_Audit_Accuracy_Remediation_Plan.md`
-**Status:** **Phase 2 complete; Phase 3 not started**
+**Status:** **Phase 3 complete; Phase 4 not started**
 **Feature:** `Tools → PNG image audit`
 **Supersedes:** section 4 (Format-comparison policy) and section 15 (Legal result-state matrix) of
 [PNG_Image_Audit_Implementation_Plan.md](PNG_Image_Audit_Implementation_Plan.md)
@@ -547,6 +547,13 @@ global minimality.
 **Gate:** a palette PNG and a grayscale PNG in the corpus produce `OptimizedPngPreferred` rather
 than a WebP recommendation; no `LosslessWebp` recommendation exists without a verified optimized-PNG
 reference.
+
+**Completed 28 August 2026.** The application now runs the pinned oxipng 10.2.0 release against
+the original bytes, independently verifies its exact RGBA and colour meaning, and applies the full
+four-way decision. The palette and grayscale gate fixtures produce `OptimizedPngPreferred`. The
+15-response Audi Capital corpus produces 12 verified lossless-WebP recommendations and three
+optimized-PNG recommendations, with no unavailable comparisons. Detailed evidence is recorded in
+[PNG_Image_Audit_Accuracy_Phase_3_Evidence.md](PNG_Image_Audit_Accuracy_Phase_3_Evidence.md).
 
 ---
 

@@ -218,16 +218,32 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
             preflight.SourceEncodingFacts,
             recommendationThresholds,
             cancellationToken);
-        return comparison.VerifiedWebpBytes is { } verifiedWebpBytes
-            ? PngAnalysisResult.ComparedAgainstOriginal(
-                originalBytes,
-                facts,
-                verifiedWebpBytes,
-                recommendationThresholds)
-            : PngAnalysisResult.ComparisonUnavailable(
+        if (comparison.VerifiedWebpBytes is not { } verifiedWebpBytes)
+        {
+            return PngAnalysisResult.ComparisonUnavailable(
                 originalBytes,
                 facts,
                 unavailableReason: comparison.UnavailableReason!);
+        }
+        if (comparison.UnavailableReason is not null)
+        {
+            return PngAnalysisResult.ComparisonUnavailable(
+                originalBytes,
+                facts,
+                new PngComparisonMetrics(originalBytes, verifiedWebpBytes),
+                comparison.UnavailableReason);
+        }
+        return comparison.VerifiedOptimizedPngBytes is { } optimizedPngBytes
+            ? PngAnalysisResult.ComparedAgainstReference(
+                originalBytes,
+                facts,
+                verifiedWebpBytes,
+                optimizedPngBytes,
+                recommendationThresholds)
+            : PngAnalysisResult.BelowWebpThreshold(
+                originalBytes,
+                facts,
+                verifiedWebpBytes);
     }
 
     private async Task<Image<TPixel>?> DecodeAsync<TPixel>(

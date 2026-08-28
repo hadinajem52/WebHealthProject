@@ -104,6 +104,7 @@ internal sealed class PngAuditReader(
                 result.MinAlpha,
                 result.Recommendation,
                 result.CandidateWebpBytes,
+                result.OptimizedPngBytes,
                 result.OriginalSavingsBytes,
                 result.OriginalSavingsPercent,
                 result.ReferenceSavingsBytes,

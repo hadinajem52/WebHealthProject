@@ -51,6 +51,7 @@
                         <th scope="col">Transparency</th>
                         <th scope="col">Recommendation</th>
                         <th scope="col">Lossless WebP size</th>
+                        <th scope="col">Optimized PNG size</th>
                         <th scope="col">Potential saving</th>
                     </tr>
                 </thead>
@@ -96,6 +97,7 @@
                                     PngAuditDisplay.DescribeClassification(image)))
                             </td>
                             <td data-label="Lossless WebP size">@PngAuditDisplay.DescribeComparisonSize(image)</td>
+                            <td data-label="Optimized PNG size">@PngAuditDisplay.DescribeOptimizedPngSize(image)</td>
                             <td data-label="Potential saving">@PngAuditDisplay.DescribeComparisonSaving(image)</td>
                         </tr>
                     }

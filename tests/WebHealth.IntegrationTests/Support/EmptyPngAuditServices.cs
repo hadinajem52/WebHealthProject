@@ -157,6 +157,7 @@ internal sealed class EmptyPngAuditReader : IPngAuditReader
         0,
         PngAuditRecommendations.LosslessWebp,
         114688,
+        180224,
         73728,
         39.1304m,
         65536,
