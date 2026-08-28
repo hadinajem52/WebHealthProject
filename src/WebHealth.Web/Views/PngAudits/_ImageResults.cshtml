@@ -86,14 +86,17 @@
                                     : "Not measured")
                             </td>
                             <td data-label="Current size">@PngAuditDisplay.FormatBytes(image.ResponseBytes > 0 ? image.ResponseBytes : null)</td>
-                            <td data-label="Transparency">@PngAuditDisplay.DescribeTransparency(image)</td>
+                            <td data-label="Transparency"
+                                title="@PngAuditDisplay.DescribeTransparencyEvidence(image)">
+                                @PngAuditDisplay.DescribeTransparency(image)
+                            </td>
                             <td data-label="Recommendation">
                                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                     PngAuditDisplay.ClassificationTone(image),
                                     PngAuditDisplay.DescribeClassification(image)))
                             </td>
-                            <td data-label="Lossless WebP size">@PngAuditDisplay.FormatBytes(image.CandidateWebpBytes)</td>
-                            <td data-label="Potential saving">@PngAuditDisplay.FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent)</td>
+                            <td data-label="Lossless WebP size">@PngAuditDisplay.DescribeComparisonSize(image)</td>
+                            <td data-label="Potential saving">@PngAuditDisplay.DescribeComparisonSaving(image)</td>
                         </tr>
                     }
                 </tbody>

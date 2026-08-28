@@ -77,6 +77,15 @@ public sealed class PngRecommendationThresholdTests
         Assert.Throws<ArgumentException>(act);
     }
 
+    [Fact]
+    public void TransparencyFacts_AcceptTheNarrowestNonOpaqueAlpha()
+    {
+        var facts = new PngTransparencyFacts(10000, 1, 0, 0, 0, byte.MaxValue - 1);
+
+        Assert.True(facts.UsesTransparency);
+        Assert.Equal(byte.MaxValue - 1, facts.MinAlpha);
+    }
+
     [Theory]
     [InlineData(0, 0, 0.0)]
     [InlineData(9305, 8941, 60.5759)]

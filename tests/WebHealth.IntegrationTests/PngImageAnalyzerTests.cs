@@ -212,6 +212,17 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_HandlesSixteenBitAlphaJustBelowFullyOpaque()
+    {
+        var result = await CreateAnalyzer().AnalyzeAsync(
+            CreateSixteenBitPng(ushort.MaxValue - 1));
+
+        result.Classification.Should().Be(PngImageAnalysisClassification.HighBitDepthPng);
+        result.Image!.Transparency!.UsesTransparency.Should().BeTrue();
+        result.Image.Transparency.MinAlpha.Should().BeLessThan(byte.MaxValue);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_ReportsSixteenBitFactsWithoutAWebpRecommendation()
     {
         using var analyzer = CreateAnalyzer(
@@ -376,12 +387,12 @@ public sealed class PngImageAnalyzerTests
         return output.ToArray();
     }
 
-    private static byte[] CreateSixteenBitPng()
+    private static byte[] CreateSixteenBitPng(ushort alpha = ushort.MaxValue)
     {
         using var image = new Image<Rgba64>(
             8,
             8,
-            new Rgba64(1000, 2000, 3000, ushort.MaxValue));
+            new Rgba64(1000, 2000, 3000, alpha));
         using var output = new MemoryStream();
         image.SaveAsPng(output, new PngEncoder
         {

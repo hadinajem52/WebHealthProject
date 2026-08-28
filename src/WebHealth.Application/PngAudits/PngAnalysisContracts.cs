@@ -363,7 +363,15 @@ public sealed record PngRecommendationThresholds
 public static class PngAnalysisProfiles
 {
     public const string Analyzer = "png-alpha-v2";
-    public const string Comparison = "libwebp-exact-vs-optimized-png-v2";
+
+    public const string Comparison = UnverifiedComparison;
+
+    public const string UnverifiedComparison = "normalized-png-vs-lossless-webp-v1";
+
+    public const string VerifiedComparison = "libwebp-exact-vs-optimized-png-v2";
+
     public const string LegacyAnalyzer = "png-alpha-v1";
-    public const string LegacyComparison = "normalized-png-vs-lossless-webp-v1";
+
+    public static bool IsVerifiedComparison(string comparisonProfile) =>
+        string.Equals(comparisonProfile, VerifiedComparison, StringComparison.Ordinal);
 }

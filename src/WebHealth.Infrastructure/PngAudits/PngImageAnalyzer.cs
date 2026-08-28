@@ -339,8 +339,13 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
             fullyTransparent,
             background,
             fullyTransparent - background,
-            (byte)(minAlpha >> 8));
+            NarrowAlpha(minAlpha));
     }
+
+    private static byte NarrowAlpha(ushort alpha) =>
+        alpha == ushort.MaxValue
+            ? byte.MaxValue
+            : Math.Min((byte)(byte.MaxValue - 1), (byte)(alpha >> 8));
 
     private static long CountBorderConnected(
         byte[] fullyTransparentMap,

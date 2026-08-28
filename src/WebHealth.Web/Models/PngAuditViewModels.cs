@@ -215,10 +215,25 @@ public static class PngAuditDisplay
             return "Opaque";
         }
 
-        return image.HasTransparentBackground(PngTransparencyPolicy.MinBackgroundCoveragePercent)
-            ? "Transparent background"
-            : "Alpha at edges only";
+        if (image.HasTransparentBackground(PngTransparencyPolicy.MinBackgroundCoveragePercent))
+        {
+            return "Transparent background";
+        }
+
+        return image.FullyTransparentPixelCount is > 0
+            ? "Transparency, no background"
+            : "Semi-transparent only";
     }
+
+    public static string DescribeComparisonSize(PngAuditImageResultView image) =>
+        image.Classification == PngAuditImageClassifications.ComparisonUnavailable
+            ? "Not verified"
+            : FormatBytes(image.CandidateWebpBytes);
+
+    public static string DescribeComparisonSaving(PngAuditImageResultView image) =>
+        image.Classification == PngAuditImageClassifications.ComparisonUnavailable
+            ? "Pending verified engine"
+            : FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent);
 
     public static string? DescribeTransparencyEvidence(PngAuditImageResultView image)
     {

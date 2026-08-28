@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.PngAudits.PngAuditImageResult",
                 typeof(PngAuditImageResult),
                 baseEntityType,
-                propertyCount: 28,
+                propertyCount: 35,
                 navigationCount: 2,
                 foreignKeyCount: 1,
                 unnamedIndexCount: 3,
@@ -38,6 +38,24 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
             id.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             id.AddAnnotation("Relational:ColumnName", "id");
+
+            var backgroundTransparentPixelCount = runtimeEntityType.AddProperty(
+                "BackgroundTransparentPixelCount",
+                typeof(long?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("BackgroundTransparentPixelCount", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<BackgroundTransparentPixelCount>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            backgroundTransparentPixelCount.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            backgroundTransparentPixelCount.AddAnnotation("Relational:ColumnName", "background_transparent_pixel_count");
+
+            var bitDepth = runtimeEntityType.AddProperty(
+                "BitDepth",
+                typeof(int?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("BitDepth", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<BitDepth>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            bitDepth.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            bitDepth.AddAnnotation("Relational:ColumnName", "bit_depth");
 
             var candidateWebpBytes = runtimeEntityType.AddProperty(
                 "CandidateWebpBytes",
@@ -56,6 +74,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 maxLength: 40);
             classification.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             classification.AddAnnotation("Relational:ColumnName", "classification");
+
+            var colorType = runtimeEntityType.AddProperty(
+                "ColorType",
+                typeof(int?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("ColorType", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<ColorType>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            colorType.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            colorType.AddAnnotation("Relational:ColumnName", "color_type");
 
             var declaredContentType = runtimeEntityType.AddProperty(
                 "DeclaredContentType",
@@ -106,6 +133,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             frameCount.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             frameCount.AddAnnotation("Relational:ColumnName", "frame_count");
 
+            var fullyTransparentPixelCount = runtimeEntityType.AddProperty(
+                "FullyTransparentPixelCount",
+                typeof(long?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("FullyTransparentPixelCount", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<FullyTransparentPixelCount>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            fullyTransparentPixelCount.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            fullyTransparentPixelCount.AddAnnotation("Relational:ColumnName", "fully_transparent_pixel_count");
+
             var height = runtimeEntityType.AddProperty(
                 "Height",
                 typeof(int?),
@@ -142,34 +178,32 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             imageIdentityHash.AddAnnotation("Relational:ColumnName", "image_identity_hash");
             imageIdentityHash.AddAnnotation("Relational:ColumnType", "bytea");
 
-            var normalizedPngBytes = runtimeEntityType.AddProperty(
-                "NormalizedPngBytes",
+            var interiorTransparentPixelCount = runtimeEntityType.AddProperty(
+                "InteriorTransparentPixelCount",
                 typeof(long?),
-                propertyInfo: typeof(PngAuditImageResult).GetProperty("NormalizedPngBytes", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                fieldInfo: typeof(PngAuditImageResult).GetField("<NormalizedPngBytes>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("InteriorTransparentPixelCount", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<InteriorTransparentPixelCount>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 nullable: true);
-            normalizedPngBytes.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
-            normalizedPngBytes.AddAnnotation("Relational:ColumnName", "normalized_png_bytes");
+            interiorTransparentPixelCount.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            interiorTransparentPixelCount.AddAnnotation("Relational:ColumnName", "interior_transparent_pixel_count");
 
-            var normalizedSavingsBytes = runtimeEntityType.AddProperty(
-                "NormalizedSavingsBytes",
+            var minAlpha = runtimeEntityType.AddProperty(
+                "MinAlpha",
+                typeof(int?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("MinAlpha", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<MinAlpha>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            minAlpha.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            minAlpha.AddAnnotation("Relational:ColumnName", "min_alpha");
+
+            var optimizedPngBytes = runtimeEntityType.AddProperty(
+                "OptimizedPngBytes",
                 typeof(long?),
-                propertyInfo: typeof(PngAuditImageResult).GetProperty("NormalizedSavingsBytes", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                fieldInfo: typeof(PngAuditImageResult).GetField("<NormalizedSavingsBytes>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("OptimizedPngBytes", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<OptimizedPngBytes>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 nullable: true);
-            normalizedSavingsBytes.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
-            normalizedSavingsBytes.AddAnnotation("Relational:ColumnName", "normalized_savings_bytes");
-
-            var normalizedSavingsPercent = runtimeEntityType.AddProperty(
-                "NormalizedSavingsPercent",
-                typeof(decimal?),
-                propertyInfo: typeof(PngAuditImageResult).GetProperty("NormalizedSavingsPercent", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                fieldInfo: typeof(PngAuditImageResult).GetField("<NormalizedSavingsPercent>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                nullable: true,
-                precision: 14,
-                scale: 4);
-            normalizedSavingsPercent.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
-            normalizedSavingsPercent.AddAnnotation("Relational:ColumnName", "normalized_savings_percent");
+            optimizedPngBytes.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            optimizedPngBytes.AddAnnotation("Relational:ColumnName", "optimized_png_bytes");
 
             var originalSavingsBytes = runtimeEntityType.AddProperty(
                 "OriginalSavingsBytes",
@@ -229,6 +263,26 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             recordedAt.AddAnnotation("Relational:ColumnName", "recorded_at");
             recordedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
 
+            var referenceSavingsBytes = runtimeEntityType.AddProperty(
+                "ReferenceSavingsBytes",
+                typeof(long?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("ReferenceSavingsBytes", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<ReferenceSavingsBytes>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            referenceSavingsBytes.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            referenceSavingsBytes.AddAnnotation("Relational:ColumnName", "reference_savings_bytes");
+
+            var referenceSavingsPercent = runtimeEntityType.AddProperty(
+                "ReferenceSavingsPercent",
+                typeof(decimal?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("ReferenceSavingsPercent", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<ReferenceSavingsPercent>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                precision: 14,
+                scale: 4);
+            referenceSavingsPercent.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            referenceSavingsPercent.AddAnnotation("Relational:ColumnName", "reference_savings_percent");
+
             var responseBytes = runtimeEntityType.AddProperty(
                 "ResponseBytes",
                 typeof(long),
@@ -246,6 +300,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
             runId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             runId.AddAnnotation("Relational:ColumnName", "run_id");
+
+            var semiTransparentPixelCount = runtimeEntityType.AddProperty(
+                "SemiTransparentPixelCount",
+                typeof(long?),
+                propertyInfo: typeof(PngAuditImageResult).GetProperty("SemiTransparentPixelCount", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(PngAuditImageResult).GetField("<SemiTransparentPixelCount>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            semiTransparentPixelCount.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            semiTransparentPixelCount.AddAnnotation("Relational:ColumnName", "semi_transparent_pixel_count");
 
             var suggestedFormat = runtimeEntityType.AddProperty(
                 "SuggestedFormat",
