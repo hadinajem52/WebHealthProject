@@ -99,6 +99,7 @@ internal sealed class CrawlExecutionService(
 internal sealed class CrawlRunExecution
 {
     private static readonly TimeSpan IdlePollInterval = TimeSpan.FromMilliseconds(20);
+    private static readonly TimeSpan ProgressCheckpointInterval = TimeSpan.FromSeconds(2);
 
     private readonly CrawlRunRequest _request;
     private readonly CrawlSchedulingOptions _options;
@@ -127,6 +128,7 @@ internal sealed class CrawlRunExecution
     private int _linksRecorded;
     private int _originsOverridden;
     private string? _firstOverrideRefusal;
+    private DateTimeOffset? _lastProgressCheckpointAt;
     private volatile string? _budgetStopReason;
 
     private volatile bool _coverageLimited;
@@ -598,6 +600,7 @@ internal sealed class CrawlRunExecution
         {
             var persisted = await _dependencies.Sink.RecordLinksAsync(pending, cancellationToken);
             Interlocked.Exchange(ref _linksRecorded, persisted);
+            await CheckpointProgressAsync(cancellationToken);
         }
         catch
         {
@@ -608,5 +611,23 @@ internal sealed class CrawlRunExecution
         {
             _dataAccess.Release();
         }
+    }
+
+    private async Task CheckpointProgressAsync(CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow();
+        if (_lastProgressCheckpointAt is { } lastCheckpoint
+            && now - lastCheckpoint < ProgressCheckpointInterval)
+        {
+            return;
+        }
+
+        await _dependencies.Sink.UpdateProgressAsync(
+            _request.RunId,
+            _executionClaimId,
+            Volatile.Read(ref _pagesFetched),
+            Volatile.Read(ref _linksRecorded),
+            cancellationToken);
+        _lastProgressCheckpointAt = now;
     }
 }

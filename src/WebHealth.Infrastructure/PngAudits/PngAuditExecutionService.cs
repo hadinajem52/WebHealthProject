@@ -38,6 +38,7 @@ public sealed class PngAuditExecutionService(
         catch (Exception exception)
         {
             logger.LogError(
+                exception,
                 "PNG audit execution failed. PngAuditRunId={PngAuditRunId} ExceptionType={ExceptionType}",
                 runId,
                 exception.GetType().Name);

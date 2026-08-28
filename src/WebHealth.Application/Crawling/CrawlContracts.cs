@@ -108,6 +108,13 @@ public interface ICrawlResultSink
         IReadOnlyList<CrawlLinkRecord> records,
         CancellationToken cancellationToken = default);
 
+    Task<bool> UpdateProgressAsync(
+        Guid runId,
+        Guid executionClaimId,
+        int pagesFetched,
+        int linksRecorded,
+        CancellationToken cancellationToken = default);
+
     Task<bool> RecordRunOutcomeAsync(
         CrawlRunOutcome outcome,
         Guid executionClaimId,

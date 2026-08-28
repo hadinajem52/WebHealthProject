@@ -15,6 +15,8 @@ internal sealed class RecordingCrawlResultSink : ICrawlResultSink
 
     public Guid? ExecutionClaimId { get; private set; }
 
+    public (int PagesFetched, int LinksRecorded)? Progress { get; private set; }
+
     public bool RefuseClaim { get; set; }
 
     public Task BeginRunAsync(CrawlRunStart start, CancellationToken cancellationToken = default)
@@ -54,6 +56,18 @@ internal sealed class RecordingCrawlResultSink : ICrawlResultSink
     {
         if (executionClaimId != ExecutionClaimId) return Task.FromResult(false);
         Outcome = outcome;
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> UpdateProgressAsync(
+        Guid runId,
+        Guid executionClaimId,
+        int pagesFetched,
+        int linksRecorded,
+        CancellationToken cancellationToken = default)
+    {
+        if (executionClaimId != ExecutionClaimId) return Task.FromResult(false);
+        Progress = (pagesFetched, linksRecorded);
         return Task.FromResult(true);
     }
 }

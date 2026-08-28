@@ -171,6 +171,25 @@ internal sealed class CrawlResultSink(
         return await batch.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<bool> UpdateProgressAsync(
+        Guid runId,
+        Guid executionClaimId,
+        int pagesFetched,
+        int linksRecorded,
+        CancellationToken cancellationToken = default)
+    {
+        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var updated = await dbContext.CrawlRuns
+            .Where(run => run.Id == runId
+                && run.Status == CrawlRunStatuses.Running
+                && run.ExecutionClaimId == executionClaimId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(run => run.PagesFetched, pagesFetched)
+                .SetProperty(run => run.LinksRecorded, linksRecorded),
+                cancellationToken);
+        return updated == 1;
+    }
+
     public async Task<bool> RecordRunOutcomeAsync(
         CrawlRunOutcome outcome,
         Guid executionClaimId,

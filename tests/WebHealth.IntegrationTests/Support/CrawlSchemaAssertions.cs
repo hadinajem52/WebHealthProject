@@ -124,8 +124,13 @@ internal static class CrawlSchemaAssertions
             "the first delivery of a job finds the run unclaimed");
         (await sink.TryClaimRunAsync(runId, Guid.NewGuid())).Should().BeFalse(
             "a redelivered job must not crawl a site the first delivery is already crawling");
+        (await sink.UpdateProgressAsync(runId, owner, 3, 4)).Should().BeTrue(
+            "the active owner can publish in-flight counters");
 
         await RetireAbandonedRunsAsync(services);
+
+        (await sink.UpdateProgressAsync(runId, owner, 8, 9)).Should().BeFalse(
+            "a checkpoint racing retirement is a harmless no-op");
 
         (await sink.RecordRunOutcomeAsync(new(
             runId, CrawlRunStatuses.Completed, CrawlStopReasons.FrontierExhausted,
@@ -136,6 +141,10 @@ internal static class CrawlSchemaAssertions
         retired.Status.Should().Be(CrawlRunStatuses.Failed,
             "the retirement stands: the late outcome was dropped, not applied");
         retired.FailureReason.Should().NotBeNullOrWhiteSpace();
+        retired.PagesFetched.Should().Be(3,
+            "the late checkpoint cannot replace counters after the run has finished");
+        retired.LinksRecorded.Should().Be(4,
+            "the late checkpoint cannot replace counters after the run has finished");
 
         (await sink.TryClaimRunAsync(runId, Guid.NewGuid())).Should().BeFalse(
             "a run that is no longer in flight is nobody's to perform");
@@ -180,14 +189,20 @@ internal static class CrawlSchemaAssertions
         await scope.ServiceProvider.GetRequiredService<ICrawlReconciler>().RetireAbandonedRunsAsync();
     }
 
-    private static async Task<(string Status, string StopReason, DateTimeOffset? FinishedAt, string? FailureReason)>
+    private static async Task<(
+        string Status,
+        string StopReason,
+        DateTimeOffset? FinishedAt,
+        string? FailureReason,
+        int PagesFetched,
+        int LinksRecorded)>
         ReadRunAsync(string connectionString, Guid runId)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
             """
-            SELECT status, stop_reason, finished_at, failure_reason
+            SELECT status, stop_reason, finished_at, failure_reason, pages_fetched, links_recorded
             FROM web_health.crawl_run WHERE id = @id;
             """, connection);
         command.Parameters.AddWithValue("id", runId);
@@ -197,7 +212,9 @@ internal static class CrawlSchemaAssertions
             reader.GetString(0),
             reader.GetString(1),
             await reader.IsDBNullAsync(2) ? null : reader.GetFieldValue<DateTimeOffset>(2),
-            await reader.IsDBNullAsync(3) ? null : reader.GetString(3));
+            await reader.IsDBNullAsync(3) ? null : reader.GetString(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5));
     }
 
     private static async Task DeleteRunsAsync(string connectionString, params Guid[] runIds)

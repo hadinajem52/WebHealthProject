@@ -153,7 +153,9 @@ internal sealed class PngSiteDiscoveryExecution
     {
         var fetch = await FetchAsync(item.Url, cancellationToken);
         _httpAttempts = checked(_httpAttempts + fetch.OutboundRequestCount);
-        _totalPageBytes += fetch.Response.ResponseBytesRead;
+        _totalPageBytes = Math.Min(
+            _request.Profile.Pages.MaxTotalPageBytes,
+            _totalPageBytes + fetch.Response.ResponseBytesRead);
         if (fetch.OutboundRequestLimitReached)
         {
             AddCoverageIfMissing(PngCoverageArea.Crawl, PngCoverageReasonCode.HttpAttemptLimit);
@@ -181,12 +183,14 @@ internal sealed class PngSiteDiscoveryExecution
 
         var page = Page(document, item.Depth);
         if (!_inspectedPageIdentities.Add(page.IdentityHash)) return;
-        _pages.Add(page);
 
         var discovery = _discoveryExtractor.Extract(
             fetch.Response.Body,
             fetch.Response.ContentType);
         TrackDocumentCoverage(discovery);
+        if (ReferenceEquals(discovery, HtmlDocumentDiscovery.NotInspected)) return;
+
+        _pages.Add(page);
         DiscoverImages(page, document, discovery);
         DiscoverPages(document, item.Depth, discovery);
     }
@@ -340,7 +344,8 @@ internal sealed class PngSiteDiscoveryExecution
         {
             var resolved = CrawlUrlNormalizer.Resolve(href, resolutionBase, _request.Scope.UrlOptions).Url;
             if (resolved is null
-                || _frontier.Scope.Decide(resolved) != CrawlScopeDecision.Internal)
+                || _frontier.Scope.Decide(resolved) != CrawlScopeDecision.Internal
+                || PngPagePathPolicy.IsNonHtmlDocument(resolved))
             {
                 continue;
             }

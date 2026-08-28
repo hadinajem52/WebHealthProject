@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using FluentAssertions;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Png;
@@ -141,6 +142,33 @@ public sealed class PngImageAnalyzerTests
             PngImageAnalysisClassification.OpaqueBelowWebpThreshold);
         webpResult.Classification.Should().Be(PngImageAnalysisClassification.NotPng);
         webpResult.DetectedFormat.Should().Be("Webp");
+    }
+
+    [Theory]
+    [InlineData("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\"></svg>")]
+    [InlineData("  \n<svg width=\"8\" height=\"8\"/>")]
+    [InlineData("<?xml version=\"1.0\"?><svg width=\"8\"></svg>")]
+    [InlineData("<!-- a comment --><svg width=\"8\"></svg>")]
+    [InlineData("<?xml version=\"1.0\"?><!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"svg11.dtd\"><svg/>")]
+    public async Task AnalyzeAsync_ReportsSvgAsNotPngRatherThanUnidentified(string markup)
+    {
+        var result = await CreateAnalyzer().AnalyzeAsync(Encoding.UTF8.GetBytes(markup));
+
+        result.Classification.Should().Be(PngImageAnalysisClassification.NotPng);
+        result.DetectedFormat.Should().Be("SVG");
+    }
+
+    [Theory]
+    [InlineData("<html><body>not an image</body></html>")]
+    [InlineData("<svgfoo/>")]
+    [InlineData("<!-- unterminated comment <svg/>")]
+    [InlineData("not markup at all")]
+    public async Task AnalyzeAsync_DoesNotMistakeOtherTextForSvg(string markup)
+    {
+        var result = await CreateAnalyzer().AnalyzeAsync(Encoding.UTF8.GetBytes(markup));
+
+        result.Classification.Should().Be(
+            PngImageAnalysisClassification.IdentificationFailed);
     }
 
     [Fact]

@@ -63,9 +63,11 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
         var detectedFormat = DetectFormat(encodedImage.Span);
         if (detectedFormat is null)
         {
-            return PngAnalysisResult.Failed(
-                PngImageAnalysisClassification.IdentificationFailed,
-                originalBytes);
+            return SvgContentDetector.IsSvg(encodedImage.Span)
+                ? PngAnalysisResult.NotPng(originalBytes, SvgContentDetector.FormatName)
+                : PngAnalysisResult.Failed(
+                    PngImageAnalysisClassification.IdentificationFailed,
+                    originalBytes);
         }
 
         if (!string.Equals(detectedFormat.Name, "PNG", StringComparison.OrdinalIgnoreCase))
