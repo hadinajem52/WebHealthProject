@@ -73,11 +73,14 @@ internal sealed class EmptyPngAuditReader : IPngAuditReader
         CancellationToken cancellationToken = default)
     {
         var item = ImageResult();
+        var highBitDepthItem = HighBitDepthImageResult();
         IReadOnlyList<PngAuditImageResultView> items =
-            PngAuditImageFilters.Normalize(filter) is PngAuditImageFilters.All
-                or PngAuditImageFilters.WebpCandidates
-                ? [item]
-                : [];
+            PngAuditImageFilters.Normalize(filter) switch
+            {
+                PngAuditImageFilters.All => [item, highBitDepthItem],
+                PngAuditImageFilters.WebpCandidates => [item],
+                _ => []
+            };
         return Task.FromResult(new PngAuditPage<PngAuditImageResultView>(
             offset == 0 ? items : [],
             Math.Max(0, offset),
@@ -164,6 +167,35 @@ internal sealed class EmptyPngAuditReader : IPngAuditReader
         36.3636m,
         DateTimeOffset.UtcNow,
         3,
+        "https://example.com/");
+
+    private static PngAuditImageResultView HighBitDepthImageResult() => new(
+        Guid.Parse("6f1c9a20-0000-0000-0000-000000000044"),
+        "https://example.com/assets/high-depth.png",
+        "https://example.com/assets/high-depth.png",
+        PngAuditImageClassifications.HighBitDepthPng,
+        null,
+        200,
+        4096,
+        8,
+        8,
+        1,
+        true,
+        64,
+        0,
+        0,
+        0,
+        64,
+        127,
+        PngAuditRecommendations.None,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        DateTimeOffset.UtcNow,
+        1,
         "https://example.com/");
 }
 

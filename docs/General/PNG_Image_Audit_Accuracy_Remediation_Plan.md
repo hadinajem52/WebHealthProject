@@ -4,7 +4,7 @@
 **Current baseline:** `b43c9fa132875e116b8e91296684d932abd3bbd4`
 **Audited baseline:** `cb149a317e98e9db6b19718044c891856685920b`
 **Suggested path:** `docs/General/PNG_Image_Audit_Accuracy_Remediation_Plan.md`
-**Status:** **Phase 3 complete; Phase 4 not started**
+**Status:** **Complete — Phases 0–4 passed**
 **Feature:** `Tools → PNG image audit`
 **Supersedes:** section 4 (Format-comparison policy) and section 15 (Legal result-state matrix) of
 [PNG_Image_Audit_Implementation_Plan.md](PNG_Image_Audit_Implementation_Plan.md)
@@ -571,6 +571,12 @@ Decode to `Rgba64`, count alpha accurately, budget 8 bytes per pixel.
 
 **Gate:** a 16-bit RGBA fixture reports dimensions and transparency, classification
 `HighBitDepthPng`, recommendation `None`.
+
+**Completed 28 August 2026.** Sixteen-bit RGB and RGBA PNGs are decoded as `Rgba64`, budgeted at
+eight decoded bytes per pixel, and measured without entering the WebP comparison engine. The UI
+reports the measured transparency and states that lossless WebP comparison is not applicable
+because WebP stores 8-bit channels. Detailed evidence is recorded in
+[PNG_Image_Audit_Accuracy_Phase_4_Evidence.md](PNG_Image_Audit_Accuracy_Phase_4_Evidence.md).
 
 ---
 

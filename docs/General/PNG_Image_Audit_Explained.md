@@ -1,6 +1,6 @@
 # PNG Image Audit — How It Works
 
-This document explains the planned PNG image audit in plain language. It describes what the
+This document explains the PNG image audit in plain language. It describes what the
 feature does, how a run moves through the system, how an image is judged, and how safety and
 history are handled.
 
@@ -22,8 +22,8 @@ For each registered endpoint, the audit can:
 4. Fetch each unique allowed image safely.
 5. Check the actual bytes, dimensions, frames, and decoded pixels.
 6. Detect whether any pixel really uses transparency.
-7. For fully opaque PNGs, encode a normalized PNG and a lossless WebP.
-8. Recommend WebP only when both configured saving tests pass.
+7. For eligible static 8-bit PNGs, create and verify lossless WebP and optimized-PNG candidates.
+8. Recommend WebP only when it beats both the current file and the optimized-PNG reference.
 9. Save the run, its results, skips, coverage limits, and source-page mappings.
 
 The feature is analysis-only. It never rewrites HTML, uploads files, changes the target site, or
@@ -337,18 +337,19 @@ flowchart TD
     C -->|Yes| E[Read dimensions, bit depth, and frame information]
     E --> F{Resource preflight passes?}
     F -->|No| G[DimensionsExceeded, PixelLimitExceeded, or DecodedMemoryExceeded]
-    F -->|Yes| H{Uses 16-bit samples?}
-    H -->|Yes| I[UnsupportedBitDepth: stop comparison]
-    H -->|No| J{Validated multi-frame APNG?}
-    J -->|Yes| K[AnimatedPng: transparency unknown, no static recommendation]
-    J -->|No| L[Decode bounded static image]
-    L --> M[Scan decoded alpha values]
-    M --> N{Any pixel alpha below 255?}
-    N -->|Yes| O[UsesTransparency: stop comparison]
-    N -->|No| P[Encode normalized metadata-stripped PNG]
-    P --> Q[Encode lossless WebP to counting stream]
-    Q --> R[Apply byte and percentage thresholds]
-    R --> S[Candidate or below threshold]
+    F -->|Yes| H{Validated multi-frame APNG?}
+    H -->|Yes| I[AnimatedPng: transparency unknown, no static recommendation]
+    H -->|No| J{Uses 16-bit samples?}
+    J -->|Yes| K[Decode as RGBA64 and measure alpha]
+    K --> L[HighBitDepthPng: WebP comparison not applicable]
+    J -->|No| M[Decode as RGBA32 and measure alpha]
+    M --> N{Colour meaning transferable?}
+    N -->|No| O[ColorProfileUnsupported]
+    N -->|Yes| P[Create and verify lossless WebP]
+    P --> Q{Beats current file threshold?}
+    Q -->|No| R[BelowWebpThreshold]
+    Q -->|Yes| S[Optimize original PNG bytes and verify]
+    S --> T[Compare WebP with the smaller PNG reference]
 ```
 
 ### 9.1 Format and resource checks
@@ -362,7 +363,7 @@ Before decoding, it checks the image against:
 - maximum height: 10,000;
 - maximum decoded pixels: 40,000,000;
 - maximum decoded memory: 256 MB;
-- 8-bit-or-lower sample precision for the V1 WebP comparison;
+- four decoded bytes per pixel for 8-bit images and eight for 16-bit images;
 - frame limits and the encoded body limit.
 
 These checks reduce the risk of decompression bombs and excessive memory use.
@@ -386,14 +387,26 @@ The analyzer does not infer transparency from:
 An image with an alpha channel but every pixel at alpha 255 is fully opaque for this decision. A
 single semi-transparent pixel is enough to classify the image as using transparency.
 
-The wording is intentionally precise: the tool reports **uses transparency**, not “has a
-transparent background.”
+Transparency is a fact and never blocks comparison. The tool separately reports whether a fully
+transparent region is connected to the image border and covers at least 1% of the pixels.
 
-### 9.3 APNG and other result states
+### 9.3 Sixteen-bit PNGs
+
+Sixteen-bit PNGs are decoded as `Rgba64`, so dimensions and alpha values are measured at their
+stored precision. They are classified as `HighBitDepthPng` and receive no format-change
+recommendation because lossless WebP stores 8-bit channels. The result table reports:
+
+```text
+16-bit PNG
+Transparency: used / not used
+Lossless WebP comparison: not applicable because WebP stores 8-bit channels
+```
+
+### 9.4 APNG and other result states
 
 If a structurally valid PNG has multiple frames, it is classified as `AnimatedPng`. Its chunks,
 CRCs, frame count, sequence numbers, frame bounds and terminal `IEND` are validated before that
-classification. V1 does not decode its frames, so transparency remains unknown and it receives no
+classification. The audit does not decode its frames, so transparency remains unknown and it receives no
 static WebP conversion recommendation.
 
 Other possible result states include:
@@ -404,16 +417,17 @@ HttpNonSuccess
 ResponseTruncated
 NotPng
 IdentificationFailed
-UnsupportedBitDepth
 DimensionsExceeded
 PixelLimitExceeded
 DecodedMemoryExceeded
 AnimatedPng
 DecodeFailed
-UsesTransparency
-WebpComparisonFailed
-OpaqueWebpCandidate
-OpaqueBelowWebpThreshold
+HighBitDepthPng
+ColorProfileUnsupported
+ComparisonUnavailable
+VerifiedWebpCandidate
+OptimizedPngPreferred
+BelowWebpThreshold
 ```
 
 The application stores a safe reason code rather than exposing raw exception text as user-facing
@@ -421,25 +435,23 @@ data.
 
 ## 10. How the WebP recommendation is proved
 
-The audit performs a real encoding comparison for fully opaque PNGs. It does not estimate savings
-from file extensions or a formula.
+The audit performs a real encoding comparison for static 8-bit PNGs, including transparent images.
+It does not estimate savings from file extensions or a formula.
 
 The original file is decoded once, then the same pixels are used for two comparison encodes:
 
 ```mermaid
 flowchart LR
-    A[Original PNG bytes] --> B[Decode pixels]
-    B --> C[Metadata-stripped normalized PNG]
-    B --> D[Lossless WebP]
-    A --> E[Keep original byte count separately]
-    C --> F[Compare normalized PNG with WebP]
-    D --> F
-    E --> G[Compare original PNG with WebP]
-    D --> G
-    F --> H{Both comparisons pass?}
-    G --> H
-    H -->|Yes| I[OpaqueWebpCandidate]
-    H -->|No| J[OpaqueBelowWebpThreshold]
+    A[Original PNG bytes] --> B[Magick.NET lossless WebP]
+    B --> C[Independent exact RGBA and colour verification]
+    C --> D{Beats original threshold?}
+    D -->|No| E[BelowWebpThreshold]
+    D -->|Yes| F[Pinned oxipng 10.2.0 on original bytes]
+    F --> G[Independent exact RGBA and colour verification]
+    G --> H[Reference = smaller of original and optimized PNG]
+    H --> I{WebP beats reference threshold?}
+    I -->|Yes| J[VerifiedWebpCandidate]
+    I -->|No| K[OptimizedPngPreferred or BelowWebpThreshold]
 ```
 
 The default recommendation policy is:
@@ -449,23 +461,24 @@ minimum saving percentage = 10%
 minimum saving bytes       = 4 KB
 ```
 
-Both comparisons must pass:
+The verified WebP must pass both gates:
 
 ```text
 original_bytes - webp_bytes >= 4 KB
 AND
 (original_bytes - webp_bytes) / original_bytes >= 10%
 
-normalized_png_bytes - webp_bytes >= 4 KB
+reference_png_bytes - webp_bytes >= 4 KB
 AND
-(normalized_png_bytes - webp_bytes) / normalized_png_bytes >= 10%
+(reference_png_bytes - webp_bytes) / reference_png_bytes >= 10%
 ```
 
-This prevents a recommendation that is explained only by removable PNG metadata or an unusually
-poorly optimized original file.
+`reference_png_bytes` is the smaller of the current file and the verified oxipng output. This
+prevents a format-change recommendation when lossless PNG optimization is the better action.
 
-Only the encoded byte counts are needed. The encoders write to a counting/discard stream instead
-of retaining complete candidate files in memory.
+Candidate output, native resources, optimizer concurrency, and per-image duration are bounded. A
+candidate is measured only after its payload, dimensions, exact RGBA values, hidden RGB under fully
+transparent pixels, and colour meaning are verified.
 
 Savings are signed. If WebP is larger, the saving is negative; that is a valid measured result,
 not a special error.
@@ -473,13 +486,12 @@ not a special error.
 The stable profiles make old results understandable after future package or encoder changes:
 
 ```text
-analyzer_profile   = png-alpha-v1
-comparison_profile = normalized-png-vs-lossless-webp-v1
+analyzer_profile   = png-alpha-v2
+comparison_profile = libwebp-exact-vs-optimized-png-v2
 ```
 
-The selected image library is SixLabors.ImageSharp 3.1.12. The operations document records the
-current license decision and the need to recheck licensing before commercial use or a major
-dependency upgrade.
+ImageSharp remains the bounded decode and independent verification path. Magick.NET provides the
+lossless WebP encoder, and the repository bundles the pinned oxipng 10.2.0 reference optimizer.
 
 ## 11. Run lifecycle and recovery
 
@@ -616,7 +628,7 @@ flags remain separate so the report can explain exactly where completeness was l
 
 Stores one row per unique image request identity. It contains safe URLs, hashes, HTTP facts,
 dimensions, frame count, transparency facts, classification, reason code, and comparison metrics.
-The transparency fields are nullable because APNG pixels are not decoded in V1. It does not
+The transparency fields are nullable because APNG pixels are not decoded. It does not
 contain image binaries.
 
 ### `png_audit_image_source`

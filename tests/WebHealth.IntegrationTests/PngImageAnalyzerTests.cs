@@ -245,33 +245,44 @@ public sealed class PngImageAnalyzerTests
             "a transparent background must still reach the comparison path");
     }
 
-    [Fact]
-    public async Task AnalyzeAsync_HandlesSixteenBitAlphaJustBelowFullyOpaque()
-    {
-        var result = await CreateAnalyzer().AnalyzeAsync(
-            CreateSixteenBitPng(ushort.MaxValue - 1));
-
-        result.Classification.Should().Be(PngImageAnalysisClassification.HighBitDepthPng);
-        result.Image!.Transparency!.UsesTransparency.Should().BeTrue();
-        result.Image.Transparency.MinAlpha.Should().BeLessThan(byte.MaxValue);
-    }
-
-    [Fact]
-    public async Task AnalyzeAsync_ReportsSixteenBitFactsWithoutAWebpRecommendation()
+    [Theory]
+    [InlineData(PngColorType.Rgb, 65535, false, 255)]
+    [InlineData(PngColorType.RgbWithAlpha, 65534, true, 254)]
+    public async Task AnalyzeAsync_ReportsSixteenBitFactsWithoutAWebpRecommendation(
+        PngColorType colorType,
+        ushort alpha,
+        bool usesTransparency,
+        byte minAlpha)
     {
         using var analyzer = CreateAnalyzer(
             thresholds: new PngRecommendationThresholds(0, 0));
 
-        var result = await analyzer.AnalyzeAsync(CreateSixteenBitPng());
+        var result = await analyzer.AnalyzeAsync(CreateSixteenBitPng(colorType, alpha));
 
         result.Classification.Should().Be(
             PngImageAnalysisClassification.HighBitDepthPng);
         result.Image.Should().NotBeNull("16-bit facts are reported, not discarded");
+        result.Image!.Width.Should().Be(8);
+        result.Image.Height.Should().Be(8);
         result.Image!.BitDepth.Should().Be(16);
         result.Image.Transparency.Should().NotBeNull();
+        result.Image.Transparency!.UsesTransparency.Should().Be(usesTransparency);
+        result.Image.Transparency.MinAlpha.Should().Be(minAlpha);
         result.Comparison.Should().BeNull(
             "lossless WebP stores 8-bit channels, so no exact equivalent exists");
         result.Recommendation.Should().Be(PngRecommendation.None);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_BudgetsEightBytesPerPixelForSixteenBitPngs()
+    {
+        var limits = new PngImageAnalysisLimits(8 * 1024 * 1024, 1000, 1000, 1000, 300);
+
+        var result = await CreateAnalyzer(limits).AnalyzeAsync(
+            CreateSixteenBitPng(PngColorType.Rgb, ushort.MaxValue));
+
+        result.Classification.Should().Be(
+            PngImageAnalysisClassification.DecodedMemoryExceeded);
     }
 
     [Fact]
@@ -519,7 +530,7 @@ public sealed class PngImageAnalyzerTests
         return output.ToArray();
     }
 
-    private static byte[] CreateSixteenBitPng(ushort alpha = ushort.MaxValue)
+    private static byte[] CreateSixteenBitPng(PngColorType colorType, ushort alpha)
     {
         using var image = new Image<Rgba64>(
             8,
@@ -529,7 +540,7 @@ public sealed class PngImageAnalyzerTests
         image.SaveAsPng(output, new PngEncoder
         {
             BitDepth = PngBitDepth.Bit16,
-            ColorType = PngColorType.RgbWithAlpha,
+            ColorType = colorType,
             CompressionLevel = PngCompressionLevel.BestCompression,
             SkipMetadata = true
         });

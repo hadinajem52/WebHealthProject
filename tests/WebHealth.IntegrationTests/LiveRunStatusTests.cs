@@ -193,6 +193,19 @@ public sealed class LiveRunStatusTests(WebHealthWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task PngRun_ExplainsWhySixteenBitComparisonIsNotApplicable()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var html = WebUtility.HtmlDecode(await client.GetStringAsync(
+            $"/Tools/PngImages/Runs/{EmptyPngAuditReader.CompletedRunId}"));
+
+        html.Should().Contain("16-bit PNG — no exact WebP equivalent");
+        html.Should().Contain("Semi-transparent only");
+        html.Should().Contain("Not applicable — WebP stores 8-bit channels");
+    }
+
+    [Fact]
     public async Task PngLiveResults_ReturnOnlyTheReplaceableResultsRegion()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);

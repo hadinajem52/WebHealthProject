@@ -226,19 +226,33 @@ public static class PngAuditDisplay
             : "Semi-transparent only";
     }
 
-    public static string DescribeComparisonSize(PngAuditImageResultView image) =>
-        image.CandidateWebpBytes is null
+    public static string DescribeComparisonSize(PngAuditImageResultView image)
+    {
+        if (image.Classification == PngAuditImageClassifications.HighBitDepthPng)
+        {
+            return "Not applicable — WebP stores 8-bit channels";
+        }
+
+        return image.CandidateWebpBytes is null
             ? "Not verified"
             : FormatBytes(image.CandidateWebpBytes);
+    }
 
-    public static string DescribeComparisonSaving(PngAuditImageResultView image) =>
-        image.CandidateWebpBytes is null
+    public static string DescribeComparisonSaving(PngAuditImageResultView image)
+    {
+        if (image.Classification == PngAuditImageClassifications.HighBitDepthPng)
+        {
+            return "Not applicable";
+        }
+
+        return image.CandidateWebpBytes is null
             ? "Unavailable"
             : image.Classification == PngAuditImageClassifications.VerifiedWebpCandidate
                 ? $"{FormatSavings(image.ReferenceSavingsBytes, image.ReferenceSavingsPercent)} · Beats the pinned optimized-PNG reference"
                 : image.ReferencePngBytes is not null
                     ? FormatSavings(image.ReferenceSavingsBytes, image.ReferenceSavingsPercent)
                     : FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent);
+    }
 
     public static string DescribeOptimizedPngSize(PngAuditImageResultView image) =>
         image.OptimizedPngBytes is null
