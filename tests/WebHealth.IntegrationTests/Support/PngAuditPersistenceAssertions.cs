@@ -65,10 +65,15 @@ internal static class PngAuditPersistenceAssertions
 
         database.ChangeTracker.Clear();
         (await database.PngAuditImageResults.CountAsync(result => result.RunId == runId))
-            .Should().Be(15, "every legal result state should be persisted once");
+            .Should().Be(14, "every legal result state should be persisted once");
         var candidate = await database.PngAuditImageResults.AsNoTracking()
             .SingleAsync(result => result.RunId == runId
-                && result.Classification == PngAuditImageClassifications.OpaqueWebpCandidate);
+                && result.Classification == PngAuditImageClassifications.ComparisonUnavailable
+                && result.UsesTransparency == true);
+        candidate.OptimizedPngBytes.Should().NotBeNull(
+            "a transparent PNG must reach the comparison path");
+        candidate.BackgroundTransparentPixelCount.Should().Be(36);
+        candidate.InteriorTransparentPixelCount.Should().Be(4);
         var collisionBatch = CollisionBatch(candidate.ImageIdentityHash, endpointUrl);
         (await sink.RecordBatchAsync(runId, claim.LeaseToken, collisionBatch)).Should().BeTrue();
         (await sink.RecordBatchAsync(runId, claim.LeaseToken, collisionBatch)).Should().BeTrue();
@@ -87,9 +92,9 @@ internal static class PngAuditPersistenceAssertions
 
         database.ChangeTracker.Clear();
         var partial = await database.PngAuditRuns.AsNoTracking().SingleAsync(run => run.Id == runId);
-        partial.ImagesDiscovered.Should().Be(15);
-        partial.ImagesAnalyzed.Should().Be(12);
-        partial.RecommendationCount.Should().Be(1);
+        partial.ImagesDiscovered.Should().Be(14);
+        partial.ImagesAnalyzed.Should().Be(11);
+        partial.RecommendationCount.Should().Be(0);
         partial.DiscoverySkipCount.Should().Be(5);
         partial.PagesDiscovered.Should().Be(3);
         partial.HttpAttempts.Should().Be(18, "run-level crawl budgets are checkpointed with results");
@@ -102,9 +107,9 @@ internal static class PngAuditPersistenceAssertions
         var totalImageBytes = batch.Images.Sum(image => image.ResponseBytes);
         var totals = new PngAuditRunTotals(
             3,
-            15,
-            12,
-            1,
+            14,
+            11,
+            0,
             5,
             18,
             4096,
@@ -116,12 +121,12 @@ internal static class PngAuditPersistenceAssertions
             runId,
             claim.LeaseToken,
             new PngAuditRunTotals(
-                3, 14, 12, 1, 5, 18, 4096, totalImageBytes, true, true, false)));
+                3, 13, 11, 0, 5, 18, 4096, totalImageBytes, true, true, false)));
         await Assert.ThrowsAsync<InvalidOperationException>(() => sink.CompleteAsync(
             runId,
             claim.LeaseToken,
             new PngAuditRunTotals(
-                21, 15, 12, 1, 5, 18, 4096, totalImageBytes, true, true, false)));
+                21, 14, 11, 0, 5, 18, 4096, totalImageBytes, true, true, false)));
         (await sink.CompleteAsync(runId, claim.LeaseToken, totals)).Should().BeTrue();
         (await sink.UpdateCrawlProgressAsync(
             runId, claim.LeaseToken, new(20, 100, 1_000_000))).Should().BeFalse(
@@ -135,44 +140,61 @@ internal static class PngAuditPersistenceAssertions
         var storedRun = await reader.FindRunAsync(runId, access);
         storedRun.Should().NotBeNull();
         storedRun!.Status.Should().Be(PngAuditRunStatuses.CompletedWithWarnings);
-        storedRun.ImagesDiscovered.Should().Be(15);
+        storedRun.ImagesDiscovered.Should().Be(14);
         storedRun.DiscoverySkipCount.Should().Be(5);
         var firstPage = await reader.ListImagesAsync(runId, 0, 5, access);
         firstPage.Items.Should().HaveCount(5);
         firstPage.HasMore.Should().BeTrue();
         var secondPage = await reader.ListImagesAsync(runId, 5, 50, access);
-        secondPage.Items.Should().HaveCount(10);
+        secondPage.Items.Should().HaveCount(9);
         secondPage.HasMore.Should().BeFalse();
         var storedCandidate = firstPage.Items.Concat(secondPage.Items)
-            .Single(image => image.Classification == PngAuditImageClassifications.OpaqueWebpCandidate);
-        storedCandidate.CandidateWebpBytes.Should().Be(700);
-        storedCandidate.NormalizedSavingsBytes.Should().Be(200);
-        storedCandidate.NormalizedSavingsPercent.Should().Be(22.2222m);
+            .Single(image => image.Classification
+                    == PngAuditImageClassifications.ComparisonUnavailable
+                && image.UsesTransparency == true);
+        storedCandidate.CandidateWebpBytes.Should().Be(800);
+        storedCandidate.ReferenceSavingsBytes.Should().Be(400);
+        storedCandidate.BackgroundTransparentPixelCount.Should().Be(36);
+        storedCandidate.HasTransparentBackground(
+            PngTransparencyPolicy.MinBackgroundCoveragePercent).Should().BeTrue();
         storedCandidate.SourceCount.Should().Be(6);
         storedCandidate.FirstSourcePageDisplayUrl.Should().Be(endpointUrl + "/");
         var candidatePage = await reader.ListImagesByFilterAsync(
             runId, PngAuditImageFilters.WebpCandidates, 0, 50, access);
-        candidatePage.Items.Should().ContainSingle()
-            .Which.Classification.Should().Be(PngAuditImageClassifications.OpaqueWebpCandidate);
+        candidatePage.Items.Should().BeEmpty(
+            "no recommendation is issued before a verified comparison engine exists");
+        var transparencyPage = await reader.ListImagesByFilterAsync(
+            runId, PngAuditImageFilters.UsesTransparency, 0, 50, access);
+        transparencyPage.Items.Should().HaveCount(
+            2,
+            "the transparency filter must read the persisted fact, not the classification");
+        var backgroundPage = await reader.ListImagesByFilterAsync(
+            runId, PngAuditImageFilters.TransparentBackground, 0, 50, access);
+        backgroundPage.Items.Should().ContainSingle()
+            .Which.InteriorTransparentPixelCount.Should().Be(4);
         var notAnalyzedPage = await reader.ListImagesByFilterAsync(
             runId, PngAuditImageFilters.NotAnalyzed, 0, 50, access);
-        notAnalyzedPage.Items.Should().HaveCount(9);
+        notAnalyzedPage.Items.Should().HaveCount(8);
         notAnalyzedPage.Items.Should().NotContain(
-            image => image.Classification == PngAuditImageClassifications.WebpComparisonFailed,
-            "a failed WebP comparison still decoded and inspected the PNG");
+            image => image.Classification
+                == PngAuditImageClassifications.ComparisonUnavailable,
+            "an unavailable comparison still decoded and inspected the PNG");
         var notPngPage = await reader.ListImagesByFilterAsync(
             runId, PngAuditImageFilters.NotPng, 0, 50, access);
         notPngPage.Items.Should().ContainSingle();
         var resultSummary = await reader.GetResultSummaryAsync(runId, access);
         resultSummary.Should().Be(new PngAuditResultSummaryView(
             11,
-            15,
+            14,
             5,
+            2,
             1,
-            3,
-            1,
-            1,
-            15));
+            0,
+            0,
+            0,
+            0,
+            2,
+            14));
         (notAnalyzedPage.Items.Count + notPngPage.Items.Count).Should().Be(
             resultSummary.SkippedOrNotAnalyzed - storedRun.DiscoverySkipCount,
             "the two non-analyzed filters must partition the images the summary excludes");
@@ -322,31 +344,37 @@ internal static class PngAuditPersistenceAssertions
         PngAnalysisProfiles.Analyzer,
         PngAnalysisProfiles.Comparison);
 
+    private static PngTransparencyFacts Opaque() => new(100, 0, 0, 0, 0, byte.MaxValue);
+
     private static PngAuditResultBatch ResultBatch(string endpointUrl)
     {
-        var factsOpaque = new PngImageFacts(10, 10, 1, 100, 0);
-        var candidate = PngAnalysisResult.Compared(
-            factsOpaque,
-            new PngComparisonMetrics(1000, 900, 700),
-            new PngRecommendationThresholds(10, 100));
-        var below = PngAnalysisResult.Compared(
-            factsOpaque,
-            new PngComparisonMetrics(1000, 900, 850),
-            new PngRecommendationThresholds(20, 200));
+        var factsOpaque = new PngImageFacts(
+            10, 10, 1, 100, 8, 2, Opaque());
+        var factsTransparentBackground = new PngImageFacts(
+            10, 10, 1, 100, 8, 6,
+            new PngTransparencyFacts(100, 10, 40, 36, 4, 0));
+        var factsHighBitDepth = new PngImageFacts(
+            10, 10, 1, 100, 16, 6,
+            new PngTransparencyFacts(100, 5, 0, 0, 0, 200));
         var analyses = new PngAnalysisResult[]
         {
             PngAnalysisResult.NotPng(500, "JPEG"),
             PngAnalysisResult.Failed(PngImageAnalysisClassification.IdentificationFailed, 600),
-            PngAnalysisResult.Failed(PngImageAnalysisClassification.UnsupportedBitDepth, 700),
             PngAnalysisResult.Failed(PngImageAnalysisClassification.DimensionsExceeded, 800),
             PngAnalysisResult.Failed(PngImageAnalysisClassification.PixelLimitExceeded, 900),
             PngAnalysisResult.Failed(PngImageAnalysisClassification.DecodedMemoryExceeded, 1000),
-            PngAnalysisResult.Animated(1100, new PngImageFacts(10, 10, 2, 100, null)),
             PngAnalysisResult.Failed(PngImageAnalysisClassification.DecodeFailed, 1200),
-            PngAnalysisResult.Transparent(1300, new PngImageFacts(10, 10, 1, 100, 10)),
-            PngAnalysisResult.ComparisonFailed(1400, factsOpaque),
-            candidate,
-            below
+            PngAnalysisResult.Animated(1100, new PngImageFacts(10, 10, 2, 100, 8, 6, null)),
+            PngAnalysisResult.HighBitDepth(700, factsHighBitDepth),
+            PngAnalysisResult.ColorProfileUnsupported(1400, factsOpaque),
+            PngAnalysisResult.ComparisonUnavailable(
+                1000,
+                factsOpaque,
+                new PngComparisonMetrics(1000, 900, 700)),
+            PngAnalysisResult.ComparisonUnavailable(
+                1300,
+                factsTransparentBackground,
+                new PngComparisonMetrics(1300, 1200, 800))
         };
         var images = new List<PngAuditImageRecord>
         {
@@ -375,7 +403,8 @@ internal static class PngAuditPersistenceAssertions
             analysis)));
 
         var candidateIdentity = images.Single(image =>
-            image.Classification == PngAuditImageClassifications.OpaqueWebpCandidate).Image.IdentityHash;
+            image.Classification == PngAuditImageClassifications.ComparisonUnavailable
+            && image.Facts?.UsesTransparency is true).Image.IdentityHash;
         return new(
             images,
             [
@@ -815,47 +844,58 @@ internal static class PngAuditPersistenceAssertions
 
     private static async Task VerifyStateInvariantsAsync(string connectionString, Guid runId)
     {
+        const string opaqueFacts = "10, 10, 1, 100, 8, 2, FALSE, 0, 0, 0, 0, 0, 0, 255";
+        const string noFacts =
+            "NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL";
         await ExpectConstraintAsync(connectionString, ResultInsert(
             runId, "animated-invalid", "AnimatedPng",
-            "200, 1000, 10, 10, 1, 100, FALSE, 0, 0"),
+            $"200, 1000, {opaqueFacts}"),
             "ck_png_audit_image_result_state");
         await ExpectConstraintAsync(connectionString, ResultInsert(
             runId, "animated-missing-facts", "AnimatedPng",
-            "200, 1000, NULL, NULL, NULL, NULL, NULL, NULL, NULL"),
+            $"200, 1000, {noFacts}"),
             "ck_png_audit_image_result_state");
         await ExpectConstraintAsync(connectionString, ResultInsert(
-            runId, "transparent-invalid", "UsesTransparency",
-            "200, 1000, 10, 10, 1, 100, FALSE, 0, 0"),
+            runId, "comparison-multiframe", "ComparisonUnavailable",
+            "200, 1000, 10, 10, 2, 100, 8, 6, TRUE, 10, 10.0000, 10, 0, 0, 0, 0"),
             "ck_png_audit_image_result_state");
         await ExpectConstraintAsync(connectionString, ResultInsert(
             runId, "not-png-invalid", "NotPng",
-            "200, 1000, NULL, NULL, NULL, NULL, NULL, NULL, NULL",
+            $"200, 1000, {noFacts}",
             "'PNG'"),
             "ck_png_audit_image_result_state");
         await ExpectConstraintAsync(connectionString, ResultInsert(
             runId, "transport-invalid", "NotPng",
-            "NULL, 1000, NULL, NULL, NULL, NULL, NULL, NULL, NULL",
+            $"NULL, 1000, {noFacts}",
             "'JPEG'"),
             "ck_png_audit_image_result_transport");
         await ExpectConstraintAsync(connectionString, ResultInsert(
-            runId, "transparency-invalid", "UsesTransparency",
-            "200, 1000, 10, 10, 1, 100, TRUE, 0, 0"),
+            runId, "transparency-flag-mismatch", "ComparisonUnavailable",
+            "200, 1000, 10, 10, 1, 100, 8, 6, TRUE, 0, 0, 0, 0, 0, 0, 255"),
             "ck_png_audit_image_result_transparency");
+        await ExpectConstraintAsync(connectionString, ResultInsert(
+            runId, "transparency-region-mismatch", "ComparisonUnavailable",
+            "200, 1000, 10, 10, 1, 100, 8, 6, TRUE, 10, 10.0000, 0, 10, 3, 3, 0"),
+            "ck_png_audit_image_result_transparency");
+        await ExpectConstraintAsync(connectionString, ResultInsert(
+            runId, "bit-depth-invalid", "ComparisonUnavailable",
+            "200, 1000, 10, 10, 1, 100, 7, 6, FALSE, 0, 0, 0, 0, 0, 0, 255"),
+            "ck_png_audit_image_result_facts");
         await ExpectConstraintAsync(connectionString,
             $"UPDATE web_health.png_audit_image_result SET height = NULL "
-            + $"WHERE run_id = '{runId}' AND classification = 'UsesTransparency';",
+            + $"WHERE run_id = '{runId}' AND classification = 'ComparisonUnavailable';",
             "ck_png_audit_image_result_facts");
         await ExpectConstraintAsync(connectionString,
             $"UPDATE web_health.png_audit_image_result SET original_savings_percent = 0 "
-            + $"WHERE run_id = '{runId}' AND classification = 'OpaqueWebpCandidate';",
+            + $"WHERE run_id = '{runId}' AND classification = 'ComparisonUnavailable';",
             "ck_png_audit_image_result_comparison");
         await ExpectConstraintAsync(connectionString,
-            $"UPDATE web_health.png_audit_image_result SET suggested_format = NULL "
-            + $"WHERE run_id = '{runId}' AND classification = 'OpaqueWebpCandidate';",
+            $"UPDATE web_health.png_audit_image_result SET suggested_format = 'WebP' "
+            + $"WHERE run_id = '{runId}' AND classification = 'ComparisonUnavailable';",
             "ck_png_audit_image_result_recommendation");
         await ExpectConstraintAsync(connectionString,
             $"UPDATE web_health.png_audit_image_result SET final_identity_hash = NULL "
-            + $"WHERE run_id = '{runId}' AND classification = 'OpaqueWebpCandidate';",
+            + $"WHERE run_id = '{runId}' AND classification = 'ComparisonUnavailable';",
             "ck_png_audit_image_result_hashes");
         await ExpectConstraintAsync(connectionString,
             $"UPDATE web_health.png_audit_run SET status = 'Completed' WHERE id = '{runId}';",
@@ -884,9 +924,11 @@ internal static class PngAuditPersistenceAssertions
         INSERT INTO web_health.png_audit_image_result
             (id, run_id, image_display_url, image_identity_hash, final_display_url,
              final_identity_hash, declared_content_type, detected_format, http_status_code,
-             response_bytes, width, height, frame_count, pixel_count, uses_transparency,
-             transparent_pixel_count, transparent_pixel_percent, classification,
-             recommendation, recorded_at)
+             response_bytes, width, height, frame_count, pixel_count, bit_depth, color_type,
+             uses_transparency, transparent_pixel_count, transparent_pixel_percent,
+             semi_transparent_pixel_count, fully_transparent_pixel_count,
+             background_transparent_pixel_count, interior_transparent_pixel_count, min_alpha,
+             classification, recommendation, recorded_at)
         VALUES ('{Guid.NewGuid()}', '{runId}', 'https://invalid.example/{identity}.png',
                 decode('{Hash(identity)}', 'hex'), 'https://invalid.example/{identity}.png',
                 decode('{Hash("final-" + identity)}', 'hex'), 'image/png', {detectedFormat},
@@ -937,10 +979,13 @@ internal static class PngAuditPersistenceAssertions
             "id", "run_id", "image_display_url", "image_identity_hash", "final_display_url",
             "final_identity_hash", "declared_content_type", "detected_format", "http_status_code",
             "response_bytes", "width", "height", "frame_count", "pixel_count",
+            "bit_depth", "color_type",
             "uses_transparency", "transparent_pixel_count", "transparent_pixel_percent",
+            "semi_transparent_pixel_count", "fully_transparent_pixel_count",
+            "background_transparent_pixel_count", "interior_transparent_pixel_count", "min_alpha",
             "classification", "reason_code", "recommendation", "suggested_format",
-            "normalized_png_bytes", "candidate_webp_bytes", "original_savings_bytes",
-            "original_savings_percent", "normalized_savings_bytes", "normalized_savings_percent",
+            "optimized_png_bytes", "candidate_webp_bytes", "original_savings_bytes",
+            "original_savings_percent", "reference_savings_bytes", "reference_savings_percent",
             "recorded_at");
         columns["png_audit_image_source"].Should().BeEquivalentTo(
             "id", "image_result_id", "source_page_display_url", "source_page_identity_hash",

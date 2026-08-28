@@ -503,6 +503,7 @@ public sealed record PngAuditImageResultView(
     long? SemiTransparentPixelCount,
     long? FullyTransparentPixelCount,
     long? BackgroundTransparentPixelCount,
+    long? InteriorTransparentPixelCount,
     long? PixelCount,
     int? MinAlpha,
     string Recommendation,

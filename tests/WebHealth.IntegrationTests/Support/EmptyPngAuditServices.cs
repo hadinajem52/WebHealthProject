@@ -90,7 +90,7 @@ internal sealed class EmptyPngAuditReader : IPngAuditReader
         CancellationToken cancellationToken = default) =>
         Task.FromResult<PngAuditResultSummaryView?>(
             runId == RunningRunId || runId == CompletedRunId
-                ? new(3, 1, 1, 0, 1, 1, 0, 0)
+                ? new(3, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0)
                 : null);
 
     public Task<PngAuditPage<PngAuditImageSourceView>> ListSourcesAsync(
@@ -140,14 +140,20 @@ internal sealed class EmptyPngAuditReader : IPngAuditReader
         Guid.Parse("6f1c9a20-0000-0000-0000-000000000043"),
         "https://example.com/assets/logo.png?token=REDACTED",
         "https://example.com/assets/logo.png?token=REDACTED",
-        PngAuditImageClassifications.OpaqueWebpCandidate,
+        PngAuditImageClassifications.VerifiedWebpCandidate,
         null,
         200,
         188416,
         1200,
         600,
         1,
-        false,
+        true,
+        4096,
+        432000,
+        424000,
+        8000,
+        720000,
+        0,
         PngAuditRecommendations.LosslessWebp,
         114688,
         73728,

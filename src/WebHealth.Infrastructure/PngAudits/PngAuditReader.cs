@@ -97,6 +97,7 @@ internal sealed class PngAuditReader(
                 result.SemiTransparentPixelCount,
                 result.FullyTransparentPixelCount,
                 result.BackgroundTransparentPixelCount,
+                result.InteriorTransparentPixelCount,
                 result.PixelCount,
                 result.MinAlpha,
                 result.Recommendation,

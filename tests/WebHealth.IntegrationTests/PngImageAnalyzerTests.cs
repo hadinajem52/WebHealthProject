@@ -212,6 +212,40 @@ public sealed class PngImageAnalyzerTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_TreatsAntiAliasedCornersAsNotATransparentBackground()
+    {
+        var result = await CreateAnalyzer().AnalyzeAsync(CreateRoundedCornerPng(241));
+
+        var transparency = result.Image!.Transparency!;
+        transparency.UsesTransparency.Should().BeTrue();
+        transparency.SemiTransparentPixelCount.Should().Be(4);
+        transparency.FullyTransparentPixelCount.Should().Be(0);
+        transparency.BackgroundTransparentPixelCount.Should().Be(0);
+        transparency.MinAlpha.Should().Be(241);
+        transparency.BackgroundCoveragePercent.Should().Be(0m);
+        transparency.HasTransparentBackground(1.0m).Should().BeFalse(
+            "anti-aliased corners contain no fully transparent pixels");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_SeparatesBorderConnectedBackgroundFromInteriorHoles()
+    {
+        var result = await CreateAnalyzer().AnalyzeAsync(CreateCutOutLogoPng());
+
+        var transparency = result.Image!.Transparency!;
+        transparency.FullyTransparentPixelCount.Should().Be(
+            transparency.BackgroundTransparentPixelCount
+            + transparency.InteriorTransparentPixelCount);
+        transparency.BackgroundTransparentPixelCount.Should().Be(64);
+        transparency.InteriorTransparentPixelCount.Should().Be(
+            4,
+            "an enclosed hole is not part of the background");
+        transparency.HasTransparentBackground(1.0m).Should().BeTrue();
+        result.Comparison.Should().NotBeNull(
+            "a transparent background must still reach the comparison path");
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_HandlesSixteenBitAlphaJustBelowFullyOpaque()
     {
         var result = await CreateAnalyzer().AnalyzeAsync(
@@ -382,6 +416,49 @@ public sealed class PngImageAnalyzerTests
         {
             FileFormat = WebpFileFormatType.Lossless,
             Quality = 100,
+            SkipMetadata = true
+        });
+        return output.ToArray();
+    }
+
+    private static byte[] CreateRoundedCornerPng(byte cornerAlpha)
+    {
+        using var image = new Image<Rgba32>(10, 10, new Rgba32(20, 40, 60, byte.MaxValue));
+        image[0, 0] = new Rgba32(20, 40, 60, cornerAlpha);
+        image[9, 0] = new Rgba32(20, 40, 60, cornerAlpha);
+        image[0, 9] = new Rgba32(20, 40, 60, cornerAlpha);
+        image[9, 9] = new Rgba32(20, 40, 60, cornerAlpha);
+        return EncodePng(image);
+    }
+
+    private static byte[] CreateCutOutLogoPng()
+    {
+        using var image = new Image<Rgba32>(10, 10, new Rgba32(0, 0, 0, 0));
+        for (var y = 2; y < 8; y++)
+        {
+            for (var x = 2; x < 8; x++)
+            {
+                image[x, y] = new Rgba32(200, 120, 40, byte.MaxValue);
+            }
+        }
+        for (var y = 4; y < 6; y++)
+        {
+            for (var x = 4; x < 6; x++)
+            {
+                image[x, y] = new Rgba32(0, 0, 0, 0);
+            }
+        }
+        return EncodePng(image);
+    }
+
+    private static byte[] EncodePng(Image<Rgba32> image)
+    {
+        using var output = new MemoryStream();
+        image.SaveAsPng(output, new PngEncoder
+        {
+            BitDepth = PngBitDepth.Bit8,
+            ColorType = PngColorType.RgbWithAlpha,
+            CompressionLevel = PngCompressionLevel.BestCompression,
             SkipMetadata = true
         });
         return output.ToArray();
