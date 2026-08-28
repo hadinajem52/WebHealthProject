@@ -73,11 +73,8 @@ public sealed class PngAuditsController(
             return Accepted(new AjaxFragmentViewModel(
                 message,
                 "information",
-                StatusUrl: Url.Action(nameof(Status), new
-                {
-                    endpointId,
-                    runId = result.RunId
-                }),
+                RefreshUrl: Url.Action(nameof(Index), new { endpointId }),
+                StatusUrl: Url.Action(nameof(LiveStatus), new { id = result.RunId }),
                 RunId: result.RunId));
         }
 
@@ -158,6 +155,63 @@ public sealed class PngAuditsController(
             GetAccess(),
             cancellationToken);
         return model is null ? this.NotFoundRecord("PNG image audit run") : View(model);
+    }
+
+    [HttpGet("Runs/{id:guid}/Status")]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public async Task<IActionResult> LiveStatus(
+        Guid id,
+        string? version,
+        CancellationToken cancellationToken = default)
+    {
+        var run = await pngAuditReader.GetLiveStatusAsync(id, GetAccess(), cancellationToken);
+        if (run is null)
+        {
+            return this.NotFoundRecord("PNG image audit run");
+        }
+
+        var currentVersion = PngAuditDisplay.LiveVersion(run);
+        if (string.Equals(version, currentVersion, StringComparison.Ordinal))
+        {
+            return NoContent();
+        }
+
+        return Json(new
+        {
+            active = PngAuditRunStatuses.IsActive(run.Status),
+            version = currentVersion,
+            status = PngAuditDisplay.DescribeStatus(run.Status),
+            pages = run.PagesDiscovered,
+            resultCount = run.ImagesDiscovered,
+            recommendations = run.RecommendationCount
+        });
+    }
+
+    [HttpGet("Runs/{id:guid}/Results")]
+    public async Task<IActionResult> Results(
+        Guid id,
+        string? filter = null,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccess();
+        var run = await pngAuditReader.GetLiveStatusAsync(id, access, cancellationToken);
+        if (run is null)
+        {
+            return this.NotFoundRecord("PNG image audit run");
+        }
+
+        var selectedFilter = PngAuditImageFilters.Normalize(filter);
+        var images = await pngAuditReader.ListImagesByFilterAsync(
+            id,
+            selectedFilter,
+            Math.Max(0, offset),
+            ImagesPerPage,
+            access,
+            cancellationToken);
+        return PartialView(
+            "_ImageResults",
+            new PngAuditResultsRegionViewModel(id, selectedFilter, images));
     }
 
     private async Task<PngAuditIndexViewModel?> BuildIndexModelAsync(

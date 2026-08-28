@@ -5,7 +5,10 @@
     ViewData.SetBreadcrumbs(new BreadcrumbItem("PNG image audit"));
     var activeRun = Model.ActiveRun;
     var statusUrl = Model.SelectedEndpointId is { } endpointId && activeRun is not null
-        ? Url.Action("Status", "PngAudits", new { endpointId, runId = activeRun.RunId })
+        ? Url.Action("LiveStatus", "PngAudits", new { id = activeRun.RunId })
+        : null;
+    var finalUrl = Model.SelectedEndpointId is { } selectedEndpointId && activeRun is not null
+        ? Url.Action("Index", "PngAudits", new { endpointId = selectedEndpointId })
         : null;
 }
 
@@ -93,11 +96,11 @@
 
     <div id="png-audit-results"
          class="stack"
-         data-run-status
-         data-run-active="@(activeRun is null ? "false" : "true")"
-         data-run-url="@statusUrl"
+         data-live-run-status-url="@statusUrl"
+         data-live-run-final-url="@finalUrl"
+         data-live-run-version="@(activeRun is null ? null : PngAuditDisplay.LiveVersion(activeRun))"
          data-run-also="#png-audit-run-action"
-         data-run-lifetime="1860000">
+         data-live-run-lifetime="1860000">
         @if (Model.SelectedEndpointId is null)
         {
             <section class="card">
@@ -180,11 +183,12 @@
                                         @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                             tone,
                                             PngAuditDisplay.DescribeStatus(run),
-                                            PngAuditDisplay.DescribeStatusDetail(run)))
+                                            PngAuditDisplay.DescribeStatusDetail(run),
+                                            LiveKey: PngAuditRunStatuses.IsActive(run.Status) ? "status" : null))
                                     </td>
-                                    <td data-label="Pages">@run.PagesDiscovered</td>
-                                    <td data-label="Unique images">@run.ImagesDiscovered</td>
-                                    <td data-label="WebP candidates">@run.RecommendationCount</td>
+                                    <td data-label="Pages"><span data-live="@(PngAuditRunStatuses.IsActive(run.Status) ? "pages" : null)">@run.PagesDiscovered</span></td>
+                                    <td data-label="Unique images"><span data-live="@(PngAuditRunStatuses.IsActive(run.Status) ? "resultCount" : null)">@run.ImagesDiscovered</span></td>
+                                    <td data-label="WebP candidates"><span data-live="@(PngAuditRunStatuses.IsActive(run.Status) ? "recommendations" : null)">@run.RecommendationCount</span></td>
                                     <td class="data-table__action">
                                         <a asp-action="Run" asp-route-id="@run.RunId">Open run</a>
                                     </td>
@@ -200,5 +204,5 @@
 
 @section Scripts {
     <script src="~/js/poller.js" asp-append-version="true"></script>
-    <script src="~/js/run-status.js" asp-append-version="true"></script>
+    <script src="~/js/live-run-status.js" asp-append-version="true"></script>
 }

@@ -145,9 +145,104 @@ must still be encoded and verified by the real engine.
 Width, Height, FrameCount, PixelCount
 BitDepth, ColorType
 TransparentPixelCount, UsesTransparency
+MinAlpha, SemiTransparentPixelCount, FullyTransparentPixelCount
+BackgroundTransparentPixelCount, InteriorTransparentPixelCount
 ```
 
 Transparency is a **fact**, never a terminal outcome.
+
+### Transparency is reported as evidence, not as a verdict
+
+`UsesTransparency` (`any pixel with A < 255`) is correct but coarse, and reads as a false positive
+when the alpha comes from anti-aliased rounded corners. Three images in the section 2 corpus carry
+550–772 pixels at a single alpha value of 241 or 242, every one within 3px of an edge and split
+evenly across four quadrants. They are visually opaque.
+
+The fix is to **surface the measurement instead of rendering a judgment**. The three new facts are
+counted in the pixel walk that already runs at
+[PngImageAnalyzer.cs:237](../../src/WebHealth.Infrastructure/PngAudits/PngImageAnalyzer.cs#L237) —
+no second pass, no extra decode. The UI then states what was measured:
+
+```text
+772 semi-transparent pixels (0.7%), min alpha 241, no fully transparent pixels
+9,305 fully transparent pixels (60%), alpha range 0–255
+```
+
+The first line answers "does this really use transparency?" without the tool guessing what the
+reader meant by *needs*.
+
+**Rejected: a `None` / `Incidental` / `Material` transparency classifier.** Recorded here so it is
+not re-proposed:
+
+1. It fails on the motivating images. Anti-aliased rounded corners are *semi-transparent*
+   (`0 < A < 255`) with zero fully transparent pixels, which any such rule treats as the strongest
+   evidence of genuine transparency — labelling the complained-about images **more** emphatically
+   than the current code does.
+2. "Does this image *need* transparency?" has no ground truth, so it cannot be verified the way the
+   WebP claim can. It would reintroduce exactly the kind of unverifiable heuristic this plan exists
+   to remove.
+3. Neither a percentage threshold nor a region-topology rule converges: a legitimate logo may have a
+   tiny transparent area, and large transparent padding may be irrelevant.
+4. Connected-component labelling over up to 40 megapixels costs real time in a pipeline already
+   spending ~47% of its runtime on encoding, to produce a label that gates nothing.
+
+Semi-transparent and fully-transparent counts are worth recording **as facts**. They are not inputs
+to a classifier.
+
+### Transparent-background detection
+
+A *structural* question can be answered where a subjective one cannot. "Does this image have a
+transparent background?" has an operational definition and is testable against fixtures; "does this
+image need transparency?" has neither. The rule:
+
+> **Transparent background = a fully-transparent (`A == 0`) region connected to the image border.**
+
+Measured over the section 2 corpus with a border flood fill:
+
+| Images | border-connected `A=0` | fully transparent | semi-transparent |
+| --- | ---: | ---: | ---: |
+| 11 opaque photos | 0.00% | 0.00% | 0.00% |
+| 3 anti-aliased rounded corners | **0.00%** | **0.00%** | 0.52–0.73% |
+| Audi Tadawul logo | **60.58%** | 63.04% | 19.19% |
+
+The separation is 0.00% against 60.58%. Any cutoff between 0.1% and 50% yields the same answer, so
+this is not a threshold-tuning exercise. Use a named constant,
+`MinBackgroundCoveragePercent = 1.0`, rather than an unexplained literal.
+
+The four cases separate structurally:
+
+| Case | `A == 0` present | border-connected | Verdict |
+| --- | --- | --- | --- |
+| Transparent background | yes, large | yes | **background** |
+| Semi-transparent shadow | only if a background is also present | — | shadow, not a background by itself |
+| Anti-aliased edges | **none** | none | not a background |
+| Single accidental semi-transparent pixel | **none** | none | not a background |
+
+Cases 3 and 4 fall out without any topology: **anti-aliased corners contain zero fully-transparent
+pixels.** They are purely semi-transparent at alpha 241/242. A background is *fully* transparent.
+That one distinction does most of the work.
+
+Record both regions from the same single fill:
+
+* `BackgroundTransparentPixelCount` — border-connected
+* `InteriorTransparentPixelCount` — `A == 0` not reachable from the border
+
+The logo's 364 interior pixels are the counter-holes in *a*, *d*, *o*. That covers the case the
+border rule alone would miss: a logo bleeding to all four edges whose only transparency is inside
+letterforms.
+
+**Cost.** `FullyTransparentPixelCount == 0` is a free precondition — skip the fill entirely. On the
+section 2 corpus that is 14 of 15 images doing no extra work. Otherwise it is one O(pixels) pass
+over an alpha channel already in memory.
+
+**Known limits, accepted:** a deliberate transparent frame around a photo reads as a background
+(defensibly correct); a whole-image alpha fade reads as no background (correct — it is not one); a
+stray transparent corner pixel is excluded by the coverage floor.
+
+**This remains a label.** It must never gate WebP eligibility. The Audi Tadawul logo has a genuine
+transparent background *and* is a verified WebP candidate at 35.6%; those are independent answers.
+Because the rule gates nothing, an error costs a word, not a recommendation — which is precisely
+why it is admissible here and the `Material` classifier is not.
 
 ## 4.2 Classifications
 
@@ -268,7 +363,18 @@ Column changes in that migration:
 * `normalized_png_bytes` → `optimized_png_bytes`
 * `normalized_savings_bytes` / `normalized_savings_percent` → `reference_savings_*`
 * add `bit_depth`, `color_type`
+* add `min_alpha`, `semi_transparent_pixel_count`, `fully_transparent_pixel_count` (section 4.1)
+* add `background_transparent_pixel_count`, `interior_transparent_pixel_count` (section 4.1)
 * add `comparison_profile_version` if per-row provenance is wanted
+
+`ck_..._transparency` must be extended to keep the new counts consistent with the existing ones:
+
+```text
+semi_transparent_pixel_count + fully_transparent_pixel_count = transparent_pixel_count
+background_transparent_pixel_count + interior_transparent_pixel_count = fully_transparent_pixel_count
+min_alpha between 0 and 255, and = 255 exactly when uses_transparency is false
+all counts null together
+```
 
 The replacement constraints must be **as strict** as the originals for the new model. Their
 strictness is why the savings arithmetic has never been wrong; do not loosen them to make room.
@@ -314,6 +420,13 @@ Land the model change and the consolidated migration together.
 * Rewrite the five check constraints for the new model.
 * Extend `PngChunkInspector` to read `sRGB`, `gAMA`, `cHRM`, `cICP`, `iCCP` and record bit depth and
   colour type as facts.
+* Count `MinAlpha`, `SemiTransparentPixelCount`, and `FullyTransparentPixelCount` in the existing
+  pixel walk, and replace the bare `Uses transparency` label with the measured evidence
+  (section 4.1). No new pass and no classifier.
+* Add transparent-background detection: a border flood fill over `A == 0`, skipped entirely when
+  `FullyTransparentPixelCount == 0`, recording `BackgroundTransparentPixelCount` and
+  `InteriorTransparentPixelCount` with `MinBackgroundCoveragePercent = 1.0`. Label only — it must
+  not reach the comparison path.
 * Fix all **three** reader sites that assume transparency is terminal — this is the trap:
   * [PngAuditReader.cs:267](../../src/WebHealth.Infrastructure/PngAudits/PngAuditReader.cs#L267) —
     the filter must query `result.UsesTransparency == true`, not the classification
@@ -334,7 +447,10 @@ PNG optimization preferred → count where Recommendation == OptimizePng
 
 **Gate:** `scripts\run-database-foundation-tests.ps1` green; the migration's `Down` runs against a
 database populated with new-model rows; the transparency filter and summary agree with the persisted
-boolean on a seeded fixture containing a transparent compared row.
+boolean on a seeded fixture containing a transparent compared row; the anti-aliased rounded-corner
+fixture reports `semi = 772, fully = 0, min alpha = 241`, background coverage `0.00%`, **not a
+transparent background**; the cut-out logo fixture reports background coverage `60.58%` with
+`interior = 364` and **is** a transparent background — while still being eligible for comparison.
 
 ---
 
@@ -449,7 +565,7 @@ Built per phase, not all at once.
 
 | Phase | Fixtures added |
 | --- | --- |
-| 1 | palette 1/2/4/8-bit, palette + `tRNS`, grayscale 1/2/4/8-bit, grayscale-alpha, truecolor + `tRNS`, `sRGB`/`gAMA`/`cHRM`/`iCCP` variants |
+| 1 | palette 1/2/4/8-bit, palette + `tRNS`, grayscale 1/2/4/8-bit, grayscale-alpha, truecolor + `tRNS`, `sRGB`/`gAMA`/`cHRM`/`iCCP` variants, anti-aliased rounded corners (semi-transparent only, no fully transparent pixels), cut-out logo on a transparent background with interior counter-holes, logo bleeding to all four edges with interior transparency only, single stray transparent corner pixel |
 | 2 | opaque RGB, opaque RGBA, single semitransparent pixel, fully transparent with non-zero hidden RGB, transparent logo artwork, metadata-heavy, ICC-profiled |
 | 3 | palette and grayscale where an optimized PNG beats WebP |
 | 4 | 16-bit RGB, 16-bit RGBA with transparency |
@@ -482,10 +598,12 @@ verified reference comparison costs more. Bound it:
 
 1. skip comparison for animated and 16-bit images
 2. skip when the original is too small to satisfy `MinSavingsBytes`
-3. WebP first; optimized PNG only after WebP passes the original threshold
-4. one comparison active at a time (matches the existing analysis semaphore and `WorkerCount = 1`)
-5. per-image timeout
-6. later, cache on `SHA-256(source bytes) + comparison profile + threshold profile`
+3. skip the background flood fill when `FullyTransparentPixelCount == 0` — 14 of the 15 images in
+   the section 2 corpus
+4. WebP first; optimized PNG only after WebP passes the original threshold
+5. one comparison active at a time (matches the existing analysis semaphore and `WorkerCount = 1`)
+6. per-image timeout
+7. later, cache on `SHA-256(source bytes) + comparison profile + threshold profile`
 
 `MaxDuration` is 30 minutes and already binds far before `MaxUniqueImages = 500`. Re-measure the
 per-image budget after Phase 2 and revise `MaxDuration` or `ImageDecodeConcurrency` on evidence, not
@@ -501,6 +619,9 @@ in advance.
 * Recalculating historical v1 runs — they require a rerun
 * Animated PNG comparison
 * A colour-management subsystem beyond the section 3.3 decision table
+* Any classifier that judges whether transparency is *meaningful* or *needed* — see section 4.1 for
+  why this was rejected rather than deferred. Transparent-**background** detection is in scope and
+  is a different thing: structural, testable, and gating nothing.
 
 ---
 

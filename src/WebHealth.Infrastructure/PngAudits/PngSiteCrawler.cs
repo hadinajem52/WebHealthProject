@@ -12,12 +12,14 @@ internal sealed class PngSiteCrawler(
 {
     public Task<PngSiteDiscoveryResult> DiscoverAsync(
         PngSiteCrawlRequest request,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        Func<PngSiteDiscoveryProgress, CancellationToken, ValueTask>? progress = null) =>
         new PngSiteDiscoveryExecution(
             request,
             fetcher,
             discoveryExtractor,
-            timeProvider).RunAsync(cancellationToken);
+            timeProvider,
+            progress).RunAsync(cancellationToken);
 }
 
 internal sealed class PngSiteDiscoveryExecution
@@ -30,6 +32,7 @@ internal sealed class PngSiteDiscoveryExecution
     private readonly PngAssetScope _assetScope;
     private readonly PngImageLedger _imageLedger;
     private readonly DateTimeOffset _deadline;
+    private readonly Func<PngSiteDiscoveryProgress, CancellationToken, ValueTask>? _progress;
     private readonly HashSet<string> _inspectedPageIdentities = new(StringComparer.Ordinal);
     private readonly List<PngDiscoveredPage> _pages = [];
     private readonly List<PngDiscoverySkip> _skips = [];
@@ -43,13 +46,15 @@ internal sealed class PngSiteDiscoveryExecution
         PngSiteCrawlRequest request,
         ISiteAnalysisFetcher fetcher,
         IHtmlDocumentDiscoveryExtractor discoveryExtractor,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        Func<PngSiteDiscoveryProgress, CancellationToken, ValueTask>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         _request = request;
         _fetcher = fetcher;
         _discoveryExtractor = discoveryExtractor;
         _timeProvider = timeProvider;
+        _progress = progress;
         _httpAttempts = Math.Max(0, request.ConsumedHttpAttempts);
         _totalPageBytes = Math.Max(0, request.ConsumedPageBytes);
 
@@ -112,6 +117,12 @@ internal sealed class PngSiteDiscoveryExecution
             if (!CanStartRequest()) break;
 
             await VisitAsync(item, cancellationToken);
+            if (_progress is not null)
+            {
+                await _progress(
+                    new(_pages.Count, _httpAttempts, _totalPageBytes),
+                    cancellationToken);
+            }
         }
     }
 

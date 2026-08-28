@@ -1,0 +1,135 @@
+@model PngAuditResultsRegionViewModel
+@using WebHealth.Application.PngAudits
+
+<section id="png-image-results" class="card" aria-labelledby="png-results-heading" data-ajax-region>
+    <div class="page-intro">
+        <div>
+            <h2 class="card__title" id="png-results-heading">Image results</h2>
+            <p class="card__status" data-status="neutral">
+                @await Html.PartialAsync("_Icon", "filter")
+                <span>@PngAuditDisplay.DescribeFilter(Model.Filter)</span>
+            </p>
+        </div>
+    </div>
+
+    <nav class="segmented" aria-label="Image result filters">
+        @foreach (var filter in PngAuditImageFilters.Values)
+        {
+            var selected = filter == Model.Filter;
+            <a class="segmented__option"
+               aria-current="@(selected ? "page" : null)"
+               asp-action="Run"
+               asp-route-id="@Model.RunId"
+               asp-route-filter="@filter"
+               data-ajax-link
+               data-ajax-target="#ajax-page">
+                @PngAuditDisplay.DescribeFilter(filter)
+            </a>
+        }
+    </nav>
+
+    @if (Model.Images.Items.Count == 0)
+    {
+        @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
+            Model.Images.Offset == 0 ? "No images match this filter" : "No more image results",
+            Model.Images.Offset == 0
+                ? "Choose another filter to see the other recorded image outcomes."
+                : "You have reached the end of this result list.",
+            "reports"))
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="data-table audit-table">
+                <caption class="visually-hidden">Image results recorded by this PNG audit</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Image</th>
+                        <th scope="col">Used on</th>
+                        <th scope="col">Dimensions</th>
+                        <th scope="col">Current size</th>
+                        <th scope="col">Transparency</th>
+                        <th scope="col">Recommendation</th>
+                        <th scope="col">Lossless WebP size</th>
+                        <th scope="col">Potential saving</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var image in Model.Images.Items)
+                    {
+                        <tr>
+                            <td data-label="Image">
+                                <span class="target-url">@image.ImageDisplayUrl</span>
+                                @if (image.FinalDisplayUrl is { } finalUrl
+                                    && !string.Equals(finalUrl, image.ImageDisplayUrl, StringComparison.Ordinal))
+                                {
+                                    <span class="data-table__secondary target-url">Fetched as @finalUrl</span>
+                                }
+                            </td>
+                            <td data-label="Used on">
+                                @if (image.SourceCount == 0)
+                                {
+                                    <span>Not recorded</span>
+                                }
+                                else
+                                {
+                                    <span class="target-url">@image.FirstSourcePageDisplayUrl</span>
+                                    @if (image.SourceCount > 1)
+                                    {
+                                        <span class="data-table__secondary">+ @(image.SourceCount - 1) more reference@(image.SourceCount == 2 ? null : "s")</span>
+                                    }
+                                }
+                            </td>
+                            <td data-label="Dimensions">
+                                @(image.Width is { } width && image.Height is { } height
+                                    ? $"{width:N0} × {height:N0}"
+                                    : "Not measured")
+                            </td>
+                            <td data-label="Current size">@PngAuditDisplay.FormatBytes(image.ResponseBytes > 0 ? image.ResponseBytes : null)</td>
+                            <td data-label="Transparency">@PngAuditDisplay.DescribeTransparency(image)</td>
+                            <td data-label="Recommendation">
+                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                    PngAuditDisplay.ClassificationTone(image),
+                                    PngAuditDisplay.DescribeClassification(image)))
+                            </td>
+                            <td data-label="Lossless WebP size">@PngAuditDisplay.FormatBytes(image.CandidateWebpBytes)</td>
+                            <td data-label="Potential saving">@PngAuditDisplay.FormatSavings(image.OriginalSavingsBytes, image.OriginalSavingsPercent)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <nav class="pagination" aria-label="Image result pages">
+            <span>Showing @(Model.Images.Offset + 1)–@(Model.Images.Offset + Model.Images.Items.Count)</span>
+            <span class="pagination__actions">
+                @if (Model.Images.Offset > 0)
+                {
+                    <a class="button button--secondary"
+                       asp-action="Run"
+                       asp-route-id="@Model.RunId"
+                       asp-route-filter="@Model.Filter"
+                       asp-route-offset="@Model.PreviousOffset"
+                       data-ajax-link
+                       data-ajax-target="#ajax-page">
+                        @await Html.PartialAsync("_Icon", "arrow-left")
+                        <span>Previous</span>
+                    </a>
+                }
+                @if (Model.Images.HasMore)
+                {
+                    <a class="button button--secondary"
+                       asp-action="Run"
+                       asp-route-id="@Model.RunId"
+                       asp-route-filter="@Model.Filter"
+                       asp-route-offset="@Model.NextOffset"
+                       data-ajax-link
+                       data-ajax-target="#ajax-page">
+                        <span>Next</span>
+                        @await Html.PartialAsync("_Icon", "arrow-right")
+                    </a>
+                }
+            </span>
+        </nav>
+    }
+</section>

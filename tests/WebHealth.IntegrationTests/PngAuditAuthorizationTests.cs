@@ -82,7 +82,8 @@ public sealed class PngAuditAuthorizationTests(WebHealthWebApplicationFactory fa
         var payload = await response.Content.ReadAsStringAsync();
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
-        payload.Should().Contain("/Tools/PngImages/Status");
+        payload.Should().Contain($"/Tools/PngImages?endpointId={EndpointId}");
+        payload.Should().Contain($"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Status");
         payload.Should().Contain(EmptyPngAuditReader.RunningRunId.ToString());
         runner.Requested.Should().ContainSingle().Which.Should().Be(EndpointId);
     }
@@ -100,7 +101,7 @@ public sealed class PngAuditAuthorizationTests(WebHealthWebApplicationFactory fa
     }
 
     [Fact]
-    public async Task ActiveStatusUsesAcceptedAndDeclaresTheExistingPollerContract()
+    public async Task ActiveStatusUsesAcceptedAndDeclaresTheLivePollerContract()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
 
@@ -110,7 +111,7 @@ public sealed class PngAuditAuthorizationTests(WebHealthWebApplicationFactory fa
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         html.Should().Contain("id=\"png-audit-results\"");
-        html.Should().Contain("data-run-active=\"true\"");
+        html.Should().Contain($"data-live-run-status-url=\"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Status\"");
         html.Should().Contain("data-run-also=\"#png-audit-run-action\"");
     }
 
@@ -142,6 +143,34 @@ public sealed class PngAuditAuthorizationTests(WebHealthWebApplicationFactory fa
         var response = await client.GetAsync($"/Tools/PngImages/Runs/{Guid.NewGuid()}");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryRole))]
+    public async Task LiveRunEndpointsAreReadableByEveryRegistryPersona(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var status = await client.GetAsync(
+            $"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Status");
+        var results = await client.GetAsync(
+            $"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Results");
+
+        status.StatusCode.Should().Be(HttpStatusCode.OK);
+        results.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task UnknownLiveRunEndpointsAreNotFound()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+        var runId = Guid.NewGuid();
+
+        var status = await client.GetAsync($"/Tools/PngImages/Runs/{runId}/Status");
+        var results = await client.GetAsync($"/Tools/PngImages/Runs/{runId}/Results");
+
+        status.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        results.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     private static async Task<HttpResponseMessage> PostRunAsync(

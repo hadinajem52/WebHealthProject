@@ -15,6 +15,20 @@ internal sealed class PngAuditReader(
     private const int MaxRunsListed = 50;
     private const int MaxPageSize = 250;
 
+    public async Task<PngAuditLiveStatus?> GetLiveStatusAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        await VisibleRuns(access)
+            .Where(run => run.Id == runId)
+            .Select(run => new PngAuditLiveStatus(
+                run.Status,
+                run.PagesDiscovered,
+                run.ImagesDiscovered,
+                run.ImagesAnalyzed,
+                run.RecommendationCount))
+            .SingleOrDefaultAsync(cancellationToken);
+
     public async Task<PngAuditRunView?> FindRunAsync(
         Guid runId,
         RegistryAccessContext access,

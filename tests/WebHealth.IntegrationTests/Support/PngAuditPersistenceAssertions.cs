@@ -48,6 +48,16 @@ internal static class PngAuditPersistenceAssertions
         claim!.AttemptCount.Should().Be(1);
         claim.Snapshot.Should().BeEquivalentTo(snapshot);
         (await sink.HeartbeatAsync(runId, claim.LeaseToken)).Should().BeTrue();
+        (await sink.UpdateCrawlProgressAsync(
+            runId, claim.LeaseToken, new(2, 10, 2048))).Should().BeTrue();
+        (await sink.UpdateCrawlProgressAsync(
+            runId, claim.LeaseToken, new(1, 8, 1024))).Should().BeTrue();
+        database.ChangeTracker.Clear();
+        var liveProgress = await database.PngAuditRuns.AsNoTracking()
+            .SingleAsync(run => run.Id == runId);
+        liveProgress.PagesDiscovered.Should().Be(2);
+        liveProgress.HttpAttempts.Should().Be(10);
+        liveProgress.TotalPageBytes.Should().Be(2048);
 
         var batch = ResultBatch(endpointUrl);
         (await sink.RecordBatchAsync(runId, claim.LeaseToken, batch)).Should().BeTrue();
@@ -113,6 +123,9 @@ internal static class PngAuditPersistenceAssertions
             new PngAuditRunTotals(
                 21, 15, 12, 1, 5, 18, 4096, totalImageBytes, true, true, false)));
         (await sink.CompleteAsync(runId, claim.LeaseToken, totals)).Should().BeTrue();
+        (await sink.UpdateCrawlProgressAsync(
+            runId, claim.LeaseToken, new(20, 100, 1_000_000))).Should().BeFalse(
+            "a terminal run cannot be changed by a racing progress checkpoint");
         (await sink.HeartbeatAsync(runId, claim.LeaseToken)).Should().BeFalse(
             "a terminal run no longer has a lease");
 
@@ -523,6 +536,9 @@ internal static class PngAuditPersistenceAssertions
         secondClaim!.LeaseToken.Should().NotBe(firstClaim.LeaseToken);
         (await sink.HeartbeatAsync(runId, firstClaim.LeaseToken)).Should().BeFalse(
             "a stale worker cannot extend a replacement lease");
+        (await sink.UpdateCrawlProgressAsync(
+            runId, firstClaim.LeaseToken, new(10, 10, 10))).Should().BeFalse(
+            "a stale worker cannot publish progress through a replacement lease");
 
         await database.PngAuditRuns.Where(run => run.Id == runId)
             .ExecuteUpdateAsync(setters => setters
@@ -731,12 +747,19 @@ internal static class PngAuditPersistenceAssertions
     {
         public PngSiteCrawlRequest? Request { get; private set; }
 
-        public Task<PngSiteDiscoveryResult> DiscoverAsync(
+        public async Task<PngSiteDiscoveryResult> DiscoverAsync(
             PngSiteCrawlRequest request,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            Func<PngSiteDiscoveryProgress, CancellationToken, ValueTask>? progress = null)
         {
             Request = request;
-            return Task.FromResult(result);
+            if (progress is not null)
+            {
+                await progress(
+                    new(result.Pages.Count, result.HttpAttempts, result.TotalPageBytes),
+                    cancellationToken);
+            }
+            return result;
         }
     }
 
@@ -744,7 +767,8 @@ internal static class PngAuditPersistenceAssertions
     {
         public Task<PngSiteDiscoveryResult> DiscoverAsync(
             PngSiteCrawlRequest request,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            Func<PngSiteDiscoveryProgress, CancellationToken, ValueTask>? progress = null) =>
             Task.FromResult(result);
     }
 

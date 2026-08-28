@@ -140,6 +140,90 @@ public sealed class LiveRunStatusTests(WebHealthWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task PngRun_WhileRunning_DeclaresItsLiveRegions()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var html = await client.GetStringAsync(
+            $"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}");
+
+        html.Should().Contain($"data-live-run-status-url=\"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Status\"");
+        html.Should().Contain($"data-live-run-final-url=\"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}?");
+        html.Should().Contain($"data-live-run-results-url=\"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Results?");
+        html.Should().Contain("data-live-run-results-selector=\"#png-image-results\"");
+        html.Should().Contain("data-live-run-version=\"Queued:2:1:1:1\"");
+        html.Should().Contain("data-live=\"pages\"");
+        html.Should().Contain("data-live=\"resultCount\"");
+        html.Should().Contain("data-live=\"recommendations\"");
+        html.Should().Contain("/js/live-run-status.js");
+        html.Should().NotContain("/js/run-status.js");
+    }
+
+    [Fact]
+    public async Task PngLiveStatus_ReturnsCurrentCountersAndHonorsVersion()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+        var url = $"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Status";
+
+        var response = await client.GetAsync(url);
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        var unchanged = await client.GetAsync(url + "?version=Queued%3A2%3A1%3A1%3A1");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        json.GetProperty("active").GetBoolean().Should().BeTrue();
+        json.GetProperty("version").GetString().Should().Be("Queued:2:1:1:1");
+        json.GetProperty("pages").GetInt32().Should().Be(2);
+        json.GetProperty("resultCount").GetInt32().Should().Be(1);
+        json.GetProperty("recommendations").GetInt32().Should().Be(1);
+        unchanged.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task PngRun_WhenTerminal_DoesNotEnablePolling()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var html = await client.GetStringAsync(
+            $"/Tools/PngImages/Runs/{EmptyPngAuditReader.CompletedRunId}");
+
+        html.Should().Contain("data-live-run-status-url=\"\"");
+        html.Should().NotContain($"data-live-run-status-url=\"/Tools/PngImages/Runs/{EmptyPngAuditReader.CompletedRunId}/Status\"");
+        html.Should().Contain($"data-live-run-final-url=\"/Tools/PngImages/Runs/{EmptyPngAuditReader.CompletedRunId}?");
+    }
+
+    [Fact]
+    public async Task PngLiveResults_ReturnOnlyTheReplaceableResultsRegion()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var html = await client.GetStringAsync(
+            $"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Results?filter=webp-candidates");
+
+        html.Should().Contain("id=\"png-image-results\"");
+        html.Should().Contain("data-ajax-region");
+        html.Should().Contain("Lossless WebP size");
+        html.Should().NotContain("id=\"ajax-page\"");
+        html.Should().NotContain("<!DOCTYPE html>");
+    }
+
+    [Fact]
+    public async Task PngHistory_ExposesLiveCountersOnTheActiveRow()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var html = await client.GetStringAsync(
+            $"/Tools/PngImages?endpointId={EmptyTargetRegistryReader.Endpoint.Id}");
+
+        html.Should().Contain($"data-live-run-status-url=\"/Tools/PngImages/Runs/{EmptyPngAuditReader.RunningRunId}/Status\"");
+        html.Should().Contain("data-live-run-final-url=\"/Tools/PngImages?endpointId=");
+        html.Should().Contain("data-live=\"pages\"");
+        html.Should().Contain("data-live=\"resultCount\"");
+        html.Should().Contain("data-live=\"recommendations\"");
+        html.Should().Contain("/js/live-run-status.js");
+    }
+
+    [Fact]
     public async Task PageSpeed_WithAQueuedAudit_DeclaresItsLiveRegion()
     {
         using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);

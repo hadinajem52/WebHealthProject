@@ -17,6 +17,8 @@ public sealed class PngAuditExecutionService(
     TimeProvider timeProvider,
     ILogger<PngAuditExecutionService> logger)
 {
+    private static readonly TimeSpan ProgressInterval = TimeSpan.FromSeconds(2);
+
     public async Task ExecuteAsync(Guid runId, CancellationToken cancellationToken)
     {
         var claim = await sink.TryClaimAsync(runId, cancellationToken);
@@ -81,6 +83,32 @@ public sealed class PngAuditExecutionService(
             snapshot.AllowedAssetHosts,
             snapshot.UrlOptions);
         var stored = await runReader.ReadProgressAsync(claim.RunId, cancellationToken);
+        var lastProgressWrite = DateTimeOffset.MinValue;
+        async ValueTask ReportProgressAsync(
+            PngSiteDiscoveryProgress reported,
+            CancellationToken progressCancellation)
+        {
+            var now = timeProvider.GetUtcNow();
+            if (now - lastProgressWrite < ProgressInterval)
+            {
+                return;
+            }
+
+            lastProgressWrite = now;
+            var normalized = new PngAuditCrawlProgress(
+                Math.Max(stored.PagesDiscovered, reported.PagesDiscovered),
+                Math.Max(stored.HttpAttempts, reported.HttpAttempts),
+                Math.Max(stored.TotalPageBytes, reported.TotalPageBytes));
+            if (!await sink.UpdateCrawlProgressAsync(
+                    claim.RunId,
+                    claim.LeaseToken,
+                    normalized,
+                    progressCancellation))
+            {
+                throw new PngAuditLeaseLostException();
+            }
+        }
+
         var discovery = await crawler.DiscoverAsync(
             new(
                 claim.RunId,
@@ -93,7 +121,8 @@ public sealed class PngAuditExecutionService(
                 ConsumedPageBytes = stored.TotalPageBytes,
                 RunDeadline = runDeadline
             },
-            cancellationToken);
+            cancellationToken,
+            ReportProgressAsync);
         ThrowIfLeaseLost(lease);
 
         var coverage = new PngCoverageTracker(discovery.CoverageReasons);

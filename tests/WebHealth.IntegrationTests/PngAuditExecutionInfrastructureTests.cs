@@ -113,6 +113,13 @@ public sealed class PngAuditExecutionInfrastructureTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<bool> UpdateCrawlProgressAsync(
+            Guid runId,
+            Guid leaseToken,
+            PngAuditCrawlProgress progress,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<bool> RecordBatchAsync(
             Guid runId,
             Guid leaseToken,

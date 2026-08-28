@@ -433,6 +433,12 @@ public interface IPngAuditResultSink
         Guid leaseToken,
         CancellationToken cancellationToken = default);
 
+    Task<bool> UpdateCrawlProgressAsync(
+        Guid runId,
+        Guid leaseToken,
+        PngAuditCrawlProgress progress,
+        CancellationToken cancellationToken = default);
+
     Task<bool> RecordBatchAsync(
         Guid runId,
         Guid leaseToken,
@@ -474,6 +480,13 @@ public sealed record PngAuditRunView(
     DateTimeOffset QueuedAt,
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt);
+
+public sealed record PngAuditLiveStatus(
+    string Status,
+    int PagesDiscovered,
+    int ImagesDiscovered,
+    int ImagesAnalyzed,
+    int RecommendationCount);
 
 public sealed record PngAuditImageResultView(
     Guid ImageResultId,
@@ -555,6 +568,11 @@ public sealed record PngAuditPage<T>(IReadOnlyList<T> Items, int Offset, int Lim
 
 public interface IPngAuditReader
 {
+    Task<PngAuditLiveStatus?> GetLiveStatusAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
     Task<PngAuditRunView?> FindRunAsync(
         Guid runId,
         RegistryAccessContext access,

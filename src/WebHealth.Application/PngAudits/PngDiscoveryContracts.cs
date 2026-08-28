@@ -8,8 +8,14 @@ public interface IPngSiteCrawler
 {
     Task<PngSiteDiscoveryResult> DiscoverAsync(
         PngSiteCrawlRequest request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Func<PngSiteDiscoveryProgress, CancellationToken, ValueTask>? progress = null);
 }
+
+public sealed record PngSiteDiscoveryProgress(
+    int PagesDiscovered,
+    int HttpAttempts,
+    long TotalPageBytes);
 
 public static class PngAuditFetchRetry
 {

@@ -36,9 +36,21 @@ public sealed record PngAuditRunViewModel(
     public int NextOffset => Images.Offset + Images.Limit;
 }
 
+public sealed record PngAuditResultsRegionViewModel(
+    Guid RunId,
+    string Filter,
+    PngAuditPage<PngAuditImageResultView> Images)
+{
+    public int PreviousOffset => Math.Max(0, Images.Offset - Images.Limit);
+
+    public int NextOffset => Images.Offset + Images.Limit;
+}
+
 public static class PngAuditDisplay
 {
-    public static string DescribeStatus(PngAuditRunView run) => run.Status switch
+    public static string DescribeStatus(PngAuditRunView run) => DescribeStatus(run.Status);
+
+    public static string DescribeStatus(string status) => status switch
     {
         PngAuditRunStatuses.Queued => "Queued",
         PngAuditRunStatuses.Running => "Running",
@@ -47,6 +59,12 @@ public static class PngAuditDisplay
         PngAuditRunStatuses.Cancelled => "Cancelled",
         _ => "Failed"
     };
+
+    public static string LiveVersion(PngAuditRunView run) =>
+        $"{run.Status}:{run.PagesDiscovered}:{run.ImagesDiscovered}:{run.ImagesAnalyzed}:{run.RecommendationCount}";
+
+    public static string LiveVersion(PngAuditLiveStatus run) =>
+        $"{run.Status}:{run.PagesDiscovered}:{run.ImagesDiscovered}:{run.ImagesAnalyzed}:{run.RecommendationCount}";
 
     public static string StatusTone(PngAuditRunView run) => run.Status switch
     {

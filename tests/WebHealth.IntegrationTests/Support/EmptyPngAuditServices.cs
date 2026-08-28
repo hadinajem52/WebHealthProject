@@ -12,6 +12,22 @@ internal sealed class EmptyPngAuditReader : IPngAuditReader
     public static Guid CompletedRunId { get; } =
         Guid.Parse("6f1c9a20-0000-0000-0000-000000000042");
 
+    public async Task<PngAuditLiveStatus?> GetLiveStatusAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default)
+    {
+        var run = await FindRunAsync(runId, access, cancellationToken);
+        return run is null
+            ? null
+            : new(
+                run.Status,
+                run.PagesDiscovered,
+                run.ImagesDiscovered,
+                run.ImagesAnalyzed,
+                run.RecommendationCount);
+    }
+
     public Task<PngAuditRunView?> FindRunAsync(
         Guid runId,
         RegistryAccessContext access,

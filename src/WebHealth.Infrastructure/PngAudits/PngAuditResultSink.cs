@@ -101,6 +101,38 @@ internal sealed class PngAuditResultSink(
         return updated == 1;
     }
 
+    public async Task<bool> UpdateCrawlProgressAsync(
+        Guid runId,
+        Guid leaseToken,
+        PngAuditCrawlProgress progress,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        await using var database = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var updated = await database.PngAuditRuns
+            .Where(run => run.Id == runId
+                && run.Status == PngAuditRunStatuses.Running
+                && run.LeaseToken == leaseToken)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(
+                    run => run.PagesDiscovered,
+                    run => Math.Max(
+                        run.PagesDiscovered,
+                        Math.Min(progress.PagesDiscovered, run.MaxPages)))
+                .SetProperty(
+                    run => run.HttpAttempts,
+                    run => Math.Max(
+                        run.HttpAttempts,
+                        Math.Min(progress.HttpAttempts, run.MaxTotalHttpAttempts)))
+                .SetProperty(
+                    run => run.TotalPageBytes,
+                    run => Math.Max(
+                        run.TotalPageBytes,
+                        Math.Min(progress.TotalPageBytes, run.MaxTotalPageBytes))),
+                cancellationToken);
+        return updated == 1;
+    }
+
     public async Task<bool> RecordBatchAsync(
         Guid runId,
         Guid leaseToken,
