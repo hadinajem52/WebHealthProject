@@ -13,7 +13,7 @@
         {
             <span class="spinner spinner--badge" aria-hidden="true" data-preserve-animation="@Model.AnimationKey"></span>
         }
-        <span class="badge__label">@Model.Label</span>
+        <span class="badge__label" data-live="@Model.LiveKey">@Model.Label</span>
     </span>
 }
 else
@@ -27,7 +27,7 @@ else
         {
             <span class="spinner spinner--badge" aria-hidden="true" data-preserve-animation="@Model.AnimationKey"></span>
         }
-        <span class="badge__label">@Model.Label</span>
+        <span class="badge__label" data-live="@Model.LiveKey">@Model.Label</span>
         <span class="badge__info" aria-hidden="true">@await Html.PartialAsync("_Icon", "information")</span>
         <span class="visually-hidden">&mdash; @Model.Detail</span>
     </span>

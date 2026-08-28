@@ -18,6 +18,28 @@ internal sealed class CrawlReportReader(
 
     public const int ComparisonSampleSize = 25;
 
+    public async Task<CrawlLiveStatus?> GetLiveStatusAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        await VisibleRuns(access)
+            .Where(run => run.Id == runId)
+            .Select(run => new CrawlLiveStatus(
+                run.Status,
+                run.PagesFetched,
+                run.LinksRecorded,
+                run.Status == CrawlRunStatuses.Completed
+                    && run.StopReason == CrawlStopReasons.FrontierExhausted
+                    && run.PagesFetched > 0
+                    && !run.CoverageLimited))
+            .SingleOrDefaultAsync(cancellationToken);
+
+    public async Task<int> CountBrokenLinksAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        await BrokenLinksOf(VisibleLinks(access), runId).CountAsync(cancellationToken);
+
     public async Task<IReadOnlyList<CrawlRunSummary>> ListRunsAsync(
         Guid endpointId,
         int limit,

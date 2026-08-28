@@ -100,6 +100,48 @@ public sealed class CrawlController(
             run, brokenLinks, skips, Math.Max(0, offset), BrokenLinksPerPage));
     }
 
+    [HttpGet("Crawl/Runs/{id:guid}/Status")]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public async Task<IActionResult> LiveStatus(
+        Guid id,
+        string? version,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccess();
+        var run = await crawlReader.GetLiveStatusAsync(id, access, cancellationToken);
+        if (run is null) return this.NotFoundRecord("crawl run");
+
+        var currentVersion = $"{run.Status}:{run.PagesFetched}:{run.LinksRecorded}";
+        if (string.Equals(version, currentVersion, StringComparison.Ordinal)) return NoContent();
+
+        var broken = await crawlReader.CountBrokenLinksAsync(id, access, cancellationToken);
+        return Json(new
+        {
+            active = run.Status == CrawlRunStatuses.Running,
+            version = currentVersion,
+            pages = run.PagesFetched,
+            links = run.LinksRecorded,
+            broken
+        });
+    }
+
+    [HttpGet("Crawl/Runs/{id:guid}/Results")]
+    public async Task<IActionResult> Results(
+        Guid id,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var access = GetAccess();
+        var run = await crawlReader.GetLiveStatusAsync(id, access, cancellationToken);
+        if (run is null) return this.NotFoundRecord("crawl run");
+
+        var normalizedOffset = Math.Max(0, offset);
+        var brokenLinks = await crawlReader.ListBrokenLinksAsync(
+            id, BrokenLinksPerPage, access, normalizedOffset, cancellationToken);
+        return PartialView("_BrokenLinksTable", new CrawlBrokenLinksRegionViewModel(
+            id, brokenLinks, normalizedOffset, BrokenLinksPerPage, run.CoveredWholeScope));
+    }
+
     private RegistryAccessContext GetAccess()
     {
         var userId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsed) ? parsed : Guid.Empty;

@@ -170,6 +170,12 @@ public sealed record CrawlRunSummary(
         && !CoverageLimited;
 }
 
+public sealed record CrawlLiveStatus(
+    string Status,
+    int PagesFetched,
+    int LinksRecorded,
+    bool CoveredWholeScope);
+
 public sealed record CrawlSkipSummary(string SkipReason, int Count);
 
 public sealed record CrawlBrokenLink(
@@ -204,6 +210,16 @@ public sealed record CrawlComparison(
 
 public interface ICrawlReportReader
 {
+    Task<CrawlLiveStatus?> GetLiveStatusAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountBrokenLinksAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<CrawlRunSummary>> ListRunsAsync(
         Guid endpointId,
         int limit,

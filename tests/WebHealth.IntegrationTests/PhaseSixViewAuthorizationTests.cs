@@ -66,6 +66,30 @@ public sealed class PhaseSixViewAuthorizationTests(WebHealthWebApplicationFactor
     }
 
     [Theory]
+    [MemberData(nameof(EveryRole))]
+    public async Task CrawlLiveStatus_OutsideVisibility_IsNotFoundRatherThanForbidden(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync(
+            "/Crawl/Runs/8a3a1c5e-0000-0000-0000-000000000000/Status");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryRole))]
+    public async Task CrawlLiveResults_OutsideVisibility_IsNotFoundRatherThanForbidden(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync(
+            "/Crawl/Runs/8a3a1c5e-0000-0000-0000-000000000000/Results");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Theory]
     [InlineData("/Seo?applicability=Everything")]
     [InlineData("/Seo?environment=Staging%20AND%201%3D1")]
     [InlineData("/Seo?page=-5")]

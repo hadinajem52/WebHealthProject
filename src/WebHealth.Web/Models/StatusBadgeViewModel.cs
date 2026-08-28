@@ -7,7 +7,8 @@ public sealed record StatusBadgeViewModel(
     string Label,
     string? Detail = null,
     bool Pending = false,
-    string? AnimationKey = null)
+    string? AnimationKey = null,
+    string? LiveKey = null)
 {
     public string Icon => StatusBadges.Icon(Status);
 }

@@ -51,10 +51,54 @@ public static class PngAuditDisplay
     public static string StatusTone(PngAuditRunView run) => run.Status switch
     {
         PngAuditRunStatuses.Completed => "success",
-        PngAuditRunStatuses.CompletedWithWarnings => "warning",
+        PngAuditRunStatuses.CompletedWithWarnings => "success",
         PngAuditRunStatuses.Failed => "danger",
         PngAuditRunStatuses.Cancelled => "neutral",
         _ => "info"
+    };
+
+    public static string StatusIcon(PngAuditRunView run) =>
+        run.Status == PngAuditRunStatuses.CompletedWithWarnings
+            ? "information"
+            : StatusIcon(StatusTone(run));
+
+    public static string? DescribeStatusDetail(PngAuditRunView run)
+    {
+        if (run.Status != PngAuditRunStatuses.CompletedWithWarnings)
+        {
+            return null;
+        }
+
+        var areas = LimitedCoverageAreas(run);
+        return areas.Count == 0
+            ? "The run finished, but at least one coverage area was limited."
+            : $"The run finished, but {JoinAreas(areas)} did not cover everything within this run's configured limits.";
+    }
+
+    private static List<string> LimitedCoverageAreas(PngAuditRunView run)
+    {
+        var areas = new List<string>(3);
+        if (run.CrawlCoverageLimited)
+        {
+            areas.Add("the site crawl");
+        }
+        if (run.ImageAnalysisCoverageLimited)
+        {
+            areas.Add("image analysis");
+        }
+        if (run.SourceMappingCoverageLimited)
+        {
+            areas.Add("source mapping");
+        }
+
+        return areas;
+    }
+
+    private static string JoinAreas(List<string> areas) => areas.Count switch
+    {
+        1 => areas[0],
+        2 => $"{areas[0]} and {areas[1]}",
+        _ => $"{string.Join(", ", areas.Take(areas.Count - 1))} and {areas[^1]}"
     };
 
     public static string StatusIcon(string tone) => tone switch

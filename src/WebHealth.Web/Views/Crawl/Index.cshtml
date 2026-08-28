@@ -155,7 +155,7 @@
                                 <td data-label="Subject">
                                     <span class="history-cell">
                                         @await Html.PartialAsync("_HistoryMark", CrawlRunDisplay.StatusTone(run))
-                                        <span class="history-cell__subject">@run.PagesFetched page@(run.PagesFetched == 1 ? null : "s") crawled</span>
+                                        <span class="history-cell__subject"><span data-live="@(run.Status == CrawlRunStatuses.Running ? "pages" : null)">@run.PagesFetched</span> page@(run.PagesFetched == 1 ? null : "s") crawled</span>
                                         <span class="history-cell__time">@Html.Timestamp(run.StartedAt)</span>
                                     </span>
                                 </td>
@@ -169,11 +169,14 @@
                                 </td>
                                 <td data-label="Broken links">
                                     @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                        run.BrokenLinkCount == 0 ? StatusBadges.Success : StatusBadges.Warning,
+                                        run.Status == CrawlRunStatuses.Running
+                                            ? StatusBadges.Info
+                                            : run.BrokenLinkCount == 0 ? StatusBadges.Success : StatusBadges.Warning,
                                         run.BrokenLinkCount.ToString(),
                                         run.CoveredWholeScope
                                             ? null
-                                            : "This crawl did not cover the whole scope, so links it never reached are not counted."))
+                                            : "This crawl did not cover the whole scope, so links it never reached are not counted.",
+                                        LiveKey: run.Status == CrawlRunStatuses.Running ? "broken" : null))
                                 </td>
                                 <td data-label="Robots override">@(run.RobotsOverrideGranted ? "Granted" : "No")</td>
                                 <td class="data-table__action" data-label="Details">

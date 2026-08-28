@@ -37,14 +37,17 @@
     <section class="card" aria-labelledby="png-run-status">
         <div class="page-intro">
             <div>
-                <p class="card__status" data-status="@runTone" id="png-run-status">
+                <p class="card__status"
+                   data-status="@runTone"
+                   id="png-run-status"
+                   title="@PngAuditDisplay.DescribeStatusDetail(run)">
                     @if (isActive)
                     {
                         @await Html.PartialAsync("_Spinner", $"png-audit-run-{run.RunId}")
                     }
                     else
                     {
-                        @await Html.PartialAsync("_Icon", PngAuditDisplay.StatusIcon(runTone))
+                        @await Html.PartialAsync("_Icon", PngAuditDisplay.StatusIcon(run))
                     }
                     <span>@PngAuditDisplay.DescribeStatus(run) · @run.SeedUrl</span>
                 </p>

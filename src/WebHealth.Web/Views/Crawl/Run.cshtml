@@ -82,7 +82,7 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "audit")</span>
                             <span>Pages fetched</span>
                         </span>
-                        <span class="detail-list__value">@run.PagesFetched</span>
+                        <span class="detail-list__value" data-live="pages">@run.PagesFetched</span>
                     </div>
                 </li>
                 <li>
@@ -91,7 +91,7 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "link")</span>
                             <span>Links recorded</span>
                         </span>
-                        <span class="detail-list__value">@run.LinksRecorded</span>
+                        <span class="detail-list__value" data-live="links">@run.LinksRecorded</span>
                     </div>
                 </li>
                 <li>
@@ -102,11 +102,14 @@
                         </span>
                         <span class="detail-list__value">
                             @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                run.BrokenLinkCount == 0 ? StatusBadges.Success : StatusBadges.Warning,
+                                isRunning
+                                    ? StatusBadges.Info
+                                    : run.BrokenLinkCount == 0 ? StatusBadges.Success : StatusBadges.Warning,
                                 run.BrokenLinkCount.ToString(),
                                 run.CoveredWholeScope
                                     ? null
-                                    : "This crawl did not cover the whole scope, so links it never reached are not counted."))
+                                    : "This crawl did not cover the whole scope, so links it never reached are not counted.",
+                                LiveKey: isRunning ? "broken" : null))
                         </span>
                     </div>
                 </li>
@@ -216,9 +219,9 @@
         <div class="page-intro">
             <div>
                 <h3 class="card__title" id="crawl-broken-heading">Broken links</h3>
-                <p class="card__status" data-status="@(run.BrokenLinkCount == 0 ? "success" : "warning")">
-                    @await Html.PartialAsync("_Icon", run.BrokenLinkCount == 0 ? "success" : "warning")
-                    <span>@run.BrokenLinkCount recorded by this crawl</span>
+                <p class="card__status" data-status="@(isRunning ? "info" : run.BrokenLinkCount == 0 ? "success" : "warning")">
+                    @await Html.PartialAsync("_Icon", isRunning ? "information" : run.BrokenLinkCount == 0 ? "success" : "warning")
+                    <span><span data-live="broken">@run.BrokenLinkCount</span> recorded by this crawl</span>
                 </p>
             </div>
         </div>
@@ -228,70 +231,8 @@
             appears once.
         </p>
 
-        @if (Model.BrokenLinks.Count == 0)
-        {
-            @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
-                Model.Offset == 0 ? "No broken links were recorded" : "No more broken links",
-                Model.Offset == 0
-                    ? (run.CoveredWholeScope
-                        ? "This crawl covered the whole scope. Links it could not classify are not counted as broken."
-                        : "This crawl did not cover the whole scope, so links it never reached are not counted here.")
-                    : "You have reached the end of the list.",
-                "broken-link"))
-        }
-        else
-        {
-            <div class="table-scroll table-scroll--flush">
-                <table class="data-table">
-                    <caption class="visually-hidden">Broken links found by this crawl</caption>
-                    <thead>
-                        <tr>
-                            <th scope="col">Source page</th>
-                            <th scope="col">Link target</th>
-                            <th scope="col">Scope</th>
-                            <th scope="col">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var link in Model.BrokenLinks)
-                        {
-                            <tr>
-                                <td data-label="Source page"><span class="target-url">@(link.SourceUrl ?? "Seed URL")</span></td>
-                                <td data-label="Link target"><span class="target-url">@link.TargetUrl</span></td>
-                                <td data-label="Scope">@(link.IsInternal ? "Internal" : "External")</td>
-                                <td data-label="Status">
-                                    
-                                    @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                        StatusBadges.Danger,
-                                        link.StatusCode?.ToString() ?? link.Classification,
-                                        link.StatusCode is null ? null : link.Classification))
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            <nav class="pagination" aria-label="Broken link pages">
-                <span>Showing @(Model.Offset + 1)–@(Model.Offset + Model.BrokenLinks.Count)</span>
-                <span class="pagination__actions">
-                    @if (Model.Offset > 0)
-                    {
-                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.PreviousOffset" data-ajax-link data-ajax-target="#ajax-page">
-                            @await Html.PartialAsync("_Icon", "arrow-left")
-                            <span>Previous</span>
-                        </a>
-                    }
-                    @if (Model.HasMore)
-                    {
-                        <a class="button button--secondary" asp-action="Run" asp-route-id="@run.RunId" asp-route-offset="@Model.NextOffset" data-ajax-link data-ajax-target="#ajax-page">
-                            <span>Next</span>
-                            @await Html.PartialAsync("_Icon", "arrow-right")
-                        </a>
-                    }
-                </span>
-            </nav>
-        }
+        @await Html.PartialAsync("_BrokenLinksTable", new CrawlBrokenLinksRegionViewModel(
+            run.RunId, Model.BrokenLinks, Model.Offset, Model.PageSize, run.CoveredWholeScope))
     </section>
 </div>
 

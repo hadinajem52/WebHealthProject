@@ -32,6 +32,32 @@ public sealed class CrawlRunAuthorizationTests(WebHealthWebApplicationFactory fa
             "crawl results are a read surface for every persona that may read the registry");
     }
 
+    [Theory]
+    [MemberData(nameof(EveryRole))]
+    public async Task LiveStatus_IsReadableByEveryApplicationPersona(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync(
+            $"/Crawl/Runs/{EmptyCrawlReportReader.RunningRunId}/Status");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            "live crawl progress is part of the registry read surface");
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryRole))]
+    public async Task LiveResults_AreReadableByEveryApplicationPersona(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+
+        var response = await client.GetAsync(
+            $"/Crawl/Runs/{EmptyCrawlReportReader.RunningRunId}/Results");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            "incremental crawl results are part of the registry read surface");
+    }
+
     [Fact]
     public async Task RunNow_IsRefusedToAViewer()
     {

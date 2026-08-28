@@ -23,6 +23,20 @@ internal sealed class EmptyCrawlReportReader : ICrawlReportReader
 
     public static Guid RunningRunId { get; } = Guid.Parse("2b7d4f10-0000-0000-0000-000000000031");
 
+    public Task<CrawlLiveStatus?> GetLiveStatusAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<CrawlLiveStatus?>(runId == RunningRunId
+            ? new(CrawlRunStatuses.Running, 3, 12, false)
+            : null);
+
+    public Task<int> CountBrokenLinksAsync(
+        Guid runId,
+        RegistryAccessContext access,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(runId == RunningRunId ? 2 : 0);
+
     public Task<IReadOnlyList<CrawlRunSummary>> ListRunsAsync(
         Guid endpointId,
         int limit,

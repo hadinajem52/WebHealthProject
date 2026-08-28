@@ -179,7 +179,8 @@
                                     <td data-label="Status">
                                         @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
                                             tone,
-                                            PngAuditDisplay.DescribeStatus(run)))
+                                            PngAuditDisplay.DescribeStatus(run),
+                                            PngAuditDisplay.DescribeStatusDetail(run)))
                                     </td>
                                     <td data-label="Pages">@run.PagesDiscovered</td>
                                     <td data-label="Unique images">@run.ImagesDiscovered</td>

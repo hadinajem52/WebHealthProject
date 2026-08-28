@@ -221,7 +221,7 @@
             var destination = status < 400 ? root.querySelector('h1, h2, h3') || root : root;
             if (destination.focus) {
                 destination.setAttribute('tabindex', '-1');
-                destination.focus();
+                destination.focus({ preventScroll: status < 400 });
             }
         }
     }

@@ -42,6 +42,20 @@ public sealed record CrawlRunViewModel(
     public int PreviousOffset => Math.Max(0, Offset - PageSize);
 }
 
+public sealed record CrawlBrokenLinksRegionViewModel(
+    Guid RunId,
+    IReadOnlyList<CrawlBrokenLink> BrokenLinks,
+    int Offset,
+    int PageSize,
+    bool CoveredWholeScope)
+{
+    public bool HasMore => BrokenLinks.Count == PageSize;
+
+    public int PreviousOffset => Math.Max(0, Offset - PageSize);
+
+    public int NextOffset => Offset + PageSize;
+}
+
 public static class CrawlRunDisplay
 {
     public static string DescribeStatus(CrawlRunSummary run)
