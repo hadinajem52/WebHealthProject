@@ -146,62 +146,98 @@
 
         <div class="stat-grid">
             <div class="stat">
-                <p class="stat__label">Pages inspected</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "audit")
+                    <span>Pages inspected</span>
+                </p>
                 <p class="stat__value" data-live="pages">@run.PagesDiscovered</p>
                 <p class="stat__detail">Pages admitted to this run's crawl scope</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Images discovered</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "search")
+                    <span>Images discovered</span>
+                </p>
                 <p class="stat__value">@summary.ImageReferencesDiscovered</p>
                 <p class="stat__detail">Recorded image references, including skipped values</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Unique images</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "link")
+                    <span>Unique images</span>
+                </p>
                 <p class="stat__value" data-live="resultCount">@summary.UniqueImages</p>
                 <p class="stat__detail">Distinct image requests after canonical deduplication</p>
             </div>
             <div class="stat">
-                <p class="stat__label">PNGs analyzed</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "diagnostics")
+                    <span>PNGs analyzed</span>
+                </p>
                 <p class="stat__value" data-live="analyzed">@summary.PngsAnalyzed</p>
                 <p class="stat__detail">PNG files with a completed structural or pixel outcome</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Uses transparency</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "eye")
+                    <span>Uses transparency</span>
+                </p>
                 <p class="stat__value">@summary.UsesTransparency</p>
                 <p class="stat__detail">Static PNGs with at least one alpha value below 255</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Transparent background</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "eye-off")
+                    <span>Transparent background</span>
+                </p>
                 <p class="stat__value">@summary.TransparentBackground</p>
                 <p class="stat__detail">Fully transparent region connected to the image border</p>
             </div>
             <div class="stat">
-                <p class="stat__label">PNGs compared</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "activity")
+                    <span>PNGs compared</span>
+                </p>
                 <p class="stat__value">@summary.PngsCompared</p>
                 <p class="stat__detail">Static PNGs with a completed format comparison</p>
             </div>
             <div class="stat">
-                <p class="stat__label">WebP candidates</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "success")
+                    <span>WebP candidates</span>
+                </p>
                 <p class="stat__value" data-live="recommendations">@summary.WebpCandidates</p>
                 <p class="stat__detail">Verified smaller than the reference PNG by both thresholds</p>
             </div>
             <div class="stat">
-                <p class="stat__label">PNG optimization preferred</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "archive")
+                    <span>PNG optimization preferred</span>
+                </p>
                 <p class="stat__value">@summary.OptimizePngPreferred</p>
                 <p class="stat__detail">An optimized PNG beats the verified WebP candidate</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Below threshold</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "information")
+                    <span>Below threshold</span>
+                </p>
                 <p class="stat__value">@summary.BelowThreshold</p>
                 <p class="stat__detail">Compared without meeting both savings thresholds</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Comparison unavailable</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "help")
+                    <span>Comparison unavailable</span>
+                </p>
                 <p class="stat__value">@summary.ComparisonUnavailable</p>
                 <p class="stat__detail">Measured, but no verified comparison engine is configured</p>
             </div>
             <div class="stat">
-                <p class="stat__label">Skipped / not analyzed</p>
+                <p class="stat__label">
+                    @await Html.PartialAsync("_Icon", "close")
+                    <span>Skipped / not analyzed</span>
+                </p>
                 <p class="stat__value">@summary.SkippedOrNotAnalyzed</p>
                 <p class="stat__detail">Skipped references and images without a completed PNG outcome</p>
             </div>

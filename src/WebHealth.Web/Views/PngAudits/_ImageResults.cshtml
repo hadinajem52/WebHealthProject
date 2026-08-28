@@ -12,21 +12,31 @@
         </div>
     </div>
 
-    <nav class="segmented" aria-label="Image result filters">
-        @foreach (var filter in PngAuditImageFilters.Values)
-        {
-            var selected = filter == Model.Filter;
-            <a class="segmented__option"
-               aria-current="@(selected ? "page" : null)"
-               asp-action="Run"
-               asp-route-id="@Model.RunId"
-               asp-route-filter="@filter"
-               data-ajax-link
-               data-ajax-target="#ajax-page">
-                @PngAuditDisplay.DescribeFilter(filter)
-            </a>
-        }
-    </nav>
+    <form method="get"
+          asp-action="Run"
+          asp-route-id="@Model.RunId"
+          class="filter-bar filter-bar--single"
+          data-ajax-form
+          data-ajax-target="#ajax-page"
+          data-ajax-history="push">
+        <div class="form-field">
+            <label for="png-image-filter">Image results</label>
+            <select id="png-image-filter" name="filter">
+                @foreach (var filter in PngAuditImageFilters.Values)
+                {
+                    <option value="@filter" selected="@(filter == Model.Filter)">
+                        @PngAuditDisplay.DescribeFilter(filter)
+                    </option>
+                }
+            </select>
+        </div>
+        <div class="filter-bar__actions">
+            <button class="button button--primary" type="submit">
+                @await Html.PartialAsync("_Icon", "filter")
+                <span>Apply filter</span>
+            </button>
+        </div>
+    </form>
 
     @if (Model.Images.Items.Count == 0)
     {
