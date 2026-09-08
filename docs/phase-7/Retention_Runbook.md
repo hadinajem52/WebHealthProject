@@ -160,3 +160,16 @@ history. Findings and redirect hops are removed before their selected results; l
 snapshots remain. Dry-run does not write aggregates or deletion markers. This service is not yet
 scheduled; report integration and the remaining retention categories must be completed before
 retention is enabled.
+
+## Observation expiration and current baselines
+
+SEO observations follow the 90-day raw-detail policy. Certificate observations use 24 calendar
+months (UTC AddMonths(-24)), not a fixed day count. Observation and completed-check timestamps
+must both be strictly older than the category cutoff. The shared hold, lease, current-health and
+active-incident protections apply before deletion.
+
+Retain the latest observation timestamp per monitor and the latest Current result-backed
+observation timestamp per monitor, including ties. This preserves current readers even when a
+newer superseded observation exists or readers use different stable-ID tie directions. These
+baseline exceptions take precedence over age. Observation cleanup removes only the observation;
+the raw-result batch separately aggregates and removes eligible result detail afterward.

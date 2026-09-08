@@ -520,3 +520,18 @@ BatchSize=1, dry-run, aggregate-before-delete, unchanged aggregate after resumed
 cleanup, check/snapshot survival and independent SEO/certificate reference protection. The batch
 remains unscheduled. Observation retention, remaining categories, report integration, coordinator
 and full acceptance/load gates are still pending; this is not completion of increment 6.
+
+### Observation retention batches
+
+ObservationRetentionBatch adds bounded SEO (90-day) and certificate (24-calendar-month) cleanup.
+Shared completed-check protections apply, and the latest recorded plus latest Current result-backed
+observation timestamps survive, including ties. This prevents a newer superseded observation from
+causing deletion of the evidence current readers still display. Results and checks are left intact
+for the aggregate-aware raw cleanup path.
+
+Validation: the full database foundation script passed, including named fixtures for both categories.
+Each proves disabled/dry-run behavior, BatchSize=1, exact cutoff survival, holds, tied current
+baselines, preservation behind newer superseded evidence, aging across the cutoff, retained latest
+superseded evidence, result/check survival and cancellation. Release build: zero warnings/errors.
+Observation jobs remain unscheduled with retention disabled; increment 6 and the final gates remain
+in progress.

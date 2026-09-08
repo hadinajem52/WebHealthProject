@@ -1014,3 +1014,8 @@ It is registered as a scoped service but has no recurring-job registration yet.
 retention. `RawResultRetentionBatch.cs` deletes bounded result batches and their findings/redirects
 only after the monitor-day aggregate has been written and frozen. Retained observations preserve
 their results. The batch keeps logical checks/snapshots and is not yet scheduled.
+
+`Infrastructure/Monitoring/ObservationRetentionBatch.cs` removes bounded expired SEO (90-day) and
+certificate (24-calendar-month) observations. It shares check protection queries and preserves the
+latest recorded and latest Current result-backed observation timestamps, including ties. It leaves
+results/checks for the separate aggregate-aware cleanup path and is not yet scheduled.
