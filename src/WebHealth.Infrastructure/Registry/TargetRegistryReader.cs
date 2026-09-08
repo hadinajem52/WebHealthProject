@@ -266,10 +266,15 @@ internal sealed class TargetRegistryReader(
         }
 
         var latest = await dbContext.CertificateObservations.AsNoTracking()
-            .Where(observation => observation.EndpointMonitorId == monitorId)
+            .Where(observation => observation.EndpointMonitorId == monitorId
+                && observation.LogicalCheck.Result != null
+                && observation.LogicalCheck.Result.CurrentStateDisposition == "Current")
             .OrderByDescending(observation => observation.ObservedAt).ThenBy(observation => observation.LogicalCheckId)
             .Select(observation => new
             {
+                observation.LogicalCheck.ConfigurationSnapshot.SslWarningExpiryDays,
+                observation.LogicalCheck.ConfigurationSnapshot.SslHighExpiryDays,
+                observation.LogicalCheck.ConfigurationSnapshot.SslCriticalExpiryDays,
                 observation.ValidityStatus,
                 observation.HostnameStatus,
                 observation.ChainTrustStatus,
@@ -301,16 +306,10 @@ internal sealed class TargetRegistryReader(
             latest.ChainTrusted,
             latest.SubjectAlternativeNames,
             latest.ObservedAt,
-            SelectExpirySeverity(latest.ValidationCategory, latest.DaysRemaining),
+            CertificateExpiry.SelectSeverity(latest.DaysRemaining, new(
+                latest.SslWarningExpiryDays ?? 30, latest.SslHighExpiryDays ?? 15, latest.SslCriticalExpiryDays ?? 7)),
             latest.ValidityStatus, latest.HostnameStatus, latest.ChainTrustStatus, latest.ChainStatusCodes));
     }
-
-    private static CertificateExpirySeverity SelectExpirySeverity(
-        string validationCategory,
-        int daysRemaining) =>
-        validationCategory == nameof(TlsValidationCategory.Valid)
-            ? CertificateExpiry.SelectSeverity(daysRemaining, CertificateExpiryThresholds.Default)
-            : CertificateExpirySeverity.None;
 
     public async Task<IReadOnlyList<EnvironmentListItem>> ListDeletedEnvironmentsAsync(
         RegistryAccessContext access,

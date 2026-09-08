@@ -203,3 +203,11 @@ converts only known hashes for active SSL monitors, advances generation, and pre
 completed historical checks. Its reverse operation recognizes matching default-expiry canonical
 hashes rather than rewriting unknown policies. Five focused policy tests passed.
 Verification on 2026-09-08: 776 unit tests passed; ordinary Release integration suite passed 640 tests with four opt-in skips (database foundation, Docker, reporting baseline, and live SMTP). The database foundation script passed separately, including populated fingerprint rollback/upgrade, repeatability, and completion of preserved legacy queued work as Superseded. Release build had zero warnings/errors and EF reported no model drift.
+
+A display regression found that the endpoint certificate card used default expiry thresholds and
+could select superseded observations. The reader now limits its current certificate to results
+accepted as Current and calculates expiry severity from that observation's immutable snapshot.
+Expiry severity remains independent of hostname/trust faults. The database regression exercises
+a current renewal with a non-default warning threshold followed by a later superseded expired
+observation, ensuring the card retains the renewal and its recorded policy.
+Verification on 2026-09-08: the full ordered database suite passed with the reader regression; Release build had zero warnings/errors and explicit migrations completed successfully.

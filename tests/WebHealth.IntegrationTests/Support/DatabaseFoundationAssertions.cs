@@ -2259,6 +2259,7 @@ internal static class DatabaseFoundationAssertions
         var renewed = certificate with
         {
             NotAfter = DateTimeOffset.UtcNow.AddDays(20),
+            ObservedAt = DateTimeOffset.UtcNow,
             HostnameMatched = true,
             ChainTrusted = true,
             ValidationCategory = TlsValidationCategory.Valid,
@@ -2272,6 +2273,25 @@ internal static class DatabaseFoundationAssertions
         (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == customPolicy.Id)).Outcome
             .Should().Be(HttpResultOutcomes.Healthy, "the recorded ten-day warning threshold overrides the thirty-day default");
         (await database.Findings.AnyAsync(item => item.LogicalCheckId == customPolicy.Id)).Should().BeFalse();
+        (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == customPolicy.Id)).CurrentStateDisposition
+            .Should().Be("Current");
+        var stale = await CreateQueuedCheckAsync(database, monitor, sslThresholds: new(10, 5, 1));
+        monitor.IsEnabled = false;
+        await database.SaveChangesAsync();
+        monitor.IsEnabled = true;
+        await database.SaveChangesAsync();
+        var staleExecution = CreateExecutionService(database, new RecordingSafeHttpTransport(Success), true,
+            new RecordingSslProbe(new(null, certificate with { ObservedAt = DateTimeOffset.UtcNow }, TimeSpan.FromMilliseconds(25))));
+        (await staleExecution.ExecuteAsync(new(stale.Id, stale.DurableWork.Single().Id,
+            $"ssl-stale-display-{stale.Id:N}", "ssl-display-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+        (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == stale.Id)).CurrentStateDisposition.Should().Be("Superseded");
+        await using var readerServices = BuildUpgradeServices(connectionString);
+        await using var readerScope = readerServices.CreateAsyncScope();
+        var status = await readerScope.ServiceProvider.GetRequiredService<ITargetRegistryReader>().FindCertificateStatusAsync(
+            endpointId, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
+        status!.Latest!.ValidationCategory.Should().Be(nameof(TlsValidationCategory.Valid));
+        status.Latest.ExpirySeverity.Should().Be(CertificateExpirySeverity.None);
+        status.Latest.DaysRemaining.Should().BeGreaterThan(10);
     }
 
     private sealed class RecordingSslProbe(SslCertificateProbeResult? response = null) : ISslCertificateProbe
@@ -2528,6 +2548,15 @@ internal static class DatabaseFoundationAssertions
         bool useResolvedPolicy = false,
         CertificateExpiryThresholds? sslThresholds = null)
     {
+        if (sslThresholds is not null)
+        {
+            monitor.ConfigurationFingerprint = new ResolvedSslPolicy(monitor.IntervalSeconds, monitor.TimeoutSeconds,
+                monitor.FailureConfirmationCount, monitor.RecoveryConfirmationCount,
+                sslThresholds.WarningDays, sslThresholds.HighDays, sslThresholds.CriticalDays)
+                .Fingerprint(monitor.Endpoint.NormalizedUrl, monitor.Endpoint.Environment.IsProduction);
+            await database.SaveChangesAsync();
+            await database.Entry(monitor).ReloadAsync();
+        }
         var sequence = Interlocked.Increment(ref fixtureSequence);
         var createdAt = (timeProvider ?? TimeProvider.System).GetUtcNow()
             .AddMinutes(-2).AddMilliseconds(sequence);
