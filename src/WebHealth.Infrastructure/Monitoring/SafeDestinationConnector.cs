@@ -41,36 +41,55 @@ internal static class SafeDestinationConnector
             throw new SafeDestinationException();
         }
 
-        var selected = addresses[0];
-        var addressLease = await limiter.AcquireAddressAsync(selected.ToString(), cancellationToken);
-        var socket = new Socket(selected.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-        try
+        var connectStart = Stopwatch.GetTimestamp();
+        foreach (var address in addresses)
         {
-            var connectStart = Stopwatch.GetTimestamp();
-            await socket.ConnectAsync(new IPEndPoint(selected, port), cancellationToken);
-            if (socket.RemoteEndPoint is not IPEndPoint peer
-                || !Normalize(peer.Address).Equals(selected)
-                || peer.Port != port
-                || !addressPolicy.IsAllowed(peer.Address))
+            cancellationToken.ThrowIfCancellationRequested();
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            attempt.CancelAfter(options.PerAddressConnectTimeout);
+            IDisposable? addressLease = null;
+            Socket? socket = null;
+            try
             {
-                throw new SafeDestinationException();
-            }
+                addressLease = await limiter.AcquireAddressAsync(address.ToString(), attempt.Token);
+                socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                await socket.ConnectAsync(new IPEndPoint(address, port), attempt.Token);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (socket.RemoteEndPoint is not IPEndPoint peer
+                    || !Normalize(peer.Address).Equals(address)
+                    || peer.Port != port
+                    || !addressPolicy.IsAllowed(Normalize(peer.Address)))
+                {
+                    throw new SafeDestinationException();
+                }
 
-            if (timing is not null)
+                if (timing is not null)
+                {
+                    var completedAt = Stopwatch.GetTimestamp();
+                    timing.ConnectDurationMs = SafeHttpTimingMath.ElapsedMs(connectStart, completedAt);
+                    timing.ConnectCompletedTimestamp = completedAt;
+                }
+
+                var stream = new LeaseReleasingStream(new NetworkStream(socket, ownsSocket: true), addressLease);
+                socket = null;
+                addressLease = null;
+                return stream;
+            }
+            catch (SocketException) when (!cancellationToken.IsCancellationRequested)
             {
-                var connectCompletedAt = Stopwatch.GetTimestamp();
-                timing.ConnectDurationMs = SafeHttpTimingMath.ElapsedMs(connectStart, connectCompletedAt);
-                timing.ConnectCompletedTimestamp = connectCompletedAt;
             }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && attempt.IsCancellationRequested)
+            {
+            }
+            finally
+            {
+                socket?.Dispose();
+                addressLease?.Dispose();
+            }
+        }
 
-            return new LeaseReleasingStream(new NetworkStream(socket, ownsSocket: true), addressLease);
-        }
-        catch
-        {
-            socket.Dispose();
-            addressLease.Dispose();
-            throw;
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new SocketException((int)SocketError.NotConnected);
     }
 
     private static IPAddress Normalize(IPAddress address) =>

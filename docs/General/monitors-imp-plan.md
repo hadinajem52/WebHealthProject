@@ -1,6 +1,10 @@
 # Phase 7 HTTP and SSL Monitoring Hardening Plan
 
-**Status:** Planned
+**Status:** In progress
+
+P7-MON-01 implementation and verification are recorded in
+[Monitoring hardening evidence](../phase-7/Monitoring_Hardening_Evidence.md).
+P7-MON-02 through P7-MON-07 remain pending.
 
 **Project profile:** Personal internship/portfolio project owned, implemented, reviewed, and operated by one intern.
 

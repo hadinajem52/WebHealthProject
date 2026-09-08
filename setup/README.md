@@ -192,3 +192,12 @@ Verification enabled, and the app password is scoped to SMTP only and revocable 
 [Google Account app passwords](https://myaccount.google.com/apppasswords). Unlike the Mailgun
 sandbox it replaced, it does grant send-as access to a real mailbox, so revoke and reissue it from
 that page if the repository is ever shared more widely.
+
+## Monitoring connection attempts
+
+`Monitoring:HttpTransport:PerAddressConnectTimeout` defaults to `00:00:05` and accepts
+`00:00:01` through `00:00:10`. Startup rejects values outside these bounds. Each DNS
+address attempt has this limit, including waiting for its per-IP concurrency slot.
+All DNS answers are validated before connection; permitted addresses are tried in resolver
+order. The check timeout remains the overall deadline across DNS, attempts, TLS, and HTTP.
+No database migration is required for this setting.

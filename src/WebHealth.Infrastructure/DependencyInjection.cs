@@ -362,8 +362,15 @@ public static class DependencyInjection
             UserAgent = string.IsNullOrWhiteSpace(configuredUserAgent)
                 ? "WebHealthMonitor/1.0"
                 : configuredUserAgent.Trim(),
-            Contact = string.IsNullOrWhiteSpace(configuredContact) ? null : configuredContact.Trim()
+            Contact = string.IsNullOrWhiteSpace(configuredContact) ? null : configuredContact.Trim(),
+            PerAddressConnectTimeout = configuration.GetValue<TimeSpan?>(
+                $"{SafeHttpTransportOptions.SectionName}:PerAddressConnectTimeout") ?? TimeSpan.FromSeconds(5)
         };
+        if (safeHttpOptions.PerAddressConnectTimeout < TimeSpan.FromSeconds(1)
+            || safeHttpOptions.PerAddressConnectTimeout > TimeSpan.FromSeconds(10))
+        {
+            throw new InvalidOperationException("Monitoring:HttpTransport:PerAddressConnectTimeout must be between 1 and 10 seconds.");
+        }
         ValidateContact(safeHttpOptions);
         services.AddSingleton(safeHttpOptions);
         ValidateCrawlOptions(crawlOptions, safeHttpOptions);

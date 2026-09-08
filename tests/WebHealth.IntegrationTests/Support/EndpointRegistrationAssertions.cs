@@ -93,6 +93,8 @@ internal static class EndpointRegistrationAssertions
         modeThreeEndpoint.Environment.Website.IsEnabled.Should().BeTrue();
         (await eligibility.IsEndpointEligibleAsync(modeThree)).Should().BeTrue();
 
+        await VerifyMonitorArchiveAsync(registration, database,
+            scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>(), baseEndpoint, access, label);
         await VerifyDuplicateEndpointAsync(registration, baseEndpoint, access);
         await VerifyDuplicateWebsiteAsync(registration, baseEndpoint, administratorOwnerId, label, access);
         await VerifyRollbackAsync(registration, database, administratorOwnerId, label, access);
@@ -109,6 +111,70 @@ internal static class EndpointRegistrationAssertions
             baseEndpoint,
             label,
             access);
+    }
+
+    private static async Task VerifyMonitorArchiveAsync(
+        IEndpointRegistrationService registration,
+        ApplicationDbContext database,
+        IEndpointRegistryService registry,
+        Endpoint parent,
+        RegistryAccessContext access,
+        string label)
+    {
+        var endpointId = await RegisterAsync(registration, new ExistingEnvironment(parent.EnvironmentId),
+            Settings($"https://example.com/{label}/archive", scheduling: false) with { PageAuditEnabled = true }, access);
+        var endpoint = await database.Endpoints.Include(item => item.Monitors).SingleAsync(item => item.Id == endpointId);
+        var availability = endpoint.Monitors.Single(item => item.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType);
+        var ssl = endpoint.Monitors.Single(item => item.MonitorType == RegistryDefaults.SslCertificateMonitorType);
+        availability.IsEnabled = false;
+        var historical = EndpointMonitorReconciler.CreateSslMonitor(endpoint, false, true, access.UserId, endpoint.CreatedAt);
+        historical.DeletedAt = endpoint.CreatedAt;
+        historical.DeletedByUserId = access.UserId;
+        database.EndpointMonitors.Add(historical);
+        var pageAudit = endpoint.Monitors.Single(item => item.MonitorType == RegistryDefaults.PageAuditMonitorType);
+        await database.SaveChangesAsync();
+        await database.Entry(availability).ReloadAsync();
+        await database.Entry(historical).ReloadAsync();
+        var dueAt = availability.NextDueAt;
+        var anchor = availability.ScheduleAnchor;
+        var retiredAt = historical.DeletedAt;
+        var retiredVersion = historical.Version;
+
+        var pageAuditInterval = pageAudit.IntervalSeconds;
+        var pageAuditFingerprint = pageAudit.ConfigurationFingerprint;
+        var updated = await registry.UpdateAsync(new(endpointId, endpoint.NormalizedUrl, endpoint.OwnerSubjectId,
+            true, null, endpoint.Version, IntervalMinutesOverride: 11, SchedulingEnabled: false,
+            WarningThresholdMsOverride: 1200, CriticalThresholdMsOverride: 2500, PageAuditEnabled: true), access);
+        updated.Succeeded.Should().BeTrue(string.Join(" ", updated.Errors));
+        await database.Entry(pageAudit).ReloadAsync();
+        pageAudit.IntervalSeconds.Should().Be(pageAuditInterval);
+        pageAudit.ConfigurationFingerprint.Should().Be(pageAuditFingerprint);
+        pageAudit.WarningThresholdMs.Should().BeNull();
+        pageAudit.CriticalThresholdMs.Should().BeNull();
+        ssl.IntervalSeconds.Should().Be(RegistryDefaults.SslIntervalSeconds);
+        ssl.WarningThresholdMs.Should().BeNull();
+        ssl.CriticalThresholdMs.Should().BeNull();
+        await database.Entry(availability).ReloadAsync();
+        dueAt = availability.NextDueAt;
+
+        var archived = await registry.DeleteAsync(new(endpointId, endpoint.Version), access);
+        archived.Succeeded.Should().BeTrue(string.Join(" ", archived.Errors));
+        historical.DeletedAt.Should().Be(retiredAt);
+        historical.Version.Should().Be(retiredVersion);
+        var restored = await registry.RestoreAsync(new(endpointId, endpoint.Version), access);
+        restored.Succeeded.Should().BeTrue(string.Join(" ", restored.Errors));
+        database.ChangeTracker.Clear();
+        endpoint = await database.Endpoints.Include(item => item.Monitors).SingleAsync(item => item.Id == endpointId);
+        endpoint.IsEnabled.Should().BeFalse();
+        var active = endpoint.Monitors.Where(item => item.DeletedAt is null).ToArray();
+        active.Select(item => item.Id).Should().BeEquivalentTo([availability.Id, ssl.Id]);
+        var restoredAvailability = active.Single(item => item.Id == availability.Id);
+        restoredAvailability.IsEnabled.Should().BeFalse();
+        restoredAvailability.SchedulingEnabled.Should().BeFalse();
+        restoredAvailability.NextDueAt.Should().Be(dueAt);
+        restoredAvailability.ScheduleAnchor.Should().Be(anchor);
+        endpoint.Monitors.Single(item => item.Id == historical.Id).DeletedAt.Should().Be(retiredAt);
+        endpoint.Monitors.Single(item => item.Id == pageAudit.Id).DeletedAt.Should().NotBeNull();
     }
 
     private static async Task VerifyAuthorizationAsync(

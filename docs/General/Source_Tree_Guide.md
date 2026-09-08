@@ -500,6 +500,7 @@ Generated migration designer files and `ApplicationDbContextModelSnapshot.cs` ar
 | `ClientRegistryService.cs` | Implements client mutations and records their audit events. |
 | `WebsiteRegistryService.cs` | Implements website mutations, tags, ownership, and related audit behavior. |
 | `EnvironmentRegistryService.cs` | Implements environment mutations and validates their website relationship. |
+| `EndpointMonitorReconciler.cs` | Creates HTTP/SSL monitors, preserves archive retirement identity and scheduling choices, and reconciles SSL presence after target changes. |
 | `EndpointRegistryService.cs` | Implements endpoint mutations, URL rules, monitor creation, scheduling, and threshold overrides. |
 | `TargetRegistryReader.cs` | Reads environments, endpoints, archives, and current certificate status for target pages. |
 | `EndpointTestGate.cs` | Decides whether an endpoint can be tested: visibility, role rights, and the enabled state of the endpoint, environment, website, client, and monitor. |

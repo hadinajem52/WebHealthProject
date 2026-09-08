@@ -7,7 +7,7 @@ internal sealed record SafeHttpTransportOptions
     public const string SectionName = "Monitoring:HttpTransport";
     public const string ClientName = "MonitoringSafeHttp";
 
-    public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(5);
+    public TimeSpan PerAddressConnectTimeout { get; init; } = TimeSpan.FromSeconds(5);
     public int MaxResponseHeadersKilobytes { get; init; } = 32;
     public int MaxDnsAnswers { get; init; } = 16;
     public int GlobalConcurrency { get; init; } = 20;

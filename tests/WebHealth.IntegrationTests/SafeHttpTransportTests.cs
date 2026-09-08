@@ -461,7 +461,7 @@ public sealed class SafeHttpTransportTests
         handler.UseCookies.Should().BeFalse();
         handler.SslOptions.RemoteCertificateValidationCallback.Should().BeNull();
         handler.MaxResponseHeadersLength.Should().Be(32);
-        handler.ConnectTimeout.Should().Be(TimeSpan.FromSeconds(5));
+        handler.ConnectTimeout.Should().Be(Timeout.InfiniteTimeSpan);
         handler.Dispose();
     }
 
@@ -612,6 +612,68 @@ public sealed class SafeHttpTransportTests
         await AssertStillWaiting(waitingAddress);
         address.Dispose();
         using var acquiredAddress = await waitingAddress;
+    }
+
+    [Fact]
+    public async Task SendAsync_FallsBackFromUnavailableIpv6ToNormalizedIpv4()
+    {
+        await using var server = await HttpFixture.Start(
+            "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok");
+        await using var harness = CreateHarness(
+            new HostResolver(("fallback.test", [IPAddress.IPv6Loopback, IPAddress.Loopback.MapToIPv6(), IPAddress.Loopback])));
+
+        var result = await harness.Transport.SendAsync(
+            new(Guid.NewGuid(), $"http://fallback.test:{server.Port}/", false));
+
+        result.Failure.Should().BeNull();
+        result.StatusCode.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task Connector_RejectsRawAnswerLimitBeforeDeduplication()
+    {
+        await using var server = await HttpFixture.Start("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        await using var harness = CreateHarness(
+            new HostResolver(("limit.test", Enumerable.Repeat(IPAddress.Loopback, 17).ToArray())));
+
+        var result = await harness.Transport.SendAsync(new(Guid.NewGuid(), $"http://limit.test:{server.Port}/", false));
+
+        result.Failure.Should().Be(SafeHttpFailureKind.DestinationRejected);
+        server.ContactCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Connector_BoundsAddressWaitAndReleasesSlots(bool cancel)
+    {
+        var options = DefaultOptions() with { PerIpConcurrency = 1, PerAddressConnectTimeout = TimeSpan.FromSeconds(1) };
+        var limiter = new SafeHttpConcurrencyLimiter(options);
+        using var occupied = await limiter.AcquireAddressAsync(IPAddress.IPv6Loopback.ToString(), CancellationToken.None);
+        using var deadline = new CancellationTokenSource(cancel ? TimeSpan.FromMilliseconds(50) : TimeSpan.FromSeconds(5));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var connect = SafeDestinationConnector.ConnectAsync(
+            new HostResolver(("fallback.test", [IPAddress.IPv6Loopback, IPAddress.Loopback])),
+            new ExactLoopbackPolicy(), limiter, options, "fallback.test", port, null, deadline.Token);
+        if (cancel)
+        {
+            await FluentActions.Awaiting(async () => await connect).Should().ThrowAsync<OperationCanceledException>();
+            listener.Pending().Should().BeFalse();
+        }
+        else
+        {
+            await using (var stream = await connect)
+            {
+                using var peer = await listener.AcceptTcpClientAsync(deadline.Token);
+                stream.CanWrite.Should().BeTrue();
+            }
+        }
+        occupied.Dispose();
+        using var acquisitionDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+        using var ipv6 = await limiter.AcquireAddressAsync(IPAddress.IPv6Loopback.ToString(), acquisitionDeadline.Token);
+        using var ipv4 = await limiter.AcquireAddressAsync(IPAddress.Loopback.ToString(), acquisitionDeadline.Token);
     }
 
     private static async Task AssertStillWaiting(Task task)

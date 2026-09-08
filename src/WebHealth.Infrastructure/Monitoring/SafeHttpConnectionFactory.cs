@@ -18,7 +18,7 @@ internal static class SafeHttpConnectionFactory
             UseProxy = false,
             UseCookies = false,
             AutomaticDecompression = DecompressionMethods.All,
-            ConnectTimeout = options.ConnectTimeout,
+            ConnectTimeout = Timeout.InfiniteTimeSpan,
             MaxResponseHeadersLength = options.MaxResponseHeadersKilobytes,
             PooledConnectionLifetime = TimeSpan.Zero,
             PooledConnectionIdleTimeout = TimeSpan.Zero,

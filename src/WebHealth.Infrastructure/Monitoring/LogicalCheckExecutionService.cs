@@ -126,15 +126,18 @@ internal sealed class LogicalCheckExecutionService(
         LogicalCheck check,
         CancellationToken cancellationToken)
     {
-        if (MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType))
+        switch (check.ConfigurationSnapshot.MonitorType)
         {
-            var probeRequest = CreateProbeRequest(check);
-            return new SslCertificateEvidence(
-                probeRequest, await sslCertificateProbe.ProbeAsync(probeRequest, cancellationToken));
+            case SslMonitorIdentity.MonitorType:
+                var probeRequest = CreateProbeRequest(check);
+                return new SslCertificateEvidence(
+                    probeRequest, await sslCertificateProbe.ProbeAsync(probeRequest, cancellationToken));
+            case HttpIssueIdentity.MonitorType:
+                var request = CreateRequest(check);
+                return new HttpTransportEvidence(request, await transport.SendAsync(request, cancellationToken));
+            default:
+                throw new InvalidOperationException("Unsupported monitor type for HTTP or SSL execution.");
         }
-
-        var request = CreateRequest(check);
-        return new HttpTransportEvidence(request, await transport.SendAsync(request, cancellationToken));
     }
 
     private Task<LogicalCheck?> LoadCheckAsync(Guid checkId, CancellationToken token) =>

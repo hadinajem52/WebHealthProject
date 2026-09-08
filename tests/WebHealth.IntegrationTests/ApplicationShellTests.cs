@@ -1,3 +1,4 @@
+using AngleSharp.Html.Parser;
 using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
@@ -242,15 +243,13 @@ public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory
 
         var content = await client.GetStringAsync("/");
 
-        var badges = BadgeLabel().Matches(content);
+        using var document = new HtmlParser().ParseDocument(content);
+        var badges = document.QuerySelectorAll(".badge[data-status]");
         Assert.NotEmpty(badges);
         Assert.All(badges, badge => Assert.False(
-            string.IsNullOrWhiteSpace(badge.Groups[1].Value),
+            string.IsNullOrWhiteSpace(badge.QuerySelector(".badge__label")?.TextContent),
             "A status pill was served with no label, leaving its fill as the only cue."));
     }
-
-    [GeneratedRegex("<span class=\"badge[^\"]*\"[^>]*?data-status=\"[a-z]+\"[^>]*>\\s*(?:<span class=\"badge__label\">)?([^<]*)")]
-    private static partial Regex BadgeLabel();
 
     [Fact]
     public async Task TrendChart_IsVendoredLocallyAndHasATableEquivalent()
