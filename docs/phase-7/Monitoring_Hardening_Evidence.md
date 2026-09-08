@@ -335,3 +335,16 @@ metric cardinality have passing evidence above. The status and badge contract is
 General/Monitoring_Status_Reference.md. Desktop/mobile diagnostics, dashboard and endpoint output
 were inspected. Database readiness remains independent. Retention and representative release
 workloads remain pending; no production availability claim or external exporter is included.
+
+### P7-DATA-01 bounded steady-failure evidence
+
+Repeated confirmed failures with no severity escalation now leave incident evidence, events and
+version unchanged. Every raw check remains recorded. The existing opening/recovery/resolution
+flow is preserved. Retention_Runbook.md defines audit events as retained indefinitely before any
+age-based deletion is introduced. No retention worker or deletion permission is enabled yet.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed. The
+health-confirmation stage now repeats three failures and asserts stable evidence/event counts
+and incident version, then verifies recovery evidence and the exact material audit sequence.
+All 657 ordinary integration tests passed (four opt-in skips). Release build: zero warnings/errors.
+Hold/aggregate schema, deletion worker and the remainder of increment 6 are still pending.

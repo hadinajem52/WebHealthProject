@@ -385,19 +385,21 @@ internal sealed class IncidentAutomationService(
         CancellationToken cancellationToken,
         string? observedSeverity = null)
     {
-        var before = IncidentLifecycleService.Snapshot(incident);
-        incident.Version++;
         var escalated = observedSeverity is not null
             && FindingSeverities.Rank(observedSeverity) > FindingSeverities.Rank(incident.Severity);
-        if (escalated)
+        if (!escalated)
         {
-            AddEvent(
-                incident,
-                IncidentEventTypes.NoteAdded,
-                now,
-                note: $"Severity escalated from {incident.Severity} to {observedSeverity}.");
-            incident.Severity = observedSeverity!;
+            return;
         }
+
+        var before = IncidentLifecycleService.Snapshot(incident);
+        incident.Version++;
+        AddEvent(
+            incident,
+            IncidentEventTypes.NoteAdded,
+            now,
+            note: $"Severity escalated from {incident.Severity} to {observedSeverity}.");
+        incident.Severity = observedSeverity!;
 
         AddEvidence(incident, observation, evidenceType, evidenceRole, now);
         AddEvidenceEvent(incident, $"{evidenceType} evidence recorded.", now);

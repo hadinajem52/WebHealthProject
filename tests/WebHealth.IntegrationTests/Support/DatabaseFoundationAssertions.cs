@@ -1620,6 +1620,17 @@ internal static class DatabaseFoundationAssertions
             && evidence.LogicalCheckId == confirmedFailure);
         incident.Events.Should().Contain(eventRecord => eventRecord.EventType == IncidentEventTypes.Opened);
 
+        var openingVersion = incident.Version;
+        var openingEvidenceCount = await database.IncidentEvidence.CountAsync(item => item.IncidentId == incident.Id);
+        var openingEventCount = await database.IncidentEvents.CountAsync(item => item.IncidentId == incident.Id);
+        for (var repeat = 0; repeat < 3; repeat++)
+        {
+            await FinalizeScheduledResultAsync(database, monitor, 500, clock);
+        }
+        (await database.IncidentEvidence.CountAsync(item => item.IncidentId == incident.Id)).Should().Be(openingEvidenceCount);
+        (await database.IncidentEvents.CountAsync(item => item.IncidentId == incident.Id)).Should().Be(openingEventCount);
+        incident.Version.Should().Be(openingVersion);
+
         var openedNotification = await database.NotificationEvents.AsNoTracking()
             .Include(notificationEvent => notificationEvent.Deliveries)
             .SingleAsync(notificationEvent => notificationEvent.IncidentId == incident.Id
