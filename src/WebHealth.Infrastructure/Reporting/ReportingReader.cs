@@ -132,7 +132,8 @@ internal sealed class ReportingReader(
                 .ThenBy(item => item.DaysRemaining)
                 .ThenBy(item => item.EndpointDisplayUrl, StringComparer.Ordinal)
                 .Take(AttentionListCount)
-                .ToArray());
+                .ToArray(),
+            items.Count(item => !item.IsValid && item.Severity != CertificateExpirySeverity.None));
     }
 
     public async Task<ReportDiagnostics> QueryDiagnosticsAsync(

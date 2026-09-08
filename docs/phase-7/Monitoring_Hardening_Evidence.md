@@ -223,3 +223,5 @@ The database regression checks that a later superseded expired observation canno
 healthy certificate back into the dashboard attention list.
 Verification on 2026-09-08: the full ordered database suite passed; the updated Razor page built
 in Release with zero warnings and errors. Final responsive browser verification remains pending.
+
+Certificate attention totals now subtract the overlap between invalid certificates and expiry bands, so simultaneous faults do not count one certificate twice. The focused regression passed on 2026-09-08; the test build compiled the application and web projects successfully.

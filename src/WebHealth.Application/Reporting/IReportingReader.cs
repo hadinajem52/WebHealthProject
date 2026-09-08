@@ -129,11 +129,12 @@ public sealed record ReportCertificateExpiry(
     int WarningCount,
     int HighCount,
     int CriticalCount,
-    IReadOnlyList<CertificateExpiryItem> NeedingAttention)
+    IReadOnlyList<CertificateExpiryItem> NeedingAttention,
+    int InvalidWithExpiryCount = 0)
 {
     public static ReportCertificateExpiry Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, []);
 
-    public int AttentionCount => WarningCount + HighCount + CriticalCount + InvalidCount;
+    public int AttentionCount => WarningCount + HighCount + CriticalCount + InvalidCount - InvalidWithExpiryCount;
 }
 
 public sealed record CertificateExpiryItem(
