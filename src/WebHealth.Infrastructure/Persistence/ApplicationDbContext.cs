@@ -48,6 +48,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<LogicalCheck> LogicalChecks => Set<LogicalCheck>();
     public DbSet<MonitoringRuntimeState> MonitoringRuntimeStates => Set<MonitoringRuntimeState>();
+    public DbSet<RetentionHold> RetentionHolds => Set<RetentionHold>();
 
     public DbSet<CheckConfigurationSnapshot> CheckConfigurationSnapshots => Set<CheckConfigurationSnapshot>();
 

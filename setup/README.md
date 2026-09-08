@@ -367,3 +367,11 @@ not confirmed target health. Dimensions are limited to `monitor_type`, `source`,
 Execution log scopes carry check, work, endpoint, monitor, attempt, job, worker, source, snapshot
 schema and generation identifiers. Transport warning events contain a safe category rather than
 raw exception text, which could contain target data. No migration or configuration change is needed.
+
+### Retention hold schema
+
+Apply `20260908144110_RetentionHolds` explicitly with the normal migration procedure. It creates
+the bounded hold-history table; the compiled model is updated with it. The Administrator management
+flow and deletion worker are still being implemented, so this schema alone does not enforce holds.
+No deletion worker is enabled. Rollback drops all hold history; keep deletion disabled during any
+rollback. See `docs/phase-7/Retention_Runbook.md` for the policy and supported scopes.

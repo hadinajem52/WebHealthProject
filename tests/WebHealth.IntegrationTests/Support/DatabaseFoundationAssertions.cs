@@ -107,11 +107,13 @@ internal static class DatabaseFoundationAssertions
         "20260908125906_StructuredCertificateFacts",
         "20260908130516_SslSnapshotExpiryPolicy",
         "20260908131625_SslPolicyFingerprint",
-        "20260908135926_MonitoringRuntimeState"
+        "20260908135926_MonitoringRuntimeState",
+        "20260908144110_RetentionHolds"
     ];
 
     private static readonly string[] ExpectedTables =
     [
+        "retention_hold",
         "monitoring_runtime_state",
         "target_authorization_evidence",
         "audit_event",
@@ -172,6 +174,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] TablesAddedAfterPhaseThree =
     [
+        "retention_hold",
         "monitoring_runtime_state",
         "target_authorization_evidence",
         "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
@@ -191,6 +194,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] ExpectedEntityTypeNames =
     [
+        "RetentionHold",
         "MonitoringRuntimeState",
         "TargetAuthorizationEvidence",
         "IdentityRoleClaim`1",
@@ -273,6 +277,7 @@ internal static class DatabaseFoundationAssertions
             ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
 
         await MonitoringRuntimeAssertions.VerifyAsync(connectionString);
+        await RetentionHoldAssertions.VerifyAsync(connectionString);
         await VerifyIdentityBootstrapAsync(connectionString);
         await VerifyClientWebsiteRegistryAsync(connectionString);
         await VerifyRegistryCreateComposabilityAsync(connectionString);

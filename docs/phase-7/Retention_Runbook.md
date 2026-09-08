@@ -20,3 +20,18 @@ material transitions. Historical evidence is preserved; this change does not rem
 The worker will default to disabled and dry-run, with batches of 1,000, at most 20 batches per run,
 a 30-second run budget and an hourly schedule. Holds and retention configuration are Administrator
 operations. Dry-run evidence must be recorded before enabling deletion.
+
+## Hold storage
+
+Migration `20260908144110_RetentionHolds` adds `retention_hold`. The supported scope types are
+Client, Website, Environment, Endpoint, Monitor, LogicalCheck, Incident, CrawlRun and PageAuditRun.
+Reason text is required and limited to 500 characters. Expiry is optional and must follow creation;
+release time and actor must be supplied together, with release no earlier than creation.
+
+Scope and actor IDs are historical identifiers, without cascading foreign keys. The management
+service must validate their existence and authorization before writing. The retention worker must
+expand scopes through registry and history relationships; merely adding the table does not enable
+hold enforcement. No secondary indexes are introduced without representative query-plan evidence.
+
+Rollback removes the holds table and its history. Do not roll back a deployment that relies on
+holds while retaining an enabled deletion worker. Fresh upgrade creates no artificial holds.

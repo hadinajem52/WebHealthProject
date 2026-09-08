@@ -348,3 +348,18 @@ health-confirmation stage now repeats three failures and asserts stable evidence
 and incident version, then verifies recovery evidence and the exact material audit sequence.
 All 657 ordinary integration tests passed (four opt-in skips). Release build: zero warnings/errors.
 Hold/aggregate schema, deletion worker and the remainder of increment 6 are still pending.
+
+### P7-DATA-01 retention hold storage
+
+Migration 20260908144110_RetentionHolds adds all nine scope types, bounded reason, creator/time,
+optional expiry and paired release actor/time. Database checks reject empty identities, unsupported
+scopes, empty reasons and inconsistent dates/releases. Scope and actor identities are historical
+identifiers; the upcoming service validates existing records and role access. No secondary indexes
+or deletion worker are introduced. EF, compiled model and expected schema/entity lists are updated.
+
+Verification on 2026-09-08: full ordered database foundation and explicit migration script passed.
+The new schema checks exercise supported scopes, invalid combinations, microsecond expiry and
+release boundaries, and isolated populated rollback/upgrade/repeatability. All 657 ordinary
+integration tests passed (four opt-in skips). Release build had zero warnings/errors; EF reports
+no pending model changes. Administrator management, scope expansion and hold enforcement remain
+pending with the rest of increment 6. Setup and the retention runbook describe this limitation.

@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("5354f0ab-2ee8-46dd-b624-2fe9c8481158"), entityTypeCount: 56)
+            : base(skipDetectChanges: false, modelId: new Guid("d58f035e-f289-4205-b5bc-35b4516180a9"), entityTypeCount: 57)
         {
         }
 
@@ -49,6 +49,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var logicalCheck = LogicalCheckEntityType.Create(this);
             var monitoringRuntimeState = MonitoringRuntimeStateEntityType.Create(this);
             var redirectHop = RedirectHopEntityType.Create(this);
+            var retentionHold = RetentionHoldEntityType.Create(this);
             var targetAuthorizationEvidence = TargetAuthorizationEvidenceEntityType.Create(this);
             var notificationAttempt = NotificationAttemptEntityType.Create(this);
             var notificationDelivery = NotificationDeliveryEntityType.Create(this);
@@ -218,6 +219,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             LogicalCheckEntityType.CreateAnnotations(logicalCheck);
             MonitoringRuntimeStateEntityType.CreateAnnotations(monitoringRuntimeState);
             RedirectHopEntityType.CreateAnnotations(redirectHop);
+            RetentionHoldEntityType.CreateAnnotations(retentionHold);
             TargetAuthorizationEvidenceEntityType.CreateAnnotations(targetAuthorizationEvidence);
             NotificationAttemptEntityType.CreateAnnotations(notificationAttempt);
             NotificationDeliveryEntityType.CreateAnnotations(notificationDelivery);
