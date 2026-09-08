@@ -535,3 +535,16 @@ baselines, preservation behind newer superseded evidence, aging across the cutof
 superseded evidence, result/check survival and cancellation. Release build: zero warnings/errors.
 Observation jobs remain unscheduled with retention disabled; increment 6 and the final gates remain
 in progress.
+
+### Crawl retention batches
+
+CrawlRetentionBatch expires bounded terminal history strictly after 90 days, deleting links before
+runs. It preserves active holds, running runs, the latest terminal run and the latest two complete
+full-coverage comparison runs per endpoint. CrawlHistoryQueries shares comparison eligibility with
+CrawlReportReader. Terminal execution claim IDs remain historical tokens and do not pin all history.
+
+Validation: full database foundation script passed with a zero-warning/error Release build. The
+named crawl fixture proves disabled/dry-run behavior, BatchSize=1, exact cutoff survival, held and
+running survival, latest failed terminal survival, both comparison baselines, child cleanup and
+cancellation. Retention remains disabled and unscheduled; remaining increment 6 work and final
+acceptance/load gates are still pending.

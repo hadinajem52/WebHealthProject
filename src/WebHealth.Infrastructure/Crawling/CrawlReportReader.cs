@@ -88,12 +88,8 @@ internal sealed class CrawlReportReader(
         RegistryAccessContext access,
         CancellationToken cancellationToken = default)
     {
-        var runs = await VisibleRuns(access)
-            .Where(run => run.EndpointId == endpointId
-                && run.Status == CrawlRunStatuses.Completed
-                && run.StopReason == CrawlStopReasons.FrontierExhausted
-                && run.PagesFetched > 0
-                && !run.CoverageLimited)
+        var runs = await CrawlHistoryQueries.Comparable(VisibleRuns(access))
+            .Where(run => run.EndpointId == endpointId)
             .OrderByDescending(run => run.StartedAt)
             .ThenByDescending(run => run.Id)
             .Select(run => run.Id)

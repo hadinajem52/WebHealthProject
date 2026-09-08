@@ -173,3 +173,13 @@ observation timestamp per monitor, including ties. This preserves current reader
 newer superseded observation exists or readers use different stable-ID tie directions. These
 baseline exceptions take precedence over age. Observation cleanup removes only the observation;
 the raw-result batch separately aggregates and removes eligible result detail afterward.
+
+## Crawl retention and comparison baselines
+
+Crawl runs expire strictly 90 days after FinishedAt. Running runs and active holds never expire.
+Retain the latest terminal run per endpoint ordered by StartedAt then ID descending, and retain
+the latest two comparison-eligible runs using the same ordering as CompareLatestAsync. Comparison
+eligibility means Completed, FrontierExhausted, PagesFetched > 0 and no limited coverage. This
+preserves the existing comparison even when the newest run failed or stopped at a limit. Archived
+runs still participate because the report currently includes them. Terminal execution claim IDs
+are historical fencing tokens, not live leases, and do not prevent expiration.

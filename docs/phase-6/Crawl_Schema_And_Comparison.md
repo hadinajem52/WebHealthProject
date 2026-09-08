@@ -128,9 +128,9 @@ Phase 7 owns retention. This increment defines the rule so that phase has someth
 so the table is not designed as though rows live forever:
 
 - **Crawl runs and their link results are kept for 90 days.**
-- **The most recent terminal run per endpoint is kept regardless of age**, because deleting it would
-  destroy the baseline every comparison in section 4 is measured against — a retention job that
-  silently turned every link into a "new" finding would be worse than no retention at all.
+- **The most recent terminal run and latest two comparison-eligible runs per endpoint are kept
+  regardless of age.** The two complete, full-coverage runs preserve the current comparison even
+  when the latest terminal run failed or stopped at a limit. Running and held runs also survive.
 - Deletion is by run: `crawl_link_result` cascades from `crawl_run`, so a run and its results leave
   together and a result can never outlive the run that explains it.
 
@@ -161,3 +161,8 @@ All of these run inside the database foundation gate, as the crawl stage that fo
 | An unchecked link is not "resolved" | `CrawlReportReader` | `VerifyUncheckedLinkIsNotReportedResolvedAsync` |
 | A replayed run start is a no-op | `CrawlResultSink` | `VerifyRunStartIsReplayableAsync` |
 | Results survive per link, not per run | `CrawlResultSink` | `VerifyComparisonAsync` |
+
+Monitoring retention preserves the latest terminal run plus the latest two comparison-eligible
+runs per endpoint, including their links, regardless of age. Active holds and running runs also
+survive. Other terminal history expires strictly 90 days after completion. Comparison eligibility
+and ordering are shared with the report reader so cleanup cannot remove its current baseline.

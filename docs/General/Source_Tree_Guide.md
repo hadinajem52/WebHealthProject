@@ -1019,3 +1019,8 @@ their results. The batch keeps logical checks/snapshots and is not yet scheduled
 certificate (24-calendar-month) observations. It shares check protection queries and preserves the
 latest recorded and latest Current result-backed observation timestamps, including ties. It leaves
 results/checks for the separate aggregate-aware cleanup path and is not yet scheduled.
+
+`Infrastructure/Monitoring/CrawlRetentionBatch.cs` expires bounded terminal crawl history after
+90 days while preserving holds, active runs, the latest terminal run and the latest two comparable
+runs per endpoint. `Crawling/CrawlHistoryQueries.cs` shares comparison eligibility with the report
+reader. The batch removes links before selected runs and remains unscheduled.
