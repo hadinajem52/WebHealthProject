@@ -409,3 +409,15 @@ expiry and immediate release. The initial fixture omitted a required Lighthouse 
 fixture was corrected before the green run. Release build had zero warnings/errors. No migration
 or secondary index was added. Worker integration, aggregate storage/reporting and UI browser
 verification remain pending; increment 6 is not complete and deletion remains disabled.
+
+### P7-DATA-01 aggregate histogram contract
+
+ResponseTimeHistogram defines version-1 non-cumulative duration buckets and approximate nearest-rank
+percentiles capped by the recorded maximum. Empty samples return no estimate; invalid shape, counts,
+durations and percentile inputs are rejected. The runbook records bucket bounds and the unchanged
+eligible Healthy/Warning duration sample set before aggregate persistence and report integration.
+
+Verification on 2026-09-08: ten focused boundary/estimate/validation cases passed, followed by all
+815 unit tests. Release compilation succeeded. No current report calculation or database schema
+changes in this slice. Aggregate storage, recomputation, older-window reporting and retention
+worker integration remain pending; the overall goal is still in progress.

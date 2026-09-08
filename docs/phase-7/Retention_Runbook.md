@@ -71,3 +71,13 @@ hold protects that run and its children without protecting unrelated monitoring 
 Released holds do not match; expiry is exclusive at its exact timestamp. Archived configuration
 is deliberately included. The deletion worker must use these queries inside the shared retention
 transaction lock. Query integration is implemented ahead of the worker; deletion is still disabled.
+
+## Daily response-time histogram contract
+
+Daily aggregates will preserve the existing report duration sample set: uptime-eligible Healthy
+or Warning results. Version 1 buckets have inclusive upper bounds of 0, 100, 250, 500, 1000, 2500,
+5000, 10000, 30000, 60000 and 120000 milliseconds, followed by an overflow bucket. Stored counts
+are non-cumulative. Approximate percentiles select the nearest-rank bucket and use its upper bound,
+capped by the recorded maximum; overflow uses the recorded maximum. Empty samples return no value.
+Raw retained windows continue using their exact existing percentile calculation. Mixed or aggregate
+windows must disclose approximation rather than presenting bucket estimates as exact percentiles.
