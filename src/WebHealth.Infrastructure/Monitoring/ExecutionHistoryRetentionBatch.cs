@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WebHealth.Application.Monitoring;
-using WebHealth.Domain.Incidents;
 using WebHealth.Infrastructure.Persistence;
 
 namespace WebHealth.Infrastructure.Monitoring;
@@ -28,15 +27,7 @@ internal sealed class ExecutionHistoryRetentionBatch(ApplicationDbContext databa
         await RetentionTransactionLock.AcquireAsync(database, token);
         var now = timeProvider.GetUtcNow();
         var cutoff = now.AddDays(-90);
-        var held = new RetentionHoldQueries(database, now).LogicalCheckIds();
-        var activeIncidentStatuses = IncidentStatuses.Active.ToArray();
-        var checks = database.LogicalChecks.Where(check => check.State == "Completed" && check.CompletedAt < cutoff
-            && !held.Contains(check.Id)
-            && !database.ExecutionLeases.Any(lease => lease.LogicalCheckId == check.Id)
-            && !database.EndpointHealth.Any(health => health.EvidenceLogicalCheckId == check.Id)
-            && !database.IncidentEvidence.Any(evidence => evidence.LogicalCheckId == check.Id
-                && activeIncidentStatuses.Contains(evidence.Incident.Status)))
-            .Select(check => check.Id);
+        var checks = new RetentionHistoryQueries(database, now).EligibleCompletedCheckIds(cutoff);
         var attempts = database.ExecutionAttempts.Where(attempt => attempt.FinishedAt != null && attempt.FinishedAt < cutoff
             && checks.Contains(attempt.LogicalCheckId));
         var work = database.DurableWork.Where(item => item.State == "Completed" && item.UpdatedAt < cutoff

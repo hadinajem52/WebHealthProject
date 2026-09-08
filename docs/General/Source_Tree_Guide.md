@@ -1009,3 +1009,8 @@ must set permission locally in the same transaction that selects and deletes its
 batch of old completed execution attempts or durable work under the retention lock. It excludes held, leased,
 current-health and active-incident checks, supports dry-run and applies the configured deadline.
 It is registered as a scoped service but has no recurring-job registration yet.
+
+`Infrastructure/Monitoring/RetentionHistoryQueries.cs` centralizes completed-check eligibility for
+retention. `RawResultRetentionBatch.cs` deletes bounded result batches and their findings/redirects
+only after the monitor-day aggregate has been written and frozen. Retained observations preserve
+their results. The batch keeps logical checks/snapshots and is not yet scheduled.

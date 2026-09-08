@@ -145,3 +145,18 @@ attempts and durable work. Durable work must be Completed, updated strictly befo
 and have no work lease fields; its logical check must also qualify. Pending, failed and leased work
 remain. Both deletion paths reapply eligibility when deleting the selected IDs. The service remains
 unscheduled, and the remaining retention categories and coordinator are still pending.
+
+## Raw-result batches
+
+RawResultRetentionBatch handles results measured strictly before the 90-day cutoff whose completed
+checks pass the shared hold, lease, current-health and active-incident protections. Retained SEO or
+certificate observations also preserve the result used by their readers. Observation expiration
+and comparison-baseline protection remain separate pending work.
+
+Each batch selects at most BatchSize result IDs from one monitor and UTC day. Before its first
+real deletion, it recomputes the full daily aggregate and records RawDeletionStartedAt in the same
+transaction. Subsequent batches preserve that aggregate instead of recomputing from partial raw
+history. Findings and redirect hops are removed before their selected results; logical checks and
+snapshots remain. Dry-run does not write aggregates or deletion markers. This service is not yet
+scheduled; report integration and the remaining retention categories must be completed before
+retention is enabled.

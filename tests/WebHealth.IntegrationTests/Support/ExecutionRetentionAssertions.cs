@@ -6,6 +6,7 @@ using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Infrastructure.Seo;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -168,10 +169,105 @@ internal static class ExecutionRetentionAssertions
             .Select(item => item.Id).ToArrayAsync();
         remainingWork.Should().BeEquivalentTo(work.Where(pair => !pair.Key.StartsWith("eligible-", StringComparison.Ordinal))
             .Select(pair => pair.Value.Id));
+        await VerifyRawResultsAsync(database, monitorId, attempts, clock);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         var execute = async () => await Batch(true, false).ExecuteAsync(cancelled.Token);
         await execute.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private static async Task VerifyRawResultsAsync(ApplicationDbContext database, Guid monitorId,
+        Dictionary<string, ExecutionAttempt> attempts, TimeProvider clock)
+    {
+        foreach (var attempt in attempts.Values)
+        {
+            database.CheckResults.Add(new CheckResult
+            {
+                LogicalCheckId = attempt.LogicalCheckId,
+                EndpointMonitorId = monitorId,
+                Outcome = "Healthy",
+                MonitorSource = "Manual",
+                MeasuredAt = attempt.FinishedAt!.Value,
+                CompletedAt = attempt.FinishedAt.Value,
+                TotalDurationMs = 100
+            });
+            database.Findings.Add(new Finding
+            {
+                Id = Guid.NewGuid(),
+                LogicalCheckId = attempt.LogicalCheckId,
+                RuleKey = "ControlledRetention",
+                IssueKey = "ControlledRetention",
+                Severity = "Warning"
+            });
+            database.RedirectHops.Add(new RedirectHop
+            {
+                Id = Guid.NewGuid(),
+                LogicalCheckId = attempt.LogicalCheckId,
+                HopNumber = 1,
+                HttpStatus = 301,
+                NormalizedFromUrl = "http://execution-retention.test/old",
+                NormalizedToUrl = "http://execution-retention.test/status"
+            });
+        }
+        await database.SaveChangesAsync();
+        RawResultRetentionBatch Batch(bool enabled, bool dryRun) => new(database,
+            new() { Enabled = enabled, DryRun = dryRun, BatchSize = 1 }, clock,
+            new DailyAggregateWriter(database, clock), NullLogger<RawResultRetentionBatch>.Instance);
+        (await Batch(false, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        (await Batch(true, true).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 0));
+        (await database.CheckResults.CountAsync(item => item.EndpointMonitorId == monitorId)).Should().Be(8);
+        (await database.MonitoringDailyAggregates.AnyAsync(item => item.EndpointMonitorId == monitorId)).Should().BeFalse();
+        var observationCheckId = attempts["eligible-b"].LogicalCheckId;
+        database.SeoObservations.Add(new SeoObservation
+        {
+            LogicalCheckId = observationCheckId,
+            EndpointMonitorId = monitorId,
+            Applicability = "NotApplicable",
+            NotApplicableReason = "NonHtml",
+            ObservedAt = attempts["eligible-b"].FinishedAt!.Value
+        });
+        await database.SaveChangesAsync();
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 1));
+        var aggregate = await database.MonitoringDailyAggregates.AsNoTracking().SingleAsync(item => item.EndpointMonitorId == monitorId);
+        var dayStart = new DateTimeOffset(aggregate.UtcDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        aggregate.TotalCount.Should().Be(attempts.Values.Count(item => item.FinishedAt >= dayStart && item.FinishedAt < dayStart.AddDays(1)));
+        aggregate.RawDeletionStartedAt.Should().Be(clock.GetUtcNow());
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        (await database.CheckResults.AnyAsync(item => item.LogicalCheckId == observationCheckId)).Should().BeTrue();
+        (await database.Findings.CountAsync(item => item.LogicalCheckId == observationCheckId)).Should().Be(1);
+        await database.SeoObservations.Where(item => item.LogicalCheckId == observationCheckId).ExecuteDeleteAsync();
+        database.CertificateObservations.Add(new CertificateObservation
+        {
+            LogicalCheckId = observationCheckId,
+            EndpointMonitorId = monitorId,
+            Subject = "CN=execution-retention.test",
+            Issuer = "CN=ControlledRetention",
+            SerialNumber = "01",
+            Sha256Fingerprint = new string('a', 64),
+            NotBefore = clock.GetUtcNow().AddYears(-1),
+            NotAfter = clock.GetUtcNow().AddYears(1),
+            ValidationCategory = "Valid",
+            ObservedAt = attempts["eligible-b"].FinishedAt!.Value
+        });
+        await database.SaveChangesAsync();
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        (await database.CheckResults.AnyAsync(item => item.LogicalCheckId == observationCheckId)).Should().BeTrue();
+        await database.CertificateObservations.Where(item => item.LogicalCheckId == observationCheckId).ExecuteDeleteAsync();
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 1));
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        var preserved = attempts.Where(pair => !pair.Key.StartsWith("eligible-", StringComparison.Ordinal))
+            .Select(pair => pair.Value.LogicalCheckId).ToArray();
+        (await database.CheckResults.Where(item => item.EndpointMonitorId == monitorId).Select(item => item.LogicalCheckId).ToArrayAsync())
+            .Should().BeEquivalentTo(preserved);
+        var checkIds = attempts.Values.Select(item => item.LogicalCheckId).ToArray();
+        (await database.Findings.Where(item => checkIds.Contains(item.LogicalCheckId)).Select(item => item.LogicalCheckId).ToArrayAsync())
+            .Should().BeEquivalentTo(preserved);
+        (await database.RedirectHops.Where(item => checkIds.Contains(item.LogicalCheckId)).Select(item => item.LogicalCheckId).ToArrayAsync())
+            .Should().BeEquivalentTo(preserved);
+        var resumed = await database.MonitoringDailyAggregates.AsNoTracking().SingleAsync(item => item.EndpointMonitorId == monitorId);
+        resumed.Should().BeEquivalentTo(aggregate);
+        (await database.LogicalChecks.CountAsync(item => checkIds.Contains(item.Id))).Should().Be(8);
+        (await database.CheckConfigurationSnapshots.CountAsync(item => checkIds.Contains(item.LogicalCheckId))).Should().Be(8);
     }
 
     private sealed class RetentionClock(DateTimeOffset now) : TimeProvider

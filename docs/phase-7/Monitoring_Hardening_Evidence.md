@@ -505,3 +505,18 @@ attempt regressions and durable-work disabled/dry-run, one-row batches, restart,
 pending/failed/leased states and the independent work-update cutoff boundary. Release build had
 zero warnings/errors. Other retention categories, run coordination, aggregate reporting and final
 workload/browser evidence remain pending; the goal is still active.
+
+### Raw-result retention batches
+
+RawResultRetentionBatch selects one bounded monitor/day batch, writes the complete daily aggregate
+before deleting findings, redirects and results, and preserves that aggregate across subsequent
+batches. Shared completed-check eligibility protects holds, leases, current health and active
+incident evidence. Retained SEO and certificate observations additionally preserve their results.
+Logical checks and snapshots remain. Dry-run writes neither aggregates nor deletion markers.
+
+Validation: the full database foundation script passed with a clean Release build (zero warnings
+and errors). Its named execution-retention fixture proves the strict cutoff, protected rows,
+BatchSize=1, dry-run, aggregate-before-delete, unchanged aggregate after resumed deletion, child
+cleanup, check/snapshot survival and independent SEO/certificate reference protection. The batch
+remains unscheduled. Observation retention, remaining categories, report integration, coordinator
+and full acceptance/load gates are still pending; this is not completion of increment 6.
