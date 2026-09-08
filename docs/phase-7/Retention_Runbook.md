@@ -128,3 +128,12 @@ DryRun=true, BatchSize=1000, MaximumBatchesPerRun=20 and MaximumRunDuration=00:0
 batch sizes outside 1..1000, batch counts outside 1..20 and durations outside 1..30 seconds. These
 upper bounds keep the first implementation within the planned local/demo run budget. Increasing
 them requires an explicit implementation/policy change. No job is registered by the options alone.
+
+## Execution-attempt batch
+
+The first deletion batch handles finished attempts older than 90 days whose logical checks are
+also completed before that cutoff. It excludes holds, any retained execution lease, current health
+evidence and active incident evidence. Candidates are ordered by finish time and ID and limited
+to BatchSize. Dry-run selects the same candidates and deletes nothing. Each batch owns a transaction,
+shares the retention lock, observes cancellation/runtime limits and logs only category/counts/time.
+The batch is not scheduled yet; durable work and other retention categories remain pending.

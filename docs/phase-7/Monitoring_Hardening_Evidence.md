@@ -477,3 +477,17 @@ Verification on 2026-09-08: eight focused default/boundary cases and all 823 uni
 All 667 ordinary integration tests passed (four opt-in skips), including application startup with
 the new configuration. No persistence changes were introduced. Worker implementation, report
 integration and the remaining retention/release gates are still pending.
+
+### P7-DATA-01 execution-attempt deletion batch
+
+The first bounded deletion batch selects finished attempts/checks strictly older than 90 days,
+excluding held/current-health/active-incident/leased checks. Each batch owns its transaction and
+retention lock, supports disabled mode and dry-run, applies cancellation/runtime limits and logs
+only operation/count/duration/dry-run facts. No recurring job or secondary index is introduced.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed. Named
+fixtures prove disabled/dry-run preservation, two one-row batches and an empty restart, the exact
+90-day microsecond boundary, preservation of all protected categories and unfinished checks,
+and cancellation. Fixture timestamp/snapshot requirements were corrected before the green run.
+Release build had zero warnings/errors. Durable-work/raw-result/other category batches, run
+coordination, report consumption and final workload/UI evidence remain pending.

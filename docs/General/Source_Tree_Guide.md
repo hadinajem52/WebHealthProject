@@ -1004,3 +1004,8 @@ computes deterministic comparability provenance and refuses days whose raw delet
 without changing entity shape. It permits only transaction-local retention or endpoint-purge
 permission; UPDATE and maintenance-occurrence behavior remain unchanged. The retention worker
 must set permission locally in the same transaction that selects and deletes its bounded batch.
+
+`Infrastructure/Monitoring/ExecutionAttemptRetentionBatch.cs` selects and deletes one bounded
+batch of old completed execution attempts under the retention lock. It excludes held, leased,
+current-health and active-incident checks, supports dry-run and applies the configured deadline.
+It is registered as a scoped service but has no recurring-job registration yet.

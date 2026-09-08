@@ -411,3 +411,8 @@ Monitoring:Retention is explicitly disabled with DryRun=true in appsettings.json
 1..1000, MaximumBatchesPerRun accepts 1..20, and MaximumRunDuration accepts 00:00:01..00:00:30.
 Invalid settings fail startup validation. Worker registration and deletion remain pending; do not
 treat enabling this setting as evidence that retention is operational yet.
+
+The execution-attempt batch is implemented but not registered as a recurring job. It preserves
+held/current/active-incident/leased checks, uses deterministic bounded selection, and supports
+dry-run and cancellation. Other retention categories and the run coordinator are still pending;
+Monitoring:Retention remains disabled by default.
