@@ -102,7 +102,8 @@ internal static class DatabaseFoundationAssertions
         "20260908105605_MonitoringSnapshotV2",
         "20260908111324_TargetAuthorizationEvidence",
         "20260908120653_HttpMonitorOverridesV2",
-        "20260908124817_HttpThresholdEquality"
+        "20260908124817_HttpThresholdEquality",
+        "20260908125906_StructuredCertificateFacts"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -2227,7 +2228,10 @@ internal static class DatabaseFoundationAssertions
             .SingleAsync(item => item.EndpointId == endpointId && item.MonitorType == RegistryDefaults.SslCertificateMonitorType && item.DeletedAt == null);
         var now = DateTimeOffset.UtcNow;
         var certificate = new TlsCertificateObservation("CN=wrong.test", "CN=Test issuer", "01", new string('c', 64),
-            now.AddDays(-40), now.AddDays(-1), ["wrong.test"], false, false, TlsValidationCategory.Expired, now);
+            now.AddDays(-40), now.AddDays(-1), ["wrong.test"], false, false, TlsValidationCategory.Expired, now)
+        {
+            ChainStatusCodes = ["PartialChain"]
+        };
         var failed = await CreateQueuedCheckAsync(database, monitor);
         var execution = CreateExecutionService(database, new RecordingSafeHttpTransport(Success), true,
             new RecordingSslProbe(new(null, certificate, TimeSpan.FromMilliseconds(25))));
@@ -2240,6 +2244,11 @@ internal static class DatabaseFoundationAssertions
         (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == failed.Id)).FailureCategory
             .Should().Be(SslFailureCategories.Expired);
         (await database.IssueStates.CountAsync(item => item.EndpointMonitorId == monitor.Id)).Should().Be(3);
+        var observation = await database.CertificateObservations.SingleAsync(item => item.LogicalCheckId == failed.Id);
+        observation.ValidityStatus.Should().Be("Expired");
+        observation.HostnameStatus.Should().Be("Mismatched");
+        observation.ChainTrustStatus.Should().Be("Untrusted");
+        JsonSerializer.Deserialize<string[]>(observation.ChainStatusCodes).Should().Equal("PartialChain");
     }
 
     private sealed class RecordingSslProbe(SslCertificateProbeResult? response = null) : ISslCertificateProbe

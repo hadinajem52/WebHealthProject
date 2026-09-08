@@ -353,7 +353,8 @@ internal static class ReportingPerformanceBaseline
         INSERT INTO web_health.certificate_observation
             (logical_check_id, endpoint_monitor_id, subject, issuer, serial_number,
              sha256_fingerprint, not_before, not_after, days_remaining, validation_category,
-             hostname_matched, chain_trusted, subject_alternative_names, observed_at)
+             hostname_matched, chain_trusted, subject_alternative_names, observed_at,
+             validity_status, hostname_status, chain_trust_status, chain_status_codes)
         SELECT
             check_row.id,
             check_row.endpoint_monitor_id,
@@ -370,7 +371,9 @@ internal static class ReportingPerformanceBaseline
                 ELSE 'Valid'
             END,
             true, true, NULL,
-            check_row.scheduled_for
+            check_row.scheduled_for,
+            CASE WHEN band.days_remaining < 0 THEN 'Expired' ELSE 'Valid' END,
+            'Matched', 'Unknown', '[]'::jsonb
         FROM web_health.logical_check AS check_row
         JOIN web_health.endpoint_monitor AS monitor ON monitor.id = check_row.endpoint_monitor_id
         JOIN web_health.endpoint AS endpoint ON endpoint.id = monitor.endpoint_id

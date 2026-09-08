@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Monitoring.CertificateObservation",
                 typeof(CertificateObservation),
                 baseEntityType,
-                propertyCount: 14,
+                propertyCount: 18,
                 navigationCount: 2,
                 foreignKeyCount: 2,
                 unnamedIndexCount: 3,
@@ -37,6 +37,24 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: new Guid("00000000-0000-0000-0000-000000000000"));
             logicalCheckId.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             logicalCheckId.AddAnnotation("Relational:ColumnName", "logical_check_id");
+
+            var chainStatusCodes = runtimeEntityType.AddProperty(
+                "ChainStatusCodes",
+                typeof(string),
+                propertyInfo: typeof(CertificateObservation).GetProperty("ChainStatusCodes", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CertificateObservation).GetField("<ChainStatusCodes>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+            chainStatusCodes.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            chainStatusCodes.AddAnnotation("Relational:ColumnName", "chain_status_codes");
+            chainStatusCodes.AddAnnotation("Relational:ColumnType", "jsonb");
+
+            var chainTrustStatus = runtimeEntityType.AddProperty(
+                "ChainTrustStatus",
+                typeof(string),
+                propertyInfo: typeof(CertificateObservation).GetProperty("ChainTrustStatus", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CertificateObservation).GetField("<ChainTrustStatus>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                maxLength: 20);
+            chainTrustStatus.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            chainTrustStatus.AddAnnotation("Relational:ColumnName", "chain_trust_status");
 
             var chainTrusted = runtimeEntityType.AddProperty(
                 "ChainTrusted",
@@ -73,6 +91,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: false);
             hostnameMatched.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             hostnameMatched.AddAnnotation("Relational:ColumnName", "hostname_matched");
+
+            var hostnameStatus = runtimeEntityType.AddProperty(
+                "HostnameStatus",
+                typeof(string),
+                propertyInfo: typeof(CertificateObservation).GetProperty("HostnameStatus", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CertificateObservation).GetField("<HostnameStatus>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                maxLength: 20);
+            hostnameStatus.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            hostnameStatus.AddAnnotation("Relational:ColumnName", "hostname_status");
 
             var issuer = runtimeEntityType.AddProperty(
                 "Issuer",
@@ -158,6 +185,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 maxLength: 30);
             validationCategory.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             validationCategory.AddAnnotation("Relational:ColumnName", "validation_category");
+
+            var validityStatus = runtimeEntityType.AddProperty(
+                "ValidityStatus",
+                typeof(string),
+                propertyInfo: typeof(CertificateObservation).GetProperty("ValidityStatus", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CertificateObservation).GetField("<ValidityStatus>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                maxLength: 20);
+            validityStatus.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            validityStatus.AddAnnotation("Relational:ColumnName", "validity_status");
 
             var key = runtimeEntityType.AddKey(
                 new[] { logicalCheckId });

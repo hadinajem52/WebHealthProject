@@ -177,3 +177,12 @@ Rollback retains the relaxed checks to preserve those policies and immutable his
 Verification: full ordered database suite and explicit migrations passed on 2026-09-08; Release build had zero warnings/errors; EF reported no pending model changes. Compiled-model regeneration produced no structural changes.
 
 The SSL probe now captures canonical chain-status names from both element and chain-wide flags: NoError is removed, flags are expanded, names are deduplicated and ordinal-sorted, and output is bounded to 32 names. The observation carries these facts without certificate-controlled strings or encoded certificate bytes. Persistence and UI wiring remain pending. Verification: 60 transport, probe, and chain-trust integration tests passed, including PartialChain evidence from the local incomplete-chain handshake.
+
+Structured certificate persistence is now implemented with separate leaf validity, hostname,
+chain trust, and JSON chain-status fields. The endpoint reader and detail view expose these facts
+and the revocation limitation. Historical positive trust is conservatively backfilled as Unknown;
+negative trust and recorded hostname matches remain available, and validity is derived from the
+observation time. The migration does not invent historical status codes. Setup documents explicit
+application and rollback loss. Browser verification, stronger schema/backfill checks, and SSL
+policy snapshots remain pending before the increment can be marked complete.
+Verification on 2026-09-08: full ordered database suite and explicit migrations passed; the new simultaneous-fault fixture verifies all four persisted fields. Release build passed without warnings/errors, compiled model was regenerated, and EF reported no model drift.

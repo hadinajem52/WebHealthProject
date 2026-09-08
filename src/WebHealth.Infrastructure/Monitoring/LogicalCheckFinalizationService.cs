@@ -589,6 +589,11 @@ internal sealed class LogicalCheckFinalizationService(
                 DaysRemaining = CertificateExpiry.DaysRemaining(
                     certificate.NotAfter, normalized.MeasuredAt),
                 ValidationCategory = certificate.ValidationCategory.ToString(),
+                ValidityStatus = certificate.ObservedAt < certificate.NotBefore ? "NotYetValid"
+                    : certificate.ObservedAt > certificate.NotAfter ? "Expired" : "Valid",
+                HostnameStatus = certificate.HostnameMatched ? "Matched" : "Mismatched",
+                ChainTrustStatus = certificate.ChainTrusted ? "Trusted" : "Untrusted",
+                ChainStatusCodes = System.Text.Json.JsonSerializer.Serialize(certificate.ChainStatusCodes),
                 HostnameMatched = certificate.HostnameMatched,
                 ChainTrusted = certificate.ChainTrusted,
                 SubjectAlternativeNames = FormatAlternativeNames(certificate.SubjectAlternativeNames),

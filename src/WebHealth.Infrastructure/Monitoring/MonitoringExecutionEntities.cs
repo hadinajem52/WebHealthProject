@@ -149,6 +149,10 @@ public sealed class CertificateObservation
     public DateTimeOffset NotAfter { get; set; }
     public int DaysRemaining { get; set; }
     public required string ValidationCategory { get; set; }
+    public string ValidityStatus { get; set; } = "Valid";
+    public string HostnameStatus { get; set; } = "Unknown";
+    public string ChainTrustStatus { get; set; } = "Unknown";
+    public string ChainStatusCodes { get; set; } = "[]";
     public bool HostnameMatched { get; set; }
     public bool ChainTrusted { get; set; }
     public string? SubjectAlternativeNames { get; set; }

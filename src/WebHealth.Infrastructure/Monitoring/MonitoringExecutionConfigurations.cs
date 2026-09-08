@@ -128,6 +128,11 @@ internal sealed class CertificateObservationConfiguration
     {
         builder.ToTable("certificate_observation", table =>
         {
+            table.HasCheckConstraint("ck_certificate_observation_structured_status",
+                "validity_status IN ('Valid','Expired','NotYetValid') AND hostname_status IN ('Matched','Mismatched','Unknown') "
+                + "AND chain_trust_status IN ('Trusted','Untrusted','Unknown')");
+            table.HasCheckConstraint("ck_certificate_observation_chain_codes",
+                "jsonb_typeof(chain_status_codes) = 'array' AND jsonb_array_length(chain_status_codes) <= 32");
             table.HasCheckConstraint(
                 "ck_certificate_observation_validity_window",
                 "not_after >= not_before");
@@ -139,6 +144,10 @@ internal sealed class CertificateObservationConfiguration
                 "validation_category IN ('Valid', 'NotYetValid', 'Expired', 'HostnameMismatch', 'Untrusted')");
         });
         builder.HasKey(observation => observation.LogicalCheckId);
+        builder.Property(observation => observation.ValidityStatus).HasMaxLength(20).IsRequired();
+        builder.Property(observation => observation.HostnameStatus).HasMaxLength(20).IsRequired();
+        builder.Property(observation => observation.ChainTrustStatus).HasMaxLength(20).IsRequired();
+        builder.Property(observation => observation.ChainStatusCodes).HasColumnType("jsonb").IsRequired();
         builder.Property(observation => observation.Subject).HasMaxLength(512).IsRequired();
         builder.Property(observation => observation.Issuer).HasMaxLength(512).IsRequired();
         builder.Property(observation => observation.SerialNumber).HasMaxLength(128).IsRequired();

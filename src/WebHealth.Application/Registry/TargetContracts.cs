@@ -154,7 +154,11 @@ public sealed record CertificateObservationItem(
     bool ChainTrusted,
     string? SubjectAlternativeNames,
     DateTimeOffset ObservedAt,
-    CertificateExpirySeverity ExpirySeverity);
+    CertificateExpirySeverity ExpirySeverity,
+    string ValidityStatus = "Valid",
+    string HostnameStatus = "Unknown",
+    string ChainTrustStatus = "Unknown",
+    string ChainStatusCodes = "[]");
 
 public sealed record CreateEnvironment(
     Guid WebsiteId,

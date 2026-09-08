@@ -283,3 +283,13 @@ as allowed by the HTTP policy contract. Its rollback deliberately retains the re
 constraints: tightening them would invalidate saved policies and historical evidence. Rolling
 back application code does not require rewriting those values. A future strict-schema conversion
 would need its own explicit data-preservation plan.
+
+### Structured certificate facts
+
+Apply `StructuredCertificateFacts` explicitly before running this application version. It adds
+leaf validity, hostname status, chain trust, and bounded JSON chain-status names. Historical
+validity and hostname facts are derived from stored timestamps and matching results. Historical
+positive chain-trust claims become Unknown because earlier chain-wide errors may not have been
+recorded. Negative trust remains Untrusted. No historical chain codes or revocation results are
+invented. Downgrading drops these new facts while retaining the older certificate fields; back up
+the database before rollback if the structured evidence must be retained.

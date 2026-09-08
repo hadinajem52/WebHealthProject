@@ -267,9 +267,13 @@ internal sealed class TargetRegistryReader(
 
         var latest = await dbContext.CertificateObservations.AsNoTracking()
             .Where(observation => observation.EndpointMonitorId == monitorId)
-            .OrderByDescending(observation => observation.ObservedAt)
+            .OrderByDescending(observation => observation.ObservedAt).ThenBy(observation => observation.LogicalCheckId)
             .Select(observation => new
             {
+                observation.ValidityStatus,
+                observation.HostnameStatus,
+                observation.ChainTrustStatus,
+                observation.ChainStatusCodes,
                 observation.Subject,
                 observation.Issuer,
                 observation.SerialNumber,
@@ -297,7 +301,8 @@ internal sealed class TargetRegistryReader(
             latest.ChainTrusted,
             latest.SubjectAlternativeNames,
             latest.ObservedAt,
-            SelectExpirySeverity(latest.ValidationCategory, latest.DaysRemaining)));
+            SelectExpirySeverity(latest.ValidationCategory, latest.DaysRemaining),
+            latest.ValidityStatus, latest.HostnameStatus, latest.ChainTrustStatus, latest.ChainStatusCodes));
     }
 
     private static CertificateExpirySeverity SelectExpirySeverity(

@@ -437,7 +437,7 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "link")</span>
                             <span>Hostname</span>
                         </span>
-                        <span class="detail-list__value">@(certificate.HostnameMatched ? "Matches" : "Does not match")</span>
+                        <span class="detail-list__value">@certificate.HostnameStatus</span>
                     </div>
                 </li>
                 <li>
@@ -446,9 +446,21 @@
                             <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield")</span>
                             <span>Chain</span>
                         </span>
-                        <span class="detail-list__value">@(certificate.ChainTrusted ? "Trusted" : "Not trusted")</span>
+                        <span class="detail-list__value">@certificate.ChainTrustStatus</span>
                     </div>
                 </li>
+                @foreach (var fact in new[] { ("Leaf validity", certificate.ValidityStatus), ("Chain status codes", certificate.ChainStatusCodes), ("Revocation", "Revocation not checked") })
+                {
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "shield")</span>
+                                <span>@fact.Item1</span>
+                            </span>
+                            <span class="detail-list__value">@fact.Item2</span>
+                        </div>
+                    </li>
+                }
                 <li>
                     <div class="detail-list__row">
                         <span class="detail-list__subject">
