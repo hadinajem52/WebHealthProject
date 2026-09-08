@@ -79,20 +79,29 @@ internal sealed class ReportingReader(
 
         var monitorIds = certificateMonitors.Select(monitor => monitor.EndpointMonitorId).ToArray();
         var latest = await dbContext.CertificateObservations.AsNoTracking()
-            .Where(observation => monitorIds.Contains(observation.EndpointMonitorId))
+            .Where(observation => monitorIds.Contains(observation.EndpointMonitorId)
+                && observation.LogicalCheck.Result != null
+                && observation.LogicalCheck.Result.CurrentStateDisposition == "Current")
             .GroupBy(observation => observation.EndpointMonitorId)
             .Select(group => group
                 .OrderByDescending(observation => observation.ObservedAt)
                 .ThenByDescending(observation => observation.LogicalCheckId)
-                .First())
+                .Select(observation => new
+                {
+                    Observation = observation,
+                    WarningDays = observation.LogicalCheck.ConfigurationSnapshot.SslWarningExpiryDays,
+                    HighDays = observation.LogicalCheck.ConfigurationSnapshot.SslHighExpiryDays,
+                    CriticalDays = observation.LogicalCheck.ConfigurationSnapshot.SslCriticalExpiryDays
+                }).First())
             .ToArrayAsync(cancellationToken);
-        var byMonitor = latest.ToDictionary(observation => observation.EndpointMonitorId);
+        var byMonitor = latest.ToDictionary(item => item.Observation.EndpointMonitorId);
 
         var items = certificateMonitors
             .Where(monitor => byMonitor.ContainsKey(monitor.EndpointMonitorId))
             .Select(monitor =>
             {
-                var observation = byMonitor[monitor.EndpointMonitorId];
+                var recorded = byMonitor[monitor.EndpointMonitorId];
+                var observation = recorded.Observation;
                 var isValid = observation.ValidationCategory == nameof(TlsValidationCategory.Valid);
                 return new CertificateExpiryItem(
                     monitor.EndpointId,
@@ -103,7 +112,8 @@ internal sealed class ReportingReader(
                     observation.DaysRemaining,
                     observation.ValidationCategory,
                     isValid,
-                    SelectExpirySeverity(observation.ValidationCategory, observation.DaysRemaining),
+                    CertificateExpiry.SelectSeverity(observation.DaysRemaining,
+                        new(recorded.WarningDays ?? 30, recorded.HighDays ?? 15, recorded.CriticalDays ?? 7)),
                     observation.ObservedAt);
             })
             .ToArray();
@@ -123,20 +133,6 @@ internal sealed class ReportingReader(
                 .ThenBy(item => item.EndpointDisplayUrl, StringComparer.Ordinal)
                 .Take(AttentionListCount)
                 .ToArray());
-    }
-
-    private static CertificateExpirySeverity SelectExpirySeverity(
-        string validationCategory,
-        int daysRemaining)
-    {
-        if (validationCategory == nameof(TlsValidationCategory.Expired))
-        {
-            return CertificateExpirySeverity.Critical;
-        }
-
-        return validationCategory == nameof(TlsValidationCategory.Valid)
-            ? CertificateExpiry.SelectSeverity(daysRemaining, CertificateExpiryThresholds.Default)
-            : CertificateExpirySeverity.None;
     }
 
     public async Task<ReportDiagnostics> QueryDiagnosticsAsync(

@@ -16,6 +16,7 @@ using WebHealth.Application.Assignments;
 using WebHealth.Infrastructure.Assignments;
 using WebHealth.Infrastructure.Auditing;
 using WebHealth.Application.Registry;
+using WebHealth.Application.Reporting;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Maintenance;
 using WebHealth.Application.Incidents;
@@ -2292,6 +2293,12 @@ internal static class DatabaseFoundationAssertions
         status!.Latest!.ValidationCategory.Should().Be(nameof(TlsValidationCategory.Valid));
         status.Latest.ExpirySeverity.Should().Be(CertificateExpirySeverity.None);
         status.Latest.DaysRemaining.Should().BeGreaterThan(10);
+        var query = ReportQueryNormalizer.Normalize(new ReportQueryInput(), ReportMonitorTypes.All, DateTimeOffset.UtcNow).Query!;
+        var expiry = await readerScope.ServiceProvider.GetRequiredService<IReportingReader>().QueryCertificateExpiryAsync(
+            query, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
+        expiry.HealthyCount.Should().BeGreaterThan(0);
+        expiry.NeedingAttention.Should().NotContain(item => item.EndpointId == endpointId,
+            "superseded observations cannot replace current certificate evidence or its recorded expiry policy");
     }
 
     private sealed class RecordingSslProbe(SslCertificateProbeResult? response = null) : ISslCertificateProbe

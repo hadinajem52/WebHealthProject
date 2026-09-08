@@ -211,3 +211,15 @@ Expiry severity remains independent of hostname/trust faults. The database regre
 a current renewal with a non-default warning threshold followed by a later superseded expired
 observation, ensuring the card retains the renewal and its recorded policy.
 Verification on 2026-09-08: the full ordered database suite passed with the reader regression; Release build had zero warnings/errors and explicit migrations completed successfully.
+
+The SSL snapshot interval source now identifies the policy profile. An isolated populated upgrade
+check verifies conservative certificate backfill (historical positive trust becomes Unknown,
+without invented chain codes) and preserved 30/15/7 expiry defaults.
+
+Browser inspection found the dashboard certificate query still selected superseded evidence.
+It now uses Current results and the observation's recorded expiry thresholds, matching endpoint
+detail. The endpoint expiry badge also remains visible alongside hostname or trust failures.
+The database regression checks that a later superseded expired observation cannot put a current,
+healthy certificate back into the dashboard attention list.
+Verification on 2026-09-08: the full ordered database suite passed; the updated Razor page built
+in Release with zero warnings and errors. Final responsive browser verification remains pending.

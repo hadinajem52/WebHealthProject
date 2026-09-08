@@ -406,16 +406,9 @@
                             <span>Expiry</span>
                         </span>
                         <span class="detail-list__value">
-                            @if (certificateValid)
-                            {
-                                @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
-                                    StatusBadges.ForExpirySeverity(certificate.ExpirySeverity),
-                                    StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)))
-                            }
-                            else
-                            {
-                                <span class="detail-list__note">Not applicable while the certificate is @certificate.ValidationCategory.</span>
-                            }
+                            @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                StatusBadges.ForExpirySeverity(certificate.ExpirySeverity),
+                                StatusBadges.DescribeExpirySeverity(certificate.ExpirySeverity)))
                         </span>
                     </div>
                 </li>
