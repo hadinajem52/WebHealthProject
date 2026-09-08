@@ -186,3 +186,5 @@ observation time. The migration does not invent historical status codes. Setup d
 application and rollback loss. Browser verification, stronger schema/backfill checks, and SSL
 policy snapshots remain pending before the increment can be marked complete.
 Verification on 2026-09-08: full ordered database suite and explicit migrations passed; the new simultaneous-fault fixture verifies all four persisted fields. Release build passed without warnings/errors, compiled model was regenerated, and EF reported no model drift.
+
+ResolvedSslPolicy now defines the daily cadence, 15-second timeout, one-check confirmations, and strictly ordered 30/15/7 expiry defaults. New SSL monitor construction consumes its effective timing/counts. Its SSL-specific canonical fingerprint includes all policy fields, URL, and production classification; four focused tests passed and the infrastructure build passed without warnings/errors. Fingerprint migration and snapshot threshold wiring remain pending, so existing fingerprint storage is unchanged in this slice.

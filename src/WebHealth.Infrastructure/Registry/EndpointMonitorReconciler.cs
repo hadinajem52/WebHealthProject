@@ -161,6 +161,8 @@ internal static class EndpointMonitorReconciler
         Guid actorId,
         DateTimeOffset now)
     {
+        var policy = ResolvedSslPolicy.Default;
+        policy.Validate();
         var schedule = MonitorCadence.Initialize(now);
         return new EndpointMonitor
         {
@@ -173,10 +175,10 @@ internal static class EndpointMonitorReconciler
                 endpoint.NormalizedUrl, isProduction),
             ScheduleAnchor = schedule.Anchor,
             NextDueAt = schedule.NextDueAt,
-            IntervalSeconds = RegistryDefaults.SslIntervalSeconds,
-            TimeoutSeconds = RegistryDefaults.SslTimeoutSeconds,
-            FailureConfirmationCount = RegistryDefaults.SslFailureConfirmationCount,
-            RecoveryConfirmationCount = RegistryDefaults.SslRecoveryConfirmationCount,
+            IntervalSeconds = policy.IntervalSeconds,
+            TimeoutSeconds = policy.TimeoutSeconds,
+            FailureConfirmationCount = policy.FailureConfirmationCount,
+            RecoveryConfirmationCount = policy.RecoveryConfirmationCount,
             WarningThresholdMs = null,
             CriticalThresholdMs = null,
             SchedulingEnabled = schedulingEnabled,
