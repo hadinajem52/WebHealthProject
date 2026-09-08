@@ -232,3 +232,12 @@ exactly one CertificateRenewed event. Schema inspection asserts all four structu
 columns and all three snapshot expiry columns. BR-C01 through BR-C07 traceability now links this
 hardening evidence, and BR-C02 explicitly documents structured facts and storage/network limits.
 Verification on 2026-09-08: the full ordered database suite passed with zero-warning Release build.
+
+Responsive browser verification on 2026-09-08 used the disposable database with scheduling and
+notifications disabled. Desktop and 390-by-844 mobile inspection confirmed current certificate
+validity, hostname, chain, recorded expiry severity, revocation limitation and wrapped fingerprint.
+The later superseded expired check remains labeled historical evidence. The dashboard reports the
+current renewal healthy. Mobile content did not overflow horizontally (375px content at 390px viewport).
+The temporary viewport was reset and the preview application/database were stopped afterward.
+A read-only query found zero endpoint_health rows with confirmed_status = Disabled; no legacy
+health backfill is justified for increment 5 in this fixture.
