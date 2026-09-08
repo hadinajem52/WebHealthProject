@@ -375,3 +375,7 @@ the bounded hold-history table; the compiled model is updated with it. The Admin
 flow and deletion worker are still being implemented, so this schema alone does not enforce holds.
 No deletion worker is enabled. Rollback drops all hold history; keep deletion disabled during any
 rollback. See `docs/phase-7/Retention_Runbook.md` for the policy and supported scopes.
+
+The hold application service now validates Administrator access and existing scope records, with
+atomic creation/release audits and idempotent release. It requires no additional migration. The
+web management flow and retention worker are still pending; deletion remains disabled.

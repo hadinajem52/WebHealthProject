@@ -35,3 +35,17 @@ hold enforcement. No secondary indexes are introduced without representative que
 
 Rollback removes the holds table and its history. Do not roll back a deployment that relies on
 holds while retaining an enabled deletion worker. Fresh upgrade creates no artificial holds.
+
+## Hold management service
+
+The application service limits listing to 100 records per page, ordered by creation time and ID.
+Only an active authenticated Administrator can list, create or release holds. Archived scope
+records remain eligible because historical data may still need protection. The service validates
+scope existence; unknown scope types and missing records are rejected.
+
+Creation and release share transaction advisory lock `(761924, 1)`. Every retention deletion batch
+must acquire the same lock before evaluating holds. Release is idempotent: concurrent or repeated
+requests preserve the first release actor/time and produce one release audit. Audit snapshots
+contain scope and lifecycle identifiers, excluding the free-text reason. Reasons remain in the
+protected hold record. Expiry is evaluated at PostgreSQL microsecond precision. The web management
+flow and worker enforcement remain pending.

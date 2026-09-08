@@ -363,3 +363,18 @@ release boundaries, and isolated populated rollback/upgrade/repeatability. All 6
 integration tests passed (four opt-in skips). Release build had zero warnings/errors; EF reports
 no pending model changes. Administrator management, scope expansion and hold enforcement remain
 pending with the rest of increment 6. Setup and the retention runbook describe this limitation.
+
+### P7-DATA-01 Administrator hold service
+
+Hold listing is bounded to 100 rows with deterministic ordering. Creation and release require an
+active Administrator, validate scope existence and commit lifecycle audit rows atomically. All
+nine scope relationships are supported, including archived records. Expiry is normalized to UTC
+microseconds before validation. Concurrent releases retain the first actor/time and one audit.
+Hold changes acquire transaction advisory lock (761924, 1); retention batches must share this lock.
+Audit snapshots exclude free-text reason. No additional migration or enabled deletion is required.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed, including
+role rejection, missing actor/scope rejection, reason bounds, sub-microsecond expiry rejection,
+valid microsecond expiry, concurrent idempotent release and exact lifecycle audit records. All
+657 ordinary integration tests passed (four opt-in skips). Release build had zero warnings/errors.
+The Administrator web flow, scope expansion and deletion enforcement remain pending.

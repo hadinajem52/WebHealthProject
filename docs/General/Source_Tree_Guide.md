@@ -980,3 +980,8 @@ protects the runtime page and `/health/monitoring` with the existing Diagnostics
 `Infrastructure/Monitoring/MonitoringTelemetry.cs` owns the monitoring operation counter and
 duration histogram. It bounds all four dimensions centrally. Logical-check execution measures
 transport attempts; the runtime recorder measures dispatcher and reconciler invocations.
+
+`Application/Monitoring/IRetentionHoldService.cs` defines bounded hold listing and Administrator
+creation/release commands. `Infrastructure/Monitoring/RetentionHoldService.cs` validates existing
+scope records and commits lifecycle audits atomically. `RetentionTransactionLock` serializes hold
+changes with future retention batches using a transaction-scoped PostgreSQL advisory lock.

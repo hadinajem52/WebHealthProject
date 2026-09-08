@@ -174,6 +174,7 @@ public static class DependencyInjection
         services.AddScoped<ILogicalCheckExecutionService, LogicalCheckExecutionService>();
         services.AddScoped<IMonitoringSchedulingService, MonitoringSchedulingService>();
         services.AddScoped<MonitoringRuntimeRecorder>();
+        services.AddScoped<IRetentionHoldService, RetentionHoldService>();
         services.AddScoped<IMonitoringWorkerReader>(provider => schedulingOptions.Enabled
             ? new HangfireMonitoringWorkerReader(provider.GetRequiredService<JobStorage>(),
                 provider.GetRequiredService<ILogger<HangfireMonitoringWorkerReader>>())
