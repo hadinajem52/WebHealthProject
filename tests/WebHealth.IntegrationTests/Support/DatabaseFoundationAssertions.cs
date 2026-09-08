@@ -3432,6 +3432,27 @@ internal static class DatabaseFoundationAssertions
             .Should().Be(LogicalCheckExecutionStatus.Completed);
         (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == queued.Id))
             .CurrentStateDisposition.Should().Be("Superseded");
+        queued.ConfigurationSnapshot.IntervalSource.Should().Be(ConfigurationValueSources.PolicyProfile);
+        var checkedAt = DateTimeOffset.UtcNow;
+        var observed = new TlsCertificateObservation("CN=ssl-fingerprint-upgrade.test", "CN=Test authority", "02",
+            new string('d', 64), checkedAt.AddDays(-1), checkedAt.AddDays(60), ["ssl-fingerprint-upgrade.test"],
+            true, true, TlsValidationCategory.Valid, checkedAt);
+        var completed = await CreateQueuedCheckAsync(database, monitor, useResolvedPolicy: true);
+        var observedExecution = CreateExecutionService(database, new RecordingSafeHttpTransport(Success), true,
+            new RecordingSslProbe(new(null, observed, TimeSpan.FromMilliseconds(20))));
+        (await observedExecution.ExecuteAsync(new(completed.Id, completed.DurableWork.Single().Id,
+            "ssl-backfill-facts", "upgrade-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+        await database.Database.MigrateAsync("HttpThresholdEquality");
+        await database.Database.MigrateAsync();
+        var backfilled = await database.CertificateObservations.AsNoTracking().SingleAsync(item => item.LogicalCheckId == completed.Id);
+        backfilled.ValidityStatus.Should().Be("Valid");
+        backfilled.HostnameStatus.Should().Be("Matched");
+        backfilled.ChainTrustStatus.Should().Be("Unknown");
+        JsonSerializer.Deserialize<string[]>(backfilled.ChainStatusCodes).Should().BeEmpty();
+        var snapshot = await database.CheckConfigurationSnapshots.AsNoTracking().SingleAsync(item => item.LogicalCheckId == completed.Id);
+        snapshot.SslWarningExpiryDays.Should().Be(30);
+        snapshot.SslHighExpiryDays.Should().Be(15);
+        snapshot.SslCriticalExpiryDays.Should().Be(7);
     }
 
     private static async Task VerifyHttpPolicyUpgradeAndRollbackAsync(string connectionString)

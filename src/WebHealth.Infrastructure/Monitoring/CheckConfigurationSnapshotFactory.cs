@@ -68,7 +68,8 @@ internal static class CheckConfigurationSnapshotFactory
             SslCriticalExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? ResolvedSslPolicy.Default.CriticalExpiryDays : null,
             WarningThresholdMs = monitor.WarningThresholdMs,
             CriticalThresholdMs = monitor.CriticalThresholdMs,
-            IntervalSource = MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides)
+            IntervalSource = monitor.MonitorType == SslMonitorIdentity.MonitorType ? ConfigurationValueSources.PolicyProfile
+                : MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides)
                 ? ConfigurationValueSources.EndpointOverride
                 : ConfigurationValueSources.EnvironmentDefault,
             AcceptedStatusCodes = http is null ? string.Empty : string.Join(',', http.AdditionalAcceptedStatusCodes),
