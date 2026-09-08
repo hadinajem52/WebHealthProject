@@ -357,3 +357,13 @@ are critical. Worker heartbeat tolerance is two minutes and a worker must cover 
 queue. Queue age warns at five minutes and is critical at fifteen. Dispatch overdue warning uses
 DispatchDelayGrace and critical starts at thirty minutes. Disabled scheduling reports Healthy
 with DisabledByConfiguration while preserving historical scheduler evidence on the protected page.
+
+### Local monitoring telemetry
+
+The `WebHealth.Monitoring` meter publishes `monitoring.operations` and `monitoring.duration`
+(milliseconds) for transport attempts, dispatch and reconciliation. These measure engine operations,
+not confirmed target health. Dimensions are limited to `monitor_type`, `source`, `operation` and
+`failure_category`; unexpected values become `Unknown`. No external exporter is required or enabled.
+Execution log scopes carry check, work, endpoint, monitor, attempt, job, worker, source, snapshot
+schema and generation identifiers. Transport warning events contain a safe category rather than
+raw exception text, which could contain target data. No migration or configuration change is needed.

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
@@ -46,6 +47,7 @@ internal sealed class LogicalCheckExecutionService(
             : await eligibilityService.IsEndpointTestableAsync(
                 check.EndpointMonitor.EndpointId, cancellationToken);
         var attemptNumber = await CountAttemptsAsync(check.Id, cancellationToken) + 1;
+        using var attemptScope = logger.BeginScope(new Dictionary<string, object> { ["AttemptNumber"] = attemptNumber });
         var isFinalAttempt = attemptNumber >= MaximumTotalAttempts;
         var claim = await AcquireLeaseAsync(check, cancellationToken);
         if (claim is null)
@@ -100,7 +102,7 @@ internal sealed class LogicalCheckExecutionService(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            logger.LogWarning(exception, "Logical check transport execution faulted.");
+            logger.LogWarning("Logical check transport execution faulted with category {FailureCategory}.", "Unexpected");
             if (isFinalAttempt)
             {
                 return await FinalizeAsync(
@@ -124,6 +126,40 @@ internal sealed class LogicalCheckExecutionService(
     }
 
     private async Task<LogicalCheckTerminalEvidence> ObserveAsync(
+        LogicalCheck check,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        string? failureCategory = null;
+        try
+        {
+            var evidence = await ObserveTransportAsync(check, cancellationToken);
+            failureCategory = evidence switch
+            {
+                HttpTransportEvidence http => http.Result.Failure?.ToString(),
+                SslCertificateEvidence ssl => ssl.Result.Failure?.ToString(),
+                _ => "Unexpected"
+            };
+            return evidence;
+        }
+        catch (OperationCanceledException)
+        {
+            failureCategory = "Cancellation";
+            throw;
+        }
+        catch
+        {
+            failureCategory = "Unexpected";
+            throw;
+        }
+        finally
+        {
+            MonitoringTelemetry.Record(check.ConfigurationSnapshot.MonitorType, check.Source, "transport",
+                failureCategory, stopwatch.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private async Task<LogicalCheckTerminalEvidence> ObserveTransportAsync(
         LogicalCheck check,
         CancellationToken cancellationToken)
     {
@@ -299,7 +335,13 @@ internal sealed class LogicalCheckExecutionService(
             ["LogicalCheckId"] = check.Id,
             ["DurableWorkId"] = command.DurableWorkId,
             ["EndpointId"] = check.EndpointMonitor.EndpointId,
-            ["JobId"] = command.JobId
+            ["JobId"] = command.JobId,
+            ["WorkerId"] = command.WorkerId,
+            ["EndpointMonitorId"] = check.EndpointMonitorId,
+            ["MonitorType"] = check.ConfigurationSnapshot.MonitorType,
+            ["Source"] = check.Source,
+            ["SchemaVersion"] = check.ConfigurationSnapshot.SchemaVersion,
+            ["CurrentTruthGeneration"] = check.ConfigurationSnapshot.CurrentTruthGeneration ?? 0
         });
 
     private static string ExpectedWorkKind(LogicalCheck check) =>

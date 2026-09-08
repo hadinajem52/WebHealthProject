@@ -311,3 +311,17 @@ endpoint detail showed confirmed Unknown separately from operational Disabled. F
 include deliberately advanced test clocks. The browser blocked the JSON health URL; direct HTTP
 role tests cover that route. Temporary viewport, preview process and PostgreSQL were cleaned up.
 Execution scopes, metrics and final increment-5 review remain pending.
+
+### P7-MON-05 bounded telemetry and execution context
+
+Transport attempts and scheduler operations now publish operation counts and duration through
+WebHealth.Monitoring. Only monitor_type, source, operation and failure_category are dimensions;
+all values pass bounded allowlists. Execution scopes include the required identifiers, attempt,
+source, snapshot schema and generation. Transport faults log a safe category without raw exception
+text. These operation metrics do not represent confirmed target health. Export remains optional.
+
+Verification on 2026-09-08: the real MeterListener regression rejected arbitrary URLs, identifiers
+and certificate-like text in every dimension. All 805 unit tests and 657 ordinary integration tests
+passed (four opt-in skips). The full ordered database foundation and migration script passed,
+including execution retries, finalization and runtime persistence. Release build had zero warnings
+or errors. Final increment-5 documentation review remains pending.

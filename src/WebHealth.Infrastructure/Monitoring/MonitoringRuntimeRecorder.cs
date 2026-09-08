@@ -50,6 +50,7 @@ internal sealed class MonitoringRuntimeRecorder(
 
     private async Task CompleteAsync(string operation, Guid invocationId, long durationMs, string? failureCategory)
     {
+        MonitoringTelemetry.Record("Unknown", "Scheduled", operation, failureCategory, durationMs);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
         {

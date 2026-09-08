@@ -976,3 +976,7 @@ health independently of target health and readiness. `HangfireMonitoringWorkerRe
 Hangfire server/queue/heartbeat facts into application DTOs without worker identifiers. Reporting
 scopes backlog facts through its existing authorization/filter selection. `DiagnosticsController`
 protects the runtime page and `/health/monitoring` with the existing Diagnostics role policy.
+
+`Infrastructure/Monitoring/MonitoringTelemetry.cs` owns the monitoring operation counter and
+duration histogram. It bounds all four dimensions centrally. Logical-check execution measures
+transport attempts; the runtime recorder measures dispatcher and reconciler invocations.
