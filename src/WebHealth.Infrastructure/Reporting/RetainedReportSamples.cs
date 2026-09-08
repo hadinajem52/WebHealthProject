@@ -58,12 +58,23 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
             ReportSampleGrouping.Day => "utc_date::text",
             _ => "''::text"
         };
-        var group = grouping == ReportSampleGrouping.Summary ? string.Empty : "GROUP BY 1";
+        var rawGroup = grouping switch
+        {
+            ReportSampleGrouping.Monitor => "GROUP BY result.endpoint_monitor_id",
+            ReportSampleGrouping.Day => "GROUP BY (result.measured_at AT TIME ZONE 'UTC')::date",
+            _ => string.Empty
+        };
+        var dailyGroup = grouping switch
+        {
+            ReportSampleGrouping.Monitor => "GROUP BY endpoint_monitor_id",
+            ReportSampleGrouping.Day => "GROUP BY utc_date",
+            _ => string.Empty
+        };
         var rawHistogram = string.Join(", ", Enumerable.Range(0, ResponseTimeHistogram.BucketCount).Select(index =>
         {
             var lower = index == 0 ? string.Empty : $" AND result.total_duration_ms > {ResponseTimeHistogram.UpperBoundsMs[index - 1]}";
             var upper = index == ResponseTimeHistogram.UpperBoundsMs.Count ? string.Empty : $" AND result.total_duration_ms <= {ResponseTimeHistogram.UpperBoundsMs[index]}";
-            return $"count(*) FILTER (WHERE {Responded}{lower}{upper})";
+            return $"count(*) FILTER (WHERE EXISTS (SELECT 1 FROM covered_days WHERE duration_count > 0) AND {Responded}{lower}{upper})";
         }));
         var dailyHistogram = string.Join(", ", Enumerable.Range(1, ResponseTimeHistogram.BucketCount)
             .Select(index => $"coalesce(sum(duration_histogram[{index}]), 0)::bigint"));
@@ -81,20 +92,20 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
                 max(result.measured_at), min(result.monitor_source), max(result.monitor_source),
                 ARRAY[{rawHistogram}], max(result.total_duration_ms) FILTER (WHERE {Responded}),
                 count(*), 0::bigint, false
-            FROM raw_results result {group}
+            FROM raw_results result {rawGroup}
             UNION ALL
             SELECT {dailyKey}, coalesce(sum(eligible_count), 0)::bigint, coalesce(sum(healthy_count), 0)::bigint,
                 coalesce(sum(warning_count), 0)::bigint, coalesce(sum(down_count), 0)::bigint,
                 coalesce(sum(excluded_count), 0)::bigint, coalesce(sum(duration_count), 0)::bigint,
                 NULL::double precision, NULL::double precision, max(last_measured_at), min(lowest_source), max(highest_source),
                 ARRAY[{dailyHistogram}], max(duration_maximum_ms), 0::bigint, coalesce(sum(total_count), 0)::bigint, false
-            FROM covered_days {group}
+            FROM covered_days {dailyGroup}
             UNION ALL
             SELECT {dailyKey}, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint,
                 NULL::double precision, NULL::double precision, NULL::timestamptz, NULL::text, NULL::text,
                 array_fill(0::bigint, ARRAY[{ResponseTimeHistogram.BucketCount}]), NULL::integer, 0::bigint, 0::bigint, true
             FROM archived_days WHERE day_start < @window_start OR day_start + interval '24 hours' > @window_end
-            GROUP BY 1;
+            {(grouping == ReportSampleGrouping.Summary ? "GROUP BY 1" : dailyGroup)};
             """;
         await using var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken);
         await using var reader = await scope.Command.ExecuteReaderAsync(cancellationToken);

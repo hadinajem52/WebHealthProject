@@ -668,3 +668,11 @@ pending, so deletion stays disabled outside controlled disposable tests.
 - Verification: clean build with zero warnings/errors; 832 unit tests and 667 ordinary integration tests passed (four opt-in skips); full ordered database-foundation and bootstrap repeatability passed after the translation correction.
 - Explicit Up, Down to MonitoringRetentionPermission, and Up again all succeeded on the separate populated reporting database. All 1,667,520 check results remained, and pg_indexes confirmed the expected index definition. This database was not the shared database-foundation fixture.
 - The prior index experiment provides the supporting EXPLAIN ANALYZE/BUFFERS evidence. End-to-end reporting performance still requires aggregation optimization and full remeasurement; the failed baseline is not superseded by these correctness checks.
+
+### Native report grouping and conditional histograms - 2026-09-08
+
+- Report SQL now groups by native UUID/date values and converts only output keys to text. This avoids sorting text representations of dates and IDs while preserving the existing report keys and UTC boundaries.
+- Raw histogram filters run only when the same statement sees a covered archived day with response samples. Raw-only percentiles remain exact and do not consume a histogram; mixed response windows still calculate the raw histogram needed for merging. This condition shares the report statement's database snapshot.
+- On the preserved 1,667,520-result fixture, EXPLAIN ANALYZE/BUFFERS measured the original 90-day trend query at 7,852.986 ms, native-date grouping at 6,473.554 ms, and native grouping with conditional histograms at 4,777.646 ms. Full plans: [Reporting_Grouping_Experiment.txt](Reporting_Grouping_Experiment.txt). These are sequential single-query observations, not end-to-end p95 measurements.
+- Validation: zero-warning/error build and the complete database-foundation script passed, including raw-only/unsealed history, merged held/raw/archived counts and percentiles, daily trends, 366-day windows, partial archived boundaries, CSV and comparability checks, plus all later ordered stages and bootstrap repeatability.
+- No schema or setup change is required. The three-second dashboard gate remains unproven and the failed full baseline remains authoritative until complete remeasurement passes.
