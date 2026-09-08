@@ -175,3 +175,5 @@ relaxes both monitor and snapshot checks. The existing policy workflow now saves
 and queues matching snapshots; the populated upgrade/rollback fixture also uses equal thresholds.
 Rollback retains the relaxed checks to preserve those policies and immutable historical values.
 Verification: full ordered database suite and explicit migrations passed on 2026-09-08; Release build had zero warnings/errors; EF reported no pending model changes. Compiled-model regeneration produced no structural changes.
+
+The SSL probe now captures canonical chain-status names from both element and chain-wide flags: NoError is removed, flags are expanded, names are deduplicated and ordinal-sorted, and output is bounded to 32 names. The observation carries these facts without certificate-controlled strings or encoded certificate bytes. Persistence and UI wiring remain pending. Verification: 60 transport, probe, and chain-trust integration tests passed, including PartialChain evidence from the local incomplete-chain handshake.

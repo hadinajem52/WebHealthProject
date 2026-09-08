@@ -49,4 +49,7 @@ public sealed record TlsCertificateObservation(
     bool HostnameMatched,
     bool ChainTrusted,
     TlsValidationCategory ValidationCategory,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt)
+{
+    public IReadOnlyList<string> ChainStatusCodes { get; init; } = [];
+}

@@ -25,7 +25,8 @@ internal static class TlsCertificateReader
         byte[]? encodedCertificate,
         bool hostnameMatched,
         bool chainTrusted,
-        DateTimeOffset observedAt)
+        DateTimeOffset observedAt,
+        IReadOnlyList<string>? chainStatusCodes = null)
     {
         if (encodedCertificate is null or { Length: 0 })
         {
@@ -59,7 +60,10 @@ internal static class TlsCertificateReader
                 chainTrusted,
                 TlsCertificateEvaluator.Classify(
                     notBefore, notAfter, observedAt, hostnameMatched, chainTrusted),
-                observedAt);
+                observedAt)
+            {
+                ChainStatusCodes = chainStatusCodes ?? []
+            };
         }
     }
 

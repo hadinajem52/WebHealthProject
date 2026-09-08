@@ -44,6 +44,18 @@ internal static class TlsChainTrust
         return true;
     }
 
+    public static IReadOnlyList<string> CanonicalStatusCodes(IEnumerable<X509ChainStatusFlags> statuses)
+    {
+        var combined = statuses.Aggregate(X509ChainStatusFlags.NoError, (all, status) => all | status);
+        return Enum.GetValues<X509ChainStatusFlags>()
+            .Where(flag => flag != X509ChainStatusFlags.NoError && (combined & flag) == flag)
+            .Select(flag => flag.ToString())
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .Take(32)
+            .ToArray();
+    }
+
     public static IReadOnlyList<X509ChainStatusFlags> ReadElementStatuses(X509Chain? chain)
     {
         if (chain is null)

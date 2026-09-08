@@ -70,7 +70,8 @@ internal sealed class SslCertificateProbe(
                 inspection.CertificateDer,
                 inspection.HostnameMatched,
                 inspection.ChainTrusted,
-                timeProvider.GetUtcNow());
+                timeProvider.GetUtcNow(),
+                inspection.ChainStatusCodes);
 
             return observation is null
                 ? Failure(SslProbeFailureKind.HandshakeFailed, stopwatch)
@@ -115,6 +116,7 @@ internal sealed class SslCertificateProbe(
         public byte[]? CertificateDer { get; private set; }
         public bool HostnameMatched { get; private set; }
         public bool ChainTrusted { get; private set; }
+        public IReadOnlyList<string> ChainStatusCodes { get; private set; } = [];
 
         public bool RecordAndReject(
             object sender,
@@ -124,6 +126,8 @@ internal sealed class SslCertificateProbe(
         {
             CertificateDer = certificate?.GetRawCertData();
             HostnameMatched = !errors.HasFlag(SslPolicyErrors.RemoteCertificateNameMismatch);
+            ChainStatusCodes = TlsChainTrust.CanonicalStatusCodes(
+                TlsChainTrust.ReadElementStatuses(chain).Concat(chain?.ChainStatus.Select(status => status.Status) ?? []));
             ChainTrusted = TlsChainTrust.Evaluate(errors, TlsChainTrust.ReadElementStatuses(chain),
                 chain?.ChainStatus.Aggregate(X509ChainStatusFlags.NoError, (flags, status) => flags | status.Status)
                     ?? X509ChainStatusFlags.NoError);

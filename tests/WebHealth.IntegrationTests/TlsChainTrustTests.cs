@@ -9,6 +9,18 @@ namespace WebHealth.IntegrationTests;
 public sealed class TlsChainTrustTests
 {
     [Fact]
+    public void CanonicalStatusCodes_ExpandsFlagsDeduplicatesAndSortsWithoutNoError()
+    {
+        TlsChainTrust.CanonicalStatusCodes([
+            X509ChainStatusFlags.NoError,
+            X509ChainStatusFlags.UntrustedRoot | X509ChainStatusFlags.NotTimeValid,
+            X509ChainStatusFlags.PartialChain,
+            X509ChainStatusFlags.UntrustedRoot])
+            .Should().Equal("NotTimeValid", "PartialChain", "UntrustedRoot");
+        TlsChainTrust.CanonicalStatusCodes([X509ChainStatusFlags.NoError]).Should().BeEmpty();
+    }
+
+    [Fact]
     public void Evaluate_TrustsAChainThePlatformRaisedNoChainErrorsFor()
     {
         TlsChainTrust.Evaluate(SslPolicyErrors.None, []).Should().BeTrue();

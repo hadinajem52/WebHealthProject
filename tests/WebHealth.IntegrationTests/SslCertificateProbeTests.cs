@@ -236,6 +236,7 @@ public sealed class SslCertificateProbeTests
             var result = await CreateProbe().ProbeAsync(new(Guid.NewGuid(), $"https://allowed.test:{server.Port}/"));
             result.Certificate.Should().NotBeNull();
             result.Certificate!.ChainTrusted.Should().BeFalse();
+            result.Certificate.ChainStatusCodes.Should().Contain("PartialChain");
         }
 
         downloadListener.Pending().Should().BeFalse("AIA, OCSP and CRL URLs must never bypass the destination policy");
