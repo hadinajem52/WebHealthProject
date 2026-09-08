@@ -1043,3 +1043,8 @@ remain. The batch leaves registry configuration intact and is not yet scheduled.
 while preserving fresh snapshots, configured sitemap policy, approved exceptions and held origins.
 It shares RobotsOriginLock with refresh. RetentionHoldQueries.RelatedEndpointIds expands all nine
 hold scopes to origins without exposing origin values in logs. The batch remains unscheduled.
+
+`Infrastructure/Monitoring/IncidentRetentionBatch.cs` expires terminal unheld incident bundles after
+24 calendar months. It locks incident and delivery rows, preserves pending/leased notifications and
+held successor links, deletes in foreign-key order, and audits retained recurrence-link detachment
+without resetting recurrence counts. Bundle deletion is atomic and remains unscheduled.

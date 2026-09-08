@@ -603,3 +603,18 @@ robots fixture proves disabled/dry-run behavior, BatchSize=1, fetch/update cutof
 boundaries, fresh/policy survival, held-origin survival and release, hostname-prefix separation and
 cancellation. Scope regressions prove related endpoint protection and release for all nine hold
 scopes. Retention remains disabled and unscheduled; remaining integration and final gates are pending.
+
+### Terminal incident bundle retention
+
+IncidentRetentionBatch expires Resolved/Closed bundles after 24 calendar months from their terminal
+timestamp. Active/held incidents, pending/retrying/processing deliveries, delivery leases and held
+successor links survive. Incident and delivery rows are locked before eligibility is rechecked.
+Children are removed in foreign-key order in one transaction. Retained successors preserve their
+RecurrenceCount, advance Version, and receive an audited PreviousIncidentId detachment.
+
+Validation: the full database foundation script passed with zero Release warnings/errors. Named
+fixtures prove bounded/dry-run deletion, closure cutoff, Resolved eligibility, active/held/pending/
+leased survival, held predecessor protection, complete child removal and recurrence/audit correctness.
+A controlled root-delete failure proves that child deletion, link detachment and audit writes all
+roll back; retry then succeeds. Retention remains disabled and unscheduled. Coordinator/report
+integration and final acceptance/load gates are still pending.

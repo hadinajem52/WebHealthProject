@@ -232,3 +232,19 @@ A hold in any supported scope preserves the related endpoint's origin cache, inc
 or archived endpoints. Origin matching uses an exact origin or slash boundary, not a hostname prefix.
 Deletion shares the robots origin lock with refresh and rechecks eligibility after acquiring it.
 The origin is never written to retention logs.
+
+## Terminal incident bundles and recurrence
+
+Resolved incidents expire strictly 24 calendar months after ResolvedAt; Closed incidents use
+ClosedAt, so an explicit later closure starts the closure retention period. Active incidents and
+active holds never expire. Pending, processing or retry-scheduled deliveries, and any delivery
+lease, preserve the whole bundle. A held successor also preserves its immediate predecessor link.
+
+Each batch locks selected incident rows, rechecks eligibility, and removes notification attempts,
+deliveries, notification events, incident evidence and incident events before incident roots in one
+transaction. This makes bundle deletion atomic and prevents a concurrent reopen from losing its
+evidence. The batch root count and overall deadline are bounded by retention options.
+
+Retained successors have PreviousIncidentId detached in the same transaction; RecurrenceCount is
+unchanged and Version advances to protect optimistic concurrency. A system retention audit records
+the old/new link and preserved recurrence count. Audit records have no age-based expiration.

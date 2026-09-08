@@ -299,6 +299,8 @@ internal static class DatabaseFoundationAssertions
             await CreateOwnedMonitorIdAsync(connectionString, "http://page-audit-retention.test/status"));
         await RobotsRetentionAssertions.VerifyAsync(connectionString,
             await CreateOwnedMonitorIdAsync(connectionString, "http://robots-retention.test/status"));
+        await IncidentRetentionAssertions.VerifyAsync(connectionString,
+            await CreateOwnedMonitorIdAsync(connectionString, "http://incident-retention.test/status"));
         await VerifyMonitoringExecutionFoundationAsync(connectionString);
         await VerifyHttpMonitoringHistoryAsync(connectionString);
         await VerifyLogicalCheckExecutionAsync(connectionString);
