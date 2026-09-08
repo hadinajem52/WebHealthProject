@@ -261,7 +261,7 @@ All rules below are mandatory unless explicitly marked optional or deferred. Con
 | BR-H06 | Redirect chains are limited to ten hops by default; exceeding the limit is critical.                                                        | The check stops safely and reports ExcessiveRedirects.                             |
 | BR-H07 | Revisiting a URL within one redirect chain is a redirect loop and is critical.                                                              | The repeated URL and chain are recorded without infinite execution.                |
 | BR-H08 | A production HTTP URL that does not redirect to HTTPS is a warning or critical finding according to endpoint policy.                        | HTTPS enforcement is visible on the endpoint result.                               |
-| BR-H09 | A successful response containing a configured required text marker is healthy only when the marker is found using the configured case rule. | A 200 response with missing marker raises ContentMismatch.                         |
+| BR-H09 | A successful response containing a configured required text marker is healthy only when the marker is found using the configured case rule. Decode the bounded body as UTF-8, US-ASCII, or ISO-8859-1; missing, malformed, or unsupported charset falls back to UTF-8. | A 200 response with missing marker raises ContentMismatch.                         |
 | BR-H10 | Response bodies are size-limited and are not retained by default; only approved diagnostic snippets may be stored with secrets removed.     | Large or sensitive content is not persisted in check history.                      |
 
 ## 7.5 Confirmation, Health and Incidents

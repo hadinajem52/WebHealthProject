@@ -102,3 +102,12 @@ The migrations have only been applied to disposable verification databases, not 
 database. The missing Detail_Page_UI_Pattern.md reference was checked; existing endpoint cards and
 fact rows supplied the UI reference. Mobile visual checks and broader changed-UI evidence remain part
 of the final release gate. Increments 3–7, including AC-14/AC-15, remain required.
+
+## P7-MON-03 — in progress
+
+The first slice implements BR-H09 charset-aware marker decoding from the existing bounded buffer.
+UTF-8, US-ASCII, and ISO-8859-1 are supported; unsupported, missing, and malformed declarations
+fall back to UTF-8. No response content is reread or persisted. The focused HttpResultNormalizerTests
+run passed all 27 tests on 2026-09-08, covering charset classes, case matching, status/5xx handling,
+truncated bodies, and existing normalization behavior. Typed overrides, migration preservation,
+configuration forms, drift detection, and remaining increment gates are not yet complete.

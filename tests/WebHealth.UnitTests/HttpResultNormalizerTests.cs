@@ -70,6 +70,30 @@ public sealed class HttpResultNormalizerTests
         result.FailureCategory.Should().Be(failureCategory);
     }
 
+    [Theory]
+    [InlineData("text/html; charset=utf-8", "utf-8")]
+    [InlineData("text/html; charset=\"ISO-8859-1\"", "iso-8859-1")]
+    [InlineData("text/html; charset=windows-1252", "utf-8")]
+    [InlineData("not a media type; charset=iso-8859-1", "utf-8")]
+    [InlineData(null, "utf-8")]
+    public void Normalize_DecodesMarkersUsingOnlySupportedDeclaredCharsets(string? contentType, string encodingName)
+    {
+        var bytes = Encoding.GetEncoding(encodingName).GetBytes("Service café ready");
+        var transport = Success(200) with { Body = bytes, ContentType = contentType };
+        var policy = HttpResultPolicy.Default with { RequiredContentMarker = "café" };
+
+        Normalize(transport, policy).Outcome.Should().Be("Healthy");
+    }
+
+    [Fact]
+    public void Normalize_UsesAsciiReplacementForNonAsciiBytes()
+    {
+        var transport = Success(200) with { Body = new byte[] { 255 }, ContentType = "text/plain; charset=us-ascii" };
+        var policy = HttpResultPolicy.Default with { RequiredContentMarker = "?" };
+
+        Normalize(transport, policy).Outcome.Should().Be("Healthy");
+    }
+
     [Fact]
     public void Normalize_EvaluatesRequiredMarkerWithConfiguredCaseRule()
     {

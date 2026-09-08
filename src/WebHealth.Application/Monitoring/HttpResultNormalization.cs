@@ -1,4 +1,5 @@
 using System.Text;
+using System.Net.Http.Headers;
 using WebHealth.Application.Seo;
 using WebHealth.Domain.Incidents;
 using WebHealth.Domain.Monitoring;
@@ -287,7 +288,7 @@ public static class HttpResultNormalizer
 
         if (!input.Transport.BodyTruncated
             && statusFinding is null
-            && !ContainsRequiredMarker(input.Transport.Body.Span, input.Policy))
+            && !ContainsRequiredMarker(input.Transport.Body.Span, input.Transport.ContentType, input.Policy))
         {
             yield return Finding(
                 HttpFailureCategories.ContentMismatch,
@@ -378,7 +379,7 @@ public static class HttpResultNormalizer
                 || new Uri(final.NormalizedUrl!, UriKind.Absolute).Scheme != Uri.UriSchemeHttps);
     }
 
-    private static bool ContainsRequiredMarker(ReadOnlySpan<byte> body, HttpResultPolicy policy)
+    private static bool ContainsRequiredMarker(ReadOnlySpan<byte> body, string? contentType, HttpResultPolicy policy)
     {
         if (string.IsNullOrEmpty(policy.RequiredContentMarker))
         {
@@ -388,7 +389,16 @@ public static class HttpResultNormalizer
         var comparison = policy.IsContentMarkerCaseSensitive
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
-        return Encoding.UTF8.GetString(body).Contains(policy.RequiredContentMarker, comparison);
+        var charset = MediaTypeHeaderValue.TryParse(contentType, out var mediaType)
+            ? mediaType.CharSet?.Trim('"').ToLowerInvariant()
+            : null;
+        var encoding = charset switch
+        {
+            "us-ascii" => Encoding.ASCII,
+            "iso-8859-1" => Encoding.Latin1,
+            _ => Encoding.UTF8
+        };
+        return encoding.GetString(body).Contains(policy.RequiredContentMarker, comparison);
     }
 
     private static string? SelectFailureCategory(
