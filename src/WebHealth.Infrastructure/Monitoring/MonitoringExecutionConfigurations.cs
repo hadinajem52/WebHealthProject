@@ -78,7 +78,7 @@ internal sealed class CheckConfigurationSnapshotConfiguration
                 "(warning_threshold_ms IS NULL OR warning_threshold_ms >= 0) "
                 + "AND (critical_threshold_ms IS NULL OR critical_threshold_ms >= 0) "
                 + "AND (warning_threshold_ms IS NULL OR critical_threshold_ms IS NULL "
-                + "OR warning_threshold_ms < critical_threshold_ms)");
+                + "OR warning_threshold_ms <= critical_threshold_ms)");
             table.HasCheckConstraint(
                 "ck_check_configuration_snapshot_sources",
                 "interval_source IN ('SystemDefault', 'EnvironmentDefault', 'PolicyProfile', 'EndpointOverride') "

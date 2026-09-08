@@ -168,3 +168,10 @@ existing category-based encoding so existing incident identity and historical re
 stable. Expiry keeps its fingerprint-specific issue key. Threshold validation now requires strict
 warning > high > critical >= 0 ordering. The unit suite passed 771 tests on 2026-09-08.
 The full ordered database foundation script passed, including persistence of three simultaneous SSL findings and issue states. The Release build completed with zero warnings and errors.
+
+An increment-3 follow-up found that the database still rejected equal HTTP warning/critical
+thresholds despite the resolver accepting this documented boundary. `HttpThresholdEquality`
+relaxes both monitor and snapshot checks. The existing policy workflow now saves equal thresholds
+and queues matching snapshots; the populated upgrade/rollback fixture also uses equal thresholds.
+Rollback retains the relaxed checks to preserve those policies and immutable historical values.
+Verification: full ordered database suite and explicit migrations passed on 2026-09-08; Release build had zero warnings/errors; EF reported no pending model changes. Compiled-model regeneration produced no structural changes.

@@ -298,7 +298,7 @@ internal sealed class EndpointMonitorConfiguration : IEntityTypeConfiguration<En
                 "(warning_threshold_ms IS NULL OR warning_threshold_ms >= 0) "
                 + "AND (critical_threshold_ms IS NULL OR critical_threshold_ms >= 0) "
                 + "AND (warning_threshold_ms IS NULL OR critical_threshold_ms IS NULL "
-                + "OR warning_threshold_ms < critical_threshold_ms)");
+                + "OR warning_threshold_ms <= critical_threshold_ms)");
         });
         builder.Property(monitor => monitor.MonitorType).HasMaxLength(50).IsRequired();
         builder.Property(monitor => monitor.BoundedOverrides).HasColumnType("jsonb").IsRequired();

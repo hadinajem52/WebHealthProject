@@ -274,3 +274,12 @@ Set `WEBHEALTH_TEST_OPENSSL` to an explicit executable path if needed. The fixtu
 loopback server, uses temporary test keys, and removes them when it stops. OpenSSL is a test
 prerequisite, not an application runtime dependency. It avoids Windows test-server OCSP stapling
 requests interfering with measurements of the monitoring client's network behavior.
+
+### Equal HTTP response thresholds
+
+Apply `HttpThresholdEquality` explicitly with the other pending migrations. It permits equal
+warning and critical response thresholds in both monitor configuration and immutable snapshots,
+as allowed by the HTTP policy contract. Its rollback deliberately retains the relaxed check
+constraints: tightening them would invalidate saved policies and historical evidence. Rolling
+back application code does not require rewriting those values. A future strict-schema conversion
+would need its own explicit data-preservation plan.

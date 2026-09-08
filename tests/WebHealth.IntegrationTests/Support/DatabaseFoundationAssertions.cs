@@ -101,7 +101,8 @@ internal static class DatabaseFoundationAssertions
         "20260828100053_PngAuditVerifiedWebpComparison",
         "20260908105605_MonitoringSnapshotV2",
         "20260908111324_TargetAuthorizationEvidence",
-        "20260908120653_HttpMonitorOverridesV2"
+        "20260908120653_HttpMonitorOverridesV2",
+        "20260908124817_HttpThresholdEquality"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -1928,7 +1929,7 @@ internal static class DatabaseFoundationAssertions
             ContentMarkerComparison = "Ordinal"
         };
         var updated = await registry.UpdateAsync(new(endpoint.Id, endpoint.NormalizedUrl, endpoint.OwnerSubjectId,
-            true, null, endpoint.Version, HttpPolicy: policy), access);
+            true, null, endpoint.Version, WarningThresholdMsOverride: 1500, CriticalThresholdMsOverride: 1500, HttpPolicy: policy), access);
         updated.Succeeded.Should().BeTrue(string.Join(" ", updated.Errors));
         await database.Entry(monitor).ReloadAsync();
         monitor.CurrentTruthGeneration.Should().BeGreaterThan(generation);
@@ -1946,6 +1947,8 @@ internal static class DatabaseFoundationAssertions
         endpoint.Version.Should().Be(version);
         monitor.BoundedOverrides.Should().Be(beforeJson);
         var check = await CreateQueuedCheckAsync(database, monitor, useResolvedPolicy: true);
+        check.ConfigurationSnapshot.WarningThresholdMs.Should().Be(1500);
+        check.ConfigurationSnapshot.CriticalThresholdMs.Should().Be(1500);
         check.ConfigurationSnapshot.RequiredContentMarker.Should().Be(policy.RequiredContentMarker);
         check.ConfigurationSnapshot.AcceptedStatusCodes.Should().Be("301,404");
         check.ConfigurationSnapshot.TimeoutSource.Should().Be(ConfigurationValueSources.EndpointOverride);
@@ -3354,6 +3357,8 @@ internal static class DatabaseFoundationAssertions
         HttpMonitorConfiguration.Apply(monitor, monitor.Endpoint.NormalizedUrl, false, new()
         {
             TimeoutSeconds = 20,
+            WarningThresholdMs = 1500,
+            CriticalThresholdMs = 1500,
             AdditionalAcceptedStatusCodes = [404],
             RequiredContentMarker = "rollback-marker"
         });
@@ -3363,7 +3368,7 @@ internal static class DatabaseFoundationAssertions
         await database.Entry(monitor).ReloadAsync();
         monitor.TimeoutSeconds.Should().Be(20);
         monitor.ConfigurationFingerprint.Should().Be(RegistryDefaults.CreateHttpFingerprint(monitor.Endpoint.NormalizedUrl,
-            false, monitor.IntervalSeconds, 20, 2, 2, 1500, 3000));
+            false, monitor.IntervalSeconds, 20, 2, 2, 1500, 1500));
         await database.Database.MigrateAsync();
         await database.Entry(monitor).ReloadAsync();
         HttpMonitorConfiguration.RequireConsistent(monitor, false).RequiredContentMarker.Should().BeNull();
