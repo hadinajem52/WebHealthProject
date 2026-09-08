@@ -32,10 +32,13 @@ internal static class ReportingPerformanceBaseline
     public static async Task VerifyAsync(
         string connectionString,
         string serverLogPath,
-        string evidencePath)
+        string evidencePath,
+        bool reuseFixture = false)
     {
         await using var services = BuildServices(connectionString);
-        var fixture = await SeedAsync(services, connectionString);
+        var fixture = reuseFixture
+            ? await ReadExistingFixtureAsync(services, connectionString)
+            : await SeedAsync(services, connectionString);
 
         var scenarios = BuildScenarios(fixture);
         var plans = await CapturePlansAsync(services, connectionString, serverLogPath, scenarios);
@@ -67,6 +70,26 @@ internal static class ReportingPerformanceBaseline
         }).Build();
 
         return new ServiceCollection().AddLogging().AddInfrastructure(configuration).BuildServiceProvider();
+    }
+
+    private static async Task<BaselineFixture> ReadExistingFixtureAsync(ServiceProvider services, string connectionString)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var administrator = await database.Users.SingleAsync(user => user.Email == "bootstrap@example.test");
+        var viewer = await database.Users.SingleAsync(user => user.Email == "baseline-viewer@example.test");
+        var client = await database.Clients.SingleAsync(item => item.Name == "Baseline Client 00");
+        var intervals = await database.EndpointMonitors.Where(item => item.DeletedAt == null)
+            .Select(item => item.IntervalSeconds).ToArrayAsync();
+        intervals.Should().HaveCount(ClientCount * WebsitesPerClient * 2 * EndpointsPerEnvironment * 2);
+        var sampleCount = await database.CheckResults.CountAsync();
+        sampleCount.Should().Be(intervals.Sum(interval => (int)(TimeSpan.FromDays(HistoryDays).TotalSeconds / interval)),
+            "reuse must preserve the complete cadence history of the original fixture");
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await VerifyHistoryIntegrityAsync(connection);
+        return new(new(administrator.Id, [ApplicationRoles.Administrator]), new(viewer.Id, [ApplicationRoles.Viewer]),
+            client.Id, intervals.Length, sampleCount);
     }
 
 

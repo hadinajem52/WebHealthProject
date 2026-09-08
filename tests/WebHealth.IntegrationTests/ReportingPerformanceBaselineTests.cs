@@ -11,7 +11,8 @@ public sealed class ReportingPerformanceBaselineTests
         await ReportingPerformanceBaseline.VerifyAsync(
             Environment.GetEnvironmentVariable("WEBHEALTH_TEST_POSTGRES_BASELINE")!,
             Environment.GetEnvironmentVariable("WEBHEALTH_BASELINE_SERVER_LOG")!,
-            Environment.GetEnvironmentVariable("WEBHEALTH_BASELINE_EVIDENCE")!);
+            Environment.GetEnvironmentVariable("WEBHEALTH_BASELINE_EVIDENCE")!,
+            Environment.GetEnvironmentVariable("WEBHEALTH_BASELINE_REUSE_FIXTURE") == "1");
     }
 }
 
