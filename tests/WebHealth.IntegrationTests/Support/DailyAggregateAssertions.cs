@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Persistence;
@@ -52,6 +53,93 @@ internal static class DailyAggregateAssertions
         await database.SaveChangesAsync();
         database.MonitoringDailyAggregates.Remove(row);
         await database.SaveChangesAsync();
+        await VerifyRetentionAsync(database, monitorId, now);
+    }
+
+    private static async Task VerifyRetentionAsync(ApplicationDbContext database, Guid monitorId, DateTimeOffset now)
+    {
+        var monitor = await database.EndpointMonitors.Include(item => item.Endpoint.Environment.Website).SingleAsync(item => item.Id == monitorId);
+        var cutoff = DateOnly.FromDateTime(now.AddMonths(-24).UtcDateTime);
+        var dates = new Dictionary<string, DateOnly>
+        {
+            ["eligible-a"] = cutoff.AddDays(-1),
+            ["eligible-b"] = cutoff.AddDays(-2),
+            ["raw"] = cutoff.AddDays(-3),
+            ["unsealed"] = cutoff.AddDays(-4),
+            ["boundary"] = cutoff
+        };
+        foreach (var pair in dates)
+        {
+            var measured = new DateTimeOffset(pair.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+            var aggregate = NewRow(monitorId, measured);
+            aggregate.RawDeletionStartedAt = pair.Key == "unsealed" ? null : now;
+            database.MonitoringDailyAggregates.Add(aggregate);
+        }
+        var observed = new DateTimeOffset(dates["raw"].ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var check = new LogicalCheck
+        {
+            Id = Guid.NewGuid(),
+            EndpointMonitorId = monitorId,
+            Source = "Manual",
+            RequestedAt = observed,
+            InitiatedByUserId = monitor.Endpoint.CreatedByUserId,
+            State = "Completed",
+            PolicyFingerprint = monitor.ConfigurationFingerprint,
+            CreatedAt = observed,
+            QueuedAt = observed,
+            StartedAt = observed,
+            CompletedAt = observed
+        };
+        database.LogicalChecks.Add(check);
+        database.CheckConfigurationSnapshots.Add(CheckConfigurationSnapshotFactory.Create(monitor, check.Id, observed, NullLogger.Instance));
+        database.CheckResults.Add(new CheckResult
+        {
+            LogicalCheckId = check.Id,
+            EndpointMonitorId = monitorId,
+            Outcome = "Healthy",
+            MonitorSource = "Manual",
+            MeasuredAt = observed,
+            CompletedAt = observed
+        });
+        await database.SaveChangesAsync();
+        AggregateRetentionBatch Batch(bool enabled, bool dryRun) => new(database,
+            new() { Enabled = enabled, DryRun = dryRun, BatchSize = 1 }, new RetentionClock(now), NullLogger<AggregateRetentionBatch>.Instance);
+        (await Batch(false, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        (await Batch(true, true).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 0));
+        (await database.MonitoringDailyAggregates.CountAsync(item => item.EndpointMonitorId == monitorId)).Should().Be(5);
+        foreach (var scope in new[] { "Monitor", "LogicalCheck" })
+        {
+            var hold = new RetentionHold
+            {
+                Id = Guid.NewGuid(),
+                ScopeType = scope,
+                ScopeId = scope == "Monitor" ? monitorId : check.Id,
+                Reason = "Controlled aggregate retention",
+                CreatedByUserId = monitor.Endpoint.CreatedByUserId,
+                CreatedAt = now
+            };
+            database.RetentionHolds.Add(hold);
+            await database.SaveChangesAsync();
+            (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+            hold.ReleasedAt = now;
+            hold.ReleasedByUserId = monitor.Endpoint.CreatedByUserId;
+            await database.SaveChangesAsync();
+        }
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 1));
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 1));
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        (await database.MonitoringDailyAggregates.Where(item => item.EndpointMonitorId == monitorId).Select(item => item.UtcDate).ToArrayAsync())
+            .Should().BeEquivalentTo(new[] { dates["raw"], dates["unsealed"], dates["boundary"] });
+        (await database.CheckResults.AnyAsync(item => item.LogicalCheckId == check.Id)).Should().BeTrue();
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var execute = async () => await Batch(true, false).ExecuteAsync(cancelled.Token);
+        await execute.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private sealed class RetentionClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     public static async Task VerifyUpgradeAsync(ApplicationDbContext database)

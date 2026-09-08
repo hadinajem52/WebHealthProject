@@ -207,3 +207,14 @@ references protect the check until the owning evidence bundle is removed, includ
 The batch deletes the immutable snapshot before its check inside one transaction with local
 retention permission. The deferred snapshot contract is satisfied when both are gone at commit.
 Daily aggregates and monitor/endpoint configuration remain. The worker is still unscheduled.
+
+## Aggregate expiration
+
+Daily aggregates expire only for UTC dates strictly before the date 24 calendar months ago.
+The cutoff day is retained in full. An aggregate must have a raw-deletion marker and no remaining
+raw results for its monitor/day before it can expire; otherwise later raw cleanup would lose its
+complete aggregate. Monitor/ancestor holds preserve the aggregate. A held logical check (including
+checks protected through incident holds) preserves its monitor's aggregates conservatively because
+its exact measured day may no longer be recoverable once raw detail has expired. Hold release or
+expiry removes that exception. Aggregates use bounded single-monitor batches and leave registry
+configuration intact.

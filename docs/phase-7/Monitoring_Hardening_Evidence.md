@@ -576,3 +576,16 @@ certificate observations and an execution attempt, then proves deletion after th
 removed. Disabled/dry-run and bounded cleanup are verified; retained work, other checks/snapshots
 and the daily aggregate survive. Retention remains disabled and unscheduled. Increment 6 and the
 final acceptance/load gates remain incomplete.
+
+### Aggregate expiration batches
+
+AggregateRetentionBatch expires bounded single-monitor UTC dates older than 24 calendar months.
+Cutoff-day aggregates, unsealed aggregates, days with retained raw results and held monitoring
+history survive. Held logical checks conservatively preserve their monitor aggregates because a
+precise measured day may be unavailable after raw expiration. Hold release restores eligibility.
+
+Validation: full database foundation script passed with zero Release warnings/errors after fixing
+an assertion collection type. The aggregate fixture proves disabled/dry-run behavior, BatchSize=1,
+UTC raw-day protection, cutoff-day and unsealed survival, monitor/check holds and release, retained
+raw-result survival and cancellation. Retention remains disabled and unscheduled. Remaining
+increment 6 integration and the final acceptance/load gates are still incomplete.

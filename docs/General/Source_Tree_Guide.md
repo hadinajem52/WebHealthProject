@@ -1033,3 +1033,8 @@ comparison reader; strategy and locale boundaries remain intact. The batch is no
 `Infrastructure/Monitoring/LogicalCheckRetentionBatch.cs` performs final monitoring-detail cleanup
 only after all retained children and evidence references are gone. It removes snapshots and checks
 in one transaction, preserving aggregates and registry configuration, and remains unscheduled.
+
+`Infrastructure/Monitoring/AggregateRetentionBatch.cs` expires bounded aggregate dates older than
+24 calendar months only after raw deletion has started and no raw result remains for that day.
+Monitor/ancestor and held-check history protections apply. Cutoff-day and unsealed aggregates
+remain. The batch leaves registry configuration intact and is not yet scheduled.
