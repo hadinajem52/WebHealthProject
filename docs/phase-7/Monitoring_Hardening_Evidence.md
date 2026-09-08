@@ -635,3 +635,11 @@ job and proves its Enqueued state targets maintenance, then resolves all eleven 
 Hangfire's legacy recurring hash Queue field is default; the actual queued-state assertion is the
 routing evidence. Aggregate-backed reporting, UI verification and final acceptance/load gates remain
 pending, so deletion stays disabled outside controlled disposable tests.
+
+### Retained reporting integration - 2026-09-08
+
+- Reports use frozen aggregates only after raw deletion starts for a monitor/UTC day. Retained raw copies of archived days are excluded, preventing hold-related double counting; unsealed aggregates do not replace raw history.
+- Summary, monitor rows and daily trends combine complete archived days with raw samples. Raw-only percentiles remain exact; mixed/archived response percentiles use merged fixed histogram counts and are identified as approximate in dashboard markup and CSV.
+- Partial archived boundary days are omitted and disclosed rather than extrapolated. UTC-midnight boundaries include complete days. Comparability includes configuration fingerprint, snapshot schema and truth generation across raw and aggregated history.
+- Database regression evidence covers unsealed aggregates, mixed counts, retained held raw records, exact and approximate percentiles, day trends, partial boundaries, a 366-day window, CSV disclosure and generation drift. The fixture also completes its expired logical-check cleanup so subsequent ordered stages remain independent.
+- Verification: 832 unit tests passed; 667 ordinary integration tests passed with four opt-in skips; the full database-foundation script passed, including migration/bootstrap repeatability. Build completed with zero warnings/errors. Browser and representative performance gates remain outstanding.

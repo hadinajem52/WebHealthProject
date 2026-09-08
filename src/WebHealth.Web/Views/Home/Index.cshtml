@@ -28,7 +28,8 @@
         day = point.Day.ToString("yyyy-MM-dd"),
         uptime = point.UptimePercentage,
         p50 = point.P50Ms,
-        p95 = point.P95Ms
+        p95 = point.P95Ms,
+        approximate = point.IsApproximate
     }));
 
     var thresholds = ResponseTimeThresholds.Default;
@@ -518,7 +519,7 @@
                                         @Percent(availability.Uptime.Percentage)
                                     }
                                 </td>
-                                <td data-label="P95">@Milliseconds(availability?.ResponseTimes.P95Ms)</td>
+                                <td data-label="P95">@(availability?.ResponseTimes.IsApproximate == true ? "≈ " : null)@Milliseconds(availability?.ResponseTimes.P95Ms)</td>
 
                                 <td data-label="Last checked" title="@(endpoint.LastMeasuredAt is { } at ? UtcText(at) : null)">
                                     @if (endpoint.LastMeasuredAt is { } measured)
@@ -589,17 +590,29 @@
             </div>
             <div class="stat">
                 <p class="stat__label">Median response</p>
-                <p class="stat__value">@Milliseconds(summary.ResponseTimes.P50Ms)</p>
+                <p class="stat__value">@(summary.ResponseTimes.IsApproximate ? "≈ " : null)@Milliseconds(summary.ResponseTimes.P50Ms)</p>
                 <p class="stat__detail">Across @summary.ResponseTimes.MeasuredSamples.ToString("N0") samples that answered</p>
             </div>
             <div class="stat">
                 <p class="stat__label">P95 response</p>
-                <p class="stat__value">@Milliseconds(summary.ResponseTimes.P95Ms)</p>
+                <p class="stat__value">@(summary.ResponseTimes.IsApproximate ? "≈ " : null)@Milliseconds(summary.ResponseTimes.P95Ms)</p>
 
                 <p class="stat__detail">@p95Verdict</p>
             </div>
         </div>
 
+        @if (summary.History is { AggregatedSamples: > 0 } history)
+        {
+            <p class="card__subtitle">
+                This window uses @history.AggregatedSamples.ToString("N0") archived samples in daily aggregates
+                and @history.RawSamples.ToString("N0") retained raw samples.
+                @(summary.ResponseTimes.IsApproximate ? "Response percentiles are approximate (≈), using fixed histogram buckets." : null)
+            </p>
+        }
+        @if (summary.History?.PartialArchivedDaysOmitted == true)
+        {
+            <p class="card__subtitle">Partial archived UTC days were omitted because hourly detail has expired. Use UTC-midnight boundaries to include complete archived days.</p>
+        }
         @if (uptime.ExcludedSamples > 0)
         {
             <p class="card__subtitle">
@@ -656,8 +669,8 @@
                                     <th scope="row" data-label="Day (UTC)">@point.Day.ToString("yyyy-MM-dd")</th>
                                     <td data-label="Eligible samples">@point.EligibleSamples.ToString("N0")</td>
                                     <td data-label="Availability">@Percent(point.UptimePercentage)</td>
-                                    <td data-label="P50">@Milliseconds(point.P50Ms)</td>
-                                    <td data-label="P95">@Milliseconds(point.P95Ms)</td>
+                                    <td data-label="P50">@(point.IsApproximate ? "≈ " : null)@Milliseconds(point.P50Ms)</td>
+                                    <td data-label="P95">@(point.IsApproximate ? "≈ " : null)@Milliseconds(point.P95Ms)</td>
                                 </tr>
                             }
                         </tbody>

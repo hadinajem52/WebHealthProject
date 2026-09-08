@@ -342,7 +342,7 @@ internal static class ReportingQueryCoreAssertions
         return normalized.Query!;
     }
 
-    private static IReadOnlyList<IReadOnlyList<string>> ParseCsv(byte[] bytes)
+    internal static IReadOnlyList<IReadOnlyList<string>> ParseCsv(byte[] bytes)
     {
         var text = new UTF8Encoding(false).GetString(
             bytes.AsSpan(Encoding.UTF8.GetPreamble().Length));

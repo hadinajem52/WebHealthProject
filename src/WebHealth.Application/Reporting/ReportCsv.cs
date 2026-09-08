@@ -31,7 +31,12 @@ public static class ReportCsv
         "ActiveIncidents",
         "MonitorSource",
         "OperationalState",
-        "LastScheduledCompletionAt"
+        "LastScheduledCompletionAt",
+        "HistoryMode",
+        "RawSamples",
+        "AggregatedSamples",
+        "PercentileMethod",
+        "PartialArchivedDaysOmitted"
     ];
 
     public static byte[] Write(ReportExport export) =>
@@ -70,6 +75,11 @@ public static class ReportCsv
         CsvField.Count(row.ActiveIncidentCount),
         CsvField.Token(row.MonitorSource),
         CsvField.Token(row.Operation?.State),
-        CsvField.Timestamp(row.Operation?.LastScheduledCompletionAt)
+        CsvField.Timestamp(row.Operation?.LastScheduledCompletionAt),
+        CsvField.Token(row.History?.Mode ?? "Raw"),
+        CsvField.Count(row.History?.RawSamples ?? row.Uptime.EligibleSamples + row.Uptime.ExcludedSamples),
+        CsvField.Count(row.History?.AggregatedSamples ?? 0),
+        CsvField.Token(row.ResponseTimes.IsApproximate ? "ApproximateHistogram" : "ExactRaw"),
+        CsvField.Flag(row.History?.PartialArchivedDaysOmitted ?? false)
     ];
 }

@@ -288,6 +288,8 @@ internal static class DatabaseFoundationAssertions
         await VerifyClientWebsiteRegistryAsync(connectionString);
         await VerifyRegistryCreateComposabilityAsync(connectionString);
         await VerifyEnvironmentEndpointRegistryAsync(connectionString);
+        await RetainedReportingAssertions.VerifyAsync(connectionString,
+            await CreateOwnedMonitorIdAsync(connectionString, "http://retained-reporting.test/status"));
         await ExecutionRetentionAssertions.VerifyAsync(connectionString,
             await CreateOwnedMonitorIdAsync(connectionString, "http://execution-retention.test/status"));
         await ObservationRetentionAssertions.VerifyAsync(connectionString,

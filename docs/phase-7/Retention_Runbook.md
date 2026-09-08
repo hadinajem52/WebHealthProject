@@ -270,3 +270,17 @@ including for an already queued job from a previous configuration.
 
 Aggregate-backed reporting and full acceptance/load verification remain pending. Keep deletion
 disabled until those gates are complete; test commissioning uses the disposable database only.
+
+## Reporting across retained and archived detail
+
+A monitor/day switches to its frozen daily aggregate when RawDeletionStartedAt is set. All raw
+samples from that monitor/day are then excluded from reporting, including held samples, to prevent
+double counting or using a partially deleted raw day. Unsealed aggregates do not replace raw data.
+Counts from complete archived UTC days combine with retained raw counts. Percentiles remain exact
+for raw-only response samples; a percentile including archived response samples uses the versioned
+histogram and is explicitly approximate in the dashboard and CSV.
+
+Daily aggregates cannot reconstruct a partial UTC day. If a requested timestamp window cuts through
+an archived boundary day, that day is omitted and the dashboard/CSV disclose the missing boundary.
+No full day is silently added outside the requested window and no prorated counts are invented.
+UTC-midnight boundaries include complete archived days within the existing 366-day maximum window.

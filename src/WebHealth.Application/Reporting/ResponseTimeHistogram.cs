@@ -4,6 +4,7 @@ public static class ResponseTimeHistogram
 {
     public const int Version = 1;
     private static readonly int[] UpperBounds = [0, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000, 120000];
+    public static IReadOnlyList<int> UpperBoundsMs { get; } = Array.AsReadOnly(UpperBounds);
     public static int BucketCount => UpperBounds.Length + 1;
 
     public static int BucketIndex(int durationMs)

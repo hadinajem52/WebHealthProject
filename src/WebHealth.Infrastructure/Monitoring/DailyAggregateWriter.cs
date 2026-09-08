@@ -82,7 +82,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
             row.LastMeasuredAt = row.TotalCount == 1 || sample.MeasuredAt > row.LastMeasuredAt ? sample.MeasuredAt : row.LastMeasuredAt;
             if (row.TotalCount == 1 || string.CompareOrdinal(sample.MonitorSource, row.LowestSource) < 0) row.LowestSource = sample.MonitorSource;
             if (row.TotalCount == 1 || string.CompareOrdinal(sample.MonitorSource, row.HighestSource) > 0) row.HighestSource = sample.MonitorSource;
-            var identity = FormattableString.Invariant($"{sample.ConfigurationFingerprint}:{sample.SchemaVersion}:{sample.CurrentTruthGeneration}\n");
+            var identity = MonitoringConfigurationIdentity.Format(sample.ConfigurationFingerprint, sample.SchemaVersion, sample.CurrentTruthGeneration);
             if (identity != previousIdentity)
             {
                 identityHash.AppendData(Encoding.UTF8.GetBytes(identity));

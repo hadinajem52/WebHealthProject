@@ -1,8 +1,4 @@
-using System.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
-using Npgsql;
-using NpgsqlTypes;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
@@ -27,6 +23,7 @@ internal sealed class ReportingReader(
     private const int AttentionListCount = 8;
 
     private readonly Dictionary<SelectionKey, Task<Selection>> selections = [];
+    private readonly RetainedReportSamples retainedSamples = new(dbContext);
 
     public async Task<ReportDataset> QueryAsync(
         ReportQuery query,
@@ -449,7 +446,7 @@ internal sealed class ReportingReader(
 
         return monitors.Select(monitor =>
         {
-            var sample = samples.GetValueOrDefault(monitor.EndpointMonitorId) ?? SampleAggregate.Empty;
+            var sample = samples.GetValueOrDefault(monitor.EndpointMonitorId) ?? ReportSampleAggregate.Empty;
             return new ReportRow(
                 monitor.EndpointMonitorId,
                 monitor.EndpointId,
@@ -470,7 +467,8 @@ internal sealed class ReportingReader(
                 sample.SingleMonitorSource,
                 MonitorOperationalState.Evaluate(monitor.ConfirmedStatus, monitor.LifecycleEligible,
                     monitor.SchedulingEnabled, monitor.IsEnabled, monitor.IntervalSeconds, monitor.NextDueAt,
-                    monitor.LastScheduledCompletionAt, timeProvider.GetUtcNow(), schedulingOptions.DispatchDelayGrace));
+                    monitor.LastScheduledCompletionAt, timeProvider.GetUtcNow(), schedulingOptions.DispatchDelayGrace),
+                sample.ToHistory());
         }).ToArray();
     }
 
@@ -482,9 +480,9 @@ internal sealed class ReportingReader(
         CancellationToken cancellationToken)
     {
         var totals = monitorIds.Count == 0
-            ? SampleAggregate.Empty
+            ? ReportSampleAggregate.Empty
             : (await LoadSamplesAsync(query, monitorIds, groupByMonitor: false, cancellationToken))
-                .Values.SingleOrDefault() ?? SampleAggregate.Empty;
+                .Values.SingleOrDefault() ?? ReportSampleAggregate.Empty;
         var health = monitorIds.Count == 0 ? [] : await LoadHealthCountsAsync(monitorIds, cancellationToken);
 
         return new ReportSummary(
@@ -503,7 +501,8 @@ internal sealed class ReportingReader(
             monitorIds.Count == 0 ? 0 : await CountActiveIncidentsAsync(monitorIds, cancellationToken),
             totals.ToUptime(),
             totals.ToResponseTimes(),
-            await AssessComparabilityAsync(query, monitorIds, cancellationToken));
+            await AssessComparabilityAsync(query, monitorIds, cancellationToken),
+            totals.ToHistory());
     }
 
     private async Task<Dictionary<string, int>> LoadHealthCountsAsync(
@@ -536,204 +535,30 @@ internal sealed class ReportingReader(
                     && IncidentStatuses.Active.Contains(incident.Status),
                 cancellationToken);
 
-    private async Task<ComparabilityAssessment> AssessComparabilityAsync(
-        ReportQuery query,
-        IReadOnlyList<Guid> monitorIds,
-        CancellationToken cancellationToken)
+    private Task<ComparabilityAssessment> AssessComparabilityAsync(
+        ReportQuery query, IReadOnlyList<Guid> monitorIds, CancellationToken cancellationToken) =>
+        retainedSamples.AssessComparabilityAsync(query, monitorIds, cancellationToken);
+    private async Task<Dictionary<Guid, ReportSampleAggregate>> LoadSamplesAsync(
+        ReportQuery query, IReadOnlyList<Guid> monitorIds, bool groupByMonitor, CancellationToken cancellationToken)
     {
-        if (monitorIds.Count == 0)
-        {
-            return PerformanceComparability.Evaluate([], configurationChanged: false);
-        }
-
-        const string sql = """
-            WITH per_monitor AS (
-                SELECT
-                    result.endpoint_monitor_id,
-                    array_agg(DISTINCT result.monitor_source) AS sources,
-                    min(snapshot.configuration_fingerprint)
-                        <> max(snapshot.configuration_fingerprint) AS changed
-                FROM web_health.check_result AS result
-                JOIN web_health.check_configuration_snapshot AS snapshot
-                  ON snapshot.logical_check_id = result.logical_check_id
-                WHERE result.endpoint_monitor_id = ANY(@monitor_ids)
-                  AND result.measured_at >= @window_start
-                  AND result.measured_at < @window_end
-                  AND result.counts_for_uptime
-                GROUP BY result.endpoint_monitor_id
-            )
-            SELECT
-                (SELECT array_agg(DISTINCT source)
-                 FROM per_monitor, unnest(per_monitor.sources) AS source) AS monitor_sources,
-                (SELECT coalesce(bool_or(changed), false) FROM per_monitor) AS configuration_changed;
-            """;
-        await using var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken);
-        await using var reader = await scope.Command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0))
-        {
-            return PerformanceComparability.Evaluate([], configurationChanged: false);
-        }
-
-        return PerformanceComparability.Evaluate(
-            reader.GetFieldValue<string[]>(0),
-            reader.GetBoolean(1));
+        var samples = await retainedSamples.LoadAsync(query, monitorIds,
+            groupByMonitor ? ReportSampleGrouping.Monitor : ReportSampleGrouping.Summary, cancellationToken);
+        return samples.ToDictionary(item => item.Key.Length == 0 ? Guid.Empty : Guid.Parse(item.Key), item => item.Value);
     }
-
-    private async Task<Dictionary<Guid, SampleAggregate>> LoadSamplesAsync(
-        ReportQuery query,
-        IReadOnlyList<Guid> monitorIds,
-        bool groupByMonitor,
-        CancellationToken cancellationToken)
-    {
-        var sql = $"""
-            SELECT
-                {(groupByMonitor ? "result.endpoint_monitor_id" : "NULL::uuid")} AS monitor_id,
-                count(*) FILTER (WHERE {EligibleSample}) AS eligible,
-                count(*) FILTER (WHERE {HealthySample}) AS healthy_samples,
-                count(*) FILTER (WHERE {WarningSample}) AS warning_samples,
-                count(*) FILTER (WHERE {DownSample}) AS down_samples,
-                count(*) FILTER (WHERE NOT result.counts_for_uptime) AS excluded_samples,
-                count(*) FILTER (WHERE {RespondedSample}) AS responded_samples,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY result.total_duration_ms)
-                    FILTER (WHERE {RespondedSample}) AS p50_ms,
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY result.total_duration_ms)
-                    FILTER (WHERE {RespondedSample}) AS p95_ms,
-                max(result.measured_at) AS last_measured_at,
-                min(result.monitor_source) AS lowest_source,
-                max(result.monitor_source) AS highest_source
-            FROM web_health.check_result AS result
-            WHERE result.endpoint_monitor_id = ANY(@monitor_ids)
-              AND result.measured_at >= @window_start
-              AND result.measured_at < @window_end
-            {(groupByMonitor ? "GROUP BY result.endpoint_monitor_id" : string.Empty)};
-            """;
-        await using var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken);
-        await using var reader = await scope.Command.ExecuteReaderAsync(cancellationToken);
-        var aggregates = new Dictionary<Guid, SampleAggregate>();
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var lowestSource = reader.IsDBNull(10) ? null : reader.GetString(10);
-            var highestSource = reader.IsDBNull(11) ? null : reader.GetString(11);
-            aggregates[reader.IsDBNull(0) ? Guid.Empty : reader.GetGuid(0)] = new SampleAggregate(
-                reader.GetInt64(1),
-                reader.GetInt64(2),
-                reader.GetInt64(3),
-                reader.GetInt64(4),
-                reader.GetInt64(5),
-                reader.GetInt64(6),
-                reader.IsDBNull(7) ? null : reader.GetDouble(7),
-                reader.IsDBNull(8) ? null : reader.GetDouble(8),
-                reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9),
-                string.Equals(lowestSource, highestSource, StringComparison.Ordinal) ? lowestSource : null);
-        }
-
-        return aggregates;
-    }
-
-    private const string Available =
-        "(result.failure_category IS NULL "
-        + "OR result.failure_category = ANY(@non_availability_categories))";
-
-    private const string EligibleSample = "result.counts_for_uptime";
-
-    private const string UpSample = "result.counts_for_uptime AND " + Available;
-
-    private const string HealthySample = "result.counts_for_uptime AND result.outcome = 'Healthy'";
-
-    private const string WarningSample =
-        "result.counts_for_uptime AND " + Available + " AND result.outcome <> 'Healthy'";
-
-    private const string DownSample = "result.counts_for_uptime AND NOT " + Available + "";
-
-    private const string RespondedSample =
-        "result.counts_for_uptime AND result.outcome IN ('Healthy', 'Warning')";
 
     private async Task<IReadOnlyList<ReportTrendPoint>> BuildTrendAsync(
-        ReportQuery query,
-        IReadOnlyList<Guid> monitorIds,
-        CancellationToken cancellationToken)
+        ReportQuery query, IReadOnlyList<Guid> monitorIds, CancellationToken cancellationToken)
     {
-        if (monitorIds.Count == 0)
+        var samples = await retainedSamples.LoadAsync(query, monitorIds, ReportSampleGrouping.Day, cancellationToken);
+        return samples.Where(item => item.Value.EligibleSamples > 0).OrderBy(item => item.Key, StringComparer.Ordinal).Select(item =>
         {
-            return [];
-        }
-
-        var sql = $"""
-            SELECT
-                (result.measured_at AT TIME ZONE 'UTC')::date AS day,
-                count(*) FILTER (WHERE {EligibleSample}) AS eligible,
-                count(*) FILTER (WHERE {UpSample}) AS up_samples,
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY result.total_duration_ms)
-                    FILTER (WHERE {RespondedSample}) AS p50_ms,
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY result.total_duration_ms)
-                    FILTER (WHERE {RespondedSample}) AS p95_ms
-            FROM web_health.check_result AS result
-            WHERE result.endpoint_monitor_id = ANY(@monitor_ids)
-              AND result.measured_at >= @window_start
-              AND result.measured_at < @window_end
-              AND result.counts_for_uptime
-            GROUP BY 1
-            ORDER BY 1;
-            """;
-        await using var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken);
-        await using var reader = await scope.Command.ExecuteReaderAsync(cancellationToken);
-        var points = new List<ReportTrendPoint>();
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var eligible = reader.GetInt64(1);
-            var up = reader.GetInt64(2);
-            points.Add(new(
-                DateOnly.FromDateTime(reader.GetDateTime(0)),
-                eligible,
-                up,
-                eligible == 0 ? null : Math.Round(up * 100d / eligible, 4, MidpointRounding.AwayFromZero),
-                reader.IsDBNull(3) ? null : reader.GetDouble(3),
-                reader.IsDBNull(4) ? null : reader.GetDouble(4)));
-        }
-
-        return points;
+            var uptime = item.Value.ToUptime();
+            var response = item.Value.ToResponseTimes();
+            return new ReportTrendPoint(DateOnly.ParseExact(item.Key, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                uptime.EligibleSamples, uptime.HealthySamples + uptime.WarningSamples, uptime.Percentage,
+                response.P50Ms, response.P95Ms, response.IsApproximate);
+        }).ToArray();
     }
-
-    private async Task<NpgsqlCommandScope> CreateCommandAsync(
-        string sql,
-        ReportQuery query,
-        IReadOnlyList<Guid> monitorIds,
-        CancellationToken cancellationToken)
-    {
-        var wasClosed = dbContext.Database.GetDbConnection().State != ConnectionState.Open;
-        if (wasClosed)
-        {
-            await dbContext.Database.OpenConnectionAsync(cancellationToken);
-        }
-
-        var command = new NpgsqlCommand(
-            sql,
-            (NpgsqlConnection)dbContext.Database.GetDbConnection(),
-            dbContext.Database.CurrentTransaction?.GetDbTransaction() as NpgsqlTransaction);
-        command.Parameters.AddWithValue(
-            "monitor_ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid, monitorIds.ToArray());
-        command.Parameters.AddWithValue("window_start", NpgsqlDbType.TimestampTz, query.WindowStart);
-        command.Parameters.AddWithValue("window_end", NpgsqlDbType.TimestampTz, query.WindowEnd);
-        command.Parameters.AddWithValue(
-            "non_availability_categories",
-            NpgsqlDbType.Array | NpgsqlDbType.Text,
-            UptimeParticipation.NonAvailabilityCategories.ToArray());
-        return new(command, wasClosed ? dbContext : null);
-    }
-
-    private sealed record NpgsqlCommandScope(NpgsqlCommand Command, ApplicationDbContext? ContextToClose)
-        : IAsyncDisposable
-    {
-        public async ValueTask DisposeAsync()
-        {
-            await Command.DisposeAsync();
-            if (ContextToClose is not null)
-            {
-                await ContextToClose.Database.CloseConnectionAsync();
-            }
-        }
-    }
-
     private sealed record MonitorRow(
         Guid EndpointMonitorId,
         Guid EndpointId,
@@ -755,23 +580,4 @@ internal sealed class ReportingReader(
         DateTimeOffset NextDueAt,
         DateTimeOffset? LastScheduledCompletionAt);
 
-    private sealed record SampleAggregate(
-        long EligibleSamples,
-        long HealthySamples,
-        long WarningSamples,
-        long DownSamples,
-        long ExcludedSamples,
-        long RespondedSamples,
-        double? P50Ms,
-        double? P95Ms,
-        DateTimeOffset? LastMeasuredAt,
-        string? SingleMonitorSource)
-    {
-        public static SampleAggregate Empty { get; } = new(0, 0, 0, 0, 0, 0, null, null, null, null);
-
-        public ReportUptime ToUptime() =>
-            new(EligibleSamples, HealthySamples, WarningSamples, DownSamples, ExcludedSamples);
-
-        public ReportResponseTimes ToResponseTimes() => new(P50Ms, P95Ms, RespondedSamples);
-    }
 }

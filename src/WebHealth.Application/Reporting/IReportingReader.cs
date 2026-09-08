@@ -59,7 +59,8 @@ public sealed record ReportSummary(
     int ActiveIncidentCount,
     ReportUptime Uptime,
     ReportResponseTimes ResponseTimes,
-    ComparabilityAssessment Comparability);
+    ComparabilityAssessment Comparability,
+    ReportHistoryCoverage? History = null);
 
 public sealed record ReportUptime(
     long EligibleSamples,
@@ -78,7 +79,13 @@ public sealed record ReportUptime(
         : Math.Round(HealthySamples * 100d / EligibleSamples, 4, MidpointRounding.AwayFromZero);
 }
 
-public sealed record ReportResponseTimes(double? P50Ms, double? P95Ms, long MeasuredSamples);
+public sealed record ReportResponseTimes(double? P50Ms, double? P95Ms, long MeasuredSamples, bool IsApproximate = false);
+
+public sealed record ReportHistoryCoverage(long RawSamples, long AggregatedSamples, bool PartialArchivedDaysOmitted = false)
+{
+    public string Mode => RawSamples > 0 && AggregatedSamples > 0 ? "Mixed"
+        : AggregatedSamples > 0 ? "Aggregated" : RawSamples > 0 ? "Raw" : "None";
+}
 
 public sealed record ReportRow(
     Guid EndpointMonitorId,
@@ -98,7 +105,8 @@ public sealed record ReportRow(
     DateTimeOffset? LastMeasuredAt,
     int ActiveIncidentCount,
     string? MonitorSource,
-    MonitorOperationalState? Operation = null);
+    MonitorOperationalState? Operation = null,
+    ReportHistoryCoverage? History = null);
 
 public sealed record ReportTrendPoint(
     DateOnly Day,
@@ -106,7 +114,8 @@ public sealed record ReportTrendPoint(
     long UpSamples,
     double? UptimePercentage,
     double? P50Ms,
-    double? P95Ms);
+    double? P95Ms,
+    bool IsApproximate = false);
 
 public sealed record ReportIncidentItem(
     Guid Id,
