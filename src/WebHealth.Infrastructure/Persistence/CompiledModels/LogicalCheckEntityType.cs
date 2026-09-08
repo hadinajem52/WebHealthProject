@@ -27,7 +27,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 propertyCount: 14,
                 navigationCount: 6,
                 foreignKeyCount: 2,
-                unnamedIndexCount: 5,
+                unnamedIndexCount: 6,
                 keyCount: 2);
 
             var id = runtimeEntityType.AddProperty(
@@ -197,6 +197,11 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var index3 = runtimeEntityType.AddIndex(
                 new[] { state, createdAt });
             index3.AddAnnotation("Relational:Name", "ix_logical_check_state_created_at");
+
+            var index4 = runtimeEntityType.AddIndex(
+                new[] { endpointMonitorId, completedAt, id });
+            index4.AddAnnotation("Relational:Filter", "source = 'Scheduled' AND state = 'Completed' AND completed_at IS NOT NULL");
+            index4.AddAnnotation("Relational:Name", "ix_logical_check_monitor_scheduled_completion");
 
             return runtimeEntityType;
         }

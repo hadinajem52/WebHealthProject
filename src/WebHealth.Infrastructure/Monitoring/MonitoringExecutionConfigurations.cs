@@ -45,6 +45,10 @@ internal sealed class LogicalCheckConfiguration : IEntityTypeConfiguration<Logic
         builder.HasIndex(check => new { check.EndpointMonitorId, check.CadenceKey })
             .IsUnique().HasFilter("source = 'Scheduled'");
         builder.HasIndex(check => new { check.EndpointMonitorId, check.CreatedAt });
+        builder.HasIndex(check => new { check.EndpointMonitorId, check.CompletedAt, check.Id })
+            .HasDatabaseName("ix_logical_check_monitor_scheduled_completion")
+            .IsDescending(false, true, true)
+            .HasFilter("source = 'Scheduled' AND state = 'Completed' AND completed_at IS NOT NULL");
         builder.HasIndex(check => new { check.EndpointMonitorId, check.ArchivedAt })
             .HasDatabaseName("ix_logical_check_endpoint_monitor_archived");
         builder.HasIndex(check => new { check.State, check.CreatedAt });

@@ -409,12 +409,12 @@ retention job is enabled by this migration.
 
 Monitoring:Retention is explicitly disabled with DryRun=true in appsettings.json. BatchSize accepts
 1..1000, MaximumBatchesPerRun accepts 1..20, and MaximumRunDuration accepts 00:00:01..00:00:30.
-Invalid settings fail startup validation. Worker registration and deletion remain pending; do not
-treat enabling this setting as evidence that retention is operational yet.
+Invalid settings fail startup validation. Worker registration and deletion are implemented;
+full acceptance and load verification remain pending.
 
-The execution-attempt batch is implemented but not registered as a recurring job. It preserves
+The execution-attempt batch runs through the hourly coordinator when enabled. It preserves
 held/current/active-incident/leased checks, uses deterministic bounded selection, and supports
-dry-run and cancellation. Other retention categories and the run coordinator are still pending;
+dry-run and cancellation. All retention categories are connected to the coordinator;
 Monitoring:Retention remains disabled by default.
 
 Completed durable-work retention is now part of ExecutionHistoryRetentionBatch. It uses the same
@@ -428,6 +428,15 @@ monitoring-retention Hangfire job on the maintenance queue and enables that queu
 when other schedulers are disabled. MaximumBatchesPerRun defaults to 20, BatchSize to 1000, and
 MaximumRunDuration to 00:00:30. The run budget applies across all categories, not separately to each.
 Dry-run reports one bounded sample per category without deleting data. Apply the documented
-migrations explicitly before enabling any worker. Aggregate-backed reporting and final acceptance
-verification are still pending, so keep deletion disabled outside controlled disposable tests.
+migrations explicitly before enabling any worker. Aggregate-backed reporting is implemented; final
+acceptance verification remains pending, so keep deletion disabled outside controlled disposable tests.
 See docs/phase-7/Retention_Runbook.md for holds, dependencies and category exceptions.
+
+## Scheduled completion lookup
+
+Apply migration `20260908183513_ScheduledCompletionLookup` explicitly through the normal setup
+migration step. It adds a filtered index for completed scheduled checks with non-null completion
+timestamps. Reporting uses that index to find each monitor's latest current scheduled completion.
+No data backfill or configuration change is required. The migration's Down only removes the index.
+The full reporting performance gate remains open; the supporting query-plan experiment is recorded
+in docs/phase-7/Reporting_Completion_Index_Experiment.txt.

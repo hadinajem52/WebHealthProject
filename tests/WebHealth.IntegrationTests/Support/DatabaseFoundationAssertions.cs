@@ -110,7 +110,8 @@ internal static class DatabaseFoundationAssertions
         "20260908135926_MonitoringRuntimeState",
         "20260908144110_RetentionHolds",
         "20260908150752_MonitoringDailyAggregates",
-        "20260908151843_MonitoringRetentionPermission"
+        "20260908151843_MonitoringRetentionPermission",
+        "20260908183513_ScheduledCompletionLookup"
     ];
 
     private static readonly string[] ExpectedTables =

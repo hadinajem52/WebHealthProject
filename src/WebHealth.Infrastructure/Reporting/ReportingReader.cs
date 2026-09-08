@@ -180,11 +180,8 @@ internal sealed class ReportingReader(
         var lastCompleted = await dbContext.CheckResults.AsNoTracking()
             .Where(result => monitorIds.Contains(result.EndpointMonitorId))
             .MaxAsync(result => (DateTimeOffset?)result.MeasuredAt, cancellationToken);
-        var lastScheduled = await dbContext.LogicalChecks.AsNoTracking()
-            .Where(check => monitorIds.Contains(check.EndpointMonitorId) && check.Source == LogicalCheckSources.Scheduled
-                && check.State == LogicalCheckStates.Completed && check.Result != null
-                && check.Result.CurrentStateDisposition == "Current")
-            .MaxAsync(check => check.CompletedAt, cancellationToken);
+        var completionRows = await selection.Monitors.ToArrayAsync(cancellationToken);
+        var lastScheduled = completionRows.Max(monitor => monitor.LastScheduledCompletionAt);
         var oldestQueued = await dbContext.DurableWork.AsNoTracking()
             .Where(item => monitorIds.Contains(item.LogicalCheck.EndpointMonitorId)
                 && item.AvailableAt <= selection.Now
@@ -364,7 +361,9 @@ internal sealed class ReportingReader(
                 monitor.NextDueAt,
                 monitor.LogicalChecks.Where(check => check.Source == LogicalCheckSources.Scheduled
                     && check.State == LogicalCheckStates.Completed && check.Result != null
-                    && check.Result.CurrentStateDisposition == "Current").Max(check => check.CompletedAt)));
+                    && check.Result.CurrentStateDisposition == "Current" && check.CompletedAt != null)
+                    .OrderByDescending(check => check.CompletedAt).ThenByDescending(check => check.Id)
+                    .Select(check => check.CompletedAt).FirstOrDefault()));
 
         return projected;
     }
