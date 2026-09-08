@@ -142,3 +142,20 @@ One deliberately orphaned endpoint from a negative database fixture was archived
 preview database so the registry editor could list valid fixtures. The browser tool's empty-fill
 operation did not clear controls; keyboard selection and Backspace verified the actual reset flow.
 No user application database migration was applied. Increments 4â€“7 remain required.
+
+## P7-MON-04 — in progress
+
+The first slice adds a shared offline TLS policy to the normal HTTP handler and inspection probe:
+certificate downloads are disabled, revocation is not checked, and certificate verification flags
+remain strict. Normal HTTPS still has no certificate-validation override. The probe rejects its
+handshake after inspection and sends no application data.
+
+A certificate with local AIA issuer, OCSP, and CRL URLs and a deliberately unavailable issuer is
+served by an OpenSSL loopback fixture. Both client paths are checked against a separate listening
+socket for zero certificate-controlled connections. The fixture uses OpenSSL because the Windows
+TLS test server made its own OCSP requests even with managed offline settings. This test also
+exposed chain-wide PartialChain errors being missed by the probe's per-element trust evaluation;
+chain-wide errors now participate in trust evaluation. Resolved SSL policy, structured persistence,
+simultaneous findings, and the remaining increment gates are still pending.
+
+Verification on 2026-09-08: 59 transport, SSL probe, and chain-trust integration tests passed.

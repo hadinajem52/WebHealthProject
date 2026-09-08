@@ -16,6 +16,7 @@ internal static class SafeHttpConnectionFactory
         SafeHttpTransportOptions options) =>
         new()
         {
+            SslOptions = OfflineTlsPolicy.Create(),
             AllowAutoRedirect = false,
             UseProxy = false,
             UseCookies = false,

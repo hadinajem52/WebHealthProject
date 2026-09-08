@@ -1,3 +1,5 @@
+using System.Formats.Asn1;
+using System.Net.Http;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -8,6 +10,7 @@ using FluentAssertions;
 using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Monitoring;
+using WebHealth.IntegrationTests.Support;
 using Xunit;
 
 namespace WebHealth.IntegrationTests;
@@ -207,6 +210,37 @@ public sealed class SslCertificateProbeTests
         result.Failure.Should().Be(SslProbeFailureKind.Timeout);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CertificateValidation_DoesNotContactCertificateControlledUrls(bool applicationTraffic)
+    {
+        using var downloadListener = new TcpListener(IPAddress.Loopback, 0);
+        downloadListener.Start();
+        var downloadPort = ((IPEndPoint)downloadListener.LocalEndpoint).Port;
+        using var certificate = TestCertificates.WithDownloadUrls($"http://127.0.0.1:{downloadPort}/");
+        await using var server = await OfflineTlsServer.StartAsync(certificate);
+
+        if (applicationTraffic)
+        {
+            var options = new SafeHttpTransportOptions();
+            using var handler = SafeHttpConnectionFactory.Create(
+                new HostResolver(("allowed.test", [IPAddress.Loopback])),
+                new ExactLoopbackPolicy(), new SafeHttpConcurrencyLimiter(options), options);
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+            var send = () => client.GetAsync($"https://allowed.test:{server.Port}/");
+            await send.Should().ThrowAsync<HttpRequestException>();
+        }
+        else
+        {
+            var result = await CreateProbe().ProbeAsync(new(Guid.NewGuid(), $"https://allowed.test:{server.Port}/"));
+            result.Certificate.Should().NotBeNull();
+            result.Certificate!.ChainTrusted.Should().BeFalse();
+        }
+
+        downloadListener.Pending().Should().BeFalse("AIA, OCSP and CRL URLs must never bypass the destination policy");
+    }
+
     private static Socket ReserveNonListeningPort()
     {
         var reservation = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -359,6 +393,46 @@ public sealed class SslCertificateProbeTests
 
     private static class TestCertificates
     {
+        public static X509Certificate2 WithDownloadUrls(string url)
+        {
+            using var authorityKey = RSA.Create(2048);
+            var authorityRequest = new CertificateRequest(
+                "CN=Offline download test " + Guid.NewGuid(), authorityKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            authorityRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+            using var authority = authorityRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-2), DateTimeOffset.UtcNow.AddDays(90));
+            using var leafKey = RSA.Create(2048);
+            var request = new CertificateRequest("CN=allowed.test", leafKey, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var names = new SubjectAlternativeNameBuilder();
+            names.AddDnsName("allowed.test");
+            request.CertificateExtensions.Add(names.Build());
+            var aia = new AsnWriter(AsnEncodingRules.DER);
+            aia.PushSequence();
+            foreach (var method in new[] { "1.3.6.1.5.5.7.48.1", "1.3.6.1.5.5.7.48.2" })
+            {
+                aia.PushSequence();
+                aia.WriteObjectIdentifier(method);
+                aia.WriteCharacterString(UniversalTagNumber.IA5String, url + method, new Asn1Tag(TagClass.ContextSpecific, 6));
+                aia.PopSequence();
+            }
+            aia.PopSequence();
+            request.CertificateExtensions.Add(new X509Extension("1.3.6.1.5.5.7.1.1", aia.Encode(), false));
+            var crl = new AsnWriter(AsnEncodingRules.DER);
+            var context = new Asn1Tag(TagClass.ContextSpecific, 0, true);
+            crl.PushSequence();
+            crl.PushSequence();
+            crl.PushSequence(context);
+            crl.PushSequence(context);
+            crl.WriteCharacterString(UniversalTagNumber.IA5String, url + "crl", new Asn1Tag(TagClass.ContextSpecific, 6));
+            crl.PopSequence(context);
+            crl.PopSequence(context);
+            crl.PopSequence();
+            crl.PopSequence();
+            request.CertificateExtensions.Add(new X509Extension("2.5.29.31", crl.Encode(), false));
+            using var issued = request.Create(authority, DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(30), RandomNumberGenerator.GetBytes(16));
+            using var withKey = issued.CopyWithPrivateKey(leafKey);
+            return X509CertificateLoader.LoadPkcs12(withKey.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.Exportable | X509KeyStorageFlags.EphemeralKeySet);
+        }
+
         public static X509Certificate2 SelfSigned(
             string subject,
             string dnsName,

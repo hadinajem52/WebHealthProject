@@ -259,3 +259,18 @@ Rollback removes HTTP marker/status overrides from current configuration and rec
 fingerprint while retaining effective timeout/confirmation/threshold columns and historical snapshots.
 Stop workers and the application first. Reapplying the migration cannot recover removed overrides;
 retain a database backup when they must be preserved. No additional table or column is introduced.
+
+### Certificate validation networking
+
+HTTP monitoring and the SSL inspection probe disable certificate downloads and revocation checks.
+Missing intermediates must be supplied by the server or already available locally; the monitor
+will not fetch AIA, OCSP, or CRL URLs embedded in certificates. Revocation is not checked.
+Normal HTTPS traffic still requires a valid certificate. The separate SSL probe records evidence
+and rejects its handshake without sending application data.
+
+The certificate-controlled-networking integration test needs OpenSSL. On Windows it uses the
+copy bundled with Git for Windows (`Git/usr/bin/openssl.exe`); elsewhere it uses `openssl` on PATH.
+Set `WEBHEALTH_TEST_OPENSSL` to an explicit executable path if needed. The fixture starts only a
+loopback server, uses temporary test keys, and removes them when it stops. OpenSSL is a test
+prerequisite, not an application runtime dependency. It avoids Windows test-server OCSP stapling
+requests interfering with measurements of the monitoring client's network behavior.

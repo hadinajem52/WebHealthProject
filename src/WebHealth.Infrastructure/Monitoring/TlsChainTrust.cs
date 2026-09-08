@@ -8,8 +8,16 @@ internal static class TlsChainTrust
     private const X509ChainStatusFlags TimeValidity =
         X509ChainStatusFlags.NotTimeValid | X509ChainStatusFlags.CtlNotTimeValid;
 
-    public static bool Evaluate(SslPolicyErrors errors, IReadOnlyList<X509ChainStatusFlags> elementStatuses)
+    public static bool Evaluate(
+        SslPolicyErrors errors,
+        IReadOnlyList<X509ChainStatusFlags> elementStatuses,
+        X509ChainStatusFlags chainStatus = X509ChainStatusFlags.NoError)
     {
+        if ((chainStatus & ~TimeValidity) != X509ChainStatusFlags.NoError)
+        {
+            return false;
+        }
+
         if (!errors.HasFlag(SslPolicyErrors.RemoteCertificateChainErrors))
         {
             return true;

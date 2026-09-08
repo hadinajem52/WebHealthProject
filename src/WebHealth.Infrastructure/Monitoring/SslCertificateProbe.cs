@@ -59,7 +59,7 @@ internal sealed class SslCertificateProbe(
             try
             {
                 await ssl.AuthenticateAsClientAsync(
-                    new SslClientAuthenticationOptions { TargetHost = host },
+                    OfflineTlsPolicy.Create(host),
                     timeout.Token);
             }
             catch (Exception exception) when (IsHandshakeFailure(exception, timeout))
@@ -124,7 +124,9 @@ internal sealed class SslCertificateProbe(
         {
             CertificateDer = certificate?.GetRawCertData();
             HostnameMatched = !errors.HasFlag(SslPolicyErrors.RemoteCertificateNameMismatch);
-            ChainTrusted = TlsChainTrust.Evaluate(errors, TlsChainTrust.ReadElementStatuses(chain));
+            ChainTrusted = TlsChainTrust.Evaluate(errors, TlsChainTrust.ReadElementStatuses(chain),
+                chain?.ChainStatus.Aggregate(X509ChainStatusFlags.NoError, (flags, status) => flags | status.Status)
+                    ?? X509ChainStatusFlags.NoError);
 
             return false;
         }

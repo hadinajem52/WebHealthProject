@@ -460,6 +460,9 @@ public sealed class SafeHttpTransportTests
         handler.UseProxy.Should().BeFalse();
         handler.UseCookies.Should().BeFalse();
         handler.SslOptions.RemoteCertificateValidationCallback.Should().BeNull();
+        handler.SslOptions.CertificateChainPolicy!.DisableCertificateDownloads.Should().BeTrue();
+        handler.SslOptions.CertificateChainPolicy.RevocationMode.Should().Be(X509RevocationMode.NoCheck);
+        handler.SslOptions.CertificateChainPolicy.VerificationFlags.Should().Be(X509VerificationFlags.NoFlag);
         handler.MaxResponseHeadersLength.Should().Be(32);
         handler.ConnectTimeout.Should().Be(Timeout.InfiniteTimeSpan);
         handler.Dispose();
