@@ -562,3 +562,17 @@ named fixture proves disabled/dry-run behavior, BatchSize=1, held and active lea
 reference preservation, two successful comparison baselines, a separate locale baseline, exact
 cutoff/latest terminal survival after clock advancement, child cleanup and cancellation. Retention
 remains disabled and unscheduled; increment 6 and final acceptance/load verification are incomplete.
+
+### Logical-check cleanup
+
+LogicalCheckRetentionBatch removes an expired completed check and its immutable snapshot only when
+all retained children and incident references are absent. Shared hold, lease and current-evidence
+protections remain in force. The snapshot and check disappear in one transaction while daily
+aggregates remain, satisfying the deferred snapshot constraint at commit.
+
+Validation: full database foundation script passed with zero Release warnings/errors. The existing
+named execution fixture now independently pins an otherwise eligible check with SEO observations,
+certificate observations and an execution attempt, then proves deletion after those references are
+removed. Disabled/dry-run and bounded cleanup are verified; retained work, other checks/snapshots
+and the daily aggregate survive. Retention remains disabled and unscheduled. Increment 6 and the
+final acceptance/load gates remain incomplete.

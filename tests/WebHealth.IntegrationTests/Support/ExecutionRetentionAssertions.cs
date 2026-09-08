@@ -170,10 +170,74 @@ internal static class ExecutionRetentionAssertions
         remainingWork.Should().BeEquivalentTo(work.Where(pair => !pair.Key.StartsWith("eligible-", StringComparison.Ordinal))
             .Select(pair => pair.Value.Id));
         await VerifyRawResultsAsync(database, monitorId, attempts, clock);
+        await VerifyLogicalCheckCleanupAsync(database, monitorId, attempts, clock);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         var execute = async () => await Batch(true, false).ExecuteAsync(cancelled.Token);
         await execute.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private static async Task VerifyLogicalCheckCleanupAsync(ApplicationDbContext database, Guid monitorId,
+        Dictionary<string, ExecutionAttempt> attempts, TimeProvider clock)
+    {
+        database.ChangeTracker.Clear();
+        var checkId = attempts["eligible-b"].LogicalCheckId;
+        LogicalCheckRetentionBatch Batch(bool enabled, bool dryRun) => new(database,
+            new() { Enabled = enabled, DryRun = dryRun, BatchSize = 1 }, clock, NullLogger<LogicalCheckRetentionBatch>.Instance);
+        (await Batch(false, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        (await Batch(true, true).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 0));
+        (await database.CheckConfigurationSnapshots.AnyAsync(item => item.LogicalCheckId == checkId)).Should().BeTrue();
+        database.SeoObservations.Add(new SeoObservation
+        {
+            LogicalCheckId = checkId,
+            EndpointMonitorId = monitorId,
+            Applicability = "NotApplicable",
+            NotApplicableReason = "NonHtml",
+            ObservedAt = attempts["eligible-b"].FinishedAt!.Value
+        });
+        await database.SaveChangesAsync();
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        await database.SeoObservations.Where(item => item.LogicalCheckId == checkId).ExecuteDeleteAsync();
+        database.CertificateObservations.Add(new CertificateObservation
+        {
+            LogicalCheckId = checkId,
+            EndpointMonitorId = monitorId,
+            Subject = "CN=execution-retention.test",
+            Issuer = "CN=ControlledRetention",
+            SerialNumber = "01",
+            Sha256Fingerprint = new string('a', 64),
+            NotBefore = clock.GetUtcNow().AddYears(-1),
+            NotAfter = clock.GetUtcNow().AddYears(1),
+            ValidationCategory = "Valid",
+            ObservedAt = attempts["eligible-b"].FinishedAt!.Value
+        });
+        await database.SaveChangesAsync();
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        await database.CertificateObservations.Where(item => item.LogicalCheckId == checkId).ExecuteDeleteAsync();
+        var attempt = new ExecutionAttempt
+        {
+            Id = Guid.NewGuid(),
+            LogicalCheckId = checkId,
+            AttemptNumber = 2,
+            JobId = "retained-attempt",
+            WorkerId = "retention-fixture",
+            StartedAt = attempts["eligible-b"].StartedAt,
+            FinishedAt = attempts["eligible-b"].FinishedAt,
+            InfrastructureOutcome = "Succeeded"
+        };
+        database.ExecutionAttempts.Add(attempt);
+        await database.SaveChangesAsync();
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        await database.ExecutionAttempts.Where(item => item.Id == attempt.Id).ExecuteDeleteAsync();
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 1));
+        (await Batch(true, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        var preserved = attempts.Where(pair => pair.Key != "eligible-b").Select(pair => pair.Value.LogicalCheckId).ToArray();
+        (await database.LogicalChecks.Where(item => item.EndpointMonitorId == monitorId).Select(item => item.Id).ToArrayAsync())
+            .Should().BeEquivalentTo(preserved);
+        var allIds = attempts.Values.Select(item => item.LogicalCheckId).ToArray();
+        (await database.CheckConfigurationSnapshots.Where(item => allIds.Contains(item.LogicalCheckId)).Select(item => item.LogicalCheckId).ToArrayAsync())
+            .Should().BeEquivalentTo(preserved);
+        (await database.MonitoringDailyAggregates.SingleAsync(item => item.EndpointMonitorId == monitorId)).RawDeletionStartedAt.Should().NotBeNull();
     }
 
     private static async Task VerifyRawResultsAsync(ApplicationDbContext database, Guid monitorId,

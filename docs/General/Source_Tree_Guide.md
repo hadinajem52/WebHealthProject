@@ -1029,3 +1029,7 @@ reader. The batch removes links before selected runs and remains unscheduled.
 90 days. Holds, leases, retained incident references, the latest terminal run and scored comparison
 baselines survive. `PageAudits/PageAuditHistoryQueries.cs` shares scored-run eligibility with the
 comparison reader; strategy and locale boundaries remain intact. The batch is not yet scheduled.
+
+`Infrastructure/Monitoring/LogicalCheckRetentionBatch.cs` performs final monitoring-detail cleanup
+only after all retained children and evidence references are gone. It removes snapshots and checks
+in one transaction, preserving aggregates and registry configuration, and remains unscheduled.

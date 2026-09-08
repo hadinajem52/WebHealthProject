@@ -195,3 +195,15 @@ per target, strategy and locale. Successful means Completed or CompletedWithWarn
 and finish time, matching the existing comparison reader. The two scored runs preserve the current
 comparison when the latest terminal run failed. Archived runs participate as they do in the reader.
 Items are removed before selected runs; target configuration and incident evidence are not changed.
+
+## Logical-check and snapshot cleanup
+
+LogicalCheckRetentionBatch is the final monitoring-detail cleanup stage. It selects completed
+checks strictly older than 90 days only when hold/current-health/lease protections pass and no
+result, SEO observation, certificate observation, attempt, durable work or incident evidence remains.
+Findings and redirects cannot outlive their result because of their foreign keys. All incident
+references protect the check until the owning evidence bundle is removed, including terminal ones.
+
+The batch deletes the immutable snapshot before its check inside one transaction with local
+retention permission. The deferred snapshot contract is satisfied when both are gone at commit.
+Daily aggregates and monitor/endpoint configuration remain. The worker is still unscheduled.
