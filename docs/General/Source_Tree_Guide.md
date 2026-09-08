@@ -990,3 +990,8 @@ changes with future retention batches using a transaction-scoped PostgreSQL advi
 and incident evidence. It returns database-composable ID queries for endpoints, monitors, checks,
 incidents, crawl runs and PageAudit runs at a single batch timestamp. Retention callers must use
 the shared transaction lock before selecting candidates and applying these protection predicates.
+
+`Infrastructure/Monitoring/MonitoringDailyAggregate.cs` defines one constrained row per monitor
+and UTC date, including provenance, duration histogram and a raw-deletion-start marker. Its
+migration and compiled model keep summaries attached to existing monitors. Endpoint purge removes
+summaries before monitors; ordinary retention must preserve monitor identities for historical names.

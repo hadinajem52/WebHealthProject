@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("d58f035e-f289-4205-b5bc-35b4516180a9"), entityTypeCount: 57)
+            : base(skipDetectChanges: false, modelId: new Guid("e57a0bb0-8150-4b4b-8032-8410e0319527"), entityTypeCount: 58)
         {
         }
 
@@ -47,6 +47,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var executionLease = ExecutionLeaseEntityType.Create(this);
             var finding = FindingEntityType.Create(this);
             var logicalCheck = LogicalCheckEntityType.Create(this);
+            var monitoringDailyAggregate = MonitoringDailyAggregateEntityType.Create(this);
             var monitoringRuntimeState = MonitoringRuntimeStateEntityType.Create(this);
             var redirectHop = RedirectHopEntityType.Create(this);
             var retentionHold = RetentionHoldEntityType.Create(this);
@@ -129,6 +130,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             FindingEntityType.CreateForeignKey1(finding, checkResult);
             LogicalCheckEntityType.CreateForeignKey1(logicalCheck, endpointMonitor);
             LogicalCheckEntityType.CreateForeignKey2(logicalCheck, applicationUser);
+            MonitoringDailyAggregateEntityType.CreateForeignKey1(monitoringDailyAggregate, endpointMonitor);
             RedirectHopEntityType.CreateForeignKey1(redirectHop, checkResult);
             TargetAuthorizationEvidenceEntityType.CreateForeignKey1(targetAuthorizationEvidence, applicationUser);
             TargetAuthorizationEvidenceEntityType.CreateForeignKey2(targetAuthorizationEvidence, endpoint);
@@ -217,6 +219,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             ExecutionLeaseEntityType.CreateAnnotations(executionLease);
             FindingEntityType.CreateAnnotations(finding);
             LogicalCheckEntityType.CreateAnnotations(logicalCheck);
+            MonitoringDailyAggregateEntityType.CreateAnnotations(monitoringDailyAggregate);
             MonitoringRuntimeStateEntityType.CreateAnnotations(monitoringRuntimeState);
             RedirectHopEntityType.CreateAnnotations(redirectHop);
             RetentionHoldEntityType.CreateAnnotations(retentionHold);

@@ -421,3 +421,19 @@ Verification on 2026-09-08: ten focused boundary/estimate/validation cases passe
 815 unit tests. Release compilation succeeded. No current report calculation or database schema
 changes in this slice. Aggregate storage, recomputation, older-window reporting and retention
 worker integration remain pending; the overall goal is still in progress.
+
+### P7-DATA-01 daily aggregate schema
+
+Migration 20260908150752_MonitoringDailyAggregates adds a unique monitor/UTC-day summary with
+sample counts, duration statistics and versioned histogram, comparability/source provenance,
+measurement bounds and raw-deletion-start marker. Database constraints enforce count partitions,
+histogram totals, valid duration ranges, UTC-day membership and marker ordering. The compiled
+model and schema expectations are updated. Endpoint purge deletes aggregate rows before monitors.
+No secondary index or automatic retention is introduced.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed, including
+round-trip fields, inconsistent-summary rejection, duplicate-day rejection, populated isolated
+rollback/upgrade/repeatability and aggregate removal through endpoint purge. All 667 ordinary
+integration tests passed (four opt-in skips). Release build had zero warnings/errors; EF reports
+no pending model changes. Recompute writer, long-window report integration and deletion worker
+remain pending; aggregate schema alone does not satisfy the retention exit gate.

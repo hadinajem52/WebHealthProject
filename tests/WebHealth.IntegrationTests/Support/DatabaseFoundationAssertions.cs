@@ -108,11 +108,13 @@ internal static class DatabaseFoundationAssertions
         "20260908130516_SslSnapshotExpiryPolicy",
         "20260908131625_SslPolicyFingerprint",
         "20260908135926_MonitoringRuntimeState",
-        "20260908144110_RetentionHolds"
+        "20260908144110_RetentionHolds",
+        "20260908150752_MonitoringDailyAggregates"
     ];
 
     private static readonly string[] ExpectedTables =
     [
+        "monitoring_daily_aggregate",
         "retention_hold",
         "monitoring_runtime_state",
         "target_authorization_evidence",
@@ -174,6 +176,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] TablesAddedAfterPhaseThree =
     [
+        "monitoring_daily_aggregate",
         "retention_hold",
         "monitoring_runtime_state",
         "target_authorization_evidence",
@@ -194,6 +197,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] ExpectedEntityTypeNames =
     [
+        "MonitoringDailyAggregate",
         "RetentionHold",
         "MonitoringRuntimeState",
         "TargetAuthorizationEvidence",
@@ -294,6 +298,8 @@ internal static class DatabaseFoundationAssertions
             await CreateOwnedMonitorIdAsync(connectionString, "http://retention-hold-management.test/status"));
         await RetentionScopeAssertions.VerifyAsync(connectionString,
             await CreateOwnedMonitorIdAsync(connectionString, "http://retention-scope.test/status"));
+        await DailyAggregateAssertions.VerifyAsync(connectionString,
+            await CreateOwnedMonitorIdAsync(connectionString, "http://daily-aggregate.test/status"));
         await VerifyHangfireSchedulingAsync(connectionString);
         await VerifyManualChecksAndHistoryAsync(connectionString);
         await VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(connectionString);
@@ -4625,6 +4631,7 @@ internal static class DatabaseFoundationAssertions
             CreatedAt = certificateCheckCreatedAt
         };
         database.LogicalChecks.Add(certificateCheck);
+        database.MonitoringDailyAggregates.Add(DailyAggregateAssertions.NewRow(certificateMonitor.Id, now));
         database.ExecutionLeases.Add(new ExecutionLease
         {
             EndpointMonitorId = certificateMonitor.Id,
@@ -5018,6 +5025,7 @@ internal static class DatabaseFoundationAssertions
             ["finding"] = await database.Findings.CountAsync(item => checks.Contains(item.LogicalCheckId)),
             ["seo_observation"] = await database.SeoObservations.CountAsync(item => checks.Contains(item.LogicalCheckId)),
             ["certificate_observation"] = await database.CertificateObservations.CountAsync(item => checks.Contains(item.LogicalCheckId)),
+            ["monitoring_daily_aggregate"] = await database.MonitoringDailyAggregates.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
             ["endpoint_health"] = await database.EndpointHealth.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
             ["issue_state"] = await database.IssueStates.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),
             ["incident"] = await database.Incidents.CountAsync(item => monitors.Contains(item.EndpointMonitorId)),

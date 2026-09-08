@@ -81,3 +81,17 @@ are non-cumulative. Approximate percentiles select the nearest-rank bucket and u
 capped by the recorded maximum; overflow uses the recorded maximum. Empty samples return no value.
 Raw retained windows continue using their exact existing percentile calculation. Mixed or aggregate
 windows must disclose approximation rather than presenting bucket estimates as exact percentiles.
+
+## Daily aggregate storage
+
+Each monitor/UTC-day row stores total and scheduled counts, eligible Healthy/Warning/Down counts,
+excluded/maintenance/cancelled counts, duration count/sum/minimum/maximum and the versioned histogram.
+Maintenance and cancellation counts are subsets of excluded samples, not additional totals.
+Comparability identity is a SHA-256 digest of the represented configuration identities; IsComparable
+records whether they describe one comparable population. Source range and first/last measurement
+retain report provenance. The forthcoming writer must populate these fields from raw results.
+
+ComputedAt records recomputation. RawDeletionStartedAt is set before the first raw deletion for
+that day; once set, recomputation from remaining raw rows is forbidden. Reports must choose the
+complete aggregate for such days instead of double-counting protected raw rows that remain.
+Endpoint purge removes its daily aggregates before monitors. No retention worker is enabled yet.

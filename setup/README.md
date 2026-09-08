@@ -383,3 +383,11 @@ web management flow and retention worker are still pending; deletion remains dis
 The Administrator hold page is available at /Retention, linked from monitoring diagnostics.
 Creation accepts a supported scope and record ID; expiry is entered in UTC. Active holds can be
 released and history is paged. Browser layout verification and the deletion worker remain pending.
+
+### Daily aggregate schema
+
+Apply migration 20260908150752_MonitoringDailyAggregates explicitly using the normal migration
+procedure. It adds one constrained summary row per monitor/UTC date and updates the compiled model.
+Endpoint purge removes these summaries before deleting monitors. Rollback drops aggregate history;
+keep retention deletion disabled during rollback. Aggregate recomputation and report consumption
+are still pending, so this migration alone does not replace raw history or enable retention.

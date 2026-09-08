@@ -82,6 +82,7 @@ internal static class MonitoringRuntimeAssertions
     public static async Task VerifyUpgradeAsync(ApplicationDbContext database, MonitoringRuntimeRecorder recorder)
     {
         await RetentionHoldAssertions.VerifyUpgradeAsync(database);
+        await DailyAggregateAssertions.VerifyUpgradeAsync(database);
         await recorder.RunAsync("monitoring-dispatch", () => Task.FromResult(new MonitoringDispatchResult(0, 0)), CancellationToken.None);
         await database.Database.MigrateAsync("SslPolicyFingerprint");
         await database.Database.MigrateAsync();

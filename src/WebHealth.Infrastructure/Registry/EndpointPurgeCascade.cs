@@ -163,6 +163,8 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
             .Where(grant => grant.EndpointId == endpointId)
             .ExecuteDeleteAsync(cancellationToken);
 
+        await dbContext.MonitoringDailyAggregates.Where(aggregate => monitors.Contains(aggregate.EndpointMonitorId))
+            .ExecuteDeleteAsync(cancellationToken);
         await dbContext.EndpointMonitors
             .Where(monitor => monitor.EndpointId == endpointId)
             .ExecuteDeleteAsync(cancellationToken);
