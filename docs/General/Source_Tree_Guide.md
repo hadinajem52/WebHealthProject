@@ -985,3 +985,8 @@ transport attempts; the runtime recorder measures dispatcher and reconciler invo
 creation/release commands. `Infrastructure/Monitoring/RetentionHoldService.cs` validates existing
 scope records and commits lifecycle audits atomically. `RetentionTransactionLock` serializes hold
 changes with future retention batches using a transaction-scoped PostgreSQL advisory lock.
+
+`Infrastructure/Monitoring/RetentionHoldQueries.cs` expands active holds through registry ancestry
+and incident evidence. It returns database-composable ID queries for endpoints, monitors, checks,
+incidents, crawl runs and PageAudit runs at a single batch timestamp. Retention callers must use
+the shared transaction lock before selecting candidates and applying these protection predicates.

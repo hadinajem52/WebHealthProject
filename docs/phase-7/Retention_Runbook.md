@@ -58,3 +58,16 @@ states in pages of 100 records. Expiry input is UTC. POST actions require antifo
 server-side Administrator authorization; reason text is HTML-encoded. The form currently accepts
 record IDs from detail-page addresses or exports rather than offering a searchable record picker.
 Browser layout verification and worker enforcement remain pending.
+
+## Hold scope expansion
+
+RetentionHoldQueries resolves active holds at one batch timestamp through existing relationships.
+Client, website, environment and endpoint holds protect descendant monitor, check, incident, crawl
+and PageAudit records. Monitor holds protect their checks and incident evidence. A held incident
+protects the checks and PageAudit runs referenced by its evidence. A held check or PageAudit run
+also preserves its referencing incident bundle, whose evidence must remain intact. A crawl-run
+hold protects that run and its children without protecting unrelated monitoring history.
+
+Released holds do not match; expiry is exclusive at its exact timestamp. Archived configuration
+is deliberately included. The deletion worker must use these queries inside the shared retention
+transaction lock. Query integration is implemented ahead of the worker; deletion is still disabled.

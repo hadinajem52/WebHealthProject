@@ -292,6 +292,8 @@ internal static class DatabaseFoundationAssertions
         await VerifyHealthConfirmationAsync(connectionString);
         await RetentionHoldAssertions.VerifyManagementAsync(connectionString,
             await CreateOwnedMonitorIdAsync(connectionString, "http://retention-hold-management.test/status"));
+        await RetentionScopeAssertions.VerifyAsync(connectionString,
+            await CreateOwnedMonitorIdAsync(connectionString, "http://retention-scope.test/status"));
         await VerifyHangfireSchedulingAsync(connectionString);
         await VerifyManualChecksAndHistoryAsync(connectionString);
         await VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(connectionString);

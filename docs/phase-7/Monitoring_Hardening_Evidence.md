@@ -393,3 +393,19 @@ All 667 ordinary integration tests passed (four opt-in skips). After the final h
 the ten web cases passed again. Browser layout verification remains pending. Persistence/service
 behavior has the prior full database evidence; no persistence change was introduced in this slice.
 Worker enforcement, aggregates and the rest of increment 6 remain pending.
+
+### P7-DATA-01 hold scope matching
+
+RetentionHoldQueries composes active hold predicates through registry ancestry and incident
+evidence without copying target data. It covers endpoints, monitors, checks, incidents, crawl
+runs and PageAudit runs. Incident bundles preserve their referenced checks/PageAudit evidence;
+holds on that evidence preserve the referencing bundle. Crawl-only holds stay limited to crawl
+history. Expiry is exclusive at the exact timestamp; released holds stop matching immediately.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed. A named,
+transaction-owned fixture exercises every supported scope against actual PostgreSQL queries,
+including parent propagation, incident evidence references, crawl isolation, exact microsecond
+expiry and immediate release. The initial fixture omitted a required Lighthouse version; that
+fixture was corrected before the green run. Release build had zero warnings/errors. No migration
+or secondary index was added. Worker integration, aggregate storage/reporting and UI browser
+verification remain pending; increment 6 is not complete and deletion remains disabled.
