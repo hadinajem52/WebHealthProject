@@ -45,11 +45,11 @@ public static class CertificateExpiry
     private static void Validate(CertificateExpiryThresholds thresholds)
     {
         if (thresholds.CriticalDays < 0
-            || thresholds.CriticalDays > thresholds.HighDays
-            || thresholds.HighDays > thresholds.WarningDays)
+            || thresholds.CriticalDays >= thresholds.HighDays
+            || thresholds.HighDays >= thresholds.WarningDays)
         {
             throw new ArgumentException(
-                "Certificate expiry thresholds must be non-negative and ordered critical <= high <= warning.",
+                "Certificate expiry thresholds must be non-negative and ordered critical < high < warning.",
                 nameof(thresholds));
         }
     }

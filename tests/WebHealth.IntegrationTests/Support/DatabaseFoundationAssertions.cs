@@ -288,6 +288,7 @@ internal static class DatabaseFoundationAssertions
         await VerifySeoObservationContractAsync(connectionString);
         await VerifyRobotsIncidentDoesNotRecoverWithoutFreshEvidenceAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
+        await VerifySimultaneousSslFindingsAsync(connectionString);
         await VerifyCrawlResultContractAsync(connectionString);
         await VerifyPageAuditContractAsync(connectionString);
         await VerifyPageAuditExecutionAsync(connectionString);
@@ -2211,14 +2212,41 @@ internal static class DatabaseFoundationAssertions
         }
     }
 
-    private sealed class RecordingSslProbe : ISslCertificateProbe
+    private static async Task VerifySimultaneousSslFindingsAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var availabilityId = await CreateOwnedMonitorIdAsync(connectionString, "https://simultaneous-ssl.test/status");
+        var endpointId = await database.EndpointMonitors.Where(item => item.Id == availabilityId)
+            .Select(item => item.EndpointId).SingleAsync();
+        var monitor = await database.EndpointMonitors.Include(item => item.Endpoint).ThenInclude(item => item.Environment)
+            .SingleAsync(item => item.EndpointId == endpointId && item.MonitorType == RegistryDefaults.SslCertificateMonitorType && item.DeletedAt == null);
+        var now = DateTimeOffset.UtcNow;
+        var certificate = new TlsCertificateObservation("CN=wrong.test", "CN=Test issuer", "01", new string('c', 64),
+            now.AddDays(-40), now.AddDays(-1), ["wrong.test"], false, false, TlsValidationCategory.Expired, now);
+        var failed = await CreateQueuedCheckAsync(database, monitor);
+        var execution = CreateExecutionService(database, new RecordingSafeHttpTransport(Success), true,
+            new RecordingSslProbe(new(null, certificate, TimeSpan.FromMilliseconds(25))));
+
+        (await execution.ExecuteAsync(new(failed.Id, failed.DurableWork.Single().Id,
+            $"ssl-faults-{failed.Id:N}", "ssl-faults-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+
+        (await database.Findings.Where(item => item.LogicalCheckId == failed.Id).Select(item => item.RuleKey).ToArrayAsync())
+            .Should().BeEquivalentTo(SslMonitorIdentity.ExpiryRuleKey, SslMonitorIdentity.HostnameMismatchRuleKey, SslMonitorIdentity.UntrustedRuleKey);
+        (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == failed.Id)).FailureCategory
+            .Should().Be(SslFailureCategories.Expired);
+        (await database.IssueStates.CountAsync(item => item.EndpointMonitorId == monitor.Id)).Should().Be(3);
+    }
+
+    private sealed class RecordingSslProbe(SslCertificateProbeResult? response = null) : ISslCertificateProbe
     {
         public SslCertificateProbeRequest? LastRequest { get; private set; }
 
         public Task<SslCertificateProbeResult> ProbeAsync(SslCertificateProbeRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
-            return Task.FromResult(new SslCertificateProbeResult(SslProbeFailureKind.HandshakeFailed, null, TimeSpan.FromMilliseconds(25)));
+            return Task.FromResult(response ?? new SslCertificateProbeResult(SslProbeFailureKind.HandshakeFailed, null, TimeSpan.FromMilliseconds(25)));
         }
     }
 

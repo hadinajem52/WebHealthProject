@@ -159,3 +159,12 @@ chain-wide errors now participate in trust evaluation. Resolved SSL policy, stru
 simultaneous findings, and the remaining increment gates are still pending.
 
 Verification on 2026-09-08: 59 transport, SSL probe, and chain-trust integration tests passed.
+
+The next slice evaluates leaf time validity, hostname matching, chain trust, and expiry bands
+independently. Several findings can be persisted for one certificate. The display category follows
+NotYetValid, Expired, HostnameMismatch, Untrusted, ExpiringSoon precedence. Rule keys use
+`Ssl.NotYetValid`, `Ssl.HostnameMismatch`, and `Ssl.Untrusted`; their issue identities retain the
+existing category-based encoding so existing incident identity and historical references remain
+stable. Expiry keeps its fingerprint-specific issue key. Threshold validation now requires strict
+warning > high > critical >= 0 ordering. The unit suite passed 771 tests on 2026-09-08.
+The full ordered database foundation script passed, including persistence of three simultaneous SSL findings and issue states. The Release build completed with zero warnings and errors.

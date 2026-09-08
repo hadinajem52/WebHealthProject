@@ -8,9 +8,20 @@ public static class SslMonitorIdentity
     public const string DefaultDiscriminator = "default";
 
     public const string ExpiryRuleKey = "Ssl.Expiry";
+    public const string HostnameMismatchRuleKey = "Ssl.HostnameMismatch";
+    public const string UntrustedRuleKey = "Ssl.Untrusted";
+    public const string NotYetValidRuleKey = "Ssl.NotYetValid";
 
     public static string CreateIssueKey(string ruleKey, string discriminator = DefaultDiscriminator) =>
-        $"v1|{MonitorType}|{ruleKey}|{discriminator}";
+        $"v1|{MonitorType}|{StableRuleIdentity(ruleKey)}|{discriminator}";
+
+    private static string StableRuleIdentity(string ruleKey) => ruleKey switch
+    {
+        HostnameMismatchRuleKey => SslFailureCategories.HostnameMismatch,
+        UntrustedRuleKey => SslFailureCategories.Untrusted,
+        NotYetValidRuleKey => SslFailureCategories.NotYetValid,
+        _ => ruleKey
+    };
 
     public static string CreateExpiryIssueKey(string sha256Fingerprint) =>
         CreateIssueKey(ExpiryRuleKey, sha256Fingerprint);
@@ -75,41 +86,49 @@ public static class SslResultNormalizer
             yield break;
         }
 
-        var validation = SelectValidationCategory(input.Probe);
-
-        if (validation is null || validation == SslFailureCategories.Expired)
+        if (input.Probe.Certificate is not { } certificate)
         {
-            var expiry = EvaluateExpiry(input, validation);
-            if (expiry is not null)
-            {
-                yield return expiry;
-            }
-
+            yield return ValidationFinding(TransportFailureCategory(input.Probe), null);
             yield break;
         }
 
-        yield return ValidationFinding(validation, input.Probe.Certificate);
-    }
-
-    private static NormalizedFinding? EvaluateExpiry(NormalizeSslResult input, string? validationCategory)
-    {
-        if (input.Probe.Certificate is not { } certificate)
+        if (input.MeasuredAt < certificate.NotBefore)
         {
-            return null;
+            yield return ValidationFinding(SslFailureCategories.NotYetValid, certificate);
         }
 
+        var expiry = EvaluateExpiry(input, certificate);
+        if (expiry is not null)
+        {
+            yield return expiry;
+        }
+
+        if (!certificate.HostnameMatched)
+        {
+            yield return ValidationFinding(SslFailureCategories.HostnameMismatch, certificate);
+        }
+
+        if (!certificate.ChainTrusted)
+        {
+            yield return ValidationFinding(SslFailureCategories.Untrusted, certificate);
+        }
+    }
+
+    private static NormalizedFinding? EvaluateExpiry(NormalizeSslResult input, TlsCertificateObservation certificate)
+    {
         var thresholds = input.EffectiveExpiryThresholds;
         var daysRemaining = CertificateExpiry.DaysRemaining(certificate.NotAfter, input.MeasuredAt);
         var severity = CertificateExpiry.SelectSeverity(daysRemaining, thresholds);
+        var expired = input.MeasuredAt > certificate.NotAfter;
         return severity == CertificateExpirySeverity.None
             ? null
             : new NormalizedFinding(
-                validationCategory ?? SslFailureCategories.ExpiringSoon,
+                expired ? SslFailureCategories.Expired : SslFailureCategories.ExpiringSoon,
                 SslMonitorIdentity.ExpiryRuleKey,
                 ToFindingSeverity(severity),
-                Bounded(validationCategory is null
-                    ? $"{daysRemaining} days remaining; expires {certificate.NotAfter:yyyy-MM-dd}"
-                    : $"Expired {-daysRemaining} days ago on {certificate.NotAfter:yyyy-MM-dd}"),
+                Bounded(expired
+                    ? $"Expired on {certificate.NotAfter:yyyy-MM-dd}"
+                    : $"{daysRemaining} days remaining; expires {certificate.NotAfter:yyyy-MM-dd}"),
                 $"More than {thresholds.WarningDays} days remaining",
                 SslMonitorIdentity.CreateExpiryIssueKey(certificate.Sha256Fingerprint));
     }
@@ -123,36 +142,35 @@ public static class SslResultNormalizer
 
     private static string? SelectFailureCategory(
         SslCertificateProbeResult probe,
-        IReadOnlyList<NormalizedFinding> findings) =>
-        findings.FirstOrDefault()?.FailureCategory ?? SelectValidationCategory(probe);
-
-    private static string? SelectValidationCategory(SslCertificateProbeResult probe)
+        IReadOnlyList<NormalizedFinding> findings)
     {
-        if (probe.Certificate is { } certificate)
+        if (probe.Failure == SslProbeFailureKind.Cancelled)
         {
-            return certificate.ValidationCategory switch
-            {
-                TlsValidationCategory.Valid => null,
-                TlsValidationCategory.NotYetValid => SslFailureCategories.NotYetValid,
-                TlsValidationCategory.Expired => SslFailureCategories.Expired,
-                TlsValidationCategory.HostnameMismatch => SslFailureCategories.HostnameMismatch,
-                _ => SslFailureCategories.Untrusted
-            };
+            return HttpFailureCategories.Cancellation;
         }
 
-        return probe.Failure switch
+        foreach (var category in new[] { SslFailureCategories.NotYetValid, SslFailureCategories.Expired,
+            SslFailureCategories.HostnameMismatch, SslFailureCategories.Untrusted, SslFailureCategories.ExpiringSoon })
         {
-            SslProbeFailureKind.NameResolution => HttpFailureCategories.Dns,
-            SslProbeFailureKind.Connection => HttpFailureCategories.Connection,
-            SslProbeFailureKind.Timeout => HttpFailureCategories.Timeout,
-            SslProbeFailureKind.Cancelled => HttpFailureCategories.Cancellation,
-            SslProbeFailureKind.DestinationRejected =>
-                HttpFailureCategories.DestinationPolicy,
-            SslProbeFailureKind.InvalidUrl or SslProbeFailureKind.NotHttps =>
-                HttpFailureCategories.InvalidConfiguration,
-            _ => SslFailureCategories.HandshakeFailed
-        };
+            if (findings.Any(finding => finding.FailureCategory == category))
+            {
+                return category;
+            }
+        }
+
+        return probe.Certificate is null ? TransportFailureCategory(probe) : null;
     }
+
+    private static string TransportFailureCategory(SslCertificateProbeResult probe) => probe.Failure switch
+    {
+        SslProbeFailureKind.NameResolution => HttpFailureCategories.Dns,
+        SslProbeFailureKind.Connection => HttpFailureCategories.Connection,
+        SslProbeFailureKind.Timeout => HttpFailureCategories.Timeout,
+        SslProbeFailureKind.Cancelled => HttpFailureCategories.Cancellation,
+        SslProbeFailureKind.DestinationRejected => HttpFailureCategories.DestinationPolicy,
+        SslProbeFailureKind.InvalidUrl or SslProbeFailureKind.NotHttps => HttpFailureCategories.InvalidConfiguration,
+        _ => SslFailureCategories.HandshakeFailed
+    };
 
     private static string SelectOutcome(
         SslCertificateProbeResult probe,
@@ -172,14 +190,17 @@ public static class SslResultNormalizer
     private static NormalizedFinding ValidationFinding(string category, TlsCertificateObservation? certificate) =>
         new(
             category,
-            category,
+            category switch
+            {
+                SslFailureCategories.HostnameMismatch => SslMonitorIdentity.HostnameMismatchRuleKey,
+                SslFailureCategories.Untrusted => SslMonitorIdentity.UntrustedRuleKey,
+                SslFailureCategories.NotYetValid => SslMonitorIdentity.NotYetValidRuleKey,
+                _ => category
+            },
             FindingSeverities.Critical,
-            certificate is null ? "No certificate was presented" : Describe(certificate),
+            certificate is null ? "No certificate was presented" : Bounded($"{category}; expires {certificate.NotAfter:yyyy-MM-dd}"),
             "A trusted certificate valid for the requested host",
             SslMonitorIdentity.CreateIssueKey(category));
-
-    private static string Describe(TlsCertificateObservation certificate) =>
-        Bounded($"{certificate.ValidationCategory}; expires {certificate.NotAfter:yyyy-MM-dd}");
 
     private static string? Diagnostic(string? category, IReadOnlyList<NormalizedFinding> findings) =>
         category == SslFailureCategories.ExpiringSoon

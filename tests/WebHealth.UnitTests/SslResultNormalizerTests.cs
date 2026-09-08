@@ -163,13 +163,36 @@ public sealed class SslResultNormalizerTests
         renewed.Findings.Single().IssueKey.Should().NotBe(first.Findings.Single().IssueKey);
     }
 
-    [Fact]
-    public void Normalize_DoesNotStackAnExpiryBandOnACertificateThatIsInvalidForAnotherReason()
+    [Theory]
+    [InlineData(-1, SslFailureCategories.Expired)]
+    [InlineData(10, SslFailureCategories.HostnameMismatch)]
+    public void Normalize_PreservesSimultaneousExpiryHostnameAndTrustFindings(int daysUntilExpiry, string primary)
     {
-        var result = Normalize(Observed(TlsValidationCategory.Untrusted));
+        var probe = Observed(TlsValidationCategory.Valid, daysUntilExpiry);
+        probe = probe with { Certificate = probe.Certificate! with { HostnameMatched = false, ChainTrusted = false } };
 
-        result.Findings.Should().ContainSingle().Which.FailureCategory
-            .Should().Be(SslFailureCategories.Untrusted);
+        var result = Normalize(probe);
+
+        result.FailureCategory.Should().Be(primary);
+        result.Outcome.Should().Be(HttpResultOutcomes.Critical);
+        result.Findings.Select(finding => finding.RuleKey).Should().BeEquivalentTo(
+            SslMonitorIdentity.ExpiryRuleKey, SslMonitorIdentity.HostnameMismatchRuleKey, SslMonitorIdentity.UntrustedRuleKey);
+        result.Findings.Single(finding => finding.RuleKey == SslMonitorIdentity.HostnameMismatchRuleKey).IssueKey
+            .Should().Be(SslMonitorIdentity.CreateIssueKey(SslFailureCategories.HostnameMismatch));
+    }
+
+    [Fact]
+    public void Normalize_NotYetValidIsPrimaryWithoutSuppressingOtherFaults()
+    {
+        var probe = Observed(TlsValidationCategory.NotYetValid, 10);
+        probe = probe with { Certificate = probe.Certificate! with { HostnameMatched = false, ChainTrusted = false } };
+
+        var result = Normalize(probe);
+
+        result.FailureCategory.Should().Be(SslFailureCategories.NotYetValid);
+        result.Findings.Select(finding => finding.RuleKey).Should().BeEquivalentTo(
+            SslMonitorIdentity.NotYetValidRuleKey, SslMonitorIdentity.ExpiryRuleKey,
+            SslMonitorIdentity.HostnameMismatchRuleKey, SslMonitorIdentity.UntrustedRuleKey);
     }
 
     [Theory]
@@ -203,11 +226,11 @@ public sealed class SslResultNormalizerTests
             "CN=Example CA",
             "01",
             fingerprint ?? Fingerprint('a'),
-            MeasuredAt.AddDays(-30),
+            category == TlsValidationCategory.NotYetValid ? MeasuredAt.AddDays(1) : MeasuredAt.AddDays(-30),
             MeasuredAt.AddDays(daysUntilExpiry),
             ["example.test"],
             category != TlsValidationCategory.HostnameMismatch,
-            category is TlsValidationCategory.Valid or TlsValidationCategory.Expired,
+            category != TlsValidationCategory.Untrusted,
             category,
             MeasuredAt),
         TimeSpan.FromMilliseconds(120));
@@ -279,6 +302,8 @@ public sealed class CertificateExpiryTests
     [Theory]
     [InlineData(30, 40, 7)]
     [InlineData(30, 15, -1)]
+    [InlineData(30, 30, 7)]
+    [InlineData(30, 7, 7)]
     public void SelectSeverity_RejectsUnorderedThresholds(int warning, int high, int critical)
     {
         var act = () => CertificateExpiry.SelectSeverity(
