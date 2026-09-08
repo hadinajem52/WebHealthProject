@@ -1,0 +1,67 @@
+BEGIN
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on endpoint_monitor monitor  (cost=0.00..8663307.14 rows=192 width=24) (actual time=56.027..3176.108 rows=192.00 loops=1)
+   Filter: (deleted_at IS NULL)
+   Buffers: shared hit=1268 read=107847
+   SubPlan 1
+     ->  Aggregate  (cost=45121.29..45121.30 rows=1 width=8) (actual time=16.530..16.530 rows=1.00 loops=192)
+           Buffers: shared hit=1268 read=107831
+           ->  Hash Join  (cost=21271.22..45097.47 rows=9529 width=8) (actual time=9.036..15.709 rows=8685.00 loops=192)
+                 Hash Cond: (check_row.id = result.logical_check_id)
+                 Buffers: shared hit=1268 read=107831
+                 ->  Bitmap Heap Scan on logical_check check_row  (cost=112.45..23912.94 rows=9809 width=40) (actual time=0.462..3.932 rows=8685.00 loops=192)
+                       Recheck Cond: (endpoint_monitor_id = monitor.id)
+                       Filter: (((source)::text = 'Scheduled'::text) AND ((state)::text = 'Completed'::text))
+                       Heap Blocks: exact=45256
+                       Buffers: shared hit=603 read=46477
+                       ->  Bitmap Index Scan on ix_logical_check_endpoint_monitor_archived  (cost=0.00..109.99 rows=9809 width=0) (actual time=0.403..0.403 rows=8685.00 loops=192)
+                             Index Cond: (endpoint_monitor_id = monitor.id)
+                             Index Searches: 192
+                             Buffers: shared hit=410 read=1414
+                 ->  Hash  (cost=21039.66..21039.66 rows=9529 width=32) (actual time=8.489..8.489 rows=8685.00 loops=192)
+                       Buckets: 32768 (originally 16384)  Batches: 1 (originally 1)  Memory Usage: 1876kB
+                       Buffers: shared hit=665 read=61354
+                       ->  Bitmap Heap Scan on check_result result  (cost=782.40..21039.66 rows=9529 width=32) (actual time=2.789..6.262 rows=8685.00 loops=192)
+                             Recheck Cond: (endpoint_monitor_id = monitor.id)
+                             Filter: ((current_state_disposition)::text = 'Current'::text)
+                             Heap Blocks: exact=30688
+                             Buffers: shared hit=665 read=61354
+                             ->  Bitmap Index Scan on ix_check_result_monitor_measured_at  (cost=0.00..780.02 rows=9529 width=0) (actual time=2.736..2.736 rows=8685.00 loops=192)
+                                   Index Cond: (endpoint_monitor_id = monitor.id)
+                                   Index Searches: 192
+                                   Buffers: shared hit=476 read=30855
+ Planning:
+   Buffers: shared hit=577 read=38
+ Planning Time: 29.127 ms
+ Execution Time: 3176.601 ms
+(34 rows)
+
+CREATE INDEX
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on endpoint_monitor monitor  (cost=0.00..1467.61 rows=192 width=24) (actual time=2.087..30.919 rows=192.00 loops=1)
+   Filter: (deleted_at IS NULL)
+   Buffers: shared hit=740 read=622
+   SubPlan 1
+     ->  Limit  (cost=0.85..7.55 rows=1 width=24) (actual time=0.158..0.158 rows=1.00 loops=192)
+           Buffers: shared hit=737 read=609
+           ->  Nested Loop  (cost=0.85..63802.11 rows=9529 width=24) (actual time=0.158..0.158 rows=1.00 loops=192)
+                 Buffers: shared hit=737 read=609
+                 ->  Index Only Scan using retention_completion_experiment on logical_check check_row  (cost=0.43..504.06 rows=9809 width=40) (actual time=0.021..0.021 rows=1.00 loops=192)
+                       Index Cond: (endpoint_monitor_id = monitor.id)
+                       Heap Fetches: 0
+                       Index Searches: 192
+                       Buffers: shared hit=353 read=225
+                 ->  Index Scan using pk_check_result on check_result result  (cost=0.43..6.45 rows=1 width=32) (actual time=0.136..0.136 rows=1.00 loops=192)
+                       Index Cond: (logical_check_id = check_row.id)
+                       Filter: ((endpoint_monitor_id = monitor.id) AND ((current_state_disposition)::text = 'Current'::text))
+                       Index Searches: 192
+                       Buffers: shared hit=384 read=384
+ Planning:
+   Buffers: shared hit=47 read=24
+ Planning Time: 2.840 ms
+ Execution Time: 30.986 ms
+(22 rows)
+
+ROLLBACK
