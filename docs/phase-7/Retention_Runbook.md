@@ -136,30 +136,29 @@ also completed before that cutoff. It excludes holds, any retained execution lea
 evidence and active incident evidence. Candidates are ordered by finish time and ID and limited
 to BatchSize. Dry-run selects the same candidates and deletes nothing. Each batch owns a transaction,
 shares the retention lock, observes cancellation/runtime limits and logs only category/counts/time.
-The batch is not scheduled yet; durable work and other retention categories remain pending.
+The hourly coordinator invokes this batch when retention is enabled.
 
 ## Completed durable-work batches
 
 ExecutionHistoryRetentionBatch shares the transaction, deadline and protected-check query between
 attempts and durable work. Durable work must be Completed, updated strictly before the 90-day cutoff,
 and have no work lease fields; its logical check must also qualify. Pending, failed and leased work
-remain. Both deletion paths reapply eligibility when deleting the selected IDs. The service remains
-unscheduled, and the remaining retention categories and coordinator are still pending.
+remain. Both deletion paths reapply eligibility when deleting the selected IDs. The coordinator
+invokes both paths in dependency order.
 
 ## Raw-result batches
 
 RawResultRetentionBatch handles results measured strictly before the 90-day cutoff whose completed
 checks pass the shared hold, lease, current-health and active-incident protections. Retained SEO or
 certificate observations also preserve the result used by their readers. Observation expiration
-and comparison-baseline protection remain separate pending work.
+and comparison-baseline protection are handled by the observation batches below.
 
 Each batch selects at most BatchSize result IDs from one monitor and UTC day. Before its first
 real deletion, it recomputes the full daily aggregate and records RawDeletionStartedAt in the same
 transaction. Subsequent batches preserve that aggregate instead of recomputing from partial raw
 history. Findings and redirect hops are removed before their selected results; logical checks and
-snapshots remain. Dry-run does not write aggregates or deletion markers. This service is not yet
-scheduled; report integration and the remaining retention categories must be completed before
-retention is enabled.
+snapshots remain. Dry-run does not write aggregates or deletion markers. The hourly coordinator
+invokes this service; deletion remains disabled by default pending the acceptance gates.
 
 ## Observation expiration and current baselines
 
@@ -268,8 +267,8 @@ and the next scheduled run can resume eligible work. The job logs category/count
 replaces failure diagnostics with a safe exception-type category. A disabled coordinator is a no-op,
 including for an already queued job from a previous configuration.
 
-Aggregate-backed reporting and full acceptance/load verification remain pending. Keep deletion
-disabled until those gates are complete; test commissioning uses the disposable database only.
+Aggregate-backed reporting is implemented. Full acceptance/load verification remains pending. Keep
+deletion disabled until those gates are complete; test commissioning uses the disposable database only.
 
 ## Reporting across retained and archived detail
 
