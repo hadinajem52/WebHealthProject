@@ -955,3 +955,8 @@ These files show the main control paths without requiring you to understand ever
 - `Infrastructure/Monitoring/HttpMonitorConfiguration.cs`: canonical override serialization, legacy materialized-value compatibility, fingerprints, and drift detection.
 - `Web/Models/HttpPolicyFormViewModel.cs` and its shared editor template: HTTP response settings reused by creation, registration, and editing.
 - `20260908120653_HttpMonitorOverridesV2`: data-only migration preserving existing effective HTTP configuration.
+
+SSL hardening additions: `ResolvedSslPolicy` owns canonical and legacy fingerprint calculations;
+`OfflineTlsPolicy` prevents certificate-controlled downloads; `TlsChainTrust` canonicalizes chain
+status flags. The `StructuredCertificateFacts`, `SslSnapshotExpiryPolicy`, and `SslPolicyFingerprint`
+migrations add recorded evidence, freeze expiry thresholds, and adopt the SSL hash respectively.

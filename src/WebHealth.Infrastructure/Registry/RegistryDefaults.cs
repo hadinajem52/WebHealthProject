@@ -38,22 +38,7 @@ internal static class RegistryDefaults
         normalizedUrl.StartsWith(Uri.UriSchemeHttps + "://", StringComparison.Ordinal);
 
     public static string CreateSslFingerprint(string normalizedUrl, bool isProduction) =>
-        HttpPolicyFingerprint.Create(new(
-            normalizedUrl,
-            SslCertificateMonitorType,
-            isProduction,
-            SslIntervalSeconds,
-            SslTimeoutSeconds,
-            SslFailureConfirmationCount,
-            SslRecoveryConfirmationCount,
-            null,
-            null,
-            [],
-            null,
-            "OrdinalIgnoreCase",
-            FindingSeverities.Warning,
-            SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes,
-            SafeHttpTransportDefaults.MaxRedirects));
+        ResolvedSslPolicy.Default.Fingerprint(normalizedUrl, isProduction);
 
     public static string CreateHttpFingerprint(
         string normalizedUrl,

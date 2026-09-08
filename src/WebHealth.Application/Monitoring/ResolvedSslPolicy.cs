@@ -28,6 +28,16 @@ public sealed record ResolvedSslPolicy(
         CertificateExpiry.SelectSeverity(0, ExpiryThresholds);
     }
 
+    public string LegacyFingerprint(string normalizedUrl, bool isProduction) => HttpPolicyFingerprint.Create(new(
+        normalizedUrl, SslMonitorIdentity.MonitorType, isProduction, IntervalSeconds, TimeoutSeconds,
+        FailureConfirmationCount, RecoveryConfirmationCount, null, null, [], null, "OrdinalIgnoreCase",
+        FindingSeverities.Warning, SafeHttpTransportDefaults.DefaultMaxResponseBodyBytes, SafeHttpTransportDefaults.MaxRedirects));
+
+    public bool MatchesFingerprint(string fingerprint, string normalizedUrl, bool isProduction) =>
+        string.Equals(fingerprint, Fingerprint(normalizedUrl, isProduction), StringComparison.Ordinal)
+        || (ExpiryThresholds == CertificateExpiryThresholds.Default
+            && string.Equals(fingerprint, LegacyFingerprint(normalizedUrl, isProduction), StringComparison.Ordinal));
+
     public string Fingerprint(string normalizedUrl, bool isProduction)
     {
         Validate();

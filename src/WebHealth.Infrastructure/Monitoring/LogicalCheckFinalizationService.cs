@@ -268,11 +268,15 @@ internal sealed class LogicalCheckFinalizationService(
             return LogicalCheckFinalizationStatus.TargetMismatch;
         }
 
-        var expected = ExpectedPolicyFingerprint(
-            check, ParseAcceptedStatuses(check.ConfigurationSnapshot.AcceptedStatusCodes));
-        if (check.PolicyFingerprint != expected
-            || check.ConfigurationSnapshot.ConfigurationFingerprint != expected
-            || evidence.Request.TimeoutSeconds != check.ConfigurationSnapshot.TimeoutSeconds)
+        var snapshot = check.ConfigurationSnapshot;
+        var policy = new ResolvedSslPolicy(snapshot.IntervalSeconds, snapshot.TimeoutSeconds,
+            snapshot.FailureConfirmationCount, snapshot.RecoveryConfirmationCount,
+            snapshot.SslWarningExpiryDays ?? ResolvedSslPolicy.Default.WarningExpiryDays,
+            snapshot.SslHighExpiryDays ?? ResolvedSslPolicy.Default.HighExpiryDays,
+            snapshot.SslCriticalExpiryDays ?? ResolvedSslPolicy.Default.CriticalExpiryDays);
+        if (check.PolicyFingerprint != snapshot.ConfigurationFingerprint
+            || !policy.MatchesFingerprint(check.PolicyFingerprint, endpoint.NormalizedUrl, endpoint.IsProduction)
+            || evidence.Request.TimeoutSeconds != snapshot.TimeoutSeconds)
         {
             return LogicalCheckFinalizationStatus.PolicyMismatch;
         }

@@ -104,7 +104,8 @@ internal static class DatabaseFoundationAssertions
         "20260908120653_HttpMonitorOverridesV2",
         "20260908124817_HttpThresholdEquality",
         "20260908125906_StructuredCertificateFacts",
-        "20260908130516_SslSnapshotExpiryPolicy"
+        "20260908130516_SslSnapshotExpiryPolicy",
+        "20260908131625_SslPolicyFingerprint"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -580,13 +581,12 @@ internal static class DatabaseFoundationAssertions
                 environment.is_production,
                 monitor.configuration_fingerprint,
                 encode(sha256(convert_to(
-                    'v2|'
+                    'ssl-v1|'
                     || octet_length(endpoint.normalized_url)::text || ':'
                     || endpoint.normalized_url || '|'
                     || '14:SslCertificate|'
                     || '1:' || CASE WHEN environment.is_production THEN '1' ELSE '0' END || '|'
-                    || '5:86400|2:15|1:1|1:1|-1:|-1:|0:|-1:|'
-                    || '17:OrdinalIgnoreCase|7:Warning|7:2097152|2:10|',
+                    || '5:86400|2:15|1:1|1:1|2:30|2:15|1:7|',
                     'UTF8')), 'hex')
             FROM web_health.endpoint_monitor AS monitor
             JOIN web_health.endpoint AS endpoint ON endpoint.id = monitor.endpoint_id
@@ -2578,6 +2578,11 @@ internal static class DatabaseFoundationAssertions
             check.ConfigurationSnapshot.SslWarningExpiryDays = sslThresholds.WarningDays;
             check.ConfigurationSnapshot.SslHighExpiryDays = sslThresholds.HighDays;
             check.ConfigurationSnapshot.SslCriticalExpiryDays = sslThresholds.CriticalDays;
+            var policy = new ResolvedSslPolicy(monitor.IntervalSeconds, monitor.TimeoutSeconds,
+                monitor.FailureConfirmationCount, monitor.RecoveryConfirmationCount,
+                sslThresholds.WarningDays, sslThresholds.HighDays, sslThresholds.CriticalDays);
+            check.PolicyFingerprint = policy.Fingerprint(monitor.Endpoint.NormalizedUrl, monitor.Endpoint.Environment.IsProduction);
+            check.ConfigurationSnapshot.ConfigurationFingerprint = check.PolicyFingerprint;
         }
         check.DurableWork.Add(new DurableWork
         {
@@ -3368,6 +3373,38 @@ internal static class DatabaseFoundationAssertions
             VerifyHttpPolicyUpgradeAndRollbackAsync(httpPolicy));
     }
 
+    private static async Task VerifySslFingerprintUpgradeAsync(AsyncServiceScope scope, ApplicationDbContext database)
+    {
+        var seed = await database.Endpoints.SingleAsync(item => item.NormalizedUrl == "http://upgrade.test/status");
+        var created = await scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>().CreateAsync(
+            new(seed.EnvironmentId, "https://ssl-fingerprint-upgrade.test/status", null, true, null),
+            new(seed.CreatedByUserId, [ApplicationRoles.Administrator]));
+        created.Succeeded.Should().BeTrue(string.Join(" ", created.Errors));
+        var monitor = await database.EndpointMonitors.Include(item => item.Endpoint).ThenInclude(item => item.Environment)
+            .SingleAsync(item => item.EndpointId == created.EntityId && item.MonitorType == SslMonitorIdentity.MonitorType);
+        var current = ResolvedSslPolicy.Default.Fingerprint(monitor.Endpoint.NormalizedUrl, false);
+        var legacy = ResolvedSslPolicy.Default.LegacyFingerprint(monitor.Endpoint.NormalizedUrl, false);
+        monitor.ConfigurationFingerprint.Should().Be(current);
+        await database.Database.MigrateAsync("SslSnapshotExpiryPolicy");
+        await database.Entry(monitor).ReloadAsync();
+        monitor.ConfigurationFingerprint.Should().Be(legacy);
+        var queued = await CreateQueuedCheckAsync(database, monitor, useResolvedPolicy: true);
+        await database.Database.MigrateAsync();
+        await database.Entry(monitor).ReloadAsync();
+        monitor.ConfigurationFingerprint.Should().Be(current);
+        var generation = monitor.CurrentTruthGeneration;
+        await database.Database.MigrateAsync();
+        await database.Entry(monitor).ReloadAsync();
+        monitor.CurrentTruthGeneration.Should().Be(generation);
+        (await database.CheckConfigurationSnapshots.AsNoTracking().SingleAsync(item => item.LogicalCheckId == queued.Id))
+            .ConfigurationFingerprint.Should().Be(legacy);
+        var execution = CreateExecutionService(database, new RecordingSafeHttpTransport(Success), true, new RecordingSslProbe());
+        (await execution.ExecuteAsync(new(queued.Id, queued.DurableWork.Single().Id, "legacy-ssl-policy", "upgrade-worker")))
+            .Should().Be(LogicalCheckExecutionStatus.Completed);
+        (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == queued.Id))
+            .CurrentStateDisposition.Should().Be("Superseded");
+    }
+
     private static async Task VerifyHttpPolicyUpgradeAndRollbackAsync(string connectionString)
     {
         await using var services = BuildUpgradeServices(connectionString);
@@ -3376,6 +3413,7 @@ internal static class DatabaseFoundationAssertions
         await database.Database.MigrateAsync();
         await scope.ServiceProvider.GetRequiredService<AdminBootstrapper>().BootstrapAsync();
         await SeedUpgradeMonitorAsync(scope, database);
+        await VerifySslFingerprintUpgradeAsync(scope, database);
         await database.Database.MigrateAsync("TargetAuthorizationEvidence");
         database.ChangeTracker.Clear();
         var monitor = await AvailabilityMonitors(database).Include(item => item.Endpoint).ThenInclude(item => item.Environment)

@@ -302,3 +302,14 @@ ordered warning/high/critical day thresholds. Existing v2 SSL snapshots are back
 snapshot immutability trigger inside its transaction for that backfill. V1 snapshots retain an
 explicit legacy-default fallback. Downgrading removes the recorded thresholds, so preserve a
 backup if non-default historical expiry policy must remain explainable.
+
+### SSL-specific policy fingerprints
+
+Stop workers and apply `SslPolicyFingerprint` explicitly. It replaces active SSL fingerprints only
+when the stored value matches the computed legacy hash for that target and materialized policy.
+Unknown hashes are preserved for investigation. The new canonical hash includes expiry thresholds
+as well as target URL, production status, cadence, timeout, and confirmations. This advances the
+monitor generation; already queued legacy checks remain readable and finish as historical evidence
+without overwriting current state. Rollback converts matching default-expiry hashes back to the
+legacy representation and leaves immutable checks unchanged. Custom-expiry hashes cannot be
+represented by the legacy format and are not rewritten.

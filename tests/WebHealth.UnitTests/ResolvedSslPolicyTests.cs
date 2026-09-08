@@ -29,6 +29,21 @@ public sealed class ResolvedSslPolicyTests
         policy.Fingerprint("https://example.test/status", false).Should().Be(original);
     }
 
+    [Fact]
+    public void MatchesFingerprint_AcceptsOnlyComputedCurrentOrDefaultExpiryLegacyHashes()
+    {
+        var policy = ResolvedSslPolicy.Default;
+        const string url = "https://example.test/status";
+        var legacy = policy.LegacyFingerprint(url, false);
+        policy.MatchesFingerprint(legacy, url, false).Should().BeTrue();
+        policy.MatchesFingerprint(policy.Fingerprint(url, false), url, false).Should().BeTrue();
+        policy.MatchesFingerprint(legacy, url, true).Should().BeFalse();
+        policy.MatchesFingerprint(new string('a', 64), url, false).Should().BeFalse();
+        var changed = policy with { WarningExpiryDays = 31 };
+        changed.MatchesFingerprint(legacy, url, false).Should().BeFalse();
+        changed.MatchesFingerprint(changed.Fingerprint(url, false), url, false).Should().BeTrue();
+    }
+
     [Theory]
     [InlineData(30, 30, 7)]
     [InlineData(30, 15, 15)]

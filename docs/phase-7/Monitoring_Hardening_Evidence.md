@@ -195,3 +195,11 @@ The migration backfills earlier v2 SSL snapshots with their previously effective
 V1 compatibility is explicit. SSL-specific fingerprint adoption and remaining evidence gates are
 still pending.
 Verification on 2026-09-08: full ordered database suite passed, including a 20-day certificate remaining healthy under its snapshotted 10-day warning threshold. Explicit migrations, zero-warning Release build, compiled-model regeneration, and EF no-model-drift check passed.
+
+SSL-specific fingerprints are now used for new monitors and registry updates. Finalization accepts
+a canonical hash or an exact computed legacy hash, with legacy compatibility limited to the original
+expiry defaults. It requires agreement between logical check and snapshot hashes. The data migration
+converts only known hashes for active SSL monitors, advances generation, and preserves queued and
+completed historical checks. Its reverse operation recognizes matching default-expiry canonical
+hashes rather than rewriting unknown policies. Five focused policy tests passed.
+Verification on 2026-09-08: 776 unit tests passed; ordinary Release integration suite passed 640 tests with four opt-in skips (database foundation, Docker, reporting baseline, and live SMTP). The database foundation script passed separately, including populated fingerprint rollback/upgrade, repeatability, and completion of preserved legacy queued work as Superseded. Release build had zero warnings/errors and EF reported no model drift.
