@@ -62,6 +62,12 @@ internal sealed class CheckConfigurationSnapshotConfiguration
     {
         builder.ToTable("check_configuration_snapshot", table =>
         {
+            table.HasCheckConstraint("ck_check_configuration_snapshot_ssl_thresholds",
+                "(schema_version = 1 AND ssl_warning_expiry_days IS NULL AND ssl_high_expiry_days IS NULL AND ssl_critical_expiry_days IS NULL) "
+                + "OR (monitor_type <> 'SslCertificate' AND ssl_warning_expiry_days IS NULL AND ssl_high_expiry_days IS NULL AND ssl_critical_expiry_days IS NULL) "
+                + "OR (monitor_type = 'SslCertificate' AND ssl_warning_expiry_days IS NOT NULL AND ssl_high_expiry_days IS NOT NULL "
+                + "AND ssl_critical_expiry_days IS NOT NULL AND ssl_warning_expiry_days > ssl_high_expiry_days "
+                + "AND ssl_high_expiry_days > ssl_critical_expiry_days AND ssl_critical_expiry_days >= 0)");
             table.HasCheckConstraint("ck_check_configuration_snapshot_schema_version", "schema_version IN (1, 2)");
             table.HasCheckConstraint("ck_check_configuration_snapshot_v2_target",
                 "schema_version = 1 OR (target_normalized_url IS NOT NULL AND length(target_normalized_url) > 0 "

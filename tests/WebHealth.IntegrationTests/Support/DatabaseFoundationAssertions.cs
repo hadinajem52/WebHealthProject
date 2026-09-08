@@ -103,7 +103,8 @@ internal static class DatabaseFoundationAssertions
         "20260908111324_TargetAuthorizationEvidence",
         "20260908120653_HttpMonitorOverridesV2",
         "20260908124817_HttpThresholdEquality",
-        "20260908125906_StructuredCertificateFacts"
+        "20260908125906_StructuredCertificateFacts",
+        "20260908130516_SslSnapshotExpiryPolicy"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -985,6 +986,9 @@ internal static class DatabaseFoundationAssertions
         {
             LogicalCheckId = logicalCheckId,
             SchemaVersion = 1,
+            SslWarningExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 30 : null,
+            SslHighExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 15 : null,
+            SslCriticalExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 7 : null,
             MonitorType = monitor.MonitorType,
             ConfigurationFingerprint = monitor.ConfigurationFingerprint,
             IntervalSeconds = monitor.IntervalSeconds,
@@ -1143,6 +1147,9 @@ internal static class DatabaseFoundationAssertions
             TargetNormalizationVersion = monitor.Endpoint.NormalizationVersion,
             TargetIsProduction = monitor.Endpoint.Environment.IsProduction,
             CurrentTruthGeneration = monitor.CurrentTruthGeneration,
+            SslWarningExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 30 : null,
+            SslHighExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 15 : null,
+            SslCriticalExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 7 : null,
             MonitorType = monitor.MonitorType,
             ConfigurationFingerprint = policyFingerprint,
             IntervalSeconds = monitor.IntervalSeconds,
@@ -2249,6 +2256,22 @@ internal static class DatabaseFoundationAssertions
         observation.HostnameStatus.Should().Be("Mismatched");
         observation.ChainTrustStatus.Should().Be("Untrusted");
         JsonSerializer.Deserialize<string[]>(observation.ChainStatusCodes).Should().Equal("PartialChain");
+        var renewed = certificate with
+        {
+            NotAfter = DateTimeOffset.UtcNow.AddDays(20),
+            HostnameMatched = true,
+            ChainTrusted = true,
+            ValidationCategory = TlsValidationCategory.Valid,
+            ChainStatusCodes = []
+        };
+        var customPolicy = await CreateQueuedCheckAsync(database, monitor, sslThresholds: new(10, 5, 1));
+        var renewedExecution = CreateExecutionService(database, new RecordingSafeHttpTransport(Success), true,
+            new RecordingSslProbe(new(null, renewed, TimeSpan.FromMilliseconds(25))));
+        (await renewedExecution.ExecuteAsync(new(customPolicy.Id, customPolicy.DurableWork.Single().Id,
+            $"ssl-policy-{customPolicy.Id:N}", "ssl-policy-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+        (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == customPolicy.Id)).Outcome
+            .Should().Be(HttpResultOutcomes.Healthy, "the recorded ten-day warning threshold overrides the thirty-day default");
+        (await database.Findings.AnyAsync(item => item.LogicalCheckId == customPolicy.Id)).Should().BeFalse();
     }
 
     private sealed class RecordingSslProbe(SslCertificateProbeResult? response = null) : ISslCertificateProbe
@@ -2502,7 +2525,8 @@ internal static class DatabaseFoundationAssertions
         ApplicationDbContext database,
         EndpointMonitor monitor,
         TimeProvider? timeProvider = null,
-        bool useResolvedPolicy = false)
+        bool useResolvedPolicy = false,
+        CertificateExpiryThresholds? sslThresholds = null)
     {
         var sequence = Interlocked.Increment(ref fixtureSequence);
         var createdAt = (timeProvider ?? TimeProvider.System).GetUtcNow()
@@ -2529,6 +2553,9 @@ internal static class DatabaseFoundationAssertions
             TargetNormalizationVersion = monitor.Endpoint.NormalizationVersion,
             TargetIsProduction = monitor.Endpoint.Environment.IsProduction,
             CurrentTruthGeneration = monitor.CurrentTruthGeneration,
+            SslWarningExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 30 : null,
+            SslHighExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 15 : null,
+            SslCriticalExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? 7 : null,
             MonitorType = monitor.MonitorType,
             ConfigurationFingerprint = monitor.ConfigurationFingerprint,
             IntervalSeconds = monitor.IntervalSeconds,
@@ -2546,6 +2573,12 @@ internal static class DatabaseFoundationAssertions
         if (useResolvedPolicy)
             check.ConfigurationSnapshot = CheckConfigurationSnapshotFactory.Create(monitor, check.Id, createdAt,
                 NullLogger<MonitoringSchedulingService>.Instance);
+        if (sslThresholds is not null)
+        {
+            check.ConfigurationSnapshot.SslWarningExpiryDays = sslThresholds.WarningDays;
+            check.ConfigurationSnapshot.SslHighExpiryDays = sslThresholds.HighDays;
+            check.ConfigurationSnapshot.SslCriticalExpiryDays = sslThresholds.CriticalDays;
+        }
         check.DurableWork.Add(new DurableWork
         {
             Id = Guid.NewGuid(),
@@ -4357,6 +4390,9 @@ internal static class DatabaseFoundationAssertions
             TargetNormalizationVersion = certificateMonitor.Endpoint.NormalizationVersion,
             TargetIsProduction = certificateMonitor.Endpoint.Environment.IsProduction,
             CurrentTruthGeneration = certificateMonitor.CurrentTruthGeneration,
+            SslWarningExpiryDays = 30,
+            SslHighExpiryDays = 15,
+            SslCriticalExpiryDays = 7,
             MonitorType = certificateMonitor.MonitorType,
             ConfigurationFingerprint = certificateMonitor.ConfigurationFingerprint,
             IntervalSeconds = certificateMonitor.IntervalSeconds,

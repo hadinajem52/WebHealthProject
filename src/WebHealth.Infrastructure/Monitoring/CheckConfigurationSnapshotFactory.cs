@@ -63,6 +63,9 @@ internal static class CheckConfigurationSnapshotFactory
             TimeoutSeconds = monitor.TimeoutSeconds,
             FailureConfirmationCount = monitor.FailureConfirmationCount,
             RecoveryConfirmationCount = monitor.RecoveryConfirmationCount,
+            SslWarningExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? ResolvedSslPolicy.Default.WarningExpiryDays : null,
+            SslHighExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? ResolvedSslPolicy.Default.HighExpiryDays : null,
+            SslCriticalExpiryDays = monitor.MonitorType == SslMonitorIdentity.MonitorType ? ResolvedSslPolicy.Default.CriticalExpiryDays : null,
             WarningThresholdMs = monitor.WarningThresholdMs,
             CriticalThresholdMs = monitor.CriticalThresholdMs,
             IntervalSource = MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides)

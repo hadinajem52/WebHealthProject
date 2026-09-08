@@ -316,7 +316,13 @@ internal sealed class LogicalCheckFinalizationService(
 
         if (evidence is SslCertificateEvidence ssl)
         {
-            return SslResultNormalizer.Normalize(new(ssl.Result, now));
+            var snapshot = check.ConfigurationSnapshot;
+            var thresholds = snapshot.SslWarningExpiryDays is { } warning
+                && snapshot.SslHighExpiryDays is { } high && snapshot.SslCriticalExpiryDays is { } critical
+                    ? new CertificateExpiryThresholds(warning, high, critical)
+                    : snapshot.SchemaVersion == 1 ? CertificateExpiryThresholds.Default
+                    : throw new InvalidOperationException("SSL snapshot is missing expiry thresholds.");
+            return SslResultNormalizer.Normalize(new(ssl.Result, now, thresholds));
         }
 
 

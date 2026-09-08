@@ -293,3 +293,12 @@ positive chain-trust claims become Unknown because earlier chain-wide errors may
 recorded. Negative trust remains Untrusted. No historical chain codes or revocation results are
 invented. Downgrading drops these new facts while retaining the older certificate fields; back up
 the database before rollback if the structured evidence must be retained.
+
+### SSL snapshot expiry thresholds
+
+Apply `SslSnapshotExpiryPolicy` before running this version. New v2 SSL snapshots require strictly
+ordered warning/high/critical day thresholds. Existing v2 SSL snapshots are backfilled with the
+30/15/7 defaults used by their original execution path. The migration briefly disables only the
+snapshot immutability trigger inside its transaction for that backfill. V1 snapshots retain an
+explicit legacy-default fallback. Downgrading removes the recorded thresholds, so preserve a
+backup if non-default historical expiry policy must remain explainable.

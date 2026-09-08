@@ -21,7 +21,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Monitoring.CheckConfigurationSnapshot",
                 typeof(CheckConfigurationSnapshot),
                 baseEntityType,
-                propertyCount: 27,
+                propertyCount: 30,
                 navigationCount: 1,
                 foreignKeyCount: 1,
                 keyCount: 1);
@@ -190,6 +190,33 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: (short)0);
             schemaVersion.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             schemaVersion.AddAnnotation("Relational:ColumnName", "schema_version");
+
+            var sslCriticalExpiryDays = runtimeEntityType.AddProperty(
+                "SslCriticalExpiryDays",
+                typeof(int?),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("SslCriticalExpiryDays", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<SslCriticalExpiryDays>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            sslCriticalExpiryDays.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            sslCriticalExpiryDays.AddAnnotation("Relational:ColumnName", "ssl_critical_expiry_days");
+
+            var sslHighExpiryDays = runtimeEntityType.AddProperty(
+                "SslHighExpiryDays",
+                typeof(int?),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("SslHighExpiryDays", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<SslHighExpiryDays>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            sslHighExpiryDays.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            sslHighExpiryDays.AddAnnotation("Relational:ColumnName", "ssl_high_expiry_days");
+
+            var sslWarningExpiryDays = runtimeEntityType.AddProperty(
+                "SslWarningExpiryDays",
+                typeof(int?),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("SslWarningExpiryDays", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<SslWarningExpiryDays>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            sslWarningExpiryDays.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            sslWarningExpiryDays.AddAnnotation("Relational:ColumnName", "ssl_warning_expiry_days");
 
             var targetEffectivePort = runtimeEntityType.AddProperty(
                 "TargetEffectivePort",

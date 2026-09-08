@@ -188,3 +188,10 @@ policy snapshots remain pending before the increment can be marked complete.
 Verification on 2026-09-08: full ordered database suite and explicit migrations passed; the new simultaneous-fault fixture verifies all four persisted fields. Release build passed without warnings/errors, compiled model was regenerated, and EF reported no model drift.
 
 ResolvedSslPolicy now defines the daily cadence, 15-second timeout, one-check confirmations, and strictly ordered 30/15/7 expiry defaults. New SSL monitor construction consumes its effective timing/counts. Its SSL-specific canonical fingerprint includes all policy fields, URL, and production classification; four focused tests passed and the infrastructure build passed without warnings/errors. Fingerprint migration and snapshot threshold wiring remain pending, so existing fingerprint storage is unchanged in this slice.
+
+SSL expiry thresholds are now copied into v2 snapshots and consumed by finalization. The database
+requires all three values for SSL v2 and enforces strict ordering; HTTP snapshots leave them null.
+The migration backfills earlier v2 SSL snapshots with their previously effective 30/15/7 defaults.
+V1 compatibility is explicit. SSL-specific fingerprint adoption and remaining evidence gates are
+still pending.
+Verification on 2026-09-08: full ordered database suite passed, including a 20-day certificate remaining healthy under its snapshotted 10-day warning threshold. Explicit migrations, zero-warning Release build, compiled-model regeneration, and EF no-model-drift check passed.

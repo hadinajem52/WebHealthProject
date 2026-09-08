@@ -44,6 +44,9 @@ public sealed class CheckConfigurationSnapshot
     public int TimeoutSeconds { get; set; }
     public int FailureConfirmationCount { get; set; }
     public int RecoveryConfirmationCount { get; set; }
+    public int? SslWarningExpiryDays { get; set; }
+    public int? SslHighExpiryDays { get; set; }
+    public int? SslCriticalExpiryDays { get; set; }
     public int? WarningThresholdMs { get; set; }
     public int? CriticalThresholdMs { get; set; }
     public required string IntervalSource { get; set; }
