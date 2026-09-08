@@ -181,7 +181,7 @@ public static class DependencyInjection
         services.AddScoped<MonitoringRuntimeRecorder>();
         services.AddScoped<IRetentionHoldService, RetentionHoldService>();
         services.AddScoped<DailyAggregateWriter>();
-        services.AddScoped<ExecutionAttemptRetentionBatch>();
+        services.AddScoped<ExecutionHistoryRetentionBatch>();
         services.AddScoped<IMonitoringWorkerReader>(provider => schedulingOptions.Enabled
             ? new HangfireMonitoringWorkerReader(provider.GetRequiredService<JobStorage>(),
                 provider.GetRequiredService<ILogger<HangfireMonitoringWorkerReader>>())

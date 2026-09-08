@@ -107,8 +107,8 @@ internal static class ExecutionRetentionAssertions
         });
         await database.SaveChangesAsync();
         var clock = new RetentionClock(now);
-        ExecutionAttemptRetentionBatch Batch(bool enabled, bool dryRun) => new(database,
-            new() { Enabled = enabled, DryRun = dryRun, BatchSize = 1 }, clock, NullLogger<ExecutionAttemptRetentionBatch>.Instance);
+        ExecutionHistoryRetentionBatch Batch(bool enabled, bool dryRun) => new(database,
+            new() { Enabled = enabled, DryRun = dryRun, BatchSize = 1 }, clock, NullLogger<ExecutionHistoryRetentionBatch>.Instance);
         (await Batch(false, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
         (await Batch(true, true).ExecuteAsync()).Should().Be(new RetentionBatchResult(1, 0));
         (await database.ExecutionAttempts.CountAsync(item => item.LogicalCheck.EndpointMonitorId == monitorId)).Should().Be(8);
@@ -118,6 +118,55 @@ internal static class ExecutionRetentionAssertions
         var remaining = await database.ExecutionAttempts.Where(item => item.LogicalCheck.EndpointMonitorId == monitorId)
             .Select(item => item.Id).ToArrayAsync();
         remaining.Should().BeEquivalentTo(attempts.Where(pair => !pair.Key.StartsWith("eligible-", StringComparison.Ordinal))
+            .Select(pair => pair.Value.Id));
+        var work = new Dictionary<string, DurableWork>();
+        foreach (var pair in attempts)
+        {
+            var item = new DurableWork
+            {
+                Id = Guid.NewGuid(),
+                LogicalCheckId = pair.Value.LogicalCheckId,
+                WorkKind = MonitorWorkKinds.For(monitor.MonitorType),
+                DedupeKey = "retention-" + pair.Key,
+                QueueName = "monitoring",
+                State = "Completed",
+                AvailableAt = pair.Value.StartedAt,
+                CreatedAt = pair.Value.StartedAt,
+                UpdatedAt = pair.Value.FinishedAt!.Value
+            };
+            database.DurableWork.Add(item);
+            work.Add(pair.Key, item);
+        }
+        foreach (var state in new[] { "Pending", "Failed", "Completed", "Boundary" })
+        {
+            var item = new DurableWork
+            {
+                Id = Guid.NewGuid(),
+                LogicalCheckId = attempts["eligible-a"].LogicalCheckId,
+                WorkKind = MonitorWorkKinds.For(monitor.MonitorType),
+                DedupeKey = "retention-protected-" + state,
+                QueueName = "monitoring",
+                State = state == "Boundary" ? "Completed" : state,
+                AvailableAt = cutoff.AddMinutes(-1),
+                CreatedAt = cutoff.AddMinutes(-1),
+                UpdatedAt = state == "Boundary" ? cutoff : cutoff.AddTicks(-10),
+                LeaseOwnerToken = state == "Completed" ? Guid.NewGuid() : null,
+                LeaseAcquiredAt = state == "Completed" ? now : null,
+                LeaseExpiresAt = state == "Completed" ? now.AddMinutes(1) : null
+            };
+            database.DurableWork.Add(item);
+            work.Add(state, item);
+        }
+        await database.SaveChangesAsync();
+        (await Batch(false, false).ExecuteWorkAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        (await Batch(true, true).ExecuteWorkAsync()).Should().Be(new RetentionBatchResult(1, 0));
+        (await database.DurableWork.CountAsync(item => item.LogicalCheck.EndpointMonitorId == monitorId)).Should().Be(12);
+        (await Batch(true, false).ExecuteWorkAsync()).Should().Be(new RetentionBatchResult(1, 1));
+        (await Batch(true, false).ExecuteWorkAsync()).Should().Be(new RetentionBatchResult(1, 1));
+        (await Batch(true, false).ExecuteWorkAsync()).Should().Be(new RetentionBatchResult(0, 0));
+        var remainingWork = await database.DurableWork.Where(item => item.LogicalCheck.EndpointMonitorId == monitorId)
+            .Select(item => item.Id).ToArrayAsync();
+        remainingWork.Should().BeEquivalentTo(work.Where(pair => !pair.Key.StartsWith("eligible-", StringComparison.Ordinal))
             .Select(pair => pair.Value.Id));
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();

@@ -491,3 +491,17 @@ fixtures prove disabled/dry-run preservation, two one-row batches and an empty r
 and cancellation. Fixture timestamp/snapshot requirements were corrected before the green run.
 Release build had zero warnings/errors. Durable-work/raw-result/other category batches, run
 coordination, report consumption and final workload/UI evidence remain pending.
+
+### P7-DATA-01 completed durable-work retention
+
+ExecutionHistoryRetentionBatch now shares attempt/work transaction and protected-check logic.
+Completed durable work is selected only when its update and check completion are strictly older
+than 90 days and all work lease fields are absent. Pending/failed/leased work remains. Both
+execution-history deletion paths reapply eligibility for selected IDs during DELETE. No recurring
+job, new migration or secondary index is introduced.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed with
+attempt regressions and durable-work disabled/dry-run, one-row batches, restart, protected records,
+pending/failed/leased states and the independent work-update cutoff boundary. Release build had
+zero warnings/errors. Other retention categories, run coordination, aggregate reporting and final
+workload/browser evidence remain pending; the goal is still active.

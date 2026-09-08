@@ -137,3 +137,11 @@ evidence and active incident evidence. Candidates are ordered by finish time and
 to BatchSize. Dry-run selects the same candidates and deletes nothing. Each batch owns a transaction,
 shares the retention lock, observes cancellation/runtime limits and logs only category/counts/time.
 The batch is not scheduled yet; durable work and other retention categories remain pending.
+
+## Completed durable-work batches
+
+ExecutionHistoryRetentionBatch shares the transaction, deadline and protected-check query between
+attempts and durable work. Durable work must be Completed, updated strictly before the 90-day cutoff,
+and have no work lease fields; its logical check must also qualify. Pending, failed and leased work
+remain. Both deletion paths reapply eligibility when deleting the selected IDs. The service remains
+unscheduled, and the remaining retention categories and coordinator are still pending.

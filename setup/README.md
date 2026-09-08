@@ -416,3 +416,7 @@ The execution-attempt batch is implemented but not registered as a recurring job
 held/current/active-incident/leased checks, uses deterministic bounded selection, and supports
 dry-run and cancellation. Other retention categories and the run coordinator are still pending;
 Monitoring:Retention remains disabled by default.
+
+Completed durable-work retention is now part of ExecutionHistoryRetentionBatch. It uses the same
+protected-check rules as attempt retention and preserves pending, failed and work-leased rows.
+No configuration/migration change or recurring job is introduced; retention remains disabled.
