@@ -313,3 +313,15 @@ monitor generation; already queued legacy checks remain readable and finish as h
 without overwriting current state. Rollback converts matching default-expiry hashes back to the
 legacy representation and leaves immutable checks unchanged. Custom-expiry hashes cannot be
 represented by the legacy format and are not rewritten.
+
+### Monitoring freshness and dispatch delay
+
+`Monitoring:Scheduling:DispatchDelayGrace` defaults to `00:10:00` and accepts two through thirty
+minutes. Startup rejects values outside those bounds. Endpoint detail shows confirmed health and
+operational state separately for availability and SSL monitors. Only a completed scheduled check
+accepted as Current refreshes scheduled freshness; manual, urgent and superseded checks do not.
+Freshness expires strictly after the interval plus the greater of ten minutes or one quarter of
+the interval. A monitor is delayed strictly after its due time plus dispatch delay grace.
+Lifecycle eligibility, manual-only mode and pause take precedence over delay or freshness.
+No database migration is needed for this derived projection. Runtime diagnostics and dashboard/CSV
+integration are subsequent parts of increment 5.

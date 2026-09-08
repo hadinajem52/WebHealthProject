@@ -960,3 +960,8 @@ SSL hardening additions: `ResolvedSslPolicy` owns canonical and legacy fingerpri
 `OfflineTlsPolicy` prevents certificate-controlled downloads; `TlsChainTrust` canonicalizes chain
 status flags. The `StructuredCertificateFacts`, `SslSnapshotExpiryPolicy`, and `SslPolicyFingerprint`
 migrations add recorded evidence, freeze expiry thresholds, and adopt the SSL hash respectively.
+
+`Application/Monitoring/MonitorOperationalState.cs` derives operational state independently of
+confirmed health, including cadence-based freshness and dispatch-delay precedence. Endpoint
+registry detail resolves it from visible active HTTP/SSL monitors and only Current, completed,
+scheduled checks. The scheduling options own the bounded dispatch-delay grace.

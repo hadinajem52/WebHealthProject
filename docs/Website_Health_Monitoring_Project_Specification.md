@@ -621,7 +621,7 @@ All rules below are mandatory unless explicitly marked optional or deferred. Con
 | Risk       | SSRF exposes internal network resources.                | Enforce destination policy before request and at every redirect.                          |
 | Risk       | Large history affects dashboard performance.            | Retention, aggregation, indexing and asynchronous export.                                 |
 | Risk       | Scope grows beyond internship duration.                 | Treat HTTP/SSL/incidents/email as the protected MVP; defer crawler/performance if needed. |
-| Decision   | Operational status is based on confirmed state.         | Retain raw results so teams can still inspect transient failures.                         |
+| Decision   | Confirmed health and monitoring operation are separate projections. | Health is Healthy, Warning, Critical or Unknown. Operation uses Disabled, ManualOnly, Paused, Delayed, NeverChecked, Stale, Active precedence; stopping checks does not overwrite confirmed health. Legacy stored Disabled health maps to Unknown. |
 
 # 17\. Future Enhancements
 

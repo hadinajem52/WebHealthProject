@@ -8,6 +8,7 @@ public sealed class MonitoringSchedulingOptions
     public int DispatchBatchSize { get; init; } = 50;
     public int RecoveryBatchSize { get; init; } = 100;
     public TimeSpan RecoveryDelay { get; init; } = TimeSpan.FromMinutes(2);
+    public TimeSpan DispatchDelayGrace { get; init; } = TimeSpan.FromMinutes(10);
 
     public TimeSpan UrgentSslCooldown { get; init; } = TimeSpan.FromHours(1);
 }

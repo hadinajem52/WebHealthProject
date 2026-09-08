@@ -280,13 +280,14 @@
                 <div class="detail-list__row">
                     <span class="detail-list__subject">
                         <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "clock")</span>
-                        <span>Effective monitoring</span>
+                        <span>Monitoring eligibility</span>
                     </span>
                     <span class="detail-list__value">
                         <span>
-                            @(!Model.Endpoint.SchedulingEnabled ? "Manual runs only"
+                            @(!Model.Endpoint.IsMonitoringEligible ? "Not eligible"
+                                : !Model.Endpoint.SchedulingEnabled ? "Manual runs only"
                                 : !Model.Endpoint.MonitorEnabled ? "Paused — manual runs only"
-                                : Model.Endpoint.IsMonitoringEligible ? "Eligible" : "Not eligible")
+                                : "Eligible")
                         </span>
                         @if (monitoringBlockReason is not null)
                         {
@@ -295,6 +296,22 @@
                     </span>
                 </div>
             </li>
+            @foreach (var monitor in Model.Endpoint.MonitorStatuses ?? [])
+            {
+                <li>
+                    <div class="detail-list__row">
+                        <span class="detail-list__subject">
+                            <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "activity")</span>
+                            <span>@(monitor.MonitorType == "SslCertificate" ? "SSL certificate" : "Availability") health and operation</span>
+                        </span>
+                        <span class="detail-list__value">
+                            <span>Confirmed health: @monitor.Status.ConfirmedHealth</span>
+                            <span class="detail-list__note">Operational state: @(monitor.Status.State switch { "ManualOnly" => "Manual only", "NeverChecked" => "Never checked", _ => monitor.Status.State })</span>
+                            <span class="detail-list__note">Last scheduled completion: @Html.Timestamp(monitor.Status.LastScheduledCompletionAt)</span>
+                        </span>
+                    </div>
+                </li>
+            }
             <li>
                 <div class="detail-list__row">
                     <span class="detail-list__subject">

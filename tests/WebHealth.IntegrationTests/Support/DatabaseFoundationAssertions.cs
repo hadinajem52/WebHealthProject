@@ -2297,6 +2297,12 @@ internal static class DatabaseFoundationAssertions
         (await staleExecution.ExecuteAsync(new(stale.Id, stale.DurableWork.Single().Id,
             $"ssl-stale-display-{stale.Id:N}", "ssl-display-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
         (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == stale.Id)).CurrentStateDisposition.Should().Be("Superseded");
+        foreach (var source in new[] { LogicalCheckSources.Manual, LogicalCheckSources.Urgent })
+        {
+            var unscheduled = await CreateQueuedCheckAsync(database, monitor, sslThresholds: new(10, 5, 1), source: source);
+            (await renewedExecution.ExecuteAsync(new(unscheduled.Id, unscheduled.DurableWork.Single().Id,
+                $"ssl-freshness-{source}", "ssl-freshness-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+        }
         await using var readerServices = BuildUpgradeServices(connectionString);
         await using var readerScope = readerServices.CreateAsyncScope();
         var status = await readerScope.ServiceProvider.GetRequiredService<ITargetRegistryReader>().FindCertificateStatusAsync(
@@ -2304,12 +2310,40 @@ internal static class DatabaseFoundationAssertions
         status!.Latest!.ValidationCategory.Should().Be(nameof(TlsValidationCategory.Valid));
         status.Latest.ExpirySeverity.Should().Be(CertificateExpirySeverity.None);
         status.Latest.DaysRemaining.Should().BeGreaterThan(10);
+        var endpointStatus = await readerScope.ServiceProvider.GetRequiredService<ITargetRegistryReader>().FindEndpointAsync(
+            endpointId, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
+        var sslStatus = endpointStatus!.MonitorStatuses!.Single(item => item.MonitorType == SslMonitorIdentity.MonitorType).Status;
+        var scheduledCompletion = await database.LogicalChecks.AsNoTracking().Where(item => item.Id == customPolicy.Id)
+            .Select(item => item.CompletedAt).SingleAsync();
+        sslStatus.LastScheduledCompletionAt.Should().Be(scheduledCompletion,
+            "manual, urgent and superseded scheduled checks cannot refresh scheduled freshness");
+        sslStatus.ConfirmedHealth.Should().Be("Healthy");
         var query = ReportQueryNormalizer.Normalize(new ReportQueryInput(), ReportMonitorTypes.All, DateTimeOffset.UtcNow).Query!;
         var expiry = await readerScope.ServiceProvider.GetRequiredService<IReportingReader>().QueryCertificateExpiryAsync(
             query, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
         expiry.HealthyCount.Should().BeGreaterThan(0);
         expiry.NeedingAttention.Should().NotContain(item => item.EndpointId == endpointId,
             "superseded observations cannot replace current certificate evidence or its recorded expiry policy");
+        var activeMonitors = await database.EndpointMonitors.Where(item => item.EndpointId == endpointId && item.DeletedAt == null).ToArrayAsync();
+        foreach (var mode in new[] { "Paused", "ManualOnly" })
+        {
+            foreach (var item in activeMonitors)
+            {
+                item.IsEnabled = false;
+                item.SchedulingEnabled = mode != "ManualOnly";
+            }
+            await database.SaveChangesAsync();
+            var stopped = await readerScope.ServiceProvider.GetRequiredService<ITargetRegistryReader>().FindEndpointAsync(
+                endpointId, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
+            stopped!.MonitorStatuses.Should().OnlyContain(item => item.Status.State == mode,
+                "stopping every schedule does not make an otherwise eligible endpoint lifecycle-disabled");
+        }
+        foreach (var item in activeMonitors)
+        {
+            item.IsEnabled = true;
+            item.SchedulingEnabled = true;
+        }
+        await database.SaveChangesAsync();
     }
 
     private sealed class RecordingSslProbe(SslCertificateProbeResult? response = null) : ISslCertificateProbe
@@ -2564,7 +2598,8 @@ internal static class DatabaseFoundationAssertions
         EndpointMonitor monitor,
         TimeProvider? timeProvider = null,
         bool useResolvedPolicy = false,
-        CertificateExpiryThresholds? sslThresholds = null)
+        CertificateExpiryThresholds? sslThresholds = null,
+        string source = LogicalCheckSources.Scheduled)
     {
         if (sslThresholds is not null)
         {
@@ -2582,10 +2617,12 @@ internal static class DatabaseFoundationAssertions
         {
             Id = Guid.NewGuid(),
             EndpointMonitorId = monitor.Id,
-            Source = LogicalCheckSources.Scheduled,
-            ScheduledFor = createdAt,
+            Source = source,
+            ScheduledFor = source == LogicalCheckSources.Scheduled ? createdAt : null,
+            RequestedAt = source == LogicalCheckSources.Scheduled ? null : createdAt,
+            InitiatedByUserId = source == LogicalCheckSources.Manual ? monitor.CreatedByUserId : null,
             State = LogicalCheckStates.Queued,
-            CadenceKey = MonitorCadence.CreateCadenceKey(monitor.Id, createdAt),
+            CadenceKey = source == LogicalCheckSources.Scheduled ? MonitorCadence.CreateCadenceKey(monitor.Id, createdAt) : null,
             PolicyFingerprint = monitor.ConfigurationFingerprint,
             CreatedAt = createdAt,
             QueuedAt = createdAt

@@ -1,6 +1,7 @@
 using WebHealth.Infrastructure.Monitoring;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Registry;
+using WebHealth.Application.Monitoring;
 using WebHealth.Infrastructure.Persistence;
 
 using WebHealth.Domain.Monitoring;
@@ -14,7 +15,9 @@ internal sealed class TargetRegistryReader(
     RegistryVisibility visibility,
     IEndpointTestGate testGate,
     IMonitoringEligibilityService monitoringEligibility,
-    OwnerSubjectNames ownerSubjectNames) : ITargetRegistryReader
+    OwnerSubjectNames ownerSubjectNames,
+    MonitoringSchedulingOptions schedulingOptions,
+    TimeProvider timeProvider) : ITargetRegistryReader
 {
     public Task<IReadOnlyList<EnvironmentListItem>> ListEnvironmentsAsync(
         Guid websiteId,
@@ -103,6 +106,9 @@ internal sealed class TargetRegistryReader(
 
         var ownerNames = await LoadOwnerNamesAsync([endpoint.EffectiveOwnerSubjectId], cancellationToken);
         var pageAudit = await PageAuditConfiguration.ReadAsync(dbContext, endpoint.Id, cancellationToken);
+        var eligible = await monitoringEligibility.IsEndpointEligibleAsync(endpoint.Id, cancellationToken);
+        var lifecycleEligible = await monitoringEligibility.IsEndpointTestableAsync(endpoint.Id, cancellationToken);
+        var operational = await LoadMonitorStatusesAsync(endpoint.Id, lifecycleEligible, cancellationToken);
         return new EndpointDetails(
             endpoint.Id,
             endpoint.EnvironmentId,
@@ -131,7 +137,7 @@ internal sealed class TargetRegistryReader(
             endpoint.TimeoutSeconds,
             endpoint.MonitorEnabled,
             endpoint.SchedulingEnabled,
-            await monitoringEligibility.IsEndpointEligibleAsync(endpoint.Id, cancellationToken),
+            eligible,
             await testGate.CanTestEndpointAsync(endpoint.Id, access, cancellationToken),
             endpoint.SeoExpectedCanonicalHost,
             endpoint.SeoIndexingExpectation,
@@ -141,7 +147,34 @@ internal sealed class TargetRegistryReader(
             pageAudit.IntervalHours,
             HttpMonitorConfiguration.ReadOverrides(endpoint.BoundedOverrides, endpoint.TimeoutSeconds,
                 endpoint.FailureConfirmationCount, endpoint.RecoveryConfirmationCount,
-                endpoint.WarningThresholdMs, endpoint.CriticalThresholdMs));
+                endpoint.WarningThresholdMs, endpoint.CriticalThresholdMs), operational);
+    }
+
+    private async Task<IReadOnlyList<MonitorOperationalStatus>> LoadMonitorStatusesAsync(
+        Guid endpointId, bool eligible, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var monitors = await dbContext.EndpointMonitors.AsNoTracking()
+            .Where(monitor => monitor.EndpointId == endpointId && monitor.DeletedAt == null
+                && (monitor.MonitorType == HttpIssueIdentity.MonitorType || monitor.MonitorType == SslMonitorIdentity.MonitorType))
+            .OrderBy(monitor => monitor.MonitorType).ThenBy(monitor => monitor.Id)
+            .Select(monitor => new
+            {
+                monitor.MonitorType,
+                monitor.SchedulingEnabled,
+                monitor.IsEnabled,
+                monitor.IntervalSeconds,
+                monitor.NextDueAt,
+                Health = monitor.EndpointHealth == null ? null : monitor.EndpointHealth.ConfirmedStatus,
+                LastScheduledCompletionAt = monitor.LogicalChecks
+                    .Where(check => check.Source == LogicalCheckSources.Scheduled && check.State == LogicalCheckStates.Completed
+                        && check.Result != null && check.Result.CurrentStateDisposition == "Current")
+                    .Max(check => check.CompletedAt)
+            }).ToArrayAsync(cancellationToken);
+        return monitors.Select(monitor => new MonitorOperationalStatus(monitor.MonitorType,
+            MonitorOperationalState.Evaluate(monitor.Health, eligible, monitor.SchedulingEnabled, monitor.IsEnabled,
+                monitor.IntervalSeconds, monitor.NextDueAt, monitor.LastScheduledCompletionAt, now,
+                schedulingOptions.DispatchDelayGrace))).ToArray();
     }
 
     public async Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(

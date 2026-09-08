@@ -132,7 +132,8 @@ public sealed record EndpointDetails(
     bool PageAuditEnabled = false,
     bool PageAuditSchedulingEnabled = false,
     int PageAuditIntervalHours = 24,
-    HttpMonitorOverridesV2? HttpPolicy = null);
+    HttpMonitorOverridesV2? HttpPolicy = null,
+    IReadOnlyList<MonitorOperationalStatus>? MonitorStatuses = null);
 
 public sealed record CertificateStatus(
     bool IsMonitored,

@@ -428,6 +428,8 @@ public static class DependencyInjection
             || options.RecoveryBatchSize is < 1 or > 1000
             || options.RecoveryDelay < TimeSpan.FromMinutes(1)
             || options.RecoveryDelay > TimeSpan.FromHours(1)
+            || options.DispatchDelayGrace < TimeSpan.FromMinutes(2)
+            || options.DispatchDelayGrace > TimeSpan.FromMinutes(30)
             || options.UrgentSslCooldown < TimeSpan.FromMinutes(5)
             || options.UrgentSslCooldown > TimeSpan.FromDays(1))
         {

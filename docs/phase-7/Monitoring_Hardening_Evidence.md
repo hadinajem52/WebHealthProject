@@ -241,3 +241,19 @@ current renewal healthy. Mobile content did not overflow horizontally (375px con
 The temporary viewport was reset and the preview application/database were stopped afterward.
 A read-only query found zero endpoint_health rows with confirmed_status = Disabled; no legacy
 health backfill is justified for increment 5 in this fixture.
+
+### P7-MON-05 endpoint operational-state slice
+
+Endpoint detail now exposes confirmed health and derived operation separately for active HTTP/SSL
+monitors. Precedence is Disabled, ManualOnly, Paused, Delayed, NeverChecked, Stale, Active. Lifecycle
+eligibility is evaluated independently of whether any schedule is enabled. The projection retains
+underlying base state, delay, stale cutoff and last scheduled completion. Legacy Disabled health
+maps to Unknown without rewriting persisted data. DispatchDelayGrace defaults to ten minutes and
+is bounded to two through thirty minutes at startup.
+
+Verification on 2026-09-08: 11 unit cases passed for precedence, exact grace/freshness boundaries,
+daily cadence and legacy compatibility. The full ordered database suite passed with real persisted
+manual, urgent and superseded checks excluded from scheduled freshness, and all-paused/manual-only
+monitors correctly classified. Ordinary integration: 640 passed, four opt-in skips. Release build
+had zero warnings/errors. This is a partial increment: new status-row browser evidence, dashboard/
+CSV wiring, runtime heartbeats, protected diagnostics and telemetry remain pending.
