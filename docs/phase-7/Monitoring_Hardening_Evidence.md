@@ -325,3 +325,13 @@ and certificate-like text in every dimension. All 805 unit tests and 657 ordinar
 passed (four opt-in skips). The full ordered database foundation and migration script passed,
 including execution retries, finalization and runtime persistence. Release build had zero warnings
 or errors. Final increment-5 documentation review remains pending.
+
+### P7-MON-05 exit gate
+
+Increment 5 is complete. The protected UI, monitoring health output and local structured logs
+separate engine state from target health. Operational-state boundaries, scheduled-only freshness,
+zero-work/failure/recovery heartbeats, real worker queue coverage, all-role route isolation and
+metric cardinality have passing evidence above. The status and badge contract is consolidated in
+General/Monitoring_Status_Reference.md. Desktop/mobile diagnostics, dashboard and endpoint output
+were inspected. Database readiness remains independent. Retention and representative release
+workloads remain pending; no production availability claim or external exporter is included.
