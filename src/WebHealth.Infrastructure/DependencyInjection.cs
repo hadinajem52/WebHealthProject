@@ -54,6 +54,11 @@ public static class DependencyInjection
         ValidateSchedulingOptions(schedulingOptions);
         services.AddSingleton(schedulingOptions);
 
+        var retentionOptions = configuration.GetSection(MonitoringRetentionOptions.SectionName)
+            .Get<MonitoringRetentionOptions>() ?? new MonitoringRetentionOptions();
+        retentionOptions.Validate();
+        services.AddSingleton(retentionOptions);
+
         var notificationOptions = configuration.GetSection(NotificationSchedulingOptions.SectionName)
             .Get<NotificationSchedulingOptions>() ?? new NotificationSchedulingOptions();
         ValidateNotificationOptions(notificationOptions);

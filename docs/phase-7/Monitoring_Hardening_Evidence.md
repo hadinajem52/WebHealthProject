@@ -466,3 +466,14 @@ rejection, same-connection permission reset after rollback and commit, and isola
 Down/Up/repeatability checks. Existing endpoint purge coverage also passed. Release build had zero
 warnings/errors and EF reported no pending model changes. Retention worker integration and report
 consumption remain pending; increment 6 and the overall goal are not complete.
+
+### P7-DATA-01 retention run limits
+
+Monitoring:Retention now binds validated startup options with explicit disabled/dry-run defaults.
+Batch size is bounded to 1..1000, batches per run to 1..20 and run duration to 1..30 seconds.
+appsettings.json records the planned default limits; no deletion job is registered by this slice.
+
+Verification on 2026-09-08: eight focused default/boundary cases and all 823 unit tests passed.
+All 667 ordinary integration tests passed (four opt-in skips), including application startup with
+the new configuration. No persistence changes were introduced. Worker implementation, report
+integration and the remaining retention/release gates are still pending.

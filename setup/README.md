@@ -404,3 +404,10 @@ trigger functions to permit transaction-local retention deletes, retaining all u
 and the existing endpoint-purge path. Maintenance-occurrence permissions are unchanged. Rollback
 restores endpoint-purge-only deletion. No table or compiled-model change is required, and no
 retention job is enabled by this migration.
+
+### Retention worker options
+
+Monitoring:Retention is explicitly disabled with DryRun=true in appsettings.json. BatchSize accepts
+1..1000, MaximumBatchesPerRun accepts 1..20, and MaximumRunDuration accepts 00:00:01..00:00:30.
+Invalid settings fail startup validation. Worker registration and deletion remain pending; do not
+treat enabling this setting as evidence that retention is operational yet.

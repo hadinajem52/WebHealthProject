@@ -120,3 +120,11 @@ each batch transaction; this change does not grant an application role permissio
 Down restores the endpoint-purge-only functions without rewriting stored history. Upgrade and
 repeatability checks use an isolated database. Transaction completion must reset the retention
 setting on the same connection, after both commit and rollback.
+
+## Worker configuration bounds
+
+Monitoring:Retention defaults are explicitly recorded in appsettings.json: Enabled=false,
+DryRun=true, BatchSize=1000, MaximumBatchesPerRun=20 and MaximumRunDuration=00:00:30. Startup rejects
+batch sizes outside 1..1000, batch counts outside 1..20 and durations outside 1..30 seconds. These
+upper bounds keep the first implementation within the planned local/demo run budget. Increasing
+them requires an explicit implementation/policy change. No job is registered by the options alone.
