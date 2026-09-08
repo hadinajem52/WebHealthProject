@@ -995,3 +995,7 @@ the shared transaction lock before selecting candidates and applying these prote
 and UTC date, including provenance, duration histogram and a raw-deletion-start marker. Its
 migration and compiled model keep summaries attached to existing monitors. Endpoint purge removes
 summaries before monitors; ordinary retention must preserve monitor identities for historical names.
+
+`Infrastructure/Monitoring/DailyAggregateWriter.cs` streams a monitor-day's raw result and snapshot
+fields into the daily summary under the retention transaction lock. It replaces existing totals,
+computes deterministic comparability provenance and refuses days whose raw deletion has started.

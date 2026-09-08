@@ -391,3 +391,8 @@ procedure. It adds one constrained summary row per monitor/UTC date and updates 
 Endpoint purge removes these summaries before deleting monitors. Rollback drops aggregate history;
 keep retention deletion disabled during rollback. Aggregate recomputation and report consumption
 are still pending, so this migration alone does not replace raw history or enable retention.
+
+DailyAggregateWriter can now rebuild a completed UTC day while all raw rows remain. It does not
+run automatically and cannot overwrite a day marked as having started raw deletion. No new
+migration is required for the writer. Historical report integration and the deletion worker
+remain pending; scheduled retention is still disabled.

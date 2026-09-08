@@ -437,3 +437,18 @@ rollback/upgrade/repeatability and aggregate removal through endpoint purge. All
 integration tests passed (four opt-in skips). Release build had zero warnings/errors; EF reports
 no pending model changes. Recompute writer, long-window report integration and deletion worker
 remain pending; aggregate schema alone does not satisfy the retention exit gate.
+
+### P7-DATA-01 aggregate recomputation
+
+DailyAggregateWriter streams raw rows for one completed UTC day and atomically creates/replaces
+its summary under the retention transaction lock. It preserves uptime and responded-duration
+classification, computes deterministic snapshot comparability and refuses current/future/empty
+days or aggregates whose raw deletion has started. It can participate in the worker transaction;
+no automatic worker or report consumption is enabled by this slice.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed after
+adding late-data tests. Assertions prove exact eligible/excluded/outcome/duration totals, source
+range, histogram counts, repeatability, late-result replacement, UTC midnight exclusion at the
+microsecond boundary, mixed-generation provenance and refusal after the raw-deletion marker.
+Release build had zero warnings/errors. Report integration, worker deletion and the remainder of
+increment 6 remain pending; the overall goal is not complete.

@@ -300,6 +300,7 @@ internal static class DatabaseFoundationAssertions
             await CreateOwnedMonitorIdAsync(connectionString, "http://retention-scope.test/status"));
         await DailyAggregateAssertions.VerifyAsync(connectionString,
             await CreateOwnedMonitorIdAsync(connectionString, "http://daily-aggregate.test/status"));
+        await VerifyAggregateWriterAsync(connectionString);
         await VerifyHangfireSchedulingAsync(connectionString);
         await VerifyManualChecksAndHistoryAsync(connectionString);
         await VerifyManualChecksUnavailableWhenSchedulingDisabledAsync(connectionString);
@@ -1559,6 +1560,106 @@ internal static class DatabaseFoundationAssertions
         exhaustedTransport.CallCount.Should().Be(3);
         (await database.ExecutionAttempts.CountAsync(attempt => attempt.LogicalCheckId == exhaustedCheck.Id))
             .Should().Be(3);
+    }
+
+    private static async Task VerifyAggregateWriterAsync(string connectionString)
+    {
+        var monitorId = await CreateOwnedMonitorIdAsync(connectionString, "http://aggregate-writer.test/status");
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        await using var transaction = await database.Database.BeginTransactionAsync();
+        var monitor = await database.EndpointMonitors.Include(item => item.Endpoint.Environment.Website)
+            .SingleAsync(item => item.Id == monitorId);
+        var now = DateTimeOffset.UtcNow;
+        now = now.AddTicks(-(now.Ticks % 10));
+        var clock = new MutableTimeProvider(now);
+        var day = DateOnly.FromDateTime(now.UtcDateTime).AddDays(-2);
+        var start = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var samples = new (string Source, string Outcome, string? Failure, int Duration, bool Eligible)[]
+        {
+            ("Scheduled", "Healthy", null, 100, true),
+            ("Scheduled", "Warning", "SlowResponse", 200, true),
+            ("Scheduled", "Critical", "ServerError", 300, true),
+            ("Scheduled", "Cancelled", "Cancellation", 0, false),
+            ("Manual", "Healthy", null, 999, false),
+            ("Urgent", "Healthy", null, 888, false)
+        };
+        foreach (var sample in samples)
+        {
+            var check = await CreateQueuedCheckAsync(database, monitor, clock, source: sample.Source);
+            database.CheckResults.Add(new CheckResult
+            {
+                LogicalCheckId = check.Id,
+                EndpointMonitorId = monitorId,
+                Outcome = sample.Outcome,
+                FailureCategory = sample.Failure,
+                TotalDurationMs = sample.Duration,
+                MonitorSource = sample.Source,
+                CountsForUptime = sample.Eligible,
+                MeasuredAt = start,
+                CompletedAt = now
+            });
+            await database.SaveChangesAsync();
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+        var writer = new DailyAggregateWriter(database, new MutableTimeProvider(now));
+        (await writer.RecomputeAsync(monitorId, day)).Should().BeTrue();
+        var first = await database.MonitoringDailyAggregates.AsNoTracking().SingleAsync(item => item.EndpointMonitorId == monitorId);
+        first.TotalCount.Should().Be(6);
+        first.ScheduledCount.Should().Be(4);
+        first.EligibleCount.Should().Be(3);
+        first.HealthyCount.Should().Be(1);
+        first.WarningCount.Should().Be(1);
+        first.DownCount.Should().Be(1);
+        first.ExcludedCount.Should().Be(3);
+        first.CancelledCount.Should().Be(1);
+        first.DurationCount.Should().Be(2);
+        first.DurationSumMs.Should().Be(300);
+        first.DurationMinimumMs.Should().Be(100);
+        first.DurationMaximumMs.Should().Be(200);
+        first.DurationHistogram.Should().Equal(0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        first.IsComparable.Should().BeTrue();
+        first.LowestSource.Should().Be("Manual");
+        first.HighestSource.Should().Be("Urgent");
+        (await writer.RecomputeAsync(monitorId, day)).Should().BeTrue();
+        (await database.MonitoringDailyAggregates.AsNoTracking().SingleAsync(item => item.EndpointMonitorId == monitorId))
+            .Should().BeEquivalentTo(first);
+        (await writer.RecomputeAsync(monitorId, DateOnly.FromDateTime(now.UtcDateTime))).Should().BeFalse();
+        (await writer.RecomputeAsync(monitorId, day.AddDays(-1))).Should().BeFalse();
+        monitor.CurrentTruthGeneration++;
+        await database.SaveChangesAsync();
+        foreach (var measuredAt in new[] { start.AddDays(1).AddTicks(-10), start.AddDays(1) })
+        {
+            var additional = await CreateQueuedCheckAsync(database, monitor, clock);
+            database.CheckResults.Add(new CheckResult
+            {
+                LogicalCheckId = additional.Id,
+                EndpointMonitorId = monitorId,
+                Outcome = "Healthy",
+                TotalDurationMs = 50,
+                MonitorSource = "Scheduled",
+                CountsForUptime = true,
+                MeasuredAt = measuredAt,
+                CompletedAt = now
+            });
+            await database.SaveChangesAsync();
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+        (await writer.RecomputeAsync(monitorId, day)).Should().BeTrue();
+        var recomputed = await database.MonitoringDailyAggregates.AsNoTracking().SingleAsync(item => item.EndpointMonitorId == monitorId);
+        recomputed.TotalCount.Should().Be(7, "the next day's midnight belongs to the next aggregate");
+        recomputed.DurationSumMs.Should().Be(350);
+        recomputed.LastMeasuredAt.Should().Be(start.AddDays(1).AddTicks(-10));
+        recomputed.IsComparable.Should().BeFalse("the late result uses a different snapshot generation");
+        recomputed.ComparabilityIdentity.Should().NotBe(first.ComparabilityIdentity);
+        var stored = await database.MonitoringDailyAggregates.SingleAsync(item => item.EndpointMonitorId == monitorId);
+        stored.RawDeletionStartedAt = now;
+        await database.SaveChangesAsync();
+        (await writer.RecomputeAsync(monitorId, day)).Should().BeFalse();
+        (await database.MonitoringDailyAggregates.AsNoTracking().SingleAsync(item => item.EndpointMonitorId == monitorId))
+            .TotalCount.Should().Be(7);
+        await transaction.RollbackAsync();
     }
 
     private static async Task VerifyHealthConfirmationAsync(string connectionString)

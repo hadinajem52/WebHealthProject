@@ -95,3 +95,16 @@ ComputedAt records recomputation. RawDeletionStartedAt is set before the first r
 that day; once set, recomputation from remaining raw rows is forbidden. Reports must choose the
 complete aggregate for such days instead of double-counting protected raw rows that remain.
 Endpoint purge removes its daily aggregates before monitors. No retention worker is enabled yet.
+
+## Aggregate recomputation
+
+DailyAggregateWriter rebuilds one completed UTC day from raw result rows under the retention
+transaction lock. It streams scalar result/snapshot fields, preserves existing uptime classification,
+and includes only eligible Healthy/Warning duration samples. It supports an existing batch
+transaction or owns one when called independently. Empty or current/future days are not written.
+
+Configuration fingerprint, snapshot schema and truth generation form the comparability identity.
+Distinct identities are hashed in deterministic database order without retaining a growing set in
+memory. More than one identity marks the day non-comparable. Recomputing replaces counts rather
+than incrementing them. Once RawDeletionStartedAt is present, recomputation returns without writing.
+The deletion worker and historical report reader still need to consume these contracts.
