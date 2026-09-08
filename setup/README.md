@@ -328,3 +328,16 @@ the same operational-state rules. CSV appends `OperationalState` and `LastSchedu
 `ConfirmedStatus` now retains health when checks stop. Health filters accept Healthy, Warning,
 Critical and Unknown. Saved links using `HealthStatus=Disabled` must be changed because Disabled
 is an operational state. Runtime diagnostics remain a subsequent part of increment 5.
+
+### Scheduler runtime records
+
+Apply `20260908135926_MonitoringRuntimeState` explicitly before starting the updated scheduler.
+The migration creates an initially empty `monitoring_runtime_state` table. Dispatch and
+reconciliation record their start and latest completion, including zero-work runs. Completion
+stores duration, bounded failure category and consecutive failures; recovery resets the counter
+while preserving the last failure time. An invocation identifier prevents an older overlapping
+run from overwriting the newest invocation. No target URLs, worker IDs or exception messages are
+stored here. If PostgreSQL is unavailable, runtime persistence is unavailable too; a safe log
+records a failed completion write, and existing scheduler error/recovery behavior remains in force.
+Rollback drops this operational history and leaves monitoring results untouched. The protected
+runtime diagnostics UI is a subsequent part of increment 5.

@@ -106,11 +106,13 @@ internal static class DatabaseFoundationAssertions
         "20260908124817_HttpThresholdEquality",
         "20260908125906_StructuredCertificateFacts",
         "20260908130516_SslSnapshotExpiryPolicy",
-        "20260908131625_SslPolicyFingerprint"
+        "20260908131625_SslPolicyFingerprint",
+        "20260908135926_MonitoringRuntimeState"
     ];
 
     private static readonly string[] ExpectedTables =
     [
+        "monitoring_runtime_state",
         "target_authorization_evidence",
         "audit_event",
         "access_grant",
@@ -170,6 +172,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] TablesAddedAfterPhaseThree =
     [
+        "monitoring_runtime_state",
         "target_authorization_evidence",
         "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
         "maintenance_occurrence", "incident", "incident_event", "incident_evidence",
@@ -188,6 +191,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] ExpectedEntityTypeNames =
     [
+        "MonitoringRuntimeState",
         "TargetAuthorizationEvidence",
         "IdentityRoleClaim`1",
         "IdentityUserClaim`1",
@@ -268,6 +272,7 @@ internal static class DatabaseFoundationAssertions
         state.Tables.Should().BeEquivalentTo(
             ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
 
+        await MonitoringRuntimeAssertions.VerifyAsync(connectionString);
         await VerifyIdentityBootstrapAsync(connectionString);
         await VerifyClientWebsiteRegistryAsync(connectionString);
         await VerifyRegistryCreateComposabilityAsync(connectionString);
@@ -2958,6 +2963,8 @@ internal static class DatabaseFoundationAssertions
 
         var firstDispatch = await scheduling.DispatchDueAsync();
         firstDispatch.Should().Be(new MonitoringDispatchResult(1, 1));
+        var firstRuntime = await database.MonitoringRuntimeStates.AsNoTracking().SingleAsync(item => item.Operation == "monitoring-dispatch");
+        firstRuntime.LastSucceededAt.Should().Be(clock.GetUtcNow().AddTicks(-(clock.GetUtcNow().Ticks % 10)));
         database.ChangeTracker.Clear();
         monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
@@ -2973,6 +2980,9 @@ internal static class DatabaseFoundationAssertions
         firstCheck.DurableWork.Single().State.Should().Be(DurableWorkStates.Enqueued);
         monitor.NextDueAt.Should().BeAfter(clock.GetUtcNow());
         (await scheduling.DispatchDueAsync()).Should().Be(new MonitoringDispatchResult(0, 0));
+        var idleRuntime = await database.MonitoringRuntimeStates.AsNoTracking().SingleAsync(item => item.Operation == "monitoring-dispatch");
+        idleRuntime.InvocationId.Should().NotBe(firstRuntime.InvocationId, "zero-work dispatch must record a fresh invocation");
+        idleRuntime.ConsecutiveFailures.Should().Be(0);
 
         firstCheck.DurableWork.Single().State = DurableWorkStates.Completed;
         monitor.Endpoint.IsEnabled = false;
@@ -3013,6 +3023,8 @@ internal static class DatabaseFoundationAssertions
         await database.SaveChangesAsync();
         var interrupted = await scheduling.DispatchDueAsync();
         interrupted.Should().Be(new MonitoringDispatchResult(1, 0));
+        (await database.MonitoringRuntimeStates.AsNoTracking().SingleAsync(item => item.Operation == "monitoring-dispatch"))
+            .FailureCategory.Should().Be("QueueEnqueue");
         database.ChangeTracker.Clear();
         var interruptedWork = await database.DurableWork
             .OrderByDescending(work => work.CreatedAt)
@@ -3024,6 +3036,8 @@ internal static class DatabaseFoundationAssertions
         clock.Advance(TimeSpan.FromMinutes(3));
         var recovered = await scheduling.ReconcileAsync();
         recovered.Should().Be(new MonitoringDispatchResult(1, 1));
+        (await database.MonitoringRuntimeStates.AsNoTracking().SingleAsync(item => item.Operation == "monitoring-reconciliation"))
+            .LastSucceededAt.Should().Be(clock.GetUtcNow().AddTicks(-(clock.GetUtcNow().Ticks % 10)));
         (await database.DurableWork.AsNoTracking()
             .Where(work => work.Id == interruptedWork.Id)
             .Select(work => work.State)
@@ -3514,6 +3528,8 @@ internal static class DatabaseFoundationAssertions
         snapshot.SslWarningExpiryDays.Should().Be(30);
         snapshot.SslHighExpiryDays.Should().Be(15);
         snapshot.SslCriticalExpiryDays.Should().Be(7);
+        await MonitoringRuntimeAssertions.VerifyUpgradeAsync(database,
+            scope.ServiceProvider.GetRequiredService<MonitoringRuntimeRecorder>());
     }
 
     private static async Task VerifyHttpPolicyUpgradeAndRollbackAsync(string connectionString)

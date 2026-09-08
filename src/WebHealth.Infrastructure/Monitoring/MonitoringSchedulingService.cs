@@ -15,21 +15,22 @@ internal sealed class MonitoringSchedulingService(
     ILogicalCheckQueue logicalCheckQueue,
     MonitoringSchedulingOptions options,
     TimeProvider timeProvider,
-    ILogger<MonitoringSchedulingService> logger) : IMonitoringSchedulingService
+    ILogger<MonitoringSchedulingService> logger,
+    MonitoringRuntimeRecorder runtimeRecorder) : IMonitoringSchedulingService
 {
-    public async Task<MonitoringDispatchResult> DispatchDueAsync(
-        CancellationToken cancellationToken = default)
+    public Task<MonitoringDispatchResult> DispatchDueAsync(
+        CancellationToken cancellationToken = default) => runtimeRecorder.RunAsync("monitoring-dispatch", async () =>
     {
         var work = await CreateDueWorkAsync(cancellationToken);
         return await EnqueueAsync(work);
-    }
+    }, cancellationToken);
 
-    public async Task<MonitoringDispatchResult> ReconcileAsync(
-        CancellationToken cancellationToken = default)
+    public Task<MonitoringDispatchResult> ReconcileAsync(
+        CancellationToken cancellationToken = default) => runtimeRecorder.RunAsync("monitoring-reconciliation", async () =>
     {
         var work = await ClaimRecoverableWorkAsync(cancellationToken);
         return await EnqueueAsync(work);
-    }
+    }, cancellationToken);
 
     private async Task<IReadOnlyList<DispatchWork>> CreateDueWorkAsync(CancellationToken token)
     {

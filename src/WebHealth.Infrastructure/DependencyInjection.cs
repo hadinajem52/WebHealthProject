@@ -172,6 +172,7 @@ public static class DependencyInjection
         services.AddScoped<ILogicalCheckFinalizationService, LogicalCheckFinalizationService>();
         services.AddScoped<ILogicalCheckExecutionService, LogicalCheckExecutionService>();
         services.AddScoped<IMonitoringSchedulingService, MonitoringSchedulingService>();
+        services.AddScoped<MonitoringRuntimeRecorder>();
         services.AddScoped<IManualCheckService, ManualCheckService>();
         services.AddScoped<ICheckHistoryReader, CheckHistoryReader>();
         services.AddScoped<IRunHistoryArchive, RunHistoryArchive>();

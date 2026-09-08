@@ -272,3 +272,20 @@ Verification on 2026-09-08: 23 report-query unit cases, 57 status projection/fil
 including stopped-monitor export health, operation and freshness, authorized filter combinations,
 and parsed CSV/screen equality for health and operation. Release build had zero warnings/errors.
 Updated dashboard/status-row browser verification remains pending with the diagnostics UI work.
+
+### P7-MON-05 scheduler runtime persistence
+
+Dispatch and reconciliation now record invocation start, latest success/failure, duration, bounded
+failure category and consecutive failures in monitoring_runtime_state. Zero-work runs count as
+successful invocations; partial enqueue reports QueueEnqueue. Recovery resets the counter and
+retains last failure time. Completion uses a separate context with a five-second deadline, and an
+invocation token prevents an older overlapping completion from overwriting the newer record.
+Migration 20260908135926_MonitoringRuntimeState creates no fake heartbeat rows. Compiled model,
+expected migrations/tables/entities and exact column assertions are updated. No target or exception
+text is persisted. Database outages can prevent recording; completion-write failures emit safe logs.
+
+Verification on 2026-09-08: full ordered database suite passed with zero-work, three consecutive
+failures, enqueue failure, cancellation, recovery, late overlapping completion and actual scheduler
+entry-point assertions. An isolated populated rollback/upgrade and repeatability check passed.
+Release build had zero warnings/errors; EF reported no pending model changes. Protected runtime
+presentation, worker heartbeat adapter, monitoring-health thresholds and metrics remain pending.

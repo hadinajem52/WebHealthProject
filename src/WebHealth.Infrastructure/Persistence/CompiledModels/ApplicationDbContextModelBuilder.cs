@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("df755b25-7843-4adf-b7df-ba13315ac397"), entityTypeCount: 55)
+            : base(skipDetectChanges: false, modelId: new Guid("5354f0ab-2ee8-46dd-b624-2fe9c8481158"), entityTypeCount: 56)
         {
         }
 
@@ -47,6 +47,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var executionLease = ExecutionLeaseEntityType.Create(this);
             var finding = FindingEntityType.Create(this);
             var logicalCheck = LogicalCheckEntityType.Create(this);
+            var monitoringRuntimeState = MonitoringRuntimeStateEntityType.Create(this);
             var redirectHop = RedirectHopEntityType.Create(this);
             var targetAuthorizationEvidence = TargetAuthorizationEvidenceEntityType.Create(this);
             var notificationAttempt = NotificationAttemptEntityType.Create(this);
@@ -215,6 +216,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             ExecutionLeaseEntityType.CreateAnnotations(executionLease);
             FindingEntityType.CreateAnnotations(finding);
             LogicalCheckEntityType.CreateAnnotations(logicalCheck);
+            MonitoringRuntimeStateEntityType.CreateAnnotations(monitoringRuntimeState);
             RedirectHopEntityType.CreateAnnotations(redirectHop);
             TargetAuthorizationEvidenceEntityType.CreateAnnotations(targetAuthorizationEvidence);
             NotificationAttemptEntityType.CreateAnnotations(notificationAttempt);

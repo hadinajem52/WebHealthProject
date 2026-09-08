@@ -965,3 +965,8 @@ migrations add recorded evidence, freeze expiry thresholds, and adopt the SSL ha
 confirmed health, including cadence-based freshness and dispatch-delay precedence. Endpoint
 registry detail resolves it from visible active HTTP/SSL monitors and only Current, completed,
 scheduled checks. The scheduling options own the bounded dispatch-delay grace.
+
+`Infrastructure/Monitoring/MonitoringRuntimeRecorder.cs` surrounds dispatch and reconciliation
+with durable runtime evidence using a separate database context. `MonitoringRuntimeState` and
+its configuration define the two bounded operation rows. `MonitoringRuntimeState` migration
+creates the table without seeding heartbeat data; invocation IDs fence overlapping completions.

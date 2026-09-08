@@ -47,6 +47,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<PolicyProfile> PolicyProfiles => Set<PolicyProfile>();
 
     public DbSet<LogicalCheck> LogicalChecks => Set<LogicalCheck>();
+    public DbSet<MonitoringRuntimeState> MonitoringRuntimeStates => Set<MonitoringRuntimeState>();
 
     public DbSet<CheckConfigurationSnapshot> CheckConfigurationSnapshots => Set<CheckConfigurationSnapshot>();
 
