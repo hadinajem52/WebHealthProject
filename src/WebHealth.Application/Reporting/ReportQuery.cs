@@ -86,8 +86,7 @@ public static class ReportQueryNormalizer
         EndpointHealthStatuses.Healthy,
         EndpointHealthStatuses.Warning,
         EndpointHealthStatuses.Critical,
-        EndpointHealthStatuses.Unknown,
-        EndpointHealthStatuses.Disabled
+        EndpointHealthStatuses.Unknown
     ];
 
     internal static int BoundPage(int page) => Math.Max(page, 1);

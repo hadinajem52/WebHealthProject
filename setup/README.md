@@ -323,5 +323,8 @@ accepted as Current refreshes scheduled freshness; manual, urgent and superseded
 Freshness expires strictly after the interval plus the greater of ten minutes or one quarter of
 the interval. A monitor is delayed strictly after its due time plus dispatch delay grace.
 Lifecycle eligibility, manual-only mode and pause take precedence over delay or freshness.
-No database migration is needed for this derived projection. Runtime diagnostics and dashboard/CSV
-integration are subsequent parts of increment 5.
+No database migration is needed for this derived projection. Dashboard rows and CSV export use
+the same operational-state rules. CSV appends `OperationalState` and `LastScheduledCompletionAt`;
+`ConfirmedStatus` now retains health when checks stop. Health filters accept Healthy, Warning,
+Critical and Unknown. Saved links using `HealthStatus=Disabled` must be changed because Disabled
+is an operational state. Runtime diagnostics remain a subsequent part of increment 5.

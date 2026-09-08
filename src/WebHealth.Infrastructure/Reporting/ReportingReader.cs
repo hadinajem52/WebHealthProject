@@ -10,6 +10,7 @@ using WebHealth.Domain.Health;
 using WebHealth.Domain.Incidents;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Registry;
 
 namespace WebHealth.Infrastructure.Reporting;
@@ -18,7 +19,8 @@ internal sealed class ReportingReader(
     ApplicationDbContext dbContext,
     RegistryVisibility visibility,
     OwnerSubjectNames ownerNames,
-    TimeProvider timeProvider) : IReportingReader
+    TimeProvider timeProvider,
+    MonitoringSchedulingOptions schedulingOptions) : IReportingReader
 {
     private const int AttentionListCount = 8;
 
@@ -317,34 +319,26 @@ internal sealed class ReportingReader(
                 monitor.MonitorType,
                 monitor.Endpoint.OwnerSubjectId
                     ?? monitor.Endpoint.Environment.Website.OwnerSubjectId,
-                !monitor.IsEnabled
-                    || !monitor.Endpoint.IsEnabled
-                    || monitor.Endpoint.DeletedAt != null
-                            || monitor.Endpoint.Environment.DeletedAt != null
-                    || !monitor.Endpoint.Environment.Website.IsEnabled
-                    || monitor.Endpoint.Environment.Website.DeletedAt != null
-                    || !monitor.Endpoint.Environment.Website.Client.IsActive
-                    || monitor.Endpoint.Environment.Website.Client.DeletedAt != null
-                    ? EndpointHealthStatuses.Disabled
-                    : monitor.EndpointHealth == null
-                        ? EndpointHealthStatuses.Unknown
-                        : monitor.EndpointHealth.ConfirmedStatus,
-                (monitor.IsEnabled && monitor.Endpoint.IsEnabled
-                    && monitor.Endpoint.DeletedAt == null
-                    && monitor.Endpoint.Environment.DeletedAt == null
-                    && monitor.Endpoint.Environment.Website.IsEnabled
-                    && monitor.Endpoint.Environment.Website.DeletedAt == null
-                    && monitor.Endpoint.Environment.Website.Client.IsActive
-                    && monitor.Endpoint.Environment.Website.Client.DeletedAt == null)
-                    || monitor.EndpointHealth == null
-                    ? null
-                    : monitor.EndpointHealth.ConfirmedStatus,
+                monitor.EndpointHealth == null || monitor.EndpointHealth.ConfirmedStatus == EndpointHealthStatuses.Disabled
+                    ? EndpointHealthStatuses.Unknown : monitor.EndpointHealth.ConfirmedStatus,
+                null,
                 monitor.EndpointHealth == null
                     ? null
                     : (DateTimeOffset?)monitor.EndpointHealth.ConfirmedAt,
                 dbContext.Incidents.Count(incident =>
                     incident.EndpointMonitorId == monitor.Id
-                    && IncidentStatuses.Active.Contains(incident.Status))));
+                    && IncidentStatuses.Active.Contains(incident.Status)),
+                monitor.Endpoint.IsEnabled && monitor.Endpoint.DeletedAt == null
+                    && monitor.Endpoint.Environment.DeletedAt == null
+                    && monitor.Endpoint.Environment.Website.IsEnabled && monitor.Endpoint.Environment.Website.DeletedAt == null
+                    && monitor.Endpoint.Environment.Website.Client.IsActive && monitor.Endpoint.Environment.Website.Client.DeletedAt == null,
+                monitor.SchedulingEnabled,
+                monitor.IsEnabled,
+                monitor.IntervalSeconds,
+                monitor.NextDueAt,
+                monitor.LogicalChecks.Where(check => check.Source == LogicalCheckSources.Scheduled
+                    && check.State == LogicalCheckStates.Completed && check.Result != null
+                    && check.Result.CurrentStateDisposition == "Current").Max(check => check.CompletedAt)));
 
         return projected;
     }
@@ -444,7 +438,10 @@ internal sealed class ReportingReader(
                 sample.ToResponseTimes(),
                 sample.LastMeasuredAt,
                 monitor.ActiveIncidentCount,
-                sample.SingleMonitorSource);
+                sample.SingleMonitorSource,
+                MonitorOperationalState.Evaluate(monitor.ConfirmedStatus, monitor.LifecycleEligible,
+                    monitor.SchedulingEnabled, monitor.IsEnabled, monitor.IntervalSeconds, monitor.NextDueAt,
+                    monitor.LastScheduledCompletionAt, timeProvider.GetUtcNow(), schedulingOptions.DispatchDelayGrace));
         }).ToArray();
     }
 
@@ -468,7 +465,12 @@ internal sealed class ReportingReader(
             health.GetValueOrDefault(EndpointHealthStatuses.Warning),
             health.GetValueOrDefault(EndpointHealthStatuses.Critical),
             health.GetValueOrDefault(EndpointHealthStatuses.Unknown),
-            health.GetValueOrDefault(EndpointHealthStatuses.Disabled),
+            await dbContext.EndpointMonitors.AsNoTracking().CountAsync(monitor => monitorIds.Contains(monitor.Id)
+                && (!monitor.Endpoint.IsEnabled || monitor.Endpoint.DeletedAt != null
+                    || monitor.Endpoint.Environment.DeletedAt != null
+                    || !monitor.Endpoint.Environment.Website.IsEnabled || monitor.Endpoint.Environment.Website.DeletedAt != null
+                    || !monitor.Endpoint.Environment.Website.Client.IsActive || monitor.Endpoint.Environment.Website.Client.DeletedAt != null),
+                cancellationToken),
             monitorIds.Count == 0 ? 0 : await CountActiveIncidentsAsync(monitorIds, cancellationToken),
             totals.ToUptime(),
             totals.ToResponseTimes(),
@@ -716,7 +718,13 @@ internal sealed class ReportingReader(
         string ConfirmedStatus,
         string? StatusBeforeDisabled,
         DateTimeOffset? ConfirmedAt,
-        int ActiveIncidentCount);
+        int ActiveIncidentCount,
+        bool LifecycleEligible,
+        bool SchedulingEnabled,
+        bool IsEnabled,
+        int IntervalSeconds,
+        DateTimeOffset NextDueAt,
+        DateTimeOffset? LastScheduledCompletionAt);
 
     private sealed record SampleAggregate(
         long EligibleSamples,

@@ -499,10 +499,9 @@
                                             endpoint.WorstStatus,
                                             StateBreakdown(endpoint)))
                                     }
-                                    @if (availability?.StatusBeforeDisabled is { } lastKnown)
+                                    @foreach (var monitor in endpoint.Monitors.Where(item => item.Operation is not null))
                                     {
-
-                                        <span class="data-table__secondary">Was @lastKnown when checks stopped</span>
+                                        <span class="data-table__secondary">@MonitorTypeDisplay.Describe(monitor.MonitorType): @(monitor.Operation!.State switch { "ManualOnly" => "Manual only", "NeverChecked" => "Never checked", _ => monitor.Operation.State })</span>
                                     }
                                 </td>
                                 <td data-label="Uptime" title="@(availability is null ? null : $"{availability.Uptime.EligibleSamples:N0} eligible samples")">

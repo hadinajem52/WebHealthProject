@@ -257,3 +257,18 @@ manual, urgent and superseded checks excluded from scheduled freshness, and all-
 monitors correctly classified. Ordinary integration: 640 passed, four opt-in skips. Release build
 had zero warnings/errors. This is a partial increment: new status-row browser evidence, dashboard/
 CSV wiring, runtime heartbeats, protected diagnostics and telemetry remain pending.
+
+### P7-MON-05 reporting separation
+
+Dashboard rows and exports now carry the same MonitorOperationalState projection as endpoint detail.
+ConfirmedStatus, health filters and health counts preserve confirmed health when schedules stop;
+legacy persisted Disabled maps to Unknown. Disabled is no longer a health filter. Dashboard rows
+show each monitor's operational state independently, and CSV appends OperationalState and
+LastScheduledCompletionAt. The summary's DisabledMonitorCount is a lifecycle-disabled count,
+separate from health totals. Existing StatusBeforeDisabled DTO compatibility values are null.
+
+Verification on 2026-09-08: 23 report-query unit cases, 57 status projection/filter cases, and all
+648 ordinary integration tests passed (four opt-in skips). The full ordered database suite passed,
+including stopped-monitor export health, operation and freshness, authorized filter combinations,
+and parsed CSV/screen equality for health and operation. Release build had zero warnings/errors.
+Updated dashboard/status-row browser verification remains pending with the diagnostics UI work.

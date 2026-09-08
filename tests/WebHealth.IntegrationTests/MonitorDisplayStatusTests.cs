@@ -23,7 +23,8 @@ public sealed class MonitorDisplayStatusTests
                     EndpointHealthStatuses.Healthy,
                     EndpointHealthStatuses.Warning,
                     EndpointHealthStatuses.Critical,
-                    EndpointHealthStatuses.Unknown
+                    EndpointHealthStatuses.Unknown,
+                    EndpointHealthStatuses.Disabled
                 })
                 {
                     data.Add(monitorEnabled, endpointEnabled, status);
@@ -41,7 +42,7 @@ public sealed class MonitorDisplayStatusTests
         var monitor = Monitor(monitorEnabled, endpointEnabled, confirmedStatus);
 
         MonitorDisplayStatus.Projection.Compile()(monitor)
-            .Should().Be(MonitorDisplayStatus.Of(monitorEnabled, endpointEnabled, confirmedStatus));
+            .Should().Be(confirmedStatus is null or EndpointHealthStatuses.Disabled ? EndpointHealthStatuses.Unknown : confirmedStatus);
     }
 
     [Theory]
@@ -72,20 +73,20 @@ public sealed class MonitorDisplayStatusTests
     [InlineData(EndpointHealthStatuses.Warning)]
     [InlineData(EndpointHealthStatuses.Critical)]
     [InlineData(null)]
-    public void ADisabledMonitorNeverReportsItsLastState(string? lastConfirmed) =>
+    public void APausedMonitorPreservesConfirmedHealth(string? lastConfirmed) =>
         MonitorDisplayStatus.Projection.Compile()(
             Monitor(monitorEnabled: false, endpointEnabled: true, lastConfirmed))
-            .Should().Be(EndpointHealthStatuses.Disabled);
+            .Should().Be(lastConfirmed ?? EndpointHealthStatuses.Unknown);
 
     [Theory]
     [InlineData(EndpointHealthStatuses.Healthy)]
     [InlineData(EndpointHealthStatuses.Warning)]
     [InlineData(EndpointHealthStatuses.Critical)]
     [InlineData(null)]
-    public void AMonitorOnADisabledEndpointNeverReportsItsLastState(string? lastConfirmed) =>
+    public void ADisabledEndpointPreservesConfirmedHealth(string? lastConfirmed) =>
         MonitorDisplayStatus.Projection.Compile()(
             Monitor(monitorEnabled: true, endpointEnabled: false, lastConfirmed))
-            .Should().Be(EndpointHealthStatuses.Disabled);
+            .Should().Be(lastConfirmed ?? EndpointHealthStatuses.Unknown);
 
     [Fact]
     public void AnEnabledMonitorWithNoConfirmationIsUnknown() =>

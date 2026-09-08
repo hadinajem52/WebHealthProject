@@ -369,9 +369,9 @@ All rules below are mandatory unless explicitly marked optional or deferred. Con
 
 | **ID** | **Business rule**                                                                                                     | **Verification / expected result**                                             |
 | ------ | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| BR-R01 | Dashboard totals use the latest visible status per enabled endpoint and disclose the selected filters and as-of time. | Changing filters recomputes every card consistently.                           |
-| BR-R02 | Reports support client, website, environment, owner, status, monitor type and date filters.                           | Exports use the same filtered dataset as the screen.                           |
-| BR-R03 | CSV exports use UTF-8, stable column names and ISO-8601 timestamps.                                                   | Arabic and other Unicode values open correctly and timestamps are unambiguous. |
+| BR-R01 | Dashboard health totals use confirmed health for visible, non-archived monitors, including stopped monitors, and disclose selected filters and as-of time. | Lifecycle/scheduling operation is separate; stopping checks does not turn confirmed health into Disabled. |
+| BR-R02 | Reports support client, website, environment, owner, confirmed health, monitor type and date filters. | Health filters accept Healthy, Warning, Critical and Unknown; exports use the same filtered dataset as the screen. |
+| BR-R03 | CSV exports use UTF-8, stable column names and ISO-8601 timestamps. | ConfirmedStatus remains health; OperationalState and LastScheduledCompletionAt are appended columns. Unicode, formula protection and timestamp encoding remain required. |
 | BR-R04 | Audit events are append-only for normal users and record before/after values for material configuration changes.      | An edited endpoint can be reconstructed from audit history.                    |
 | BR-R05 | Raw check results are retained for 90 days by default; daily aggregates and incidents are retained for 24 months.     | Retention job deletes or aggregates only eligible records.                     |
 | BR-R06 | Retention never deletes records under an active legal or operational hold.                                            | Held entities survive the retention job and the action is logged.              |

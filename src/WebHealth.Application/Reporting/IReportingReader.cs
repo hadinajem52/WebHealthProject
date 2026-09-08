@@ -97,7 +97,8 @@ public sealed record ReportRow(
     ReportResponseTimes ResponseTimes,
     DateTimeOffset? LastMeasuredAt,
     int ActiveIncidentCount,
-    string? MonitorSource);
+    string? MonitorSource,
+    MonitorOperationalState? Operation = null);
 
 public sealed record ReportTrendPoint(
     DateOnly Day,

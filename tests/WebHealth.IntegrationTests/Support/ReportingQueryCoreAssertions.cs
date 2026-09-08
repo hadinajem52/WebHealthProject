@@ -191,6 +191,10 @@ internal static class ReportingQueryCoreAssertions
                 .Should().Equal(screenRows.Select(row => row.EndpointMonitorId.ToString()));
             csvRows.Select(row => row[Array.IndexOf(ReportCsv.Headers.ToArray(), "UptimePercent")])
                 .Should().Equal(screenRows.Select(row => Rendered(row.Uptime.Percentage)));
+            csvRows.Select(row => row[Array.IndexOf(ReportCsv.Headers.ToArray(), "OperationalState")])
+                .Should().Equal(screenRows.Select(row => row.Operation!.State));
+            csvRows.Select(row => row[Array.IndexOf(ReportCsv.Headers.ToArray(), "ConfirmedStatus")])
+                .Should().Equal(screenRows.Select(row => row.ConfirmedStatus));
 
             Interlocked.Increment(ref covered);
         });

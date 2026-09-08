@@ -2337,6 +2337,12 @@ internal static class DatabaseFoundationAssertions
                 endpointId, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
             stopped!.MonitorStatuses.Should().OnlyContain(item => item.Status.State == mode,
                 "stopping every schedule does not make an otherwise eligible endpoint lifecycle-disabled");
+            var report = await readerScope.ServiceProvider.GetRequiredService<IReportingReader>().ExportAsync(
+                query, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
+            var reportedSsl = report.Rows.Single(item => item.EndpointMonitorId == monitor.Id);
+            reportedSsl.ConfirmedStatus.Should().Be("Healthy");
+            reportedSsl.Operation!.State.Should().Be(mode);
+            reportedSsl.Operation.LastScheduledCompletionAt.Should().Be(scheduledCompletion);
         }
         foreach (var item in activeMonitors)
         {

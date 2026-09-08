@@ -29,7 +29,9 @@ public static class ReportCsv
         "MeasuredSamples",
         "LastMeasuredAt",
         "ActiveIncidents",
-        "MonitorSource"
+        "MonitorSource",
+        "OperationalState",
+        "LastScheduledCompletionAt"
     ];
 
     public static byte[] Write(ReportExport export) =>
@@ -66,6 +68,8 @@ public static class ReportCsv
         CsvField.Count(row.ResponseTimes.MeasuredSamples),
         CsvField.Timestamp(row.LastMeasuredAt),
         CsvField.Count(row.ActiveIncidentCount),
-        CsvField.Token(row.MonitorSource)
+        CsvField.Token(row.MonitorSource),
+        CsvField.Token(row.Operation?.State),
+        CsvField.Timestamp(row.Operation?.LastScheduledCompletionAt)
     ];
 }

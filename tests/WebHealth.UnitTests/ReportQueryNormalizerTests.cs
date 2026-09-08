@@ -76,19 +76,17 @@ public sealed class ReportQueryNormalizerTests
     [InlineData("Warning")]
     [InlineData("Critical")]
     [InlineData("Unknown")]
-    [InlineData("Disabled")]
     public void EverySelectableHealthStatusIsAccepted(string status)
     {
         Normalize(new ReportQueryInput(HealthStatus: status)).Query!.HealthStatus.Should().Be(status);
     }
 
     [Fact]
-    public void ADisabledMonitorCanBeFilteredForBecauseItIsReported()
+    public void OperationalDisabledIsNotAConfirmedHealthFilter()
     {
         var result = Normalize(new ReportQueryInput(HealthStatus: EndpointHealthStatuses.Disabled));
 
-        result.Succeeded.Should().BeTrue(string.Join(" ", result.Errors));
-        result.Query!.HealthStatus.Should().Be(EndpointHealthStatuses.Disabled);
+        result.Succeeded.Should().BeFalse();
     }
 
     [Fact]
