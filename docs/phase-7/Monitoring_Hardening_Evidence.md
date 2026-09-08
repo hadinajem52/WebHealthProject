@@ -289,3 +289,25 @@ failures, enqueue failure, cancellation, recovery, late overlapping completion a
 entry-point assertions. An isolated populated rollback/upgrade and repeatability check passed.
 Release build had zero warnings/errors; EF reported no pending model changes. Protected runtime
 presentation, worker heartbeat adapter, monitoring-health thresholds and metrics remain pending.
+
+### P7-MON-05 engine health and protected diagnostics
+
+MonitoringEngineHealth evaluates scheduler success age (3/5 minutes), consecutive failures,
+worker availability/short-check queue coverage/two-minute heartbeat, queue age (5/15 minutes),
+and dispatch overdue grace/30-minute critical age. Disabled scheduling reports Healthy with
+DisabledByConfiguration. Hangfire DTOs remain inside the worker adapter and no worker IDs enter
+application output. Reporting scopes monitor/work facts using existing selection and authorization;
+Viewer output excludes the detailed runtime object. Administrators and Operations can open the
+protected diagnostics page and /health/monitoring. Readiness remains independent of target health.
+
+Verification on 2026-09-08: 18 threshold cases and 49 authorization baseline cases passed, including
+all four roles against both new routes. Ordinary integration: 656 passed, four opt-in skips. Full
+ordered database suite passed with real Hangfire server announcement/queue/heartbeat evidence,
+Viewer runtime isolation and disabled-scheduling health. Latest Release build: zero warnings/errors.
+Desktop and 390-by-844 mobile browser inspection verified the diagnostics page, preserved runtime
+history, disabled-mode wording and no horizontal page overflow. Inspection caught missing mobile
+history labels; the corrected stacked rows were rebuilt and visually verified. Dashboard and
+endpoint detail showed confirmed Unknown separately from operational Disabled. Fixture timestamps
+include deliberately advanced test clocks. The browser blocked the JSON health URL; direct HTTP
+role tests cover that route. Temporary viewport, preview process and PostgreSQL were cleaned up.
+Execution scopes, metrics and final increment-5 review remain pending.

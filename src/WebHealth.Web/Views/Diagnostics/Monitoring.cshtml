@@ -1,0 +1,92 @@
+@model ReportDiagnostics
+@{
+    ViewData.SetTitle("Monitoring diagnostics");
+    ViewData.SetSubtitle("Scheduler, workers and queued checks. Target health is reported separately.");
+    var health = Model.EngineHealth;
+    var runtime = Model.Runtime;
+    static string DescribeReason(string reason) => reason switch
+    {
+        "DisabledByConfiguration" => "Scheduled monitoring is disabled in configuration.",
+        "WorkerStatusUnavailable" => "Worker status could not be read.",
+        "WorkerAbsent" => "No monitoring worker server is registered.",
+        "ShortCheckQueueUncovered" => "No worker is assigned to the short-check queue.",
+        "WorkerHeartbeatStale" => "The worker heartbeat is more than two minutes old.",
+        "QueueAgeCritical" => "Queued work has waited at least fifteen minutes.",
+        "QueueAgeWarning" => "Queued work has waited at least five minutes.",
+        "DispatchOverdueCritical" => "A monitor is overdue by at least thirty minutes.",
+        "DispatchOverdueWarning" => "A monitor is overdue beyond the configured dispatch grace.",
+        _ => reason.Replace("monitoring-dispatch:", "Dispatch: ", StringComparison.Ordinal)
+            .Replace("monitoring-reconciliation:", "Reconciliation: ", StringComparison.Ordinal)
+            .Replace("SuccessOverdue", "no success within five minutes", StringComparison.Ordinal)
+            .Replace("SuccessDelayed", "no success within three minutes", StringComparison.Ordinal)
+            .Replace("RepeatedFailure", "at least three consecutive failures", StringComparison.Ordinal)
+            .Replace("Failed", "the latest invocation failed", StringComparison.Ordinal)
+    };
+}
+<section class="card" aria-labelledby="monitoring-engine-heading">
+    <div class="page-intro">
+        <h2 class="card__title" id="monitoring-engine-heading">Monitoring engine</h2>
+        <a class="button button--secondary" asp-controller="Home" asp-action="Index">Dashboard</a>
+    </div>
+    <p>@await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForHealthStatus(health?.Status ?? "Unknown"), health?.Status ?? "Unknown"))</p>
+    @if (health?.Reasons.Count > 0)
+    {
+        <ul>
+            @foreach (var reason in health.Reasons)
+            {
+                <li>@DescribeReason(reason)</li>
+            }
+        </ul>
+    }
+    <p>Readiness checks database availability. A monitored website failure does not make the application unready.</p>
+    <p>Monitor and work counts use the selected dashboard filters. Scheduler and worker status applies to the whole monitoring engine.</p>
+    <dl class="data-list">
+        <div class="data-list__row"><dt>Scheduled monitors</dt><dd>@Model.ScheduledMonitorCount</dd></div>
+        <div class="data-list__row"><dt>Paused monitors</dt><dd>@Model.PausedMonitorCount</dd></div>
+        <div class="data-list__row"><dt>Manual-only monitors</dt><dd>@Model.ManualOnlyMonitorCount</dd></div>
+        <div class="data-list__row"><dt>Overdue monitors</dt><dd>@Model.OverdueMonitorCount</dd></div>
+        <div class="data-list__row"><dt>Oldest due time</dt><dd>@Html.Timestamp(Model.OldestOverdueAt)</dd></div>
+        <div class="data-list__row"><dt>Oldest queued work</dt><dd>@Html.Timestamp(Model.OldestQueuedAt)</dd></div>
+        <div class="data-list__row"><dt>Last scheduled completion</dt><dd>@Html.Timestamp(Model.LastScheduledCompletionAt)</dd></div>
+    </dl>
+</section>
+@if (runtime is not null)
+{
+    <section class="card" aria-labelledby="monitoring-workers-heading">
+        <h2 class="card__title" id="monitoring-workers-heading">Workers and scheduler</h2>
+        <p>Scheduling: @(runtime.SchedulingEnabled ? "Enabled" : "Disabled by configuration")</p>
+        @if (runtime.SchedulingEnabled)
+        {
+            <p>Worker status: @(runtime.Workers.Available ? "Available" : "Unavailable") · Server present: @(runtime.Workers.ServerPresent ? "Yes" : "No") · Short-check queue covered: @(runtime.Workers.QueueCovered ? "Yes" : "No")</p>
+            <p>Last worker heartbeat: @Html.Timestamp(runtime.Workers.LastHeartbeatAt)</p>
+        }
+        else
+        {
+            <p>Worker checks are not required while scheduled monitoring is disabled.</p>
+        }
+        <div class="table-scroll">
+            <table class="data-table">
+                <caption class="visually-hidden">Recorded scheduler invocations</caption>
+                <thead><tr><th scope="col">Operation</th><th scope="col">Last start</th><th scope="col">Last success</th><th scope="col">Last failure</th><th scope="col">Duration</th><th scope="col">Failure category</th><th scope="col">Consecutive failures</th></tr></thead>
+                <tbody>
+                    @foreach (var operation in runtime.Operations)
+                    {
+                        <tr>
+                            <th scope="row" data-label="Operation">@operation.Operation</th>
+                            <td data-label="Last start">@Html.Timestamp(operation.LastStartedAt)</td>
+                            <td data-label="Last success">@Html.Timestamp(operation.LastSucceededAt)</td>
+                            <td data-label="Last failure">@Html.Timestamp(operation.LastFailedAt)</td>
+                            <td data-label="Duration">@operation.LastDurationMs ms</td>
+                            <td data-label="Failure category">@(operation.FailureCategory ?? "None")</td>
+                            <td data-label="Consecutive failures">@operation.ConsecutiveFailures</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (runtime.Operations.Count == 0)
+        {
+            <p>No scheduler invocation has been recorded.</p>
+        }
+    </section>
+}

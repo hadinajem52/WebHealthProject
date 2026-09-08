@@ -341,3 +341,19 @@ stored here. If PostgreSQL is unavailable, runtime persistence is unavailable to
 records a failed completion write, and existing scheduler error/recovery behavior remains in force.
 Rollback drops this operational history and leaves monitoring results untouched. The protected
 runtime diagnostics UI is a subsequent part of increment 5.
+
+### Protected monitoring diagnostics
+
+Administrators and Operations can open `/Diagnostics/Monitoring` from the dashboard monitoring
+system card. Registry filters scope aggregate monitor/work counts; scheduler and worker evidence
+is global engine state. Viewer dashboard output receives only the coarse engine assessment and
+its authorized aggregates, never the detailed runtime object. No worker IDs or exception text
+are exposed. `/health/monitoring` uses the same diagnostics policy and returns 503 for Critical or
+unknown engine health, 200 for Healthy or Warning. `/health/ready` remains a database readiness
+check and does not depend on monitored target failures.
+
+Scheduler success age warns at three minutes and is critical at five; three consecutive failures
+are critical. Worker heartbeat tolerance is two minutes and a worker must cover the monitoring
+queue. Queue age warns at five minutes and is critical at fifteen. Dispatch overdue warning uses
+DispatchDelayGrace and critical starts at thirty minutes. Disabled scheduling reports Healthy
+with DisabledByConfiguration while preserving historical scheduler evidence on the protected page.

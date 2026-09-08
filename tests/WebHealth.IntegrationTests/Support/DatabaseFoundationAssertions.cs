@@ -2324,6 +2324,11 @@ internal static class DatabaseFoundationAssertions
             "manual, urgent and superseded scheduled checks cannot refresh scheduled freshness");
         sslStatus.ConfirmedHealth.Should().Be("Healthy");
         var query = ReportQueryNormalizer.Normalize(new ReportQueryInput(), ReportMonitorTypes.All, DateTimeOffset.UtcNow).Query!;
+        var diagnostics = await readerScope.ServiceProvider.GetRequiredService<IReportingReader>().QueryDiagnosticsAsync(
+            query, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
+        diagnostics.EngineHealth!.Status.Should().Be("Healthy");
+        diagnostics.EngineHealth.Reasons.Should().Contain("DisabledByConfiguration");
+        diagnostics.Runtime!.SchedulingEnabled.Should().BeFalse();
         var expiry = await readerScope.ServiceProvider.GetRequiredService<IReportingReader>().QueryCertificateExpiryAsync(
             query, new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]));
         expiry.HealthyCount.Should().BeGreaterThan(0);
@@ -2926,6 +2931,35 @@ internal static class DatabaseFoundationAssertions
             WHERE table_schema = 'hangfire'
             """).SingleAsync();
         hangfireTables.Should().BeGreaterThan(0);
+        var workerConfiguration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString,
+            ["Monitoring:Scheduling:Enabled"] = "true"
+        }).Build();
+        await using var workerServices = new ServiceCollection().AddLogging().AddInfrastructure(workerConfiguration).BuildServiceProvider();
+        await using var workerScope = workerServices.CreateAsyncScope();
+        var workerReader = workerScope.ServiceProvider.GetRequiredService<IMonitoringWorkerReader>();
+        using (var storageConnection = workerScope.ServiceProvider.GetRequiredService<Hangfire.JobStorage>().GetConnection())
+        {
+            var serverId = $"runtime-verification-{Guid.NewGuid():N}";
+            try
+            {
+                storageConnection.AnnounceServer(serverId, new Hangfire.Server.ServerContext { WorkerCount = 1, Queues = ["unrelated-test-queue"] });
+                workerReader.Read().QueueCovered.Should().BeFalse("a worker on another queue cannot execute short checks");
+                storageConnection.RemoveServer(serverId);
+                storageConnection.AnnounceServer(serverId, new Hangfire.Server.ServerContext { WorkerCount = 1, Queues = ["monitoring"] });
+                storageConnection.Heartbeat(serverId);
+                var workers = workerReader.Read();
+                workers.Available.Should().BeTrue();
+                workers.ServerPresent.Should().BeTrue();
+                workers.QueueCovered.Should().BeTrue();
+                workers.LastHeartbeatAt.Should().BeOnOrAfter(DateTimeOffset.UtcNow.AddMinutes(-2));
+            }
+            finally
+            {
+                storageConnection.RemoveServer(serverId);
+            }
+        }
 
         var eligibleEndpointIds = MonitoringEligibility.Apply(database.Endpoints.AsNoTracking())
             .Select(endpoint => endpoint.Id);

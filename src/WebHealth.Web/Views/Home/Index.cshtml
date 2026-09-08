@@ -17,8 +17,8 @@
 
     var isFiltered = !Model.Summary.IsUnfiltered;
 
-    var schedulerHealthy = Model.Diagnostics.FailedWorkCount == 0
-        && Model.Diagnostics.OverdueMonitorCount == 0;
+    var schedulerHealthy = Model.Diagnostics.EngineHealth?.Status == "Healthy";
+    var schedulingDisabled = Model.Diagnostics.EngineHealth?.Reasons.Contains("DisabledByConfiguration") == true;
     var certificatesHealthy = Model.Certificates.AttentionCount == 0;
 
     var windowDays = window is null ? 0 : (int)Math.Round((window.End - window.Start).TotalDays);
@@ -325,7 +325,7 @@
 
             <div class="status-tile" data-tone="@(schedulerHealthy ? "success" : "warning")">
                 <p class="status-tile__label">Monitoring system</p>
-                <p class="status-tile__value">@(schedulerHealthy ? "Running normally" : "Needs attention")</p>
+                <p class="status-tile__value">@(schedulingDisabled ? "Scheduling disabled" : schedulerHealthy ? "Running normally" : "Needs attention")</p>
                 <p class="status-tile__detail">
                     @if (schedulerHealthy)
                     {
@@ -339,6 +339,10 @@
                         </text>
                     }
                 </p>
+                @if (User.IsInRole(ApplicationRoles.Administrator) || User.IsInRole(ApplicationRoles.Operations))
+                {
+                    <a asp-controller="Diagnostics" asp-action="Monitoring" asp-all-route-data="routeValues">Monitoring diagnostics</a>
+                }
             </div>
 
             <div class="status-tile" data-tone="@(certificatesHealthy ? "success" : "warning")">

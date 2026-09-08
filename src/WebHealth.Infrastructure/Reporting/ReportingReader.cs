@@ -5,6 +5,7 @@ using Npgsql;
 using NpgsqlTypes;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
+using WebHealth.Infrastructure.Identity;
 using WebHealth.Application.Reporting;
 using WebHealth.Domain.Health;
 using WebHealth.Domain.Incidents;
@@ -20,11 +21,10 @@ internal sealed class ReportingReader(
     RegistryVisibility visibility,
     OwnerSubjectNames ownerNames,
     TimeProvider timeProvider,
-    MonitoringSchedulingOptions schedulingOptions) : IReportingReader
+    MonitoringSchedulingOptions schedulingOptions,
+    IMonitoringWorkerReader workerReader) : IReportingReader
 {
     private const int AttentionListCount = 8;
-
-    private static readonly TimeSpan OverdueGrace = TimeSpan.FromMinutes(10);
 
     private readonly Dictionary<SelectionKey, Task<Selection>> selections = [];
 
@@ -147,10 +147,10 @@ internal sealed class ReportingReader(
         var monitorIds = selection.MonitorIds;
         if (monitorIds.Count == 0)
         {
-            return ReportDiagnostics.Empty;
+            return await AddEngineHealthAsync(ReportDiagnostics.Empty, access, selection.Now, cancellationToken);
         }
 
-        var overdueBefore = selection.Now - OverdueGrace;
+        var overdueBefore = selection.Now - schedulingOptions.DispatchDelayGrace;
         var scheduling = await dbContext.EndpointMonitors.AsNoTracking()
             .Where(monitor => monitorIds.Contains(monitor.Id))
             .Select(monitor => new
@@ -182,22 +182,51 @@ internal sealed class ReportingReader(
 
         var lastCompleted = await dbContext.CheckResults.AsNoTracking()
             .Where(result => monitorIds.Contains(result.EndpointMonitorId))
-            .OrderByDescending(result => result.MeasuredAt)
-            .Select(result => (DateTimeOffset?)result.MeasuredAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return new(
+            .MaxAsync(result => (DateTimeOffset?)result.MeasuredAt, cancellationToken);
+        var lastScheduled = await dbContext.LogicalChecks.AsNoTracking()
+            .Where(check => monitorIds.Contains(check.EndpointMonitorId) && check.Source == LogicalCheckSources.Scheduled
+                && check.State == LogicalCheckStates.Completed && check.Result != null
+                && check.Result.CurrentStateDisposition == "Current")
+            .MaxAsync(check => check.CompletedAt, cancellationToken);
+        var oldestQueued = await dbContext.DurableWork.AsNoTracking()
+            .Where(item => monitorIds.Contains(item.LogicalCheck.EndpointMonitorId)
+                && item.AvailableAt <= selection.Now
+                && (item.State == DurableWorkStates.Pending || item.State == DurableWorkStates.Dispatching
+                    || item.State == DurableWorkStates.Enqueued))
+            .MinAsync(item => (DateTimeOffset?)item.AvailableAt, cancellationToken);
+        var oldestDue = scheduling.Where(monitor => monitor.LifecycleEnabled && monitor.SchedulingEnabled
+                && monitor.IsEnabled && monitor.NextDueAt < selection.Now)
+            .Select(monitor => (DateTimeOffset?)monitor.NextDueAt).Min();
+        var diagnostics = new ReportDiagnostics(
             scheduling.Count(monitor => monitor.LifecycleEnabled
                 && monitor.SchedulingEnabled && monitor.IsEnabled),
-            scheduling.Count(monitor => !monitor.LifecycleEnabled
-                || monitor.SchedulingEnabled && !monitor.IsEnabled),
+            scheduling.Count(monitor => monitor.LifecycleEnabled && monitor.SchedulingEnabled && !monitor.IsEnabled),
             scheduling.Count(monitor => monitor.LifecycleEnabled && !monitor.SchedulingEnabled),
             scheduling.Count(monitor => monitor.LifecycleEnabled
                 && monitor.SchedulingEnabled && monitor.IsEnabled
                 && monitor.NextDueAt < overdueBefore),
             inFlight,
             work.Where(item => item.State == DurableWorkStates.Failed).Sum(item => item.Count),
-            lastCompleted);
+            lastCompleted, oldestDue, oldestQueued, lastScheduled);
+        return await AddEngineHealthAsync(diagnostics, access, selection.Now, cancellationToken);
+    }
+
+    private async Task<ReportDiagnostics> AddEngineHealthAsync(ReportDiagnostics diagnostics,
+        RegistryAccessContext access, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var operations = await dbContext.MonitoringRuntimeStates.AsNoTracking().OrderBy(state => state.Operation)
+                .Select(state => new MonitoringOperationStatus(state.Operation, state.LastStartedAt,
+                    state.LastSucceededAt, state.LastFailedAt, state.LastDurationMs, state.FailureCategory,
+                    state.ConsecutiveFailures)).ToArrayAsync(cancellationToken);
+        var workers = workerReader.Read();
+        var health = MonitoringEngineHealth.Evaluate(schedulingOptions.Enabled, operations, workers,
+            diagnostics.OldestQueuedAt, diagnostics.OldestOverdueAt, schedulingOptions.DispatchDelayGrace, now);
+        var detailed = access.Roles.Contains(ApplicationRoles.Administrator) || access.Roles.Contains(ApplicationRoles.Operations);
+        return diagnostics with
+        {
+            EngineHealth = health,
+            Runtime = detailed ? new(schedulingOptions.Enabled, workers, operations) : null
+        };
     }
 
     public async Task<IReadOnlyList<ReportIncidentItem>> QueryActiveIncidentsAsync(

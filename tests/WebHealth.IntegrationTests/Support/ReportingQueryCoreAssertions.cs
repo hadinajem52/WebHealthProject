@@ -229,6 +229,8 @@ internal static class ReportingQueryCoreAssertions
             .Should().BeEmpty("the incident list applies the same visibility scope");
         (await reader.QueryCertificateExpiryAsync(query, unprivileged))
             .NeedingAttention.Should().BeEmpty("the certificate card applies the same visibility scope");
+        (await reader.QueryDiagnosticsAsync(query, unprivileged)).Runtime.Should().BeNull(
+            "Viewer output excludes detailed scheduler and worker runtime evidence");
 
         await ForEachReaderAsync(services, EveryScopedFilter(fixture), async (scopedReader, scopedQuery) =>
         {

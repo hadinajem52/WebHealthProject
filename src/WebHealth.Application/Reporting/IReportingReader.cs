@@ -157,7 +157,12 @@ public sealed record ReportDiagnostics(
     int OverdueMonitorCount,
     int WorkInFlightCount,
     int FailedWorkCount,
-    DateTimeOffset? LastCompletedCheckAt)
+    DateTimeOffset? LastCompletedCheckAt,
+    DateTimeOffset? OldestOverdueAt = null,
+    DateTimeOffset? OldestQueuedAt = null,
+    DateTimeOffset? LastScheduledCompletionAt = null,
+    MonitoringEngineHealth? EngineHealth = null,
+    MonitoringRuntimeDiagnostics? Runtime = null)
 {
     public static ReportDiagnostics Empty { get; } = new(0, 0, 0, 0, 0, 0, null);
 }

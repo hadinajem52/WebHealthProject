@@ -181,6 +181,21 @@ public sealed class AuthorizationBaselineTests(WebHealthWebApplicationFactory fa
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Theory]
+    [InlineData(ApplicationRoles.Administrator, "/Diagnostics/Monitoring", HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.Operations, "/Diagnostics/Monitoring", HttpStatusCode.OK)]
+    [InlineData(ApplicationRoles.DeveloperSupport, "/Diagnostics/Monitoring", HttpStatusCode.Forbidden)]
+    [InlineData(ApplicationRoles.Viewer, "/Diagnostics/Monitoring", HttpStatusCode.Forbidden)]
+    [InlineData(ApplicationRoles.Administrator, "/health/monitoring", HttpStatusCode.ServiceUnavailable)]
+    [InlineData(ApplicationRoles.Operations, "/health/monitoring", HttpStatusCode.ServiceUnavailable)]
+    [InlineData(ApplicationRoles.DeveloperSupport, "/health/monitoring", HttpStatusCode.Forbidden)]
+    [InlineData(ApplicationRoles.Viewer, "/health/monitoring", HttpStatusCode.Forbidden)]
+    public async Task MonitoringDiagnostics_UsesDiagnosticsRolePolicy(string role, string path, HttpStatusCode expected)
+    {
+        using var client = factory.CreateHttpsClient(role);
+        (await client.GetAsync(path)).StatusCode.Should().Be(expected);
+    }
+
     [Fact]
     public async Task AuthenticatedForbiddenRequest_IsSentToTheAuditWriter()
     {

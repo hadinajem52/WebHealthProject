@@ -970,3 +970,9 @@ scheduled checks. The scheduling options own the bounded dispatch-delay grace.
 with durable runtime evidence using a separate database context. `MonitoringRuntimeState` and
 its configuration define the two bounded operation rows. `MonitoringRuntimeState` migration
 creates the table without seeding heartbeat data; invocation IDs fence overlapping completions.
+
+`Application/Monitoring/MonitoringEngineHealth.cs` evaluates bounded scheduler/worker/backlog
+health independently of target health and readiness. `HangfireMonitoringWorkerReader` translates
+Hangfire server/queue/heartbeat facts into application DTOs without worker identifiers. Reporting
+scopes backlog facts through its existing authorization/filter selection. `DiagnosticsController`
+protects the runtime page and `/health/monitoring` with the existing Diagnostics role policy.

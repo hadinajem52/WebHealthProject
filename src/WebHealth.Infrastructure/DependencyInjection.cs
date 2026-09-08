@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using WebHealth.Infrastructure.Diagnostics;
 using WebHealth.Infrastructure.Identity;
 using WebHealth.Infrastructure.Persistence;
@@ -173,6 +174,10 @@ public static class DependencyInjection
         services.AddScoped<ILogicalCheckExecutionService, LogicalCheckExecutionService>();
         services.AddScoped<IMonitoringSchedulingService, MonitoringSchedulingService>();
         services.AddScoped<MonitoringRuntimeRecorder>();
+        services.AddScoped<IMonitoringWorkerReader>(provider => schedulingOptions.Enabled
+            ? new HangfireMonitoringWorkerReader(provider.GetRequiredService<JobStorage>(),
+                provider.GetRequiredService<ILogger<HangfireMonitoringWorkerReader>>())
+            : new DisabledMonitoringWorkerReader());
         services.AddScoped<IManualCheckService, ManualCheckService>();
         services.AddScoped<ICheckHistoryReader, CheckHistoryReader>();
         services.AddScoped<IRunHistoryArchive, RunHistoryArchive>();
