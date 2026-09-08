@@ -618,3 +618,20 @@ leased survival, held predecessor protection, complete child removal and recurre
 A controlled root-delete failure proves that child deletion, link detachment and audit writes all
 roll back; retry then succeeds. Retention remains disabled and unscheduled. Coordinator/report
 integration and final acceptance/load gates are still pending.
+
+### Bounded hourly coordinator
+
+MonitoringRetentionCoordinator connects eleven categories with one shared deadline, a hard attempted-
+batch cap, dependency-order passes, empty-pass stopping and single-pass dry-run sampling. The runner
+creates a fresh scope/context for every batch. MonitoringRetentionJob is a thin maintenance-queue
+Hangfire entry point with automatic retries disabled and sanitized failure reporting. Enabling only
+retention also registers Hangfire storage and a maintenance worker. Defaults remain disabled/dry-run.
+
+Validation: 832 unit tests passed; 667 ordinary integration tests passed with four opt-in skips;
+the full database foundation script passed independently. Coordinator regressions cover caps, pass
+ordering, dry-run non-duplication, empty stopping, elapsed/in-flight deadlines, caller cancellation
+and safe job failures. The database test verifies idempotent hourly registration, triggers a real
+job and proves its Enqueued state targets maintenance, then resolves all eleven actual batches.
+Hangfire's legacy recurring hash Queue field is default; the actual queued-state assertion is the
+routing evidence. Aggregate-backed reporting, UI verification and final acceptance/load gates remain
+pending, so deletion stays disabled outside controlled disposable tests.

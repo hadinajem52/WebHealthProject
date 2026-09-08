@@ -1,6 +1,6 @@
 # Retention policy and implementation record
 
-Increment 6 is in progress. No retention worker is enabled yet.
+Increment 6 is in progress. The hourly coordinator is implemented; retention remains disabled by default.
 
 The implementation follows section 10 of the monitoring plan: raw monitoring, execution, crawl
 and PageAudit history defaults to 90 days; certificate observations, daily aggregates and terminal
@@ -248,3 +248,25 @@ evidence. The batch root count and overall deadline are bounded by retention opt
 Retained successors have PreviousIncidentId detached in the same transaction; RecurrenceCount is
 unchanged and Version advances to protect optimistic concurrency. A system retention audit records
 the old/new link and preserved recurrence count. Audit records have no age-based expiration.
+
+## Hourly coordinator
+
+The coordinator now connects all eleven retention categories. Enabled=true registers the hourly
+monitoring-retention job on the existing maintenance queue, including when other schedulers are
+disabled. Defaults remain Enabled=false and DryRun=true. Configuration belongs to the project
+Administrator/operator; no lower-role web action changes these values.
+
+Each run has one shared cancellation deadline and a hard cap on attempted batches, including empty
+ones. It visits categories in dependency order before repeating a pass. A pass with no deletion
+stops; dry-run stops after one pass so it never counts the same candidate twice. Dry-run counts are
+bounded samples, not a total backlog estimate. Very small MaximumBatchesPerRun values can stop
+before reaching later categories; the default 20 permits a complete eleven-category pass.
+
+Each batch receives a fresh dependency-injection scope and database context. Earlier commits survive
+a later batch failure; the failed transaction rolls back. Hangfire automatic retries are disabled,
+and the next scheduled run can resume eligible work. The job logs category/counts/budget state and
+replaces failure diagnostics with a safe exception-type category. A disabled coordinator is a no-op,
+including for an already queued job from a previous configuration.
+
+Aggregate-backed reporting and full acceptance/load verification remain pending. Keep deletion
+disabled until those gates are complete; test commissioning uses the disposable database only.

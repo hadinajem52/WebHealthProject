@@ -282,6 +282,7 @@ internal static class DatabaseFoundationAssertions
             ExpectedTables.Append(DatabaseConventions.MigrationsHistoryTable));
 
         await MonitoringRuntimeAssertions.VerifyAsync(connectionString);
+        await RetentionCoordinatorAssertions.VerifyAsync(connectionString);
         await RetentionHoldAssertions.VerifyAsync(connectionString);
         await VerifyIdentityBootstrapAsync(connectionString);
         await VerifyClientWebsiteRegistryAsync(connectionString);

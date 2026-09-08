@@ -1,11 +1,22 @@
 using Hangfire;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using WebHealth.Application.Monitoring;
+using WebHealth.Infrastructure.Maintenance;
 
 namespace WebHealth.Infrastructure.Monitoring;
 
 public static class MonitoringSchedulingApplicationBuilderExtensions
 {
+    public static WebApplication UseMonitoringRetention(this WebApplication app)
+    {
+        if (!app.Services.GetRequiredService<MonitoringRetentionOptions>().Enabled) return app;
+        app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<MonitoringRetentionJob>(
+            "monitoring-retention", MaintenanceQueueNames.Maintenance,
+            job => job.ExecuteAsync(CancellationToken.None), Cron.Hourly, new RecurringJobOptions());
+        return app;
+    }
+
     public static WebApplication UseMonitoringScheduling(this WebApplication app)
     {
         var options = app.Services.GetRequiredService<MonitoringSchedulingOptions>();

@@ -420,3 +420,14 @@ Monitoring:Retention remains disabled by default.
 Completed durable-work retention is now part of ExecutionHistoryRetentionBatch. It uses the same
 protected-check rules as attempt retention and preserves pending, failed and work-leased rows.
 No configuration/migration change or recurring job is introduced; retention remains disabled.
+
+## Monitoring retention
+
+Monitoring:Retention defaults to Enabled=false and DryRun=true. Enabling it registers the hourly
+monitoring-retention Hangfire job on the maintenance queue and enables that queue's worker even
+when other schedulers are disabled. MaximumBatchesPerRun defaults to 20, BatchSize to 1000, and
+MaximumRunDuration to 00:00:30. The run budget applies across all categories, not separately to each.
+Dry-run reports one bounded sample per category without deleting data. Apply the documented
+migrations explicitly before enabling any worker. Aggregate-backed reporting and final acceptance
+verification are still pending, so keep deletion disabled outside controlled disposable tests.
+See docs/phase-7/Retention_Runbook.md for holds, dependencies and category exceptions.

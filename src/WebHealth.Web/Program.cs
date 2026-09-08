@@ -172,6 +172,7 @@ app.MapControllerRoute(
     .WithStaticAssets();
 
 app.UseMonitoringScheduling();
+app.UseMonitoringRetention();
 app.UseNotificationScheduling();
 app.UseMaintenanceScheduling();
 app.UseSeoScheduling();

@@ -190,6 +190,9 @@ public static class DependencyInjection
         services.AddScoped<AggregateRetentionBatch>();
         services.AddScoped<RobotsRetentionBatch>();
         services.AddScoped<IncidentRetentionBatch>();
+        services.AddScoped<IMonitoringRetentionBatchRunner, MonitoringRetentionBatchRunner>();
+        services.AddScoped<MonitoringRetentionCoordinator>();
+        services.AddScoped<MonitoringRetentionJob>();
         services.AddScoped<IMonitoringWorkerReader>(provider => schedulingOptions.Enabled
             ? new HangfireMonitoringWorkerReader(provider.GetRequiredService<JobStorage>(),
                 provider.GetRequiredService<ILogger<HangfireMonitoringWorkerReader>>())
@@ -263,7 +266,7 @@ public static class DependencyInjection
         services.AddScoped<NotificationDispatchJob>();
         var hangfireEnabled = schedulingOptions.Enabled || notificationOptions.Enabled
             || maintenanceOptions.Enabled || seoOptions.Enabled || crawlOptions.Enabled
-            || pageAuditOptions.Enabled || pngAuditOptions.Enabled;
+            || pageAuditOptions.Enabled || pngAuditOptions.Enabled || retentionOptions.Enabled;
         if (hangfireEnabled)
         {
             var connectionString = configuration.GetConnectionString(DatabaseConnectionName);
@@ -301,7 +304,7 @@ public static class DependencyInjection
                 sharedQueues.Add(NotificationQueueNames.Notifications);
             }
 
-            if (maintenanceOptions.Enabled)
+            if (maintenanceOptions.Enabled || retentionOptions.Enabled)
             {
                 sharedQueues.Add(MaintenanceQueueNames.Maintenance);
             }

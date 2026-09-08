@@ -1048,3 +1048,9 @@ hold scopes to origins without exposing origin values in logs. The batch remains
 24 calendar months. It locks incident and delivery rows, preserves pending/leased notifications and
 held successor links, deletes in foreign-key order, and audits retained recurrence-link detachment
 without resetting recurrence counts. Bundle deletion is atomic and remains unscheduled.
+
+`Application/Monitoring/MonitoringRetentionCoordinator.cs` bounds passes, attempted batches and the
+whole-run deadline. `Infrastructure/Monitoring/MonitoringRetentionBatchRunner.cs` resolves each
+category in a fresh scope. `MonitoringRetentionJob.cs` supplies the thin hourly Hangfire entry point
+and safe failure reporting. UseMonitoringRetention registers the job on the maintenance queue only
+when enabled. Default configuration keeps retention disabled and dry-run enabled.
