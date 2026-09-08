@@ -452,3 +452,17 @@ range, histogram counts, repeatability, late-result replacement, UTC midnight ex
 microsecond boundary, mixed-generation provenance and refusal after the raw-deletion marker.
 Release build had zero warnings/errors. Report integration, worker deletion and the remainder of
 increment 6 remain pending; the overall goal is not complete.
+
+### P7-DATA-01 transaction-local immutable deletion permission
+
+Migration 20260908151843_MonitoringRetentionPermission permits snapshot, incident-event and
+incident-evidence DELETE only under transaction-local monitoring_retention or existing endpoint
+purge permission. UPDATE stays forbidden. Maintenance-occurrence behavior is unchanged. Down
+restores endpoint-purge-only functions. No entity shape, secondary index or enabled job changes.
+
+Verification on 2026-09-08: full ordered database foundation and migration script passed with
+actual protected-row deletes, update rejection with permission enabled, maintenance delete/update
+rejection, same-connection permission reset after rollback and commit, and isolated populated
+Down/Up/repeatability checks. Existing endpoint purge coverage also passed. Release build had zero
+warnings/errors and EF reported no pending model changes. Retention worker integration and report
+consumption remain pending; increment 6 and the overall goal are not complete.

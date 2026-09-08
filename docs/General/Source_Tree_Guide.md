@@ -999,3 +999,8 @@ summaries before monitors; ordinary retention must preserve monitor identities f
 `Infrastructure/Monitoring/DailyAggregateWriter.cs` streams a monitor-day's raw result and snapshot
 fields into the daily summary under the retention transaction lock. It replaces existing totals,
 computes deterministic comparability provenance and refuses days whose raw deletion has started.
+
+`MonitoringRetentionPermission` changes the immutable snapshot/event/evidence DELETE triggers
+without changing entity shape. It permits only transaction-local retention or endpoint-purge
+permission; UPDATE and maintenance-occurrence behavior remain unchanged. The retention worker
+must set permission locally in the same transaction that selects and deletes its bounded batch.

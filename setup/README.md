@@ -396,3 +396,11 @@ DailyAggregateWriter can now rebuild a completed UTC day while all raw rows rema
 run automatically and cannot overwrite a day marked as having started raw deletion. No new
 migration is required for the writer. Historical report integration and the deletion worker
 remain pending; scheduled retention is still disabled.
+
+### Retention deletion permission migration
+
+Apply 20260908151843_MonitoringRetentionPermission explicitly. It changes three immutable-history
+trigger functions to permit transaction-local retention deletes, retaining all update protections
+and the existing endpoint-purge path. Maintenance-occurrence permissions are unchanged. Rollback
+restores endpoint-purge-only deletion. No table or compiled-model change is required, and no
+retention job is enabled by this migration.

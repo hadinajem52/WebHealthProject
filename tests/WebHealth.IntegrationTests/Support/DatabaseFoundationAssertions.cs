@@ -109,7 +109,8 @@ internal static class DatabaseFoundationAssertions
         "20260908131625_SslPolicyFingerprint",
         "20260908135926_MonitoringRuntimeState",
         "20260908144110_RetentionHolds",
-        "20260908150752_MonitoringDailyAggregates"
+        "20260908150752_MonitoringDailyAggregates",
+        "20260908151843_MonitoringRetentionPermission"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -1051,6 +1052,7 @@ internal static class DatabaseFoundationAssertions
             scheduledFor,
             cadenceKey);
         await VerifySnapshotIsImmutableAsync(connectionString, logicalCheckId);
+        await RetentionPermissionAssertions.VerifyAsync(connectionString, "check_configuration_snapshot", "logical_check_id", logicalCheckId);
         await VerifyMissingSnapshotRejectedAsync(
             connectionString, monitor.Id, monitor.ConfigurationFingerprint, scheduledFor);
         await VerifySystemUrgentCheckAsync(
@@ -3689,6 +3691,7 @@ internal static class DatabaseFoundationAssertions
         snapshot.SslWarningExpiryDays.Should().Be(30);
         snapshot.SslHighExpiryDays.Should().Be(15);
         snapshot.SslCriticalExpiryDays.Should().Be(7);
+        await RetentionPermissionAssertions.VerifyUpgradeAsync(database, queued.Id);
         await MonitoringRuntimeAssertions.VerifyUpgradeAsync(database,
             scope.ServiceProvider.GetRequiredService<MonitoringRuntimeRecorder>());
     }
@@ -4233,6 +4236,10 @@ internal static class DatabaseFoundationAssertions
 
         await VerifyDuplicateIncidentEventSequenceRejectedAsync(connectionString, incidentId);
         await VerifyIncidentEventImmutableAsync(connectionString, incidentId);
+        var retainedEventId = await database.IncidentEvents.Where(item => item.IncidentId == incidentId
+            && item.EventType == IncidentEventTypes.NoteAdded && item.BoundedNote == "Reopened for controlled verification.")
+            .Select(item => item.Id).SingleAsync();
+        await RetentionPermissionAssertions.VerifyAsync(connectionString, "incident_event", "id", retainedEventId);
         await VerifyIncidentEventFieldsRejectedAsync(connectionString, incidentId);
 
         var evidenceLogicalCheckId = await database.LogicalChecks
@@ -4257,6 +4264,7 @@ internal static class DatabaseFoundationAssertions
         });
         await database.SaveChangesAsync();
         await VerifyIncidentEvidenceImmutableAsync(connectionString, evidenceId);
+        await RetentionPermissionAssertions.VerifyAsync(connectionString, "incident_evidence", "id", evidenceId);
 
         var windowId = Guid.NewGuid();
         database.MaintenanceWindows.Add(new MaintenanceWindow
@@ -4299,6 +4307,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyCheckResultMaintenanceFieldGroupRejectedAsync(connectionString, occurrenceId);
         await VerifyCheckResultMaintenanceIntervalRejectedAsync(connectionString, occurrenceId);
         await VerifyMaintenanceOccurrenceImmutableAsync(connectionString, occurrenceId);
+        await RetentionPermissionAssertions.VerifyAsync(connectionString, "maintenance_occurrence", "id", occurrenceId, false);
 
         var trackedWindow = await database.MaintenanceWindows.SingleAsync(window => window.Id == windowId);
         trackedWindow.Reason = "Extended patching";

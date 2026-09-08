@@ -108,3 +108,15 @@ Distinct identities are hashed in deterministic database order without retaining
 memory. More than one identity marks the day non-comparable. Recomputing replaces counts rather
 than incrementing them. Once RawDeletionStartedAt is present, recomputation returns without writing.
 The deletion worker and historical report reader still need to consume these contracts.
+
+## Immutable history deletion permission
+
+Migration 20260908151843_MonitoringRetentionPermission allows DELETE on check snapshots, incident
+events and incident evidence when the current transaction sets web_health.monitoring_retention
+to on. Existing endpoint-purge permission still works. UPDATE remains rejected even with either
+permission. Maintenance-occurrence exemptions are unchanged. The worker must use SET LOCAL inside
+each batch transaction; this change does not grant an application role permission or enable a job.
+
+Down restores the endpoint-purge-only functions without rewriting stored history. Upgrade and
+repeatability checks use an isolated database. Transaction completion must reset the retention
+setting on the same connection, after both commit and rollback.
