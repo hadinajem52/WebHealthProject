@@ -55,6 +55,7 @@ public sealed class EnvironmentFormViewModel
 
 public sealed class EndpointFormViewModel
 {
+    public HttpPolicyFormViewModel HttpPolicy { get; set; } = new();
     public Guid EndpointId { get; set; }
     public Guid EnvironmentId { get; set; }
     public string EnvironmentName { get; set; } = string.Empty;
@@ -134,6 +135,7 @@ public static class EndpointRegistrationModes
 
 public sealed class EndpointRegistrationFormViewModel : IValidatableObject
 {
+    public HttpPolicyFormViewModel HttpPolicy { get; set; } = new();
     public static Guid CreateNew => Guid.Empty;
 
     [Display(Name = "Client")]

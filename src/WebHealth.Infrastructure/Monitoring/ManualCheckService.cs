@@ -71,6 +71,15 @@ internal sealed class ManualCheckService(
 
         var logicalCheckId = Guid.NewGuid();
         var durableWorkId = Guid.NewGuid();
+        CheckConfigurationSnapshot snapshot;
+        try
+        {
+            snapshot = CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now, logger);
+        }
+        catch (HttpConfigurationDriftException)
+        {
+            return new(ManualCheckStatus.InvalidConfiguration);
+        }
         dbContext.LogicalChecks.Add(new LogicalCheck
         {
             Id = logicalCheckId,
@@ -83,8 +92,7 @@ internal sealed class ManualCheckService(
             CreatedAt = now,
             QueuedAt = now
         });
-        dbContext.CheckConfigurationSnapshots.Add(
-            CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now));
+        dbContext.CheckConfigurationSnapshots.Add(snapshot);
         dbContext.DurableWork.Add(new DurableWork
         {
             Id = durableWorkId,

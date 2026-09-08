@@ -1,3 +1,5 @@
+using WebHealth.Application.Monitoring;
+using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
@@ -91,12 +93,17 @@ internal sealed class EndpointRegistryService(
                 nameof(UpdateEndpoint.HttpExceptionReason), exception.Error)));
         }
 
+        var httpOverrides = BuildHttpOverrides(command.HttpPolicy, interval.Seconds,
+            command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
+        var httpPolicy = HttpMonitorConfiguration.Resolve(httpOverrides, environment.IsProduction);
+        if (!httpPolicy.Succeeded) return new RegistryCreateCompleted(Validation(HttpPolicyErrors(httpPolicy.Errors)));
         var now = DateTimeOffset.UtcNow;
         var endpoint = CreateEndpointEntity(command, access.UserId, url, exception, now);
         dbContext.Endpoints.Add(endpoint);
-        dbContext.EndpointMonitors.Add(EndpointMonitorReconciler.CreateMonitor(
+        var availability = EndpointMonitorReconciler.CreateMonitor(
             endpoint, environment.IsProduction, interval.Seconds, command.SchedulingEnabled,
-            thresholds.Thresholds, access.UserId, now));
+            thresholds.Thresholds, access.UserId, now, httpOverrides);
+        dbContext.EndpointMonitors.Add(availability);
         if (RegistryDefaults.RequiresSslMonitor(endpoint.NormalizedUrl))
         {
             dbContext.EndpointMonitors.Add(EndpointMonitorReconciler.CreateSslMonitor(
@@ -209,6 +216,11 @@ internal sealed class EndpointRegistryService(
             return Validation(ValidationError.For(nameof(UpdateEndpoint.HttpExceptionReason), exception.Error));
         }
 
+        var httpOverrides = BuildHttpOverrides(command.HttpPolicy ?? HttpMonitorConfiguration.ReadOverrides(monitor),
+            interval.Seconds, command.WarningThresholdMsOverride, command.CriticalThresholdMsOverride);
+        var httpPolicy = HttpMonitorConfiguration.Resolve(httpOverrides, endpoint.Environment.IsProduction);
+        if (!httpPolicy.Succeeded) return Validation(HttpPolicyErrors(httpPolicy.Errors));
+
         dbContext.Entry(endpoint).Property(candidate => candidate.Version).OriginalValue = command.Version;
         var urlChanged = !string.Equals(endpoint.NormalizedUrl, url.NormalizedUrl, StringComparison.Ordinal);
         var exceptionChanged = !string.Equals(endpoint.HttpExceptionReason, exception.Reason, StringComparison.Ordinal)
@@ -232,6 +244,7 @@ internal sealed class EndpointRegistryService(
                 thresholds.Thresholds,
                 access.UserId,
                 now);
+            HttpMonitorConfiguration.Apply(monitor, endpoint.NormalizedUrl, endpoint.Environment.IsProduction, httpOverrides);
             ApplyPageAuditMonitor(
                 endpoint,
                 endpoint.Environment.IsProduction,
@@ -538,6 +551,27 @@ internal sealed class EndpointRegistryService(
     private static string? NormalizeExpectedHost(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 
+    private static IEnumerable<ValidationError> HttpPolicyErrors(IEnumerable<ValidationError> errors) => errors.Select(error =>
+        error with
+        {
+            Field = error.Field switch
+            {
+                "WarningThresholdMs" => nameof(UpdateEndpoint.WarningThresholdMsOverride),
+                "CriticalThresholdMs" => nameof(UpdateEndpoint.CriticalThresholdMsOverride),
+                "IntervalSeconds" => nameof(UpdateEndpoint.IntervalMinutesOverride),
+                _ => "HttpPolicy." + error.Field
+            }
+        });
+
+    private static HttpMonitorOverridesV2 BuildHttpOverrides(
+        HttpMonitorOverridesV2? policy, int? intervalSeconds, int? warningMs, int? criticalMs) =>
+        (policy ?? new HttpMonitorOverridesV2()) with
+        {
+            IntervalSeconds = intervalSeconds,
+            WarningThresholdMs = warningMs,
+            CriticalThresholdMs = criticalMs
+        };
+
     private static EndpointCreatePreparation PrepareCreate(
         CreateEndpoint command,
         RegistryAccessContext access)
@@ -783,18 +817,6 @@ internal sealed class EndpointRegistryService(
                 }
             }
 
-            monitor.BoundedOverrides = MonitorIntervalOverride.Serialize(intervalOverrideSeconds);
-            monitor.WarningThresholdMs = thresholds.WarningMs;
-            monitor.CriticalThresholdMs = thresholds.CriticalMs;
-            monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
-                endpoint.NormalizedUrl,
-                isProduction,
-                interval,
-                monitor.TimeoutSeconds,
-                monitor.FailureConfirmationCount,
-                monitor.RecoveryConfirmationCount,
-                monitor.WarningThresholdMs,
-                monitor.CriticalThresholdMs);
             monitor.UpdatedAt = now;
             monitor.UpdatedByUserId = actorId;
             monitor.Version++;
@@ -839,6 +861,7 @@ internal sealed class EndpointRegistryService(
         PageAuditConfigurationState pageAudit)
     {
         var monitor = AuditedAvailabilityMonitor(endpoint);
+        var policy = HttpMonitorConfiguration.ReadOverrides(monitor);
         return new(
             endpoint.Id, endpoint.EnvironmentId, endpoint.OwnerSubjectId,
             Convert.ToHexString(endpoint.NormalizedUrlHash).ToLowerInvariant(), endpoint.NormalizationVersion,
@@ -850,7 +873,10 @@ internal sealed class EndpointRegistryService(
             endpoint.SeoExpectedCanonicalHost is not null,
             pageAudit.Enabled,
             pageAudit.SchedulingEnabled,
-            endpoint.DeletedAt is not null, endpoint.Version);
+            endpoint.DeletedAt is not null, endpoint.Version,
+            new(monitor.TimeoutSeconds, monitor.FailureConfirmationCount, monitor.RecoveryConfirmationCount,
+                monitor.WarningThresholdMs, monitor.CriticalThresholdMs, policy.AdditionalAcceptedStatusCodes ?? [],
+                !string.IsNullOrEmpty(policy.RequiredContentMarker), policy.ContentMarkerComparison ?? "OrdinalIgnoreCase"));
     }
 
     private static IntervalOverrideDecision DecideIntervalOverride(

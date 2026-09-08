@@ -57,6 +57,10 @@ public sealed class ChecksController(
                     FlashLevel.Error,
                     StatusCodes.Status422UnprocessableEntity,
                     endpointUrl);
+            case ManualCheckStatus.InvalidConfiguration:
+                return this.AjaxMessage(endpointUrl,
+                    "The saved HTTP policy is inconsistent. Edit and save the endpoint's HTTP policy before running a check.",
+                    FlashLevel.Error, StatusCodes.Status422UnprocessableEntity, endpointUrl);
             case ManualCheckStatus.SchedulingUnavailable:
                 return this.AjaxMessage(
                     endpointUrl,

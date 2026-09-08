@@ -1,3 +1,4 @@
+using WebHealth.Infrastructure.Monitoring;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Persistence;
@@ -137,7 +138,10 @@ internal sealed class TargetRegistryReader(
             endpoint.SeoDescriptionRequired,
             pageAudit.Enabled,
             pageAudit.SchedulingEnabled,
-            pageAudit.IntervalHours);
+            pageAudit.IntervalHours,
+            HttpMonitorConfiguration.ReadOverrides(endpoint.BoundedOverrides, endpoint.TimeoutSeconds,
+                endpoint.FailureConfirmationCount, endpoint.RecoveryConfirmationCount,
+                endpoint.WarningThresholdMs, endpoint.CriticalThresholdMs));
     }
 
     public async Task<IReadOnlyList<RegistryEndpointItem>> ListAllEndpointsAsync(
@@ -419,6 +423,12 @@ internal sealed class TargetRegistryReader(
                     .Select(monitor => monitor.TimeoutSeconds).Single(),
                 endpoint.Monitors
                     .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.FailureConfirmationCount).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
+                    .Select(monitor => monitor.RecoveryConfirmationCount).Single(),
+                endpoint.Monitors
+                    .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
                     .Select(monitor => monitor.IsEnabled).Single(),
                 endpoint.Monitors
                     .Where(monitor => monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType)
@@ -459,7 +469,7 @@ internal sealed class TargetRegistryReader(
         Guid EffectiveOwnerSubjectId, bool IsEnabled, bool IsDeleted, string? HttpExceptionReason,
         long Version, string MonitorType,
         int IntervalSeconds, string BoundedOverrides, int? WarningThresholdMs,
-        int? CriticalThresholdMs, int TimeoutSeconds, bool MonitorEnabled,
+        int? CriticalThresholdMs, int TimeoutSeconds, int FailureConfirmationCount, int RecoveryConfirmationCount, bool MonitorEnabled,
         bool SchedulingEnabled, string? SeoExpectedCanonicalHost, string SeoIndexingExpectation,
         bool SeoDescriptionRequired);
 }

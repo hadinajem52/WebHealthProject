@@ -413,7 +413,8 @@ internal sealed class EndpointRegistrationService(
         SeoDescriptionRequired: endpoint.SeoDescriptionRequired,
         PageAuditEnabled: endpoint.PageAuditEnabled,
         PageAuditSchedulingEnabled: endpoint.PageAuditSchedulingEnabled,
-        PageAuditIntervalHours: endpoint.PageAuditIntervalHours);
+        PageAuditIntervalHours: endpoint.PageAuditIntervalHours,
+        HttpPolicy: endpoint.HttpPolicy);
 
     private static RegistryMutationResult Validation(string? field, string message) =>
         RegistryMutationResult.Failure(

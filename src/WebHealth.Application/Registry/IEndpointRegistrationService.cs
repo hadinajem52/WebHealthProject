@@ -1,3 +1,4 @@
+using WebHealth.Application.Monitoring;
 using WebHealth.Application.Seo;
 using WebHealth.Domain.PageAudits;
 
@@ -51,6 +52,7 @@ public sealed record EndpointRegistrationEnvironment(
 
 public sealed record EndpointRegistrationSettings
 {
+    public HttpMonitorOverridesV2? HttpPolicy { get; init; }
     public required string Url { get; init; }
     public Guid? OwnerSubjectId { get; init; }
     public required bool IsEnabled { get; init; }

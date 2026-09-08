@@ -298,7 +298,7 @@ public sealed class TargetsController(
                 model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
                 model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
-                model.PageAuditEnabled, model.PageAuditSchedulingEnabled, model.PageAuditIntervalHours),
+                model.PageAuditEnabled, model.PageAuditSchedulingEnabled, model.PageAuditIntervalHours, model.HttpPolicy.ToOverrides()),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -327,9 +327,12 @@ public sealed class TargetsController(
             OwnerSubjectId = endpoint.OwnerSubjectId,
             IsEnabled = endpoint.IsEnabled,
             SchedulingEnabled = endpoint.SchedulingEnabled,
+            HttpPolicy = HttpPolicyFormViewModel.From(endpoint.HttpPolicy ?? new() { TimeoutSeconds = endpoint.TimeoutSeconds }),
             IntervalMinutesOverride = endpoint.IntervalMinutesOverride,
-            WarningThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.WarningThresholdMs : null,
-            CriticalThresholdMsOverride = endpoint.HasThresholdOverride ? endpoint.CriticalThresholdMs : null,
+            WarningThresholdMsOverride = endpoint.HttpPolicy is { } warningPolicy ? warningPolicy.WarningThresholdMs
+                : endpoint.HasThresholdOverride ? endpoint.WarningThresholdMs : null,
+            CriticalThresholdMsOverride = endpoint.HttpPolicy is { } criticalPolicy ? criticalPolicy.CriticalThresholdMs
+                : endpoint.HasThresholdOverride ? endpoint.CriticalThresholdMs : null,
             SeoExpectedCanonicalHost = endpoint.SeoExpectedCanonicalHost,
             SeoIndexingExpectation = endpoint.SeoIndexingExpectation,
             SeoDescriptionRequired = endpoint.SeoDescriptionRequired,
@@ -357,7 +360,7 @@ public sealed class TargetsController(
                 model.Version, model.IntervalMinutesOverride, model.SchedulingEnabled,
                 model.WarningThresholdMsOverride, model.CriticalThresholdMsOverride,
                 model.SeoExpectedCanonicalHost, model.SeoIndexingExpectation, model.SeoDescriptionRequired,
-                model.PageAuditEnabled, model.PageAuditSchedulingEnabled, model.PageAuditIntervalHours),
+                model.PageAuditEnabled, model.PageAuditSchedulingEnabled, model.PageAuditIntervalHours, model.HttpPolicy.ToOverrides()),
             GetAccess(), cancellationToken);
         if (!result.Succeeded)
         {
@@ -626,7 +629,8 @@ public sealed class TargetsController(
             SeoDescriptionRequired = model.SeoDescriptionRequired,
             PageAuditEnabled = model.PageAuditEnabled,
             PageAuditSchedulingEnabled = model.PageAuditSchedulingEnabled,
-            PageAuditIntervalHours = model.PageAuditIntervalHours
+            PageAuditIntervalHours = model.PageAuditIntervalHours,
+            HttpPolicy = model.HttpPolicy.ToOverrides()
         };
 
     private static string WithSchemeNotice(

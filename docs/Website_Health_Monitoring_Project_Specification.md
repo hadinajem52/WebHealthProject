@@ -254,11 +254,11 @@ All rules below are mandatory unless explicitly marked optional or deferred. Con
 | **ID** | **Business rule**                                                                                                                           | **Verification / expected result**                                                 |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | BR-H01 | An HTTP check records DNS/connect/TLS/TTFB/total duration when available, final status code, content length and redirect chain.             | A completed result exposes the captured metrics or a clear not-available value.    |
-| BR-H02 | HTTP 200-299 is healthy by default; accepted status codes may be configured per endpoint.                                                   | A configured 204 endpoint is healthy; an unaccepted status raises a finding.       |
+| BR-H02 | HTTP 200-299 is always accepted. Up to 20 distinct additional 300-499 statuses may be configured per endpoint; 5xx responses are never healthy.                                                   | A configured 204 endpoint is healthy; an unaccepted status raises a finding.       |
 | BR-H03 | HTTP 300-399 is evaluated against redirect rules, not treated automatically as healthy.                                                     | The result records every hop and final target.                                     |
 | BR-H04 | HTTP 400-499 is critical for public production pages except explicitly accepted codes; HTTP 500-599 is always critical.                     | Findings carry ClientError or ServerError severity as configured.                  |
 | BR-H05 | DNS failure, connection refusal, TLS handshake failure and timeout are stored as distinct failure categories.                               | Dashboards and alerts display the normalized category and safe diagnostic message. |
-| BR-H06 | Redirect chains are limited to ten hops by default; exceeding the limit is critical.                                                        | The check stops safely and reports ExcessiveRedirects.                             |
+| BR-H06 | Redirect chains are limited to ten hops by default; exceeding the limit is critical. Accepted statuses never bypass redirect-loop, invalid-location, authorization, or HTTPS-policy findings.                                                        | The check stops safely and reports ExcessiveRedirects.                             |
 | BR-H07 | Revisiting a URL within one redirect chain is a redirect loop and is critical.                                                              | The repeated URL and chain are recorded without infinite execution.                |
 | BR-H08 | A production HTTP URL that does not redirect to HTTPS is a warning or critical finding according to endpoint policy.                        | HTTPS enforcement is visible on the endpoint result.                               |
 | BR-H09 | A successful response containing a configured required text marker is healthy only when the marker is found using the configured case rule. Decode the bounded body as UTF-8, US-ASCII, or ISO-8859-1; missing, malformed, or unsupported charset falls back to UTF-8. | A 200 response with missing marker raises ContentMismatch.                         |
@@ -679,3 +679,18 @@ This document is the implementation baseline when the intern records acceptance.
 | Intern | Accepted / Changes Required |  |
 
 Optional mentor or peer feedback may be linked separately but is not required approval.
+
+## Phase 7 HTTP configuration compatibility
+
+New HTTP monitors default to a 15-second timeout and two failure/recovery confirmations. Timeout is
+bounded to 1–120 seconds and each confirmation count to 1–10. Warning defaults to 1,500 ms; critical
+to 3,000 ms, at least warning and no greater than timeout. Each threshold may independently inherit
+its default. Additional accepted statuses are limited to 20 distinct 300–499 values. Required markers
+are optional, at most 500 characters, with Ordinal or OrdinalIgnoreCase comparison.
+
+The HTTP policy v2 migration preserves legacy effective values, including 30-second timeouts, as
+explicit overrides. Out-of-bounds legacy policy requires correction before new checks; migration
+never silently changes its thresholds or timeout. Empty and interval-only legacy JSON remains readable.
+Policy profile identity remains provenance; mutable profile administration is deferred. Snapshot v2
+records all resolved HTTP fields, and typed policy/materialized-value disagreement prevents check
+creation. Audits store policy facts and marker presence, never marker contents.

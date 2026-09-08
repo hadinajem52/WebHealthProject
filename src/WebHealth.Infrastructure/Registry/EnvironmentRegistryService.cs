@@ -1,3 +1,4 @@
+using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Application;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Application.Auditing;
@@ -354,27 +355,27 @@ internal sealed class EnvironmentRegistryService(
 
     private static void UpdateMonitorIntervals(WebsiteEnvironment environment, Guid actorId, DateTimeOffset now)
     {
-        var interval = RegistryDefaults.GetHttpIntervalSeconds(environment.IsProduction);
-        foreach (var monitor in environment.Endpoints.SelectMany(endpoint => endpoint.Monitors))
+        foreach (var monitor in environment.Endpoints.SelectMany(endpoint => endpoint.Monitors).Where(item => item.DeletedAt is null))
         {
-            var effectiveInterval = MonitorIntervalOverride.GetSeconds(monitor.BoundedOverrides) ?? interval;
-            if (monitor.IntervalSeconds == effectiveInterval)
+            var previousFingerprint = monitor.ConfigurationFingerprint;
+            switch (monitor.MonitorType)
             {
-                continue;
+                case RegistryDefaults.PageAuditMonitorType:
+                    continue;
+                case RegistryDefaults.SslCertificateMonitorType:
+                    monitor.ConfigurationFingerprint = RegistryDefaults.CreateSslFingerprint(monitor.Endpoint.NormalizedUrl, environment.IsProduction);
+                    break;
+                case RegistryDefaults.HttpAvailabilityMonitorType:
+                    var previousInterval = monitor.IntervalSeconds;
+                    var overrides = HttpMonitorConfiguration.ReadOverrides(monitor);
+                    HttpMonitorConfiguration.Apply(monitor, monitor.Endpoint.NormalizedUrl, environment.IsProduction, overrides);
+                    if (monitor.IntervalSeconds != previousInterval)
+                        monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(monitor.ScheduleAnchor, monitor.IntervalSeconds, now);
+                    break;
+                default:
+                    throw new InvalidOperationException("Unsupported monitor type for environment update.");
             }
-
-            monitor.IntervalSeconds = effectiveInterval;
-            monitor.NextDueAt = MonitorCadence.GetFirstSlotAfter(
-                monitor.ScheduleAnchor, effectiveInterval, now);
-            monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(
-                monitor.Endpoint.NormalizedUrl,
-                environment.IsProduction,
-                effectiveInterval,
-                monitor.TimeoutSeconds,
-                monitor.FailureConfirmationCount,
-                monitor.RecoveryConfirmationCount,
-                monitor.WarningThresholdMs,
-                monitor.CriticalThresholdMs);
+            if (monitor.ConfigurationFingerprint == previousFingerprint) continue;
             monitor.UpdatedAt = now;
             monitor.UpdatedByUserId = actorId;
             monitor.Version++;

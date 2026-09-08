@@ -100,7 +100,8 @@ internal static class DatabaseFoundationAssertions
         "20260828093443_RunHistoryArchive",
         "20260828100053_PngAuditVerifiedWebpComparison",
         "20260908105605_MonitoringSnapshotV2",
-        "20260908111324_TargetAuthorizationEvidence"
+        "20260908111324_TargetAuthorizationEvidence",
+        "20260908120653_HttpMonitorOverridesV2"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -271,6 +272,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyLogicalCheckExecutionAsync(connectionString);
         await VerifyStaleSnapshotsAsync(connectionString);
         await VerifyStaleSslSnapshotsAsync(connectionString);
+        await VerifyHttpPolicyConfigurationAsync(connectionString);
         await VerifyTargetAuthorizationAsync(connectionString);
         await VerifyHealthConfirmationAsync(connectionString);
         await VerifyHangfireSchedulingAsync(connectionString);
@@ -1897,6 +1899,97 @@ internal static class DatabaseFoundationAssertions
         (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeFalse();
     }
 
+    private static async Task VerifyHttpPolicyConfigurationAsync(string connectionString)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:WebHealth"] = connectionString,
+            ["Monitoring:Scheduling:Enabled"] = "true"
+        }).Build();
+        await using var services = new ServiceCollection().AddLogging().AddInfrastructure(configuration)
+            .AddSingleton<ILogicalCheckQueue>(new RecordingLogicalCheckQueue()).BuildServiceProvider();
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var monitor = await CreateOwnedMonitorAsync(scope, database, "http://http-policy.test/status");
+        monitor.TimeoutSeconds.Should().Be(15);
+        HttpMonitorConfiguration.ReadOverrides(monitor).TimeoutSeconds.Should().BeNull();
+        var endpoint = monitor.Endpoint;
+        var registry = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
+        var access = new RegistryAccessContext(monitor.CreatedByUserId, [ApplicationRoles.Administrator]);
+        var generation = monitor.CurrentTruthGeneration;
+        var policy = new HttpMonitorOverridesV2
+        {
+            TimeoutSeconds = 30,
+            FailureConfirmationCount = 3,
+            RecoveryConfirmationCount = 1,
+            AdditionalAcceptedStatusCodes = [404, 301, 404],
+            RequiredContentMarker = "READY-PRIVATE-MARKER",
+            ContentMarkerComparison = "Ordinal"
+        };
+        var updated = await registry.UpdateAsync(new(endpoint.Id, endpoint.NormalizedUrl, endpoint.OwnerSubjectId,
+            true, null, endpoint.Version, HttpPolicy: policy), access);
+        updated.Succeeded.Should().BeTrue(string.Join(" ", updated.Errors));
+        await database.Entry(monitor).ReloadAsync();
+        monitor.CurrentTruthGeneration.Should().BeGreaterThan(generation);
+        var effective = HttpMonitorConfiguration.RequireConsistent(monitor, endpoint.Environment.IsProduction);
+        effective.TimeoutSeconds.Should().Be(30);
+        effective.AdditionalAcceptedStatusCodes.Should().Equal(301, 404);
+        var version = endpoint.Version;
+        var beforeJson = monitor.BoundedOverrides;
+        var invalid = await registry.UpdateAsync(new(endpoint.Id, endpoint.NormalizedUrl, endpoint.OwnerSubjectId,
+            true, null, endpoint.Version, HttpPolicy: policy with { TimeoutSeconds = 0 }), access);
+        invalid.Succeeded.Should().BeFalse();
+        invalid.Errors.Should().Contain(error => error.Field == "HttpPolicy.TimeoutSeconds");
+        await database.Entry(endpoint).ReloadAsync();
+        await database.Entry(monitor).ReloadAsync();
+        endpoint.Version.Should().Be(version);
+        monitor.BoundedOverrides.Should().Be(beforeJson);
+        var check = await CreateQueuedCheckAsync(database, monitor, useResolvedPolicy: true);
+        check.ConfigurationSnapshot.RequiredContentMarker.Should().Be(policy.RequiredContentMarker);
+        check.ConfigurationSnapshot.AcceptedStatusCodes.Should().Be("301,404");
+        check.ConfigurationSnapshot.TimeoutSource.Should().Be(ConfigurationValueSources.EndpointOverride);
+        var transport = new RecordingSafeHttpTransport((request, _) => new(null, 404,
+            new(new Uri(request.Url).GetLeftPart(UriPartial.Path)), TimeSpan.FromMilliseconds(25),
+            Encoding.UTF8.GetByteCount(policy.RequiredContentMarker), false,
+            Encoding.UTF8.GetBytes(policy.RequiredContentMarker), [], SafeHttpRequestIdentity.Create(request)));
+        (await CreateExecutionService(database, transport, true).ExecuteAsync(
+            new(check.Id, check.DurableWork.Single().Id, "http-policy", "policy-worker")))
+            .Should().Be(LogicalCheckExecutionStatus.Completed);
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == check.Id))
+            .Outcome.Should().Be(HttpResultOutcomes.Healthy);
+        var manualService = scope.ServiceProvider.GetRequiredService<IManualCheckService>();
+        var manual = await manualService.RunNowAsync(endpoint.Id, access);
+        manual.Status.Should().Be(ManualCheckStatus.Queued);
+        var manualSnapshot = await database.CheckConfigurationSnapshots.AsNoTracking()
+            .SingleAsync(item => item.LogicalCheckId == manual.LogicalCheckId);
+        manualSnapshot.Should().BeEquivalentTo(check.ConfigurationSnapshot, options => options
+            .Excluding(item => item.LogicalCheckId).Excluding(item => item.CreatedAt).Excluding(item => item.LogicalCheck));
+        var manualWorkId = await database.DurableWork.Where(item => item.LogicalCheckId == manual.LogicalCheckId)
+            .Select(item => item.Id).SingleAsync();
+        (await CreateExecutionService(database, transport, true).ExecuteAsync(
+            new(manual.LogicalCheckId!.Value, manualWorkId, "http-policy-manual", "policy-worker")))
+            .Should().Be(LogicalCheckExecutionStatus.Completed);
+        var audit = await database.AuditEvents.AsNoTracking()
+            .Where(item => item.EntityIdentifier == endpoint.Id.ToString() && item.Action == "endpoint.updated")
+            .OrderByDescending(item => item.OccurredAt).ThenBy(item => item.Id).FirstAsync();
+        audit.AfterValues.Should().NotContain(policy.RequiredContentMarker);
+        audit.AfterValues.Should().Contain("hasRequiredContentMarker");
+        monitor.TimeoutSeconds = 29;
+        await database.SaveChangesAsync();
+        FluentActions.Invoking(() => CheckConfigurationSnapshotFactory.Create(monitor, Guid.NewGuid(),
+            DateTimeOffset.UtcNow, NullLogger<MonitoringSchedulingService>.Instance))
+            .Should().Throw<InvalidOperationException>().WithMessage("HTTP configuration drift prevents creating a check.");
+        var checksBeforeDrift = await database.LogicalChecks.CountAsync(item => item.EndpointMonitorId == monitor.Id);
+        (await manualService.RunNowAsync(endpoint.Id, access)).Status.Should().Be(ManualCheckStatus.InvalidConfiguration);
+        (await database.LogicalChecks.CountAsync(item => item.EndpointMonitorId == monitor.Id)).Should().Be(checksBeforeDrift);
+        var reset = await registry.UpdateAsync(new(endpoint.Id, endpoint.NormalizedUrl, endpoint.OwnerSubjectId,
+            true, null, endpoint.Version, HttpPolicy: new()), access);
+        reset.Succeeded.Should().BeTrue(string.Join(" ", reset.Errors));
+        monitor.TimeoutSeconds.Should().Be(15);
+        HttpMonitorConfiguration.ReadOverrides(monitor).TimeoutSeconds.Should().BeNull();
+        HttpMonitorConfiguration.RequireConsistent(monitor, endpoint.Environment.IsProduction).RequiredContentMarker.Should().BeNull();
+    }
+
     private static async Task VerifyStaleSnapshotsAsync(string connectionString)
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
@@ -2368,7 +2461,8 @@ internal static class DatabaseFoundationAssertions
     private static async Task<LogicalCheck> CreateQueuedCheckAsync(
         ApplicationDbContext database,
         EndpointMonitor monitor,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        bool useResolvedPolicy = false)
     {
         var sequence = Interlocked.Increment(ref fixtureSequence);
         var createdAt = (timeProvider ?? TimeProvider.System).GetUtcNow()
@@ -2409,6 +2503,9 @@ internal static class DatabaseFoundationAssertions
             ThresholdSource = ConfigurationValueSources.PolicyProfile,
             CreatedAt = createdAt
         };
+        if (useResolvedPolicy)
+            check.ConfigurationSnapshot = CheckConfigurationSnapshotFactory.Create(monitor, check.Id, createdAt,
+                NullLogger<MonitoringSchedulingService>.Instance);
         check.DurableWork.Add(new DurableWork
         {
             Id = Guid.NewGuid(),
@@ -3188,12 +3285,62 @@ internal static class DatabaseFoundationAssertions
         var phaseTwo = await CreateUpgradeDatabaseAsync(connectionString, "phase2");
         var phaseOne = await CreateUpgradeDatabaseAsync(connectionString, "phase1");
         var snapshots = await CreateUpgradeDatabaseAsync(connectionString, "snapshot_v2");
+        var httpPolicy = await CreateUpgradeDatabaseAsync(connectionString, "http_policy");
 
         await Task.WhenAll(
             VerifyPhaseThreeToPhaseFourUpgradeAsync(phaseThree),
             VerifyPhaseTwoUpgradeAsync(phaseTwo),
             VerifyPhaseOneUpgradeAndRepeatabilityAsync(phaseOne),
-            VerifySnapshotUpgradeAndRollbackAsync(snapshots));
+            VerifySnapshotUpgradeAndRollbackAsync(snapshots),
+            VerifyHttpPolicyUpgradeAndRollbackAsync(httpPolicy));
+    }
+
+    private static async Task VerifyHttpPolicyUpgradeAndRollbackAsync(string connectionString)
+    {
+        await using var services = BuildUpgradeServices(connectionString);
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await database.Database.MigrateAsync();
+        await scope.ServiceProvider.GetRequiredService<AdminBootstrapper>().BootstrapAsync();
+        await SeedUpgradeMonitorAsync(scope, database);
+        await database.Database.MigrateAsync("TargetAuthorizationEvidence");
+        database.ChangeTracker.Clear();
+        var monitor = await AvailabilityMonitors(database).Include(item => item.Endpoint).ThenInclude(item => item.Environment)
+            .SingleAsync(item => item.Endpoint.NormalizedUrl == "http://upgrade.test/status");
+        monitor.TimeoutSeconds = 30;
+        monitor.BoundedOverrides = "{}";
+        monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(monitor.Endpoint.NormalizedUrl, false,
+            monitor.IntervalSeconds, 30, monitor.FailureConfirmationCount, monitor.RecoveryConfirmationCount,
+            monitor.WarningThresholdMs, monitor.CriticalThresholdMs);
+        await database.SaveChangesAsync();
+        var oldFingerprint = monitor.ConfigurationFingerprint;
+        await database.Database.MigrateAsync();
+        await database.Entry(monitor).ReloadAsync();
+        monitor.TimeoutSeconds.Should().Be(30);
+        monitor.ConfigurationFingerprint.Should().Be(oldFingerprint);
+        HttpMonitorConfiguration.ReadOverrides(monitor).TimeoutSeconds.Should().Be(30);
+        var generation = monitor.CurrentTruthGeneration;
+        await database.Database.MigrateAsync();
+        await database.Entry(monitor).ReloadAsync();
+        monitor.CurrentTruthGeneration.Should().Be(generation);
+        HttpMonitorConfiguration.Apply(monitor, monitor.Endpoint.NormalizedUrl, false, new()
+        {
+            TimeoutSeconds = 20,
+            AdditionalAcceptedStatusCodes = [404],
+            RequiredContentMarker = "rollback-marker"
+        });
+        await database.SaveChangesAsync();
+        var historical = await CreateQueuedCheckAsync(database, monitor, useResolvedPolicy: true);
+        await database.Database.MigrateAsync("TargetAuthorizationEvidence");
+        await database.Entry(monitor).ReloadAsync();
+        monitor.TimeoutSeconds.Should().Be(20);
+        monitor.ConfigurationFingerprint.Should().Be(RegistryDefaults.CreateHttpFingerprint(monitor.Endpoint.NormalizedUrl,
+            false, monitor.IntervalSeconds, 20, 2, 2, 1500, 3000));
+        await database.Database.MigrateAsync();
+        await database.Entry(monitor).ReloadAsync();
+        HttpMonitorConfiguration.RequireConsistent(monitor, false).RequiredContentMarker.Should().BeNull();
+        (await database.CheckConfigurationSnapshots.AsNoTracking().SingleAsync(item => item.LogicalCheckId == historical.Id))
+            .RequiredContentMarker.Should().Be("rollback-marker");
     }
 
     private static async Task VerifySnapshotUpgradeAndRollbackAsync(string connectionString)

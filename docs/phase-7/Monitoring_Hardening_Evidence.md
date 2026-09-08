@@ -103,11 +103,42 @@ database. The missing Detail_Page_UI_Pattern.md reference was checked; existing 
 fact rows supplied the UI reference. Mobile visual checks and broader changed-UI evidence remain part
 of the final release gate. Increments 3–7, including AC-14/AC-15, remain required.
 
-## P7-MON-03 — in progress
+## P7-MON-03 — implemented
 
-The first slice implements BR-H09 charset-aware marker decoding from the existing bounded buffer.
-UTF-8, US-ASCII, and ISO-8859-1 are supported; unsupported, missing, and malformed declarations
-fall back to UTF-8. No response content is reread or persisted. The focused HttpResultNormalizerTests
-run passed all 27 tests on 2026-09-08, covering charset classes, case matching, status/5xx handling,
-truncated bodies, and existing normalization behavior. Typed overrides, migration preservation,
-configuration forms, drift detection, and remaining increment gates are not yet complete.
+Typed v2 HTTP overrides share one policy resolver across registry updates and queued snapshots.
+New and reset monitors use a 15-second timeout. The data migration preserves existing materialized
+values, including 30-second timeouts, as explicit overrides. Status codes are bounded and canonical;
+thresholds, confirmation counts, marker length, and comparison modes are validated before saving.
+Configuration drift prevents snapshot creation and reports identifiers without marker text.
+Scheduled and manual checks capture equivalent resolved policy, with each setting's source.
+
+Endpoint forms expose overrides and clearing them restores defaults. Detail rows show effective
+values and sources. Audit facts expose marker presence only. Marker matching decodes the bounded
+buffer as UTF-8, US-ASCII, or ISO-8859-1, falling back to UTF-8 for unsupported or malformed charsets.
+No response content is reread or persisted.
+
+Verification on 2026-09-08:
+
+| Check | Result |
+| --- | --- |
+| Unit suite | 767 passed |
+| Ordinary integration suite | 634 passed, three existing skips |
+| Additional legacy JSON compatibility tests | 3 passed |
+| Full ordered database foundation script | Passed; Release build had no warnings or errors |
+| EF pending-model check | No model drift; migration changes data only |
+| Browser validation | Rejected status 500 without saving; accepted and canonicalized 404, 301, 404 |
+| Browser edit and reset | Saved 30-second timeout, three failures, and literal marker; reloaded values; clearing restored 15 seconds, two failures, and no marker/status overrides |
+| Visual inspection | Desktop detail cards and 390-pixel mobile layout retained dashboard styling; marker HTML displayed as text |
+
+Database evidence includes named policy fixtures, atomic invalid-update rejection, drift rejection
+without queued work, safe audit payloads, scheduled/manual snapshot equivalence, marker/status
+execution, and a 15-second reset. An isolated migration database proves 30-second preservation,
+repeatable upgrade, populated rollback, and retention of historical snapshot marker facts.
+Existing transport and authorization suites protect redirect security, 2xx/5xx behavior, bounded
+bodies, role restrictions, and anti-forgery. Setup documents rollback loss of current v2-only fields.
+
+Browser verification used the disposable foundation database with workers and email disabled.
+One deliberately orphaned endpoint from a negative database fixture was archived only in that
+preview database so the registry editor could list valid fixtures. The browser tool's empty-fill
+operation did not clear controls; keyboard selection and Backspace verified the actual reset flow.
+No user application database migration was applied. Increments 4–7 remain required.

@@ -111,7 +111,18 @@ public sealed class AuditContractTests
                 nameof(EndpointAuditSnapshot.PageAuditEnabled),
                 nameof(EndpointAuditSnapshot.PageAuditSchedulingEnabled),
                 nameof(EndpointAuditSnapshot.IsDeleted),
-                nameof(EndpointAuditSnapshot.Version));
+                nameof(EndpointAuditSnapshot.Version),
+                nameof(EndpointAuditSnapshot.HttpPolicy));
+        typeof(HttpPolicyAuditFacts).GetProperties().Select(property => property.Name)
+            .Should().BeEquivalentTo(
+                nameof(HttpPolicyAuditFacts.TimeoutSeconds),
+                nameof(HttpPolicyAuditFacts.FailureConfirmationCount),
+                nameof(HttpPolicyAuditFacts.RecoveryConfirmationCount),
+                nameof(HttpPolicyAuditFacts.WarningThresholdMs),
+                nameof(HttpPolicyAuditFacts.CriticalThresholdMs),
+                nameof(HttpPolicyAuditFacts.AdditionalAcceptedStatusCodes),
+                nameof(HttpPolicyAuditFacts.HasRequiredContentMarker),
+                nameof(HttpPolicyAuditFacts.ContentMarkerComparison));
         typeof(RobotsPolicyAuditSnapshot).GetProperties().Select(property => property.Name)
             .Should().BeEquivalentTo(
                 nameof(RobotsPolicyAuditSnapshot.Origin),

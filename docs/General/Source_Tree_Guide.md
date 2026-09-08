@@ -948,3 +948,10 @@ If you are learning the project, do not start by reading every file. Read these 
 8. [`WebHealth.Web/Views/Shared/_Layout.cshtml`](../../src/WebHealth.Web/Views/Shared/_Layout.cshtml) — see how pages are composed into the shared UI shell.
 
 These files show the main control paths without requiring you to understand every helper first.
+
+### HTTP policy configuration
+
+- `Application/Monitoring/HttpMonitoringPolicyResolver.cs`: typed v2 overrides, bounded policy resolution, and the resolved target/policy check contract.
+- `Infrastructure/Monitoring/HttpMonitorConfiguration.cs`: canonical override serialization, legacy materialized-value compatibility, fingerprints, and drift detection.
+- `Web/Models/HttpPolicyFormViewModel.cs` and its shared editor template: HTTP response settings reused by creation, registration, and editing.
+- `20260908120653_HttpMonitorOverridesV2`: data-only migration preserving existing effective HTTP configuration.

@@ -28,11 +28,13 @@ public sealed class ResponseThresholdOverrideTests
     }
 
     [Theory]
-    [InlineData(600, null)]
-    [InlineData(null, 1_200)]
-    public void OneSubmittedValueWithoutTheOther_IsRejected(int? warning, int? critical)
+    [InlineData(600, null, 600, 3000)]
+    [InlineData(null, 5000, 1500, 5000)]
+    public void OneSubmittedValueUsesTheDefaultForTheOther(int? warning, int? critical, int expectedWarning, int expectedCritical)
     {
-        ResponseThresholdOverride.Decide(warning, critical).Error.Should().NotBeNullOrWhiteSpace();
+        var result = ResponseThresholdOverride.Decide(warning, critical);
+        result.Error.Should().BeNull();
+        result.Thresholds.Should().Be(new ResponseTimeThresholds(expectedWarning, expectedCritical));
     }
 
     [Fact]

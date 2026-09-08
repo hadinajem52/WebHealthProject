@@ -61,7 +61,7 @@ internal sealed class MonitoringSchedulingService(
             if (eligibleEndpointIds.Contains(monitor.EndpointId))
             {
                 await CheckConfigurationSnapshotFactory.LockAndRefreshAsync(dbContext, monitor, token);
-                work.Add(CreateScheduledCheck(monitor, now));
+                if (CreateScheduledCheck(monitor, now) is { } created) work.Add(created);
             }
             else
             {
@@ -75,11 +75,20 @@ internal sealed class MonitoringSchedulingService(
         return work;
     }
 
-    private DispatchWork CreateScheduledCheck(EndpointMonitor monitor, DateTimeOffset now)
+    private DispatchWork? CreateScheduledCheck(EndpointMonitor monitor, DateTimeOffset now)
     {
         var logicalCheckId = Guid.NewGuid();
         var durableWorkId = Guid.NewGuid();
         var scheduledFor = monitor.NextDueAt;
+        CheckConfigurationSnapshot snapshot;
+        try
+        {
+            snapshot = CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now, logger);
+        }
+        catch (HttpConfigurationDriftException)
+        {
+            return null;
+        }
         var check = new LogicalCheck
         {
             Id = logicalCheckId,
@@ -93,8 +102,7 @@ internal sealed class MonitoringSchedulingService(
             QueuedAt = now
         };
         dbContext.LogicalChecks.Add(check);
-        dbContext.CheckConfigurationSnapshots.Add(
-            CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now));
+        dbContext.CheckConfigurationSnapshots.Add(snapshot);
         dbContext.DurableWork.Add(new DurableWork
         {
             Id = durableWorkId,

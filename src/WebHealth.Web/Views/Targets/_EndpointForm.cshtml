@@ -120,7 +120,7 @@
             </div>
         </div>
         <span class="form-field__hint">
-            Set both or neither; critical must be at or above warning. Blank uses the
+            Critical must be at or above warning and no greater than the HTTP timeout. Each blank field uses the
             1,500 ms and 3,000 ms defaults, and a response at or above a threshold breaches it.
         </span>
     </div>
@@ -223,3 +223,5 @@
 {
 
 }
+
+@Html.EditorFor(model => model.HttpPolicy)

@@ -1,0 +1,44 @@
+@model HttpPolicyFormViewModel
+<fieldset class="form-section">
+    <legend class="form-section__title">HTTP response policy</legend>
+    <p class="form-section__hint">Blank overrides use 15 seconds and two checks to confirm failure or recovery. Clear overrides to reset these defaults.</p>
+    <div class="form-section__body">
+        <div class="form-field">
+            <label asp-for="TimeoutSeconds"></label>
+            <input asp-for="TimeoutSeconds" type="number" min="1" max="120" placeholder="15" />
+            <span asp-validation-for="TimeoutSeconds"></span>
+        </div>
+        <div class="form-grid form-grid--two">
+            <div class="form-field">
+                <label asp-for="FailureConfirmationCount"></label>
+                <input asp-for="FailureConfirmationCount" type="number" min="1" max="10" placeholder="2" />
+                <span asp-validation-for="FailureConfirmationCount"></span>
+            </div>
+            <div class="form-field">
+                <label asp-for="RecoveryConfirmationCount"></label>
+                <input asp-for="RecoveryConfirmationCount" type="number" min="1" max="10" placeholder="2" />
+                <span asp-validation-for="RecoveryConfirmationCount"></span>
+            </div>
+        </div>
+        <div class="form-field">
+            <label asp-for="AdditionalAcceptedStatusCodes"></label>
+            <input asp-for="AdditionalAcceptedStatusCodes" placeholder="301, 404" maxlength="100" />
+            <span class="form-field__hint">Up to 20 codes from 300 to 499, separated by commas. All 2xx responses remain accepted. Redirect safety rules still apply.</span>
+            <span asp-validation-for="AdditionalAcceptedStatusCodes"></span>
+        </div>
+        <div class="form-field">
+            <label asp-for="RequiredContentMarker"></label>
+            <textarea asp-for="RequiredContentMarker" maxlength="500" rows="3"></textarea>
+            <span asp-validation-for="RequiredContentMarker"></span>
+        </div>
+        <div class="form-field">
+            <label asp-for="ContentMarkerComparison"></label>
+            <select asp-for="ContentMarkerComparison">
+                <option value="">Default: ignore case</option>
+                <option value="OrdinalIgnoreCase">Ignore case</option>
+                <option value="Ordinal">Match case</option>
+            </select>
+            <span asp-validation-for="ContentMarkerComparison"></span>
+        </div>
+    </div>
+</fieldset>

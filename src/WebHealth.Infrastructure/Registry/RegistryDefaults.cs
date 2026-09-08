@@ -18,7 +18,7 @@ internal static class RegistryDefaults
     public const string HttpAvailabilityMonitorType = HttpIssueIdentity.MonitorType;
     public const string SslCertificateMonitorType = SslMonitorIdentity.MonitorType;
     public const string PageAuditMonitorType = PageAuditMonitorIdentity.MonitorType;
-    public const int HttpTimeoutSeconds = 30;
+    public const int HttpTimeoutSeconds = 15;
 
     public const int SslIntervalSeconds = 24 * 60 * 60;
     public const int SslTimeoutSeconds = 15;

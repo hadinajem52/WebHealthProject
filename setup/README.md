@@ -232,3 +232,30 @@ removes permission evidence, so grants must be recorded again after reapplying i
 Use a database backup when preserving these new facts is required. Normal upgrades leave
 completed v1 snapshots unchanged. The isolated database suite verifies populated rollback
 and repeatable reapplication; application startup never performs migrations.
+
+### HTTP policy v2
+
+Apply `20260908120653_HttpMonitorOverridesV2` explicitly before using the new HTTP policy forms.
+It canonicalizes active HTTP configuration without changing effective column values or existing
+fingerprints. Existing 30-second timeouts become explicit overrides; new monitors and blank/reset
+timeouts use 15 seconds. Historical intent cannot be recovered from old materialized values, so
+migrated timeout, confirmation, and threshold values are shown as overrides. Interval inheritance
+is retained when it agrees with the environment default.
+
+Administrators retain exclusive control of interval changes. Registry managers can configure HTTP
+timeout (1–120 seconds), failure/recovery counts (1–10), thresholds, up to 20 additional 300–499
+statuses, a marker of at most 500 characters, and ordinal comparison. Warning must be at least 1 ms;
+critical must be at least warning and no greater than timeout. Each blank threshold uses its default.
+Transport redirect/body limits remain system settings. All 2xx statuses are accepted; 5xx and
+redirect/security failures cannot be made healthy by an accepted status.
+
+Legacy effective values outside the new bounds are preserved by migration, not silently adjusted.
+Such policies must be corrected through Edit endpoint before checks can be created. An inconsistent
+typed policy produces a `ConfigurationDrift` event containing only monitor/endpoint identifiers.
+Manual runs explain the configuration problem; scheduled dispatch skips the affected monitor and
+continues processing valid ones. Saving a valid policy repairs its materialized values and fingerprint.
+
+Rollback removes HTTP marker/status overrides from current configuration and recomputes the legacy
+fingerprint while retaining effective timeout/confirmation/threshold columns and historical snapshots.
+Stop workers and the application first. Reapplying the migration cannot recover removed overrides;
+retain a database backup when they must be preserved. No additional table or column is introduced.

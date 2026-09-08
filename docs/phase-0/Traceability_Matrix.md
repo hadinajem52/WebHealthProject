@@ -182,3 +182,5 @@ Test commands, results, changed-UI checks, compatibility limits, and remaining i
 [Monitoring hardening evidence](../phase-7/Monitoring_Hardening_Evidence.md).
 These entries supplement earlier feature evidence and do not close retention or representative
 scale acceptance gates AC-14 and AC-15.
+
+| P7-MON-03 | BR-H02/H06/H09, Appendix A | Typed HTTP policy, bounded overrides, safe audit facts, charset matching, drift rejection, equivalent snapshots, migration preservation, browser edit/reset, and default/source display; evidence in phase-7/Monitoring_Hardening_Evidence.md. |

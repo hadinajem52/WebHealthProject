@@ -1,3 +1,4 @@
+using WebHealth.Application.Monitoring;
 using WebHealth.Application.Seo;
 using WebHealth.Domain.Monitoring;
 
@@ -130,7 +131,8 @@ public sealed record EndpointDetails(
     bool SeoDescriptionRequired = true,
     bool PageAuditEnabled = false,
     bool PageAuditSchedulingEnabled = false,
-    int PageAuditIntervalHours = 24);
+    int PageAuditIntervalHours = 24,
+    HttpMonitorOverridesV2? HttpPolicy = null);
 
 public sealed record CertificateStatus(
     bool IsMonitored,
@@ -184,7 +186,8 @@ public sealed record CreateEndpoint(
     bool SeoDescriptionRequired = true,
     bool PageAuditEnabled = false,
     bool PageAuditSchedulingEnabled = false,
-    int PageAuditIntervalHours = 24);
+    int PageAuditIntervalHours = 24,
+    HttpMonitorOverridesV2? HttpPolicy = null);
 
 
 public sealed record UpdateEndpoint(
@@ -203,4 +206,5 @@ public sealed record UpdateEndpoint(
     bool SeoDescriptionRequired = true,
     bool PageAuditEnabled = false,
     bool PageAuditSchedulingEnabled = false,
-    int PageAuditIntervalHours = 24);
+    int PageAuditIntervalHours = 24,
+    HttpMonitorOverridesV2? HttpPolicy = null);

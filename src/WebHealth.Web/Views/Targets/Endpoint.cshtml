@@ -237,7 +237,7 @@
                         <span>Monitor configuration</span>
                     </span>
                     <span class="detail-list__value">
-                        @Model.Endpoint.MonitorType &middot; every @(Model.Endpoint.IntervalSeconds / 60) min @(Model.Endpoint.IntervalMinutesOverride is null ? "(environment default)" : "(endpoint override)") &middot; @(Model.Endpoint.TimeoutSeconds)s timeout
+                        @Model.Endpoint.MonitorType &middot; every @(Model.Endpoint.IntervalSeconds / 60) min @(Model.Endpoint.IntervalMinutesOverride is null ? "(environment default)" : "(endpoint override)") &middot; @(Model.Endpoint.TimeoutSeconds)s timeout (@(Model.Endpoint.HttpPolicy?.TimeoutSeconds is null ? "default" : "endpoint override"))
                     </span>
                 </div>
             </li>
@@ -248,11 +248,34 @@
                         <span>Response-time thresholds</span>
                     </span>
                     <span class="detail-list__value">
-                        @(Model.Endpoint.WarningThresholdMs) ms warning &middot; @(Model.Endpoint.CriticalThresholdMs) ms critical
-                        <span class="detail-list__note">@(Model.Endpoint.HasThresholdOverride ? "Endpoint override" : "Default")</span>
+                        @(Model.Endpoint.WarningThresholdMs) ms warning (@(Model.Endpoint.HttpPolicy?.WarningThresholdMs is null ? "default" : "override"))
+                        &middot; @(Model.Endpoint.CriticalThresholdMs) ms critical (@(Model.Endpoint.HttpPolicy?.CriticalThresholdMs is null ? "default" : "override"))
                     </span>
                 </div>
             </li>
+            @if (Model.Endpoint.HttpPolicy is { } httpPolicy)
+            {
+                var facts = new[]
+                {
+                    (Name: "Failure confirmation", Value: (httpPolicy.FailureConfirmationCount ?? 2).ToString(), Overridden: httpPolicy.FailureConfirmationCount is not null),
+                    (Name: "Recovery confirmation", Value: (httpPolicy.RecoveryConfirmationCount ?? 2).ToString(), Overridden: httpPolicy.RecoveryConfirmationCount is not null),
+                    (Name: "Accepted HTTP statuses", Value: "200–299" + (httpPolicy.AdditionalAcceptedStatusCodes is { Count: > 0 } codes ? ", " + string.Join(", ", codes) : ""), Overridden: httpPolicy.AdditionalAcceptedStatusCodes is { Count: > 0 }),
+                    (Name: "Required marker", Value: httpPolicy.RequiredContentMarker ?? "Not configured", Overridden: httpPolicy.RequiredContentMarker is not null),
+                    (Name: "Marker comparison", Value: httpPolicy.ContentMarkerComparison ?? "OrdinalIgnoreCase", Overridden: httpPolicy.ContentMarkerComparison is not null)
+                };
+                foreach (var fact in facts)
+                {
+                    <li>
+                        <div class="detail-list__row">
+                            <span class="detail-list__subject">
+                                <span class="detail-list__icon">@await Html.PartialAsync("_Icon", "settings")</span>
+                                <span>@fact.Name</span>
+                            </span>
+                            <span class="detail-list__value">@fact.Value <span class="detail-list__note">@(fact.Overridden ? "Endpoint override" : "Default")</span></span>
+                        </div>
+                    </li>
+                }
+            }
             <li>
                 <div class="detail-list__row">
                     <span class="detail-list__subject">

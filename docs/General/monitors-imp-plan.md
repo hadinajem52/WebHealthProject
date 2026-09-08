@@ -2,9 +2,9 @@
 
 **Status:** In progress
 
-P7-MON-01 and P7-MON-02 implementation and verification are recorded in
+P7-MON-01 through P7-MON-03 implementation and verification are recorded in
 [Monitoring hardening evidence](../phase-7/Monitoring_Hardening_Evidence.md).
-P7-MON-03 through P7-MON-07 remain pending.
+P7-MON-04 through P7-MON-07 remain pending.
 
 **Project profile:** Personal internship/portfolio project owned, implemented, reviewed, and operated by one intern.
 

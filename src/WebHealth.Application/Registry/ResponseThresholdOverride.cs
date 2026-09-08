@@ -16,12 +16,8 @@ public static class ResponseThresholdOverride
             return new(ResponseTimeThresholds.Default, null);
         }
 
-        if (warningMs is null || criticalMs is null)
-        {
-            return new(
-                ResponseTimeThresholds.Default,
-                "Set both the warning and critical response-time thresholds, or neither.");
-        }
+        warningMs ??= ResponseTimeThresholds.Default.WarningMs;
+        criticalMs ??= ResponseTimeThresholds.Default.CriticalMs;
 
         if (warningMs is < MinimumMs or > MaximumMs || criticalMs is < MinimumMs or > MaximumMs)
         {

@@ -191,7 +191,18 @@ public sealed record EndpointAuditSnapshot(
     bool PageAuditEnabled,
     bool PageAuditSchedulingEnabled,
     bool IsDeleted,
-    long Version);
+    long Version,
+    HttpPolicyAuditFacts? HttpPolicy = null);
+
+public sealed record HttpPolicyAuditFacts(
+    int TimeoutSeconds,
+    int FailureConfirmationCount,
+    int RecoveryConfirmationCount,
+    int? WarningThresholdMs,
+    int? CriticalThresholdMs,
+    IReadOnlyList<int> AdditionalAcceptedStatusCodes,
+    bool HasRequiredContentMarker,
+    string ContentMarkerComparison);
 
 public sealed record RobotsPolicyAuditSnapshot(
     string Origin,

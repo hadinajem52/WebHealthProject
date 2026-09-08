@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using WebHealth.Application.Monitoring;
 using Microsoft.EntityFrameworkCore;
 using WebHealth.Infrastructure.Persistence;
 using WebHealth.Domain.Monitoring;
@@ -23,15 +26,36 @@ internal static class CheckConfigurationSnapshotFactory
     public static CheckConfigurationSnapshot Create(
         EndpointMonitor monitor,
         Guid logicalCheckId,
-        DateTimeOffset now) => new()
+        DateTimeOffset now,
+        ILogger logger)
+    {
+        ResolvedHttpCheckConfiguration? resolvedHttp;
+        try
+        {
+            resolvedHttp = monitor.MonitorType == RegistryDefaults.HttpAvailabilityMonitorType
+                ? HttpMonitorConfiguration.ResolveCheck(monitor)
+                : null;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or JsonException)
+        {
+            logger.LogError("HTTP configuration rejected before check creation for monitor {MonitorId}, endpoint {EndpointId}; category {FailureCategory}",
+                monitor.Id, monitor.EndpointId, "ConfigurationDrift");
+            throw new HttpConfigurationDriftException();
+        }
+        var http = resolvedHttp?.Policy;
+        var overrides = http is null ? null : HttpMonitorConfiguration.ReadOverrides(monitor);
+        var target = resolvedHttp?.Target ?? new ResolvedMonitoringTarget(monitor.EndpointId,
+            monitor.Endpoint.NormalizedUrl, monitor.Endpoint.NormalizedHost, monitor.Endpoint.EffectivePort,
+            monitor.Endpoint.NormalizationVersion, monitor.Endpoint.Environment.IsProduction);
+        return new()
         {
             LogicalCheckId = logicalCheckId,
             SchemaVersion = 2,
-            TargetNormalizedUrl = monitor.Endpoint.NormalizedUrl,
-            TargetNormalizedHost = monitor.Endpoint.NormalizedHost,
-            TargetEffectivePort = monitor.Endpoint.EffectivePort,
-            TargetNormalizationVersion = monitor.Endpoint.NormalizationVersion,
-            TargetIsProduction = monitor.Endpoint.Environment.IsProduction,
+            TargetNormalizedUrl = target.NormalizedUrl,
+            TargetNormalizedHost = target.NormalizedHost,
+            TargetEffectivePort = target.EffectivePort,
+            TargetNormalizationVersion = target.NormalizationVersion,
+            TargetIsProduction = target.IsProduction,
             CurrentTruthGeneration = monitor.CurrentTruthGeneration,
             MonitorType = monitor.MonitorType,
             ConfigurationFingerprint = monitor.ConfigurationFingerprint,
@@ -44,9 +68,20 @@ internal static class CheckConfigurationSnapshotFactory
             IntervalSource = MonitorIntervalOverride.HasOverride(monitor.BoundedOverrides)
                 ? ConfigurationValueSources.EndpointOverride
                 : ConfigurationValueSources.EnvironmentDefault,
-            TimeoutSource = ConfigurationValueSources.PolicyProfile,
-            ConfirmationSource = ConfigurationValueSources.PolicyProfile,
-            ThresholdSource = ConfigurationValueSources.PolicyProfile,
+            AcceptedStatusCodes = http is null ? string.Empty : string.Join(',', http.AdditionalAcceptedStatusCodes),
+            RequiredContentMarker = http?.RequiredContentMarker,
+            ContentMarkerComparison = http?.ContentMarkerComparison ?? "OrdinalIgnoreCase",
+            TimeoutSource = overrides?.TimeoutSeconds is not null ? ConfigurationValueSources.EndpointOverride
+                : http is null ? ConfigurationValueSources.PolicyProfile : ConfigurationValueSources.SystemDefault,
+            ConfirmationSource = overrides?.FailureConfirmationCount is not null || overrides?.RecoveryConfirmationCount is not null
+                ? ConfigurationValueSources.EndpointOverride
+                : http is null ? ConfigurationValueSources.PolicyProfile : ConfigurationValueSources.SystemDefault,
+            ThresholdSource = overrides?.WarningThresholdMs is not null || overrides?.CriticalThresholdMs is not null
+                ? ConfigurationValueSources.EndpointOverride
+                : http is null ? ConfigurationValueSources.PolicyProfile : ConfigurationValueSources.SystemDefault,
             CreatedAt = now
         };
+    }
 }
+
+internal sealed class HttpConfigurationDriftException() : InvalidOperationException("HTTP configuration drift prevents creating a check.");

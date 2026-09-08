@@ -20,7 +20,8 @@ public enum ManualCheckStatus
     Queued,
     Forbidden,
     MonitorNotAvailable,
-    SchedulingUnavailable
+    SchedulingUnavailable,
+    InvalidConfiguration
 }
 
 public sealed record ManualCheckResult(

@@ -1,3 +1,5 @@
+using WebHealth.Infrastructure.Monitoring;
+using WebHealth.Application.Monitoring;
 using WebHealth.Domain.Monitoring;
 using WebHealth.Infrastructure.Persistence;
 
@@ -106,11 +108,12 @@ internal static class EndpointMonitorReconciler
         bool schedulingEnabled,
         ResponseTimeThresholds thresholds,
         Guid actorId,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        HttpMonitorOverridesV2? overrides = null)
     {
         var interval = intervalOverrideSeconds ?? RegistryDefaults.GetHttpIntervalSeconds(isProduction);
         var schedule = MonitorCadence.Initialize(now);
-        return new EndpointMonitor
+        var monitor = new EndpointMonitor
         {
             Id = Guid.NewGuid(),
             EndpointId = endpoint.Id,
@@ -142,6 +145,13 @@ internal static class EndpointMonitorReconciler
             UpdatedByUserId = actorId,
             Version = 1
         };
+        HttpMonitorConfiguration.Apply(monitor, endpoint.NormalizedUrl, isProduction, overrides ?? new HttpMonitorOverridesV2
+        {
+            IntervalSeconds = intervalOverrideSeconds,
+            WarningThresholdMs = thresholds.WarningMs == ResponseTimeThresholds.Default.WarningMs ? null : thresholds.WarningMs,
+            CriticalThresholdMs = thresholds.CriticalMs == ResponseTimeThresholds.Default.CriticalMs ? null : thresholds.CriticalMs
+        });
+        return monitor;
     }
 
     public static EndpointMonitor CreateSslMonitor(

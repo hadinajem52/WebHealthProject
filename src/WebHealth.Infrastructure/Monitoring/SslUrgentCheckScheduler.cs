@@ -66,7 +66,7 @@ internal sealed class SslUrgentCheckScheduler(
             QueuedAt = now
         });
         dbContext.CheckConfigurationSnapshots.Add(
-            CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now));
+            CheckConfigurationSnapshotFactory.Create(monitor, logicalCheckId, now, logger));
         dbContext.DurableWork.Add(new DurableWork
         {
             Id = durableWorkId,
