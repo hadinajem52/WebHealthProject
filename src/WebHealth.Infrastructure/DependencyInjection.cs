@@ -188,6 +188,7 @@ public static class DependencyInjection
         services.AddScoped<PageAuditRetentionBatch>();
         services.AddScoped<LogicalCheckRetentionBatch>();
         services.AddScoped<AggregateRetentionBatch>();
+        services.AddScoped<RobotsRetentionBatch>();
         services.AddScoped<IMonitoringWorkerReader>(provider => schedulingOptions.Enabled
             ? new HangfireMonitoringWorkerReader(provider.GetRequiredService<JobStorage>(),
                 provider.GetRequiredService<ILogger<HangfireMonitoringWorkerReader>>())

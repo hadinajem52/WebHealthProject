@@ -1038,3 +1038,8 @@ in one transaction, preserving aggregates and registry configuration, and remain
 24 calendar months only after raw deletion has started and no raw result remains for that day.
 Monitor/ancestor and held-check history protections apply. Cutoff-day and unsealed aggregates
 remain. The batch leaves registry configuration intact and is not yet scheduled.
+
+`Infrastructure/Monitoring/RobotsRetentionBatch.cs` expires old, expired default-policy cache rows
+while preserving fresh snapshots, configured sitemap policy, approved exceptions and held origins.
+It shares RobotsOriginLock with refresh. RetentionHoldQueries.RelatedEndpointIds expands all nine
+hold scopes to origins without exposing origin values in logs. The batch remains unscheduled.

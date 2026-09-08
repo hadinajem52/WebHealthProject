@@ -59,4 +59,19 @@ internal sealed class RetentionHoldQueries(ApplicationDbContext database, DateTi
             || database.IncidentEvidence.Any(evidence => evidence.PageAuditRunId == run.Id && incidents.Contains(evidence.IncidentId)))
             .Select(run => run.Id);
     }
+
+    public IQueryable<Guid> RelatedEndpointIds()
+    {
+        var monitors = MonitorIds();
+        var checks = LogicalCheckIds();
+        var incidents = IncidentIds();
+        var crawls = CrawlRunIds();
+        var audits = PageAuditRunIds();
+        return EndpointIds()
+            .Union(database.EndpointMonitors.Where(item => monitors.Contains(item.Id)).Select(item => item.EndpointId))
+            .Union(database.LogicalChecks.Where(item => checks.Contains(item.Id)).Select(item => item.EndpointMonitor.EndpointId))
+            .Union(database.Incidents.Where(item => incidents.Contains(item.Id)).Select(item => item.EndpointMonitor.EndpointId))
+            .Union(database.CrawlRuns.Where(item => crawls.Contains(item.Id)).Select(item => item.EndpointId))
+            .Union(database.PageAuditRuns.Where(item => audits.Contains(item.Id)).Select(item => item.EndpointId));
+    }
 }

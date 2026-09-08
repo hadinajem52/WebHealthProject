@@ -589,3 +589,17 @@ an assertion collection type. The aggregate fixture proves disabled/dry-run beha
 UTC raw-day protection, cutoff-day and unsealed survival, monitor/check holds and release, retained
 raw-result survival and cancellation. Retention remains disabled and unscheduled. Remaining
 increment 6 integration and the final acceptance/load gates are still incomplete.
+
+### Robots cache retention
+
+RobotsRetentionBatch expires old default-policy cache rows only after expiry, preserving fresh
+snapshots, sitemap requirements/URLs, approved exceptions and held origins. The single-row-per-origin
+schema has no separate superseded snapshot history; refresh replaces fetched contents in place.
+Deletion shares the origin lock with refresh and rechecks eligibility. RelatedEndpointIds expands
+all supported hold scopes to the protected origin.
+
+Validation: full database foundation script passed with zero Release warnings/errors. The named
+robots fixture proves disabled/dry-run behavior, BatchSize=1, fetch/update cutoff and expiry
+boundaries, fresh/policy survival, held-origin survival and release, hostname-prefix separation and
+cancellation. Scope regressions prove related endpoint protection and release for all nine hold
+scopes. Retention remains disabled and unscheduled; remaining integration and final gates are pending.

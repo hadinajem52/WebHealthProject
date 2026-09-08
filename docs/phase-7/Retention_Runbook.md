@@ -218,3 +218,17 @@ checks protected through incident holds) preserves its monitor's aggregates cons
 its exact measured day may no longer be recoverable once raw detail has expired. Hold release or
 expiry removes that exception. Aggregates use bounded single-monitor batches and leave registry
 configuration intact.
+
+## Robots cache expiration and policy preservation
+
+The existing robots table stores one row per origin; refresh replaces the fetched contents in place,
+so no separate superseded snapshot rows exist. Retention removes an expired cache row only when
+FetchedAt and UpdatedAt are both strictly older than 90 days. Unexpired snapshots survive. Rows
+carrying a sitemap requirement, configured sitemap URL or approved exception remain because those
+fields are policy, not disposable fetched history. Refresh can recreate an expired default-policy
+cache row using the existing origin workflow.
+
+A hold in any supported scope preserves the related endpoint's origin cache, including historical
+or archived endpoints. Origin matching uses an exact origin or slash boundary, not a hostname prefix.
+Deletion shares the robots origin lock with refresh and rechecks eligibility after acquiring it.
+The origin is never written to retention logs.

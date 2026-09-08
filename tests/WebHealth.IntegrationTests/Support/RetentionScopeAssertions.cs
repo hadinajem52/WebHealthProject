@@ -138,6 +138,7 @@ internal static class RetentionScopeAssertions
             database.RetentionHolds.Add(hold);
             await database.SaveChangesAsync();
             var queries = new RetentionHoldQueries(database, now);
+            (await queries.RelatedEndpointIds().ContainsAsync(endpoint.Id)).Should().BeTrue(scope.Key);
             var ancestor = scope.Key is "Client" or "Website" or "Environment" or "Endpoint";
             (await queries.EndpointIds().ContainsAsync(endpoint.Id)).Should().Be(ancestor, scope.Key);
             (await queries.MonitorIds().ContainsAsync(monitorId)).Should().Be(ancestor || scope.Key == "Monitor", scope.Key);
@@ -151,6 +152,7 @@ internal static class RetentionScopeAssertions
             hold.ReleasedByUserId = endpoint.CreatedByUserId;
             await database.SaveChangesAsync();
             (await queries.IncidentIds().ContainsAsync(incident.Id)).Should().BeFalse("release takes effect immediately");
+            (await queries.RelatedEndpointIds().ContainsAsync(endpoint.Id)).Should().BeFalse("release takes effect immediately");
         }
         await transaction.RollbackAsync();
     }
