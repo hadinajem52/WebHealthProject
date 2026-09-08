@@ -378,3 +378,18 @@ role rejection, missing actor/scope rejection, reason bounds, sub-microsecond ex
 valid microsecond expiry, concurrent idempotent release and exact lifecycle audit records. All
 657 ordinary integration tests passed (four opt-in skips). Release build had zero warnings/errors.
 The Administrator web flow, scope expansion and deletion enforcement remain pending.
+
+### P7-DATA-01 protected hold web flow
+
+Administrators can create and release holds through /Retention, linked from protected monitoring
+diagnostics. Forms use the existing shell and form/table styles. History is paged and distinguishes
+active, expired and released records. The current form accepts a record ID from a detail address
+or export. Expiry input is explicitly UTC. POST actions require antiforgery validation, all actions
+require the Administration policy, and reason text is HTML-encoded.
+
+Verification on 2026-09-08: ten direct web cases passed covering all four read roles, valid-token
+mutation rejection for non-Administrators, missing-token rejection, reason encoding and UTC expiry.
+All 667 ordinary integration tests passed (four opt-in skips). After the final history-label change,
+the ten web cases passed again. Browser layout verification remains pending. Persistence/service
+behavior has the prior full database evidence; no persistence change was introduced in this slice.
+Worker enforcement, aggregates and the rest of increment 6 remain pending.

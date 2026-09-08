@@ -1,0 +1,81 @@
+@model RetentionHoldsViewModel
+@{
+    ViewData.SetTitle("Retention holds");
+    ViewData.SetSubtitle("Protect selected history from age-based deletion.");
+}
+<section class="card" aria-labelledby="create-hold-heading">
+    <div class="page-intro">
+        <h2 class="card__title" id="create-hold-heading">Create a hold</h2>
+        <a class="button button--secondary" asp-controller="Diagnostics" asp-action="Monitoring">Monitoring diagnostics</a>
+    </div>
+    <form asp-action="Create" method="post" class="form-stack">
+        <div asp-validation-summary="All" class="validation-summary"></div>
+        <div class="form-field">
+            <label asp-for="ScopeType">Scope</label>
+            <select asp-for="ScopeType">
+                @foreach (var scope in new[] { "Client", "Website", "Environment", "Endpoint", "Monitor", "LogicalCheck", "Incident", "CrawlRun", "PageAuditRun" })
+                {
+                    <option value="@scope">@scope</option>
+                }
+            </select>
+        </div>
+        <div class="form-field">
+            <label asp-for="ScopeId">Record ID</label>
+            <input asp-for="ScopeId" aria-describedby="hold-record-help" />
+            <p class="form-field__hint" id="hold-record-help">Use the record identifier from its detail-page address or export. Archived records can also be held.</p>
+        </div>
+        <div class="form-field">
+            <label asp-for="Reason">Reason</label>
+            <textarea asp-for="Reason" maxlength="500" rows="3"></textarea>
+        </div>
+        <div class="form-field">
+            <label asp-for="ExpiresAt">Expiry (UTC, optional)</label>
+            <input asp-for="ExpiresAt" type="datetime-local" />
+        </div>
+        <button type="submit" class="button button--primary">Create hold</button>
+    </form>
+</section>
+<section class="card" aria-labelledby="holds-heading">
+    <h2 class="card__title" id="holds-heading">Hold history</h2>
+    @if (Model.Holds.Count == 0)
+    {
+        <p>No holds on this page.</p>
+    }
+    else
+    {
+        <div class="data-table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Scope</th><th>Reason</th><th>Created (UTC)</th><th>Expiry (UTC)</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>
+                @foreach (var hold in Model.Holds)
+                {
+                    var active = hold.ReleasedAt is null && (hold.ExpiresAt is null || hold.ExpiresAt > Model.AsOf);
+                    <tr>
+                        <th scope="row" data-label="Scope">@hold.ScopeType <span class="data-table__secondary">@hold.ScopeId</span></th>
+                        <td data-label="Reason">@hold.Reason</td>
+                        <td data-label="Created (UTC)">@hold.CreatedAt.ToString("u")</td>
+                        <td data-label="Expiry (UTC)">@(hold.ExpiresAt?.ToString("u") ?? "No expiry")</td>
+                        <td data-label="Status">
+                            @(hold.ReleasedAt is not null ? "Released" : active ? "Active" : "Expired")
+                            @if (hold.ReleasedAt is { } released) { <span class="data-table__secondary">@released.ToString("u")</span> }
+                        </td>
+                        <td data-label="Action">
+                            @if (active)
+                            {
+                                <form asp-action="Release" method="post">
+                                    <input type="hidden" name="id" value="@hold.Id" />
+                                    <button type="submit" class="button button--secondary">Release hold</button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+    <div class="page-intro">
+        @if (Model.Offset > 0) { <a asp-action="Index" asp-route-offset="@(Math.Max(0, Model.Offset - 100))">Previous</a> }
+        @if (Model.Holds.Count == 100 && Model.Offset <= int.MaxValue - 100) { <a asp-action="Index" asp-route-offset="@(Model.Offset + 100)">Next</a> }
+    </div>
+</section>

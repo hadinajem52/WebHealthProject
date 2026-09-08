@@ -379,3 +379,7 @@ rollback. See `docs/phase-7/Retention_Runbook.md` for the policy and supported s
 The hold application service now validates Administrator access and existing scope records, with
 atomic creation/release audits and idempotent release. It requires no additional migration. The
 web management flow and retention worker are still pending; deletion remains disabled.
+
+The Administrator hold page is available at /Retention, linked from monitoring diagnostics.
+Creation accepts a supported scope and record ID; expiry is entered in UTC. Active holds can be
+released and history is paged. Browser layout verification and the deletion worker remain pending.

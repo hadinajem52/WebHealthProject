@@ -36,6 +36,9 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
 
         builder.ConfigureServices(services =>
         {
+            services.RemoveAll<IRetentionHoldService>();
+            services.AddSingleton<TestRetentionHoldService>();
+            services.AddScoped<IRetentionHoldService>(provider => provider.GetRequiredService<TestRetentionHoldService>());
             services.RemoveAll<INotificationFeedReader>();
             services.AddScoped<INotificationFeedReader, EmptyNotificationFeedReader>();
 

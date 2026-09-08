@@ -49,3 +49,12 @@ requests preserve the first release actor/time and produce one release audit. Au
 contain scope and lifecycle identifiers, excluding the free-text reason. Reasons remain in the
 protected hold record. Expiry is evaluated at PostgreSQL microsecond precision. The web management
 flow and worker enforcement remain pending.
+
+## Administrator web flow
+
+Administrators can open /Retention from monitoring diagnostics, create a hold using its scope
+and record identifier, and release an active hold. The history shows active, expired and released
+states in pages of 100 records. Expiry input is UTC. POST actions require antiforgery tokens and
+server-side Administrator authorization; reason text is HTML-encoded. The form currently accepts
+record IDs from detail-page addresses or exports rather than offering a searchable record picker.
+Browser layout verification and worker enforcement remain pending.
