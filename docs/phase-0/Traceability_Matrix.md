@@ -82,9 +82,9 @@ The tables cover AC-01–AC-15 and BR-A01–BR-Q07. Functional requirements FR-0
 | BR-U01, BR-U02, BR-U03 | 5/WI-51 | U/I: logical eligible samples and exclusion counts |
 | BR-U04 | 5/WI-51 | U/I: exact `[start,end)` UTC boundaries |
 | BR-U05, BR-U06 | 5/WI-51 | U/I: successful percentile inputs; current health/history distinction |
-| BR-C01, BR-C02, BR-C03 | 5/WI-50 | I: HTTPS applicability, evidence, validation categories |
-| BR-C04 | 5/WI-50 | U/I: exact 30/15/7 boundaries |
-| BR-C05, BR-C06, BR-C07 | 5/WI-50 | C/I: fingerprint uniqueness, renewal, daily/urgent scheduling |
+| BR-C01, BR-C02, BR-C03 | 5/WI-50; 7/P7-MON-04 | I: HTTPS applicability; offline TLS validation; separate persisted validity, hostname and chain facts; simultaneous findings; conservative migration backfill. [Evidence](../phase-7/Monitoring_Hardening_Evidence.md) |
+| BR-C04 | 5/WI-50; 7/P7-MON-04 | U/I: exact 30/15/7 boundaries, strict threshold ordering, immutable custom expiry policy and SSL-specific fingerprint; current certificate display excludes superseded results. [Evidence](../phase-7/Monitoring_Hardening_Evidence.md) |
+| BR-C05, BR-C06, BR-C07 | 5/WI-50; 7/P7-MON-04 | C/I: fingerprint uniqueness, certificate replacement, daily/urgent scheduling, queued legacy fingerprint compatibility and generation fencing. [Evidence](../phase-7/Monitoring_Hardening_Evidence.md) |
 | BR-P01 | 5/WI-52 | U/I: total/TTFB ms, timestamps, missing values |
 | BR-P02, BR-P03 | 5/WI-52 | U/I: 1500/3000 boundaries, overrides, third-breach/reset |
 | BR-P04, BR-P05 | 5/WI-52 | U/I: 2 MiB/measurement label, provenance/comparability warning |

@@ -2165,7 +2165,7 @@ internal static class DatabaseFoundationAssertions
         await using var columns = new NpgsqlCommand("""
             SELECT table_name || '.' || column_name FROM information_schema.columns
             WHERE table_schema = 'web_health'
-                AND table_name IN ('endpoint_monitor', 'check_configuration_snapshot', 'check_result', 'target_authorization_evidence')
+                AND table_name IN ('endpoint_monitor', 'check_configuration_snapshot', 'check_result', 'target_authorization_evidence', 'certificate_observation')
             ORDER BY table_name, column_name;
             """, connection);
         await using var reader = await columns.ExecuteReaderAsync();
@@ -2176,6 +2176,10 @@ internal static class DatabaseFoundationAssertions
             "check_configuration_snapshot.target_normalized_url", "check_configuration_snapshot.target_normalized_host",
             "check_configuration_snapshot.target_effective_port", "check_configuration_snapshot.target_normalization_version",
             "check_configuration_snapshot.target_is_production", "check_configuration_snapshot.current_truth_generation",
+            "check_configuration_snapshot.ssl_warning_expiry_days", "check_configuration_snapshot.ssl_high_expiry_days",
+            "check_configuration_snapshot.ssl_critical_expiry_days", "certificate_observation.validity_status",
+            "certificate_observation.hostname_status", "certificate_observation.chain_trust_status",
+            "certificate_observation.chain_status_codes",
             "target_authorization_evidence.endpoint_id", "target_authorization_evidence.normalized_host",
             "target_authorization_evidence.port", "target_authorization_evidence.authorization_kind",
             "target_authorization_evidence.evidence_reference", "target_authorization_evidence.effective_from",
@@ -2259,6 +2263,7 @@ internal static class DatabaseFoundationAssertions
         JsonSerializer.Deserialize<string[]>(observation.ChainStatusCodes).Should().Equal("PartialChain");
         var renewed = certificate with
         {
+            Sha256Fingerprint = new string('d', 64),
             NotAfter = DateTimeOffset.UtcNow.AddDays(20),
             ObservedAt = DateTimeOffset.UtcNow,
             HostnameMatched = true,
@@ -2276,6 +2281,12 @@ internal static class DatabaseFoundationAssertions
         (await database.Findings.AnyAsync(item => item.LogicalCheckId == customPolicy.Id)).Should().BeFalse();
         (await database.CheckResults.SingleAsync(item => item.LogicalCheckId == customPolicy.Id)).CurrentStateDisposition
             .Should().Be("Current");
+        var replacedIncident = await database.Incidents.SingleAsync(item => item.EndpointMonitorId == monitor.Id
+            && item.IssueKey == SslMonitorIdentity.CreateIssueKey(SslMonitorIdentity.ExpiryRuleKey, certificate.Sha256Fingerprint));
+        replacedIncident.Status.Should().Be(IncidentStatuses.Resolved);
+        replacedIncident.ResolutionCategory.Should().Be(IncidentResolutionCategories.CertificateRenewed);
+        (await database.IncidentEvents.CountAsync(item => item.IncidentId == replacedIncident.Id
+            && item.EventType == IncidentEventTypes.CertificateRenewed)).Should().Be(1);
         var stale = await CreateQueuedCheckAsync(database, monitor, sslThresholds: new(10, 5, 1));
         monitor.IsEnabled = false;
         await database.SaveChangesAsync();

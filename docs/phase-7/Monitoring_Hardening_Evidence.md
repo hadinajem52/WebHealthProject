@@ -225,3 +225,10 @@ Verification on 2026-09-08: the full ordered database suite passed; the updated 
 in Release with zero warnings and errors. Final responsive browser verification remains pending.
 
 Certificate attention totals now subtract the overlap between invalid certificates and expiry bands, so simultaneous faults do not count one certificate twice. The focused regression passed on 2026-09-08; the test build compiled the application and web projects successfully.
+
+The populated SSL scenario now presents a genuinely different SHA-256 fingerprint during renewal.
+It verifies that the old expiry incident is Resolved with CertificateRenewed classification and
+exactly one CertificateRenewed event. Schema inspection asserts all four structured certificate
+columns and all three snapshot expiry columns. BR-C01 through BR-C07 traceability now links this
+hardening evidence, and BR-C02 explicitly documents structured facts and storage/network limits.
+Verification on 2026-09-08: the full ordered database suite passed with zero-warning Release build.
