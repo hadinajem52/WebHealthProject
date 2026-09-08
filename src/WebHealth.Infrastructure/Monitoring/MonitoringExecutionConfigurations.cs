@@ -62,7 +62,13 @@ internal sealed class CheckConfigurationSnapshotConfiguration
     {
         builder.ToTable("check_configuration_snapshot", table =>
         {
-            table.HasCheckConstraint("ck_check_configuration_snapshot_schema_version", "schema_version > 0");
+            table.HasCheckConstraint("ck_check_configuration_snapshot_schema_version", "schema_version IN (1, 2)");
+            table.HasCheckConstraint("ck_check_configuration_snapshot_v2_target",
+                "schema_version = 1 OR (target_normalized_url IS NOT NULL AND length(target_normalized_url) > 0 "
+                + "AND target_normalized_host IS NOT NULL AND length(target_normalized_host) > 0 "
+                + "AND target_effective_port IS NOT NULL AND target_effective_port BETWEEN 1 AND 65535 "
+                + "AND target_normalization_version IS NOT NULL AND target_normalization_version > 0 "
+                + "AND target_is_production IS NOT NULL AND current_truth_generation IS NOT NULL AND current_truth_generation > 0)");
             table.HasCheckConstraint(
                 "ck_check_configuration_snapshot_positive_values",
                 "interval_seconds > 0 AND timeout_seconds > 0 "
@@ -97,6 +103,8 @@ internal sealed class CheckConfigurationSnapshotConfiguration
                 + "'^[1-5][0-9]{2}(,[1-5][0-9]{2})*$'");
         });
         builder.HasKey(snapshot => snapshot.LogicalCheckId);
+        builder.Property(snapshot => snapshot.TargetNormalizedUrl).HasMaxLength(2048);
+        builder.Property(snapshot => snapshot.TargetNormalizedHost).HasMaxLength(253);
         builder.Property(snapshot => snapshot.MonitorType).HasMaxLength(50).IsRequired();
         builder.Property(snapshot => snapshot.ConfigurationFingerprint).HasMaxLength(64).IsRequired();
         builder.Property(snapshot => snapshot.IntervalSource).HasMaxLength(30).IsRequired();
@@ -203,6 +211,9 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
                 "(is_maintenance AND maintenance_occurrence_id IS NOT NULL) OR "
                 + "(NOT is_maintenance AND maintenance_occurrence_id IS NULL)");
         });
+        builder.Property(result => result.CurrentStateDisposition).HasMaxLength(20).HasDefaultValue("Current");
+        builder.ToTable("check_result", table => table.HasCheckConstraint(
+            "ck_check_result_current_state_disposition", "current_state_disposition IN ('Current', 'Superseded', 'Ineligible')"));
         builder.HasKey(result => result.LogicalCheckId);
         builder.Property(result => result.Outcome).HasMaxLength(20).IsRequired();
         builder.Property(result => result.FailureCategory).HasMaxLength(50);

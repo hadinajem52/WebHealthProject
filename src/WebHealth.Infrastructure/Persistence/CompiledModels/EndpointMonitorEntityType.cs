@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Registry.EndpointMonitor",
                 typeof(EndpointMonitor),
                 baseEntityType,
-                propertyCount: 23,
+                propertyCount: 24,
                 navigationCount: 5,
                 foreignKeyCount: 5,
                 unnamedIndexCount: 6,
@@ -84,6 +84,19 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 nullable: true);
             criticalThresholdMs.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             criticalThresholdMs.AddAnnotation("Relational:ColumnName", "critical_threshold_ms");
+
+            var currentTruthGeneration = runtimeEntityType.AddProperty(
+                "CurrentTruthGeneration",
+                typeof(long),
+                propertyInfo: typeof(EndpointMonitor).GetProperty("CurrentTruthGeneration", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(EndpointMonitor).GetField("<CurrentTruthGeneration>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                valueGenerated: ValueGenerated.OnAddOrUpdate,
+                beforeSaveBehavior: PropertySaveBehavior.Ignore,
+                afterSaveBehavior: PropertySaveBehavior.Ignore,
+                sentinel: 0L);
+            currentTruthGeneration.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            currentTruthGeneration.AddAnnotation("Relational:ColumnName", "current_truth_generation");
+            currentTruthGeneration.AddAnnotation("Relational:DefaultValue", 1L);
 
             var deletedAt = runtimeEntityType.AddProperty(
                 "DeletedAt",

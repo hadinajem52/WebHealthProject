@@ -386,6 +386,8 @@ public static class DependencyInjection
         services.AddScoped<IEndpointUrlSchemeProbe, EndpointUrlSchemeProbe>();
         services.AddScoped<EndpointUrlResolver>();
         services.AddScoped<ISslCertificateProbe, SslCertificateProbe>();
+        services.AddScoped<ITargetConnectionAuthorization, TargetConnectionAuthorization>();
+        services.AddScoped<ITargetPermissionService, TargetPermissionService>();
         services.AddScoped<ISslUrgentCheckScheduler, SslUrgentCheckScheduler>();
         services.AddHttpClient(SafeHttpTransportOptions.ClientName, client =>
             {

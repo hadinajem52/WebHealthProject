@@ -57,3 +57,48 @@ no badge rendering was changed.
 This is local personal-project evidence, not deployment certification. Later increments remain
 required for snapshot immutability, authorization revocation, SSL hardening, diagnostics,
 retention, and representative load/recovery evidence.
+
+## P7-MON-02 — implemented
+
+Snapshot v2 freezes target URL, host, port, normalization, production classification, policy,
+and monitor generation. Scheduled, manual, and urgent creation share the builder. HTTP/SSL
+execution and evidence validation use the recorded target; v1 compatibility is explicit.
+PostgreSQL triggers advance generations atomically for policy and lifecycle mutations, including
+set-based parent cascades. Cadence updates alone do not advance generation. Finalization locks
+and refreshes current state; superseded/ineligible history cannot change health, issue counters,
+incidents, notifications, or urgent work.
+
+Current target authorization is checked immediately before every socket, including HTTP redirects
+and DNS fallback. Administrator/Operations can grant or revoke endpoint/host/port evidence through
+endpoint Actions. Existing endpoints receive no fabricated permission. Evidence/reasons are absent
+from snapshots, logs, and audit payloads; grant/revoke audits record identifiers and action only.
+
+Verification on 2026-09-08:
+
+| Check | Result |
+| --- | --- |
+| Unit suite | 738 passed |
+| Ordinary integration suite | 634 passed, three existing skips |
+| Full ordered database foundation script | Passed, including explicit migration application |
+| EF pending-model check | No model drift |
+| Browser against disposable PostgreSQL fixtures | Endpoint superseded message visible; permission empty state, grant to Active, revoke to Revoked verified |
+| Visual inspection | Dashboard fonts/cards retained; corrected an empty validation-summary box found during inspection |
+
+Database regressions cover pause/resume, scheduling toggle, endpoint disable/enable, archive/restore,
+policy changes, all parent lifecycle toggles, HTTP scheme changes, SSL host/port/scheme replacement,
+and recorded-target execution after edits. Old results persist without current health/issues/incidents.
+Transport tests prove revoked permission causes zero socket contacts and fallback rechecks permission.
+Direct service and MVC tests cover roles, anti-forgery, duplicate grants, idempotent revoke, audit privacy,
+identity matching, and expiry boundaries. Snapshot tests cover legacy resolution, missing/conflicting
+v2 fields, unsupported versions, and database rejection of invalid snapshots.
+
+An isolated populated database regression found and now protects a rollback defect. Rollback cancels
+unfinished v2 work, clears leases, preserves completed result facts, and converts snapshots to the
+legacy representation before dropping target fields. It flushes deferred constraints before schema
+changes. Reapplication is repeatable. This explicit rollback loses v2-only target/disposition facts
+and permission grants; the setup guide documents that limitation. Normal upgrades preserve v1 history.
+
+The migrations have only been applied to disposable verification databases, not the user's application
+database. The missing Detail_Page_UI_Pattern.md reference was checked; existing endpoint cards and
+fact rows supplied the UI reference. Mobile visual checks and broader changed-UI evidence remain part
+of the final release gate. Increments 3–7, including AC-14/AC-15, remain required.

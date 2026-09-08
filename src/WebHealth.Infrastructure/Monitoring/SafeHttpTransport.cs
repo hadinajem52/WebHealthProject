@@ -122,6 +122,7 @@ internal sealed class SafeHttpTransport(
                 currentTiming = new SafeHttpTimingCollector();
                 var currentTls = new SafeHttpTlsCollector();
                 currentTtfbMs = null;
+                message.Options.Set(SafeHttpConnectionFactory.RequestKey, request);
                 message.Options.Set(SafeHttpTimingOptions.Key, currentTiming);
                 message.Options.Set(SafeHttpTlsOptions.Key, currentTls);
                 var ttfbStart = Stopwatch.GetTimestamp();

@@ -201,3 +201,34 @@ address attempt has this limit, including waiting for its per-IP concurrency slo
 All DNS answers are validated before connection; permitted addresses are tried in resolver
 order. The check timeout remains the overall deadline across DNS, attempts, TLS, and HTTP.
 No database migration is required for this setting.
+
+## Snapshot v2 and target permissions
+
+The monitoring hardening upgrade adds `MonitoringSnapshotV2` and `TargetAuthorizationEvidence`.
+Apply migrations explicitly before starting the upgraded application; startup does not apply them.
+Existing completed snapshots remain historical. New checks capture their target and lifecycle
+generation so queued evidence cannot overwrite health after configuration or lifecycle changes.
+
+The upgrade creates no target permission automatically. An Administrator or Operations user must
+open an endpoint, choose **Actions → Target permissions**, and record an ownership or explicit
+permission reference for its host and port. Grant separate permission for any redirect destination
+host/port. Permissions are scoped to that endpoint; they do not override prohibited-address rules.
+Only one current permission can cover the same endpoint, host, and port. Revoke it before replacing
+it. Revocation needs a reason and prevents subsequent connection attempts; an existing connection
+may finish. An optional expiry includes its time zone, for example `2026-12-31T23:59:00Z`.
+
+Permission references and revocation reasons stay out of snapshots and audit payloads. Do not
+place credentials or secrets in them. Existing endpoints without evidence fail closed at connection
+time. This is a deliberate local/demo upgrade step, not automatic permission for stored targets.
+
+### Snapshot v2 rollback
+
+Stop the application and workers before explicitly rolling back `MonitoringSnapshotV2`.
+Rollback completes unfinished v2 checks as cancelled, releases their leases and work, and
+reduces snapshots to the legacy v1 representation before removing target/generation fields.
+Completed result facts survive, but the frozen target and superseded disposition do not;
+rolling forward cannot recover those removed facts. The permission migration rollback also
+removes permission evidence, so grants must be recorded again after reapplying it.
+Use a database backup when preserving these new facts is required. Normal upgrades leave
+completed v1 snapshots unchanged. The isolated database suite verifies populated rollback
+and repeatable reapplication; application startup never performs migrations.

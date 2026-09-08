@@ -157,6 +157,7 @@ internal static class EndpointRegistrationAssertions
         await database.Entry(availability).ReloadAsync();
         dueAt = availability.NextDueAt;
 
+        var beforeArchiveGeneration = availability.CurrentTruthGeneration;
         var archived = await registry.DeleteAsync(new(endpointId, endpoint.Version), access);
         archived.Succeeded.Should().BeTrue(string.Join(" ", archived.Errors));
         historical.DeletedAt.Should().Be(retiredAt);
@@ -169,6 +170,7 @@ internal static class EndpointRegistrationAssertions
         var active = endpoint.Monitors.Where(item => item.DeletedAt is null).ToArray();
         active.Select(item => item.Id).Should().BeEquivalentTo([availability.Id, ssl.Id]);
         var restoredAvailability = active.Single(item => item.Id == availability.Id);
+        restoredAvailability.CurrentTruthGeneration.Should().BeGreaterThan(beforeArchiveGeneration);
         restoredAvailability.IsEnabled.Should().BeFalse();
         restoredAvailability.SchedulingEnabled.Should().BeFalse();
         restoredAvailability.NextDueAt.Should().Be(dueAt);

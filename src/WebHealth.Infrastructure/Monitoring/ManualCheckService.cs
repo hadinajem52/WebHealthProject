@@ -50,6 +50,7 @@ internal sealed class ManualCheckService(
         var now = timeProvider.GetUtcNow();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var monitor = await dbContext.EndpointMonitors
+            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
             .Where(candidate => candidate.EndpointId == endpointId
                 && candidate.MonitorType == monitorType
                 && candidate.DeletedAt == null)
@@ -60,6 +61,7 @@ internal sealed class ManualCheckService(
             return ManualCheckResult.MonitorNotAvailable();
         }
 
+        await CheckConfigurationSnapshotFactory.LockAndRefreshAsync(dbContext, monitor, cancellationToken);
         if (!await testGate.CanTestEndpointAsync(endpointId, access, cancellationToken))
         {
             await transaction.RollbackAsync(cancellationToken);

@@ -24,10 +24,24 @@
      data-run-active="@(inFlight ? "true" : "false")"
      data-run-url="@Url.Action("Check", new { id = check.LogicalCheckId })"
      data-run-lifetime="120000">
+    @if (check.CurrentStateDisposition is "Superseded" or "Ineligible")
+    {
+        <div class="flash" data-level="info" role="status">
+            <span class="flash__icon">@await Html.PartialAsync("_Icon", "information")</span>
+            <div>
+                <p class="flash__label">@check.CurrentStateDisposition evidence</p>
+                <p class="flash__text">This result is kept in history. It did not change current health or incidents because the monitoring configuration or eligibility changed.</p>
+            </div>
+        </div>
+    }
     <section class="card">
         <div class="page-intro">
             <div>
                 <h2 class="card__title target-url">@check.EndpointDisplayUrl</h2>
+                @if (check.TargetDisplayUrl is { } targetUrl)
+                {
+                    <p class="card__subtitle">Check target: <span class="target-url">@targetUrl</span></p>
+                }
                 <p class="card__status" data-status="@outcomeStatus">
                     @if (inFlight)
                     {

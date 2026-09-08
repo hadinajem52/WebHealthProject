@@ -35,6 +35,7 @@ internal sealed class SslUrgentCheckScheduler(
         }
 
         var monitor = await dbContext.EndpointMonitors
+            .Include(candidate => candidate.Endpoint).ThenInclude(endpoint => endpoint.Environment)
             .SingleAsync(candidate => candidate.Id == monitorId.Value, cancellationToken);
         var cooldownStart = now - schedulingOptions.UrgentSslCooldown;
         var recentlyRequested = await dbContext.LogicalChecks.AnyAsync(candidate =>
@@ -50,6 +51,7 @@ internal sealed class SslUrgentCheckScheduler(
             return null;
         }
 
+        await CheckConfigurationSnapshotFactory.LockAndRefreshAsync(dbContext, monitor, cancellationToken);
         var logicalCheckId = Guid.NewGuid();
         var durableWorkId = Guid.NewGuid();
         dbContext.LogicalChecks.Add(new LogicalCheck

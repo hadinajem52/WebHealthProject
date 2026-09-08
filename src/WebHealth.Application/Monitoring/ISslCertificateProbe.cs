@@ -12,7 +12,10 @@ public interface ISslCertificateProbe
 public sealed record SslCertificateProbeRequest(
     Guid EndpointId,
     string Url,
-    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds);
+    int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds)
+{
+    public ITargetConnectionAuthorization? ConnectionAuthorization { get; init; }
+}
 
 public sealed record SslCertificateProbeResult(
     SslProbeFailureKind? Failure,

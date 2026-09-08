@@ -170,3 +170,15 @@ The tables cover AC-01–AC-15 and BR-A01–BR-Q07. Functional requirements FR-0
 ## 9. Completeness rule
 
 If AC-07/08 are deferred, BR-E01–E10 and BR-L01–L10 must be explicitly listed as incomplete follow-up. BR-M05 requires a separate decision. No rule is complete from a planned test alone.
+
+## Phase 7 monitoring hardening evidence
+
+| Work item | Rules and acceptance criteria | Implementation and regression evidence |
+| --- | --- | --- |
+| P7-MON-01 | BR-S01–S08, BR-Q01/Q02/Q07, AC-02/AC-05 | DNS fallback validates all answers before bounded connection attempts; monitor reconciliation preserves retirement and operator choices; exhaustive monitor dispatch. |
+| P7-MON-02 | BR-S01/S03/S05/S06, BR-Q01/Q02/Q06, AC-02/AC-03/AC-06 | Immutable v2 target and generation; current permission on each socket; stale HTTP/SSL history cannot alter current state; direct role and anti-forgery checks; populated rollback and upgrade repeatability. |
+
+Test commands, results, changed-UI checks, compatibility limits, and remaining increments are in
+[Monitoring hardening evidence](../phase-7/Monitoring_Hardening_Evidence.md).
+These entries supplement earlier feature evidence and do not close retention or representative
+scale acceptance gates AC-14 and AC-15.

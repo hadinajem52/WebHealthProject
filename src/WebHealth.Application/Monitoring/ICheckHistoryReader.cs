@@ -47,6 +47,7 @@ public sealed record CheckHistoryItem(
     string? MonitorSource,
     bool CountsForUptime)
 {
+    public string? CurrentStateDisposition { get; init; }
     public IReadOnlyList<KnownIncidentItem> KnownIncidents { get; init; } = [];
 }
 
@@ -81,6 +82,8 @@ public sealed record CheckDetails(
     IReadOnlyList<CheckFindingItem> Findings,
     IReadOnlyList<CheckRedirectHopItem> RedirectHops)
 {
+    public string? CurrentStateDisposition { get; init; }
+    public string? TargetDisplayUrl { get; init; }
     public IReadOnlyList<KnownIncidentItem> KnownIncidents { get; init; } = [];
 }
 

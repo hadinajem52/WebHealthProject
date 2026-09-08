@@ -62,6 +62,8 @@ public sealed class WebHealthWebApplicationFactory : WebApplicationFactory<Progr
                 provider.GetRequiredService<EmptyPageAuditIncidentPolicyService>());
             services.RemoveAll<IAuditTrailReader>();
             services.AddScoped<IAuditTrailReader, EmptyAuditTrailReader>();
+            services.RemoveAll<ITargetPermissionService>();
+            services.AddScoped<ITargetPermissionService, EmptyTargetPermissionService>();
             services.RemoveAll<ICheckHistoryReader>();
             services.AddScoped<ICheckHistoryReader, EmptyCheckHistoryReader>();
             services.RemoveAll<IRunHistoryArchive>();

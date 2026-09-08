@@ -21,7 +21,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Monitoring.CheckConfigurationSnapshot",
                 typeof(CheckConfigurationSnapshot),
                 baseEntityType,
-                propertyCount: 21,
+                propertyCount: 27,
                 navigationCount: 1,
                 foreignKeyCount: 1,
                 keyCount: 1);
@@ -90,6 +90,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 nullable: true);
             criticalThresholdMs.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             criticalThresholdMs.AddAnnotation("Relational:ColumnName", "critical_threshold_ms");
+
+            var currentTruthGeneration = runtimeEntityType.AddProperty(
+                "CurrentTruthGeneration",
+                typeof(long?),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("CurrentTruthGeneration", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<CurrentTruthGeneration>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            currentTruthGeneration.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            currentTruthGeneration.AddAnnotation("Relational:ColumnName", "current_truth_generation");
 
             var failureConfirmationCount = runtimeEntityType.AddProperty(
                 "FailureConfirmationCount",
@@ -181,6 +190,53 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: (short)0);
             schemaVersion.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             schemaVersion.AddAnnotation("Relational:ColumnName", "schema_version");
+
+            var targetEffectivePort = runtimeEntityType.AddProperty(
+                "TargetEffectivePort",
+                typeof(int?),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("TargetEffectivePort", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<TargetEffectivePort>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            targetEffectivePort.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            targetEffectivePort.AddAnnotation("Relational:ColumnName", "target_effective_port");
+
+            var targetIsProduction = runtimeEntityType.AddProperty(
+                "TargetIsProduction",
+                typeof(bool?),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("TargetIsProduction", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<TargetIsProduction>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            targetIsProduction.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            targetIsProduction.AddAnnotation("Relational:ColumnName", "target_is_production");
+
+            var targetNormalizationVersion = runtimeEntityType.AddProperty(
+                "TargetNormalizationVersion",
+                typeof(int?),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("TargetNormalizationVersion", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<TargetNormalizationVersion>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            targetNormalizationVersion.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            targetNormalizationVersion.AddAnnotation("Relational:ColumnName", "target_normalization_version");
+
+            var targetNormalizedHost = runtimeEntityType.AddProperty(
+                "TargetNormalizedHost",
+                typeof(string),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("TargetNormalizedHost", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<TargetNormalizedHost>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                maxLength: 253);
+            targetNormalizedHost.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            targetNormalizedHost.AddAnnotation("Relational:ColumnName", "target_normalized_host");
+
+            var targetNormalizedUrl = runtimeEntityType.AddProperty(
+                "TargetNormalizedUrl",
+                typeof(string),
+                propertyInfo: typeof(CheckConfigurationSnapshot).GetProperty("TargetNormalizedUrl", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckConfigurationSnapshot).GetField("<TargetNormalizedUrl>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                maxLength: 2048);
+            targetNormalizedUrl.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            targetNormalizedUrl.AddAnnotation("Relational:ColumnName", "target_normalized_url");
 
             var thresholdSource = runtimeEntityType.AddProperty(
                 "ThresholdSource",

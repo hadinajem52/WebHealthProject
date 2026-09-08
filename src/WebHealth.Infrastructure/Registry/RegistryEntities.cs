@@ -136,6 +136,7 @@ public sealed class PolicyProfile
 public sealed class EndpointMonitor
 {
     public Guid Id { get; set; }
+    public long CurrentTruthGeneration { get; set; } = 1;
     public Guid EndpointId { get; set; }
     public Guid PolicyProfileId { get; set; }
     public required string MonitorType { get; set; }

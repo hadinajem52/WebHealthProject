@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Monitoring.CheckResult",
                 typeof(CheckResult),
                 baseEntityType,
-                propertyCount: 21,
+                propertyCount: 22,
                 navigationCount: 4,
                 foreignKeyCount: 2,
                 unnamedIndexCount: 4,
@@ -65,6 +65,17 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 sentinel: false);
             countsForUptime.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             countsForUptime.AddAnnotation("Relational:ColumnName", "counts_for_uptime");
+
+            var currentStateDisposition = runtimeEntityType.AddProperty(
+                "CurrentStateDisposition",
+                typeof(string),
+                propertyInfo: typeof(CheckResult).GetProperty("CurrentStateDisposition", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckResult).GetField("<CurrentStateDisposition>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                valueGenerated: ValueGenerated.OnAdd,
+                maxLength: 20);
+            currentStateDisposition.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            currentStateDisposition.AddAnnotation("Relational:ColumnName", "current_state_disposition");
+            currentStateDisposition.AddAnnotation("Relational:DefaultValue", "Current");
 
             var decodedLength = runtimeEntityType.AddProperty(
                 "DecodedLength",

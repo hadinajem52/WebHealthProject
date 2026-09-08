@@ -289,6 +289,7 @@ internal sealed class EndpointMonitorConfiguration : IEntityTypeConfiguration<En
     {
         builder.ToTable("endpoint_monitor", table =>
         {
+            table.HasCheckConstraint("ck_endpoint_monitor_current_truth_generation", "current_truth_generation > 0");
             table.HasCheckConstraint("ck_endpoint_monitor_positive_interval", "interval_seconds > 0");
             table.HasCheckConstraint("ck_endpoint_monitor_positive_timeout", "timeout_seconds > 0");
             table.HasCheckConstraint("ck_endpoint_monitor_positive_confirmation", "failure_confirmation_count > 0 AND recovery_confirmation_count > 0");
@@ -302,6 +303,7 @@ internal sealed class EndpointMonitorConfiguration : IEntityTypeConfiguration<En
         builder.Property(monitor => monitor.MonitorType).HasMaxLength(50).IsRequired();
         builder.Property(monitor => monitor.BoundedOverrides).HasColumnType("jsonb").IsRequired();
         builder.Property(monitor => monitor.ConfigurationFingerprint).HasMaxLength(64).IsRequired();
+        builder.Property(monitor => monitor.CurrentTruthGeneration).HasDefaultValue(1L).ValueGeneratedOnAddOrUpdate();
         builder.Property(monitor => monitor.Version).IsConcurrencyToken();
         builder.Property(monitor => monitor.SchedulingEnabled).HasDefaultValue(true);
         builder.HasIndex(monitor => new { monitor.EndpointId, monitor.MonitorType })

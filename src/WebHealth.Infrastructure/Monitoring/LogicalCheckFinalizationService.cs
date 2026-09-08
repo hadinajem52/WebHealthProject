@@ -34,12 +34,16 @@ internal sealed class LogicalCheckFinalizationService(
         var seoExtraction = ExtractSeoValues(command.Evidence);
 
         await using var transaction = await BeginTransactionAsync(cancellationToken);
+        await LockEndpointMonitorAsync(command.Lease.EndpointMonitorId, cancellationToken);
         await LockLogicalCheckAsync(command.Lease.LogicalCheckId, cancellationToken);
         var check = await LoadLogicalCheckAsync(command.Lease.LogicalCheckId, cancellationToken);
         if (check is null)
         {
             return LogicalCheckFinalizationStatus.InvalidLogicalCheck;
         }
+
+        await RefreshCurrentRegistryAsync(check, cancellationToken);
+        var disposition = CheckCurrentState.Disposition(check);
 
         var attempt = check.Attempts.SingleOrDefault(candidate => candidate.Id == command.AttemptId);
         if (check.Result is not null)
@@ -85,23 +89,28 @@ internal sealed class LogicalCheckFinalizationService(
         var normalized = Normalize(check, command.Evidence, seoExtraction, robotsFacts, now);
         var indeterminateIssueKeys = FindIndeterminateIssueKeys(check, command.Evidence, robotsFacts);
         var maintenance = await maintenanceEvaluator.FindActiveAsync(check.EndpointMonitorId, normalized.MeasuredAt, cancellationToken);
-        AddHistory(check, normalized, command.Evidence, seoExtraction, maintenance, now);
+        AddHistory(check, normalized, command.Evidence, seoExtraction, maintenance, now, disposition);
         var counterMode = HealthConfirmationEngine.SelectCounterMode(
             check.Source,
             normalized.Outcome,
             normalized.FailureCategory,
             maintenance is not null,
             maintenance?.ContinueFailureCounter ?? false);
-        var healthDecision = await ApplyHealthAsync(
-            check, normalized, indeterminateIssueKeys, counterMode, now, cancellationToken);
-        await incidentAutomation.ApplyAsync(
-            check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken,
-            (command.Evidence as SslCertificateEvidence)?.Result.Certificate?.Sha256Fingerprint);
+        if (disposition == "Current")
+        {
+            var healthDecision = await ApplyHealthAsync(
+                check, normalized, indeterminateIssueKeys, counterMode, now, cancellationToken);
+            await incidentAutomation.ApplyAsync(
+                check, normalized, healthDecision, counterMode, maintenance is not null, now, cancellationToken,
+                (command.Evidence as SslCertificateEvidence)?.Result.Certificate?.Sha256Fingerprint);
+        }
         CompleteAttempt(attempt!, command.Evidence, now);
         CompleteWork(work, now);
 
-        var urgentCertificateCheck = await urgentCertificateChecks.PrepareAfterTlsFailureAsync(
-            check.EndpointMonitor.EndpointId, command.Evidence, now, cancellationToken);
+        var urgentCertificateCheck = disposition == "Current"
+            ? await urgentCertificateChecks.PrepareAfterTlsFailureAsync(
+                check.EndpointMonitor.EndpointId, command.Evidence, now, cancellationToken)
+            : null;
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -164,6 +173,16 @@ internal sealed class LogicalCheckFinalizationService(
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return LogicalCheckRetryStatus.RetryPrepared;
+    }
+
+    private async Task RefreshCurrentRegistryAsync(LogicalCheck check, CancellationToken token)
+    {
+        var monitor = check.EndpointMonitor;
+        await dbContext.Entry(monitor).ReloadAsync(token);
+        await dbContext.Entry(monitor.Endpoint).ReloadAsync(token);
+        await dbContext.Entry(monitor.Endpoint.Environment).ReloadAsync(token);
+        await dbContext.Entry(monitor.Endpoint.Environment.Website).ReloadAsync(token);
+        await dbContext.Entry(monitor.Endpoint.Environment.Website.Client).ReloadAsync(token);
     }
 
     private Task<LogicalCheck?> LoadLogicalCheckAsync(Guid logicalCheckId, CancellationToken token) =>
@@ -240,9 +259,9 @@ internal sealed class LogicalCheckFinalizationService(
             return LogicalCheckFinalizationStatus.InvalidTransportResult;
         }
 
-        var endpoint = check.EndpointMonitor.Endpoint;
+        var endpoint = CheckSnapshotTarget.Resolve(check);
         var normalized = EndpointUrlNormalizer.Normalize(evidence.Request.Url);
-        if (evidence.Request.EndpointId != endpoint.Id
+        if (evidence.Request.EndpointId != endpoint.EndpointId
             || !normalized.Succeeded
             || normalized.NormalizedUrl != endpoint.NormalizedUrl)
         {
@@ -268,7 +287,7 @@ internal sealed class LogicalCheckFinalizationService(
         CancellationToken cancellationToken)
     {
         if (MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType)) return null;
-        var origin = RobotsRefreshService.OriginOf(check.EndpointMonitor.Endpoint.NormalizedUrl);
+        var origin = RobotsRefreshService.OriginOf(CheckSnapshotTarget.Resolve(check).NormalizedUrl);
 
         var now = timeProvider.GetUtcNow();
         var snapshot = await dbContext.RobotsSnapshots.AsNoTracking()
@@ -365,10 +384,10 @@ internal sealed class LogicalCheckFinalizationService(
 
     private static bool MatchesTarget(LogicalCheck check, SafeHttpTransportRequest request)
     {
-        var endpoint = check.EndpointMonitor.Endpoint;
+        var endpoint = CheckSnapshotTarget.Resolve(check);
         var normalized = EndpointUrlNormalizer.Normalize(request.Url);
-        return request.EndpointId == endpoint.Id
-            && request.IsProduction == endpoint.Environment.IsProduction
+        return request.EndpointId == endpoint.EndpointId
+            && request.IsProduction == endpoint.IsProduction
             && normalized.Succeeded
             && normalized.NormalizedUrl == endpoint.NormalizedUrl;
     }
@@ -393,9 +412,9 @@ internal sealed class LogicalCheckFinalizationService(
     {
         var snapshot = check.ConfigurationSnapshot;
         return HttpPolicyFingerprint.Create(new(
-            check.EndpointMonitor.Endpoint.NormalizedUrl,
+            CheckSnapshotTarget.Resolve(check).NormalizedUrl,
             snapshot.MonitorType,
-            check.EndpointMonitor.Endpoint.Environment.IsProduction,
+            CheckSnapshotTarget.Resolve(check).IsProduction,
             snapshot.IntervalSeconds,
             snapshot.TimeoutSeconds,
             snapshot.FailureConfirmationCount,
@@ -498,13 +517,15 @@ internal sealed class LogicalCheckFinalizationService(
         LogicalCheckTerminalEvidence evidence,
         SeoExtraction? seoExtraction,
         ActiveMaintenanceOccurrence? maintenance,
-        DateTimeOffset completedAt)
+        DateTimeOffset completedAt,
+        string disposition)
     {
         var isSsl = MonitorWorkKinds.IsSsl(check.ConfigurationSnapshot.MonitorType);
         dbContext.CheckResults.Add(new CheckResult
         {
             LogicalCheckId = check.Id,
             EndpointMonitorId = check.EndpointMonitorId,
+            CurrentStateDisposition = disposition,
             Outcome = normalized.Outcome,
             FailureCategory = normalized.FailureCategory,
             HttpStatus = normalized.HttpStatus,

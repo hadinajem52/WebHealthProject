@@ -114,6 +114,12 @@
                                         item.FailureCategory,
                                         itemInFlight,
                                         $"check-history-{item.LogicalCheckId}"))
+                                    @if (item.CurrentStateDisposition is "Superseded" or "Ineligible")
+                                    {
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                            StatusBadges.Info, item.CurrentStateDisposition,
+                                            "Historical evidence; current health and incidents were not changed."))
+                                    }
                                     @foreach (var incident in item.KnownIncidents)
                                     {
                                         <a class="known-issue" asp-controller="Incidents" asp-action="Details" asp-route-id="@incident.IncidentId"

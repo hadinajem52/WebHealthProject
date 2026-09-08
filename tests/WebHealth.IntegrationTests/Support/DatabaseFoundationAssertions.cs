@@ -98,11 +98,14 @@ internal static class DatabaseFoundationAssertions
         "20260827092012_PngAuditPersistenceHardening",
         "20260828083420_PngAuditComparisonModelV2",
         "20260828093443_RunHistoryArchive",
-        "20260828100053_PngAuditVerifiedWebpComparison"
+        "20260828100053_PngAuditVerifiedWebpComparison",
+        "20260908105605_MonitoringSnapshotV2",
+        "20260908111324_TargetAuthorizationEvidence"
     ];
 
     private static readonly string[] ExpectedTables =
     [
+        "target_authorization_evidence",
         "audit_event",
         "access_grant",
         "client",
@@ -161,6 +164,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] TablesAddedAfterPhaseThree =
     [
+        "target_authorization_evidence",
         "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
         "maintenance_occurrence", "incident", "incident_event", "incident_evidence",
         "notification_event", "notification_delivery", "notification_attempt",
@@ -178,6 +182,7 @@ internal static class DatabaseFoundationAssertions
 
     private static readonly string[] ExpectedEntityTypeNames =
     [
+        "TargetAuthorizationEvidence",
         "IdentityRoleClaim`1",
         "IdentityUserClaim`1",
         "IdentityUserLogin`1",
@@ -264,6 +269,9 @@ internal static class DatabaseFoundationAssertions
         await VerifyMonitoringExecutionFoundationAsync(connectionString);
         await VerifyHttpMonitoringHistoryAsync(connectionString);
         await VerifyLogicalCheckExecutionAsync(connectionString);
+        await VerifyStaleSnapshotsAsync(connectionString);
+        await VerifyStaleSslSnapshotsAsync(connectionString);
+        await VerifyTargetAuthorizationAsync(connectionString);
         await VerifyHealthConfirmationAsync(connectionString);
         await VerifyHangfireSchedulingAsync(connectionString);
         await VerifyManualChecksAndHistoryAsync(connectionString);
@@ -1124,6 +1132,12 @@ internal static class DatabaseFoundationAssertions
         {
             LogicalCheckId = logicalCheckId,
             SchemaVersion = 2,
+            TargetNormalizedUrl = monitor.Endpoint.NormalizedUrl,
+            TargetNormalizedHost = monitor.Endpoint.NormalizedHost,
+            TargetEffectivePort = monitor.Endpoint.EffectivePort,
+            TargetNormalizationVersion = monitor.Endpoint.NormalizationVersion,
+            TargetIsProduction = monitor.Endpoint.Environment.IsProduction,
+            CurrentTruthGeneration = monitor.CurrentTruthGeneration,
             MonitorType = monitor.MonitorType,
             ConfigurationFingerprint = policyFingerprint,
             IntervalSeconds = monitor.IntervalSeconds,
@@ -1519,13 +1533,12 @@ internal static class DatabaseFoundationAssertions
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString);
         await using var database = new ApplicationDbContext(options.Options);
+        var monitorId = await CreateOwnedMonitorIdAsync(connectionString, "http://health-confirmation.test/status");
         var monitor = await AvailabilityMonitors(database)
             .Include(candidate => candidate.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment)
                     .ThenInclude(environment => environment.Website)
-            .Where(candidate => candidate.DeletedAt == null && candidate.IsEnabled)
-            .OrderBy(candidate => candidate.CreatedAt).ThenBy(candidate => candidate.Id)
-            .FirstAsync();
+            .SingleAsync(candidate => candidate.Id == monitorId);
 
         database.IssueStates.RemoveRange(database.IssueStates.Where(state => state.EndpointMonitorId == monitor.Id));
         database.EndpointHealth.RemoveRange(database.EndpointHealth.Where(health => health.EndpointMonitorId == monitor.Id));
@@ -1834,12 +1847,295 @@ internal static class DatabaseFoundationAssertions
         await AcknowledgeAndResolveAsync(database, clientErrorIncident.Id, clock);
     }
 
+    private static async Task VerifyTargetAuthorizationAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var monitorId = await CreateOwnedMonitorIdAsync(connectionString, "http://authorization-evidence.test/status");
+        var monitor = await AvailabilityMonitors(database).Include(item => item.Endpoint)
+            .SingleAsync(item => item.Id == monitorId);
+        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
+        var authorization = new TargetConnectionAuthorization(database, clock);
+        var host = monitor.Endpoint.NormalizedHost;
+        var port = monitor.Endpoint.EffectivePort;
+        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeFalse();
+        var manager = new TargetPermissionService(database, clock);
+        var access = new RegistryAccessContext(monitor.CreatedByUserId, [ApplicationRoles.Administrator]);
+        var grant = new GrantTargetPermission(monitor.EndpointId, monitor.Endpoint.NormalizedUrl,
+            "Owned", "private-fixture-evidence", clock.GetUtcNow().AddMinutes(1));
+        foreach (var role in new[] { ApplicationRoles.DeveloperSupport, ApplicationRoles.Viewer })
+        {
+            var denied = await manager.GrantAsync(grant, new(monitor.CreatedByUserId, [role]), CancellationToken.None);
+            denied.Status.Should().Be(RegistryMutationStatus.Forbidden);
+        }
+        var invalid = await manager.GrantAsync(grant with { EvidenceReference = " " }, access, CancellationToken.None);
+        invalid.Status.Should().Be(RegistryMutationStatus.ValidationFailed);
+        var granted = await manager.GrantAsync(grant, access, CancellationToken.None);
+        granted.Succeeded.Should().BeTrue(string.Join(" ", granted.Errors));
+        var permissionId = granted.EntityId!.Value;
+        var duplicate = await manager.GrantAsync(grant, access, CancellationToken.None);
+        duplicate.Status.Should().Be(RegistryMutationStatus.ValidationFailed);
+        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeTrue();
+        (await authorization.IsAuthorizedAsync(monitor.EndpointId, "other.test", port, CancellationToken.None)).Should().BeFalse();
+        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port + 1, CancellationToken.None)).Should().BeFalse();
+        (await authorization.IsAuthorizedAsync(Guid.NewGuid(), host, port, CancellationToken.None)).Should().BeFalse();
+        var deniedRevoke = await manager.RevokeAsync(monitor.EndpointId, permissionId, "private-revocation-reason",
+            new(monitor.CreatedByUserId, [ApplicationRoles.Viewer]), CancellationToken.None);
+        deniedRevoke.Status.Should().Be(RegistryMutationStatus.Forbidden);
+        var revoked = await manager.RevokeAsync(monitor.EndpointId, permissionId, "private-revocation-reason", access, CancellationToken.None);
+        revoked.Succeeded.Should().BeTrue(string.Join(" ", revoked.Errors));
+        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeFalse();
+        var repeated = await manager.RevokeAsync(monitor.EndpointId, permissionId, "duplicate", access, CancellationToken.None);
+        repeated.Succeeded.Should().BeTrue(string.Join(" ", repeated.Errors));
+        var audit = await database.AuditEvents.AsNoTracking().Where(item => item.EntityIdentifier == permissionId.ToString()).ToArrayAsync();
+        audit.Select(item => item.Action).Should().BeEquivalentTo(["target-permission.granted", "target-permission.revoked"]);
+        audit.Should().OnlyContain(item => item.BeforeValues == null && item.AfterValues == null);
+        var renewed = await manager.GrantAsync(grant, new(monitor.CreatedByUserId, [ApplicationRoles.Operations]), CancellationToken.None);
+        renewed.Succeeded.Should().BeTrue(string.Join(" ", renewed.Errors));
+        clock.Advance(TimeSpan.FromMinutes(1));
+        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeFalse();
+    }
+
+    private static async Task VerifyStaleSnapshotsAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var monitorId = await CreateOwnedMonitorIdAsync(connectionString, "http://stale-snapshot.test/health");
+        var monitor = await AvailabilityMonitors(database)
+            .Include(item => item.Endpoint).ThenInclude(endpoint => endpoint.Environment)
+            .SingleAsync(item => item.Id == monitorId);
+        var generation = monitor.CurrentTruthGeneration;
+        monitor.NextDueAt = monitor.NextDueAt.AddMinutes(1);
+        await database.SaveChangesAsync();
+        await database.Entry(monitor).ReloadAsync();
+        monitor.CurrentTruthGeneration.Should().Be(generation);
+        var pausedCheck = await FinalizeScheduledResultAsync(database, monitor, 500, beforeFinalization: async () =>
+        {
+            monitor.IsEnabled = false;
+            await database.SaveChangesAsync();
+            monitor.IsEnabled = true;
+            await database.SaveChangesAsync();
+        });
+        monitor.CurrentTruthGeneration.Should().BeGreaterThan(generation);
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == pausedCheck))
+            .CurrentStateDisposition.Should().Be("Superseded");
+        var parentCheck = await FinalizeScheduledResultAsync(database, monitor, 500, beforeFinalization: async () =>
+        {
+            monitor.Endpoint.Environment.IsActive = false;
+            await database.SaveChangesAsync();
+            monitor.Endpoint.Environment.IsActive = true;
+            await database.SaveChangesAsync();
+        });
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == parentCheck))
+            .CurrentStateDisposition.Should().Be("Superseded");
+        var changes = new (string Name, Action<bool> Apply)[]
+        {
+            ("Endpoint disable/enable", enabled => monitor.Endpoint.IsEnabled = enabled),
+            ("Scheduling disable/enable", enabled => monitor.SchedulingEnabled = enabled),
+            ("Website disable/enable", enabled => monitor.Endpoint.Environment.Website.IsEnabled = enabled),
+            ("Client disable/enable", enabled => monitor.Endpoint.Environment.Website.Client.IsActive = enabled)
+        };
+        foreach (var change in changes)
+        {
+            var checkId = await FinalizeScheduledResultAsync(database, monitor, 500, beforeFinalization: async () =>
+            {
+                change.Apply(false);
+                await database.SaveChangesAsync();
+                change.Apply(true);
+                await database.SaveChangesAsync();
+            });
+            (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == checkId))
+                .CurrentStateDisposition.Should().Be("Superseded", change.Name);
+        }
+        var archiveCheck = await FinalizeScheduledResultAsync(database, monitor, 500, beforeFinalization: async () =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            EndpointMonitorReconciler.Archive(monitor.Endpoint, monitor.CreatedByUserId, now);
+            monitor.Endpoint.DeletedAt = now;
+            monitor.Endpoint.DeletedByUserId = monitor.CreatedByUserId;
+            monitor.Endpoint.IsEnabled = false;
+            await database.SaveChangesAsync();
+            EndpointMonitorReconciler.Restore(database, monitor.Endpoint, monitor.Endpoint.Environment.IsProduction,
+                monitor.CreatedByUserId, DateTimeOffset.UtcNow);
+            monitor.Endpoint.DeletedAt = null;
+            monitor.Endpoint.DeletedByUserId = null;
+            await database.SaveChangesAsync();
+            monitor.Endpoint.IsEnabled = true;
+            await database.SaveChangesAsync();
+        });
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == archiveCheck))
+            .CurrentStateDisposition.Should().Be("Superseded");
+        var policyCheck = await FinalizeScheduledResultAsync(database, monitor, 500, beforeFinalization: async () =>
+        {
+            monitor.TimeoutSeconds = 25;
+            monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(monitor.Endpoint.NormalizedUrl,
+                monitor.Endpoint.Environment.IsProduction, monitor.IntervalSeconds, monitor.TimeoutSeconds,
+                monitor.FailureConfirmationCount, monitor.RecoveryConfirmationCount, monitor.WarningThresholdMs, monitor.CriticalThresholdMs);
+            await database.SaveChangesAsync();
+        });
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == policyCheck))
+            .CurrentStateDisposition.Should().Be("Superseded");
+        await VerifySnapshotV2ConstraintsAsync(connectionString, policyCheck);
+        var originalUrl = monitor.Endpoint.NormalizedUrl;
+        var changedTargetCheck = await FinalizeScheduledResultAsync(database, monitor, 500, beforeFinalization: async () =>
+        {
+            var changed = EndpointUrlNormalizer.Normalize("http://changed-snapshot-target.test/new-path");
+            monitor.Endpoint.DisplayUrl = changed.DisplayUrl!;
+            monitor.Endpoint.NormalizedUrl = changed.NormalizedUrl!;
+            monitor.Endpoint.NormalizedUrlHash = changed.NormalizedUrlHash!;
+            monitor.Endpoint.NormalizedHost = changed.NormalizedHost!;
+            monitor.Endpoint.EffectivePort = changed.EffectivePort!.Value;
+            monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(changed.NormalizedUrl!,
+                monitor.Endpoint.Environment.IsProduction, monitor.IntervalSeconds, monitor.TimeoutSeconds,
+                monitor.FailureConfirmationCount, monitor.RecoveryConfirmationCount, monitor.WarningThresholdMs, monitor.CriticalThresholdMs);
+            await database.SaveChangesAsync();
+        });
+        var oldTargetSnapshot = await database.CheckConfigurationSnapshots.AsNoTracking()
+            .SingleAsync(item => item.LogicalCheckId == changedTargetCheck);
+        oldTargetSnapshot.TargetNormalizedUrl.Should().Be(originalUrl);
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == changedTargetCheck))
+            .CurrentStateDisposition.Should().Be("Superseded");
+        foreach (var nextUrl in new[] { "https://scheme-snapshot.test/health", "http://scheme-snapshot.test/health" })
+        {
+            var queued = await CreateQueuedCheckAsync(database, monitor);
+            var queuedUrl = queued.ConfigurationSnapshot.TargetNormalizedUrl;
+            var changed = EndpointUrlNormalizer.Normalize(nextUrl);
+            monitor.Endpoint.DisplayUrl = changed.DisplayUrl!;
+            monitor.Endpoint.NormalizedUrl = changed.NormalizedUrl!;
+            monitor.Endpoint.NormalizedUrlHash = changed.NormalizedUrlHash!;
+            monitor.Endpoint.NormalizedHost = changed.NormalizedHost!;
+            monitor.Endpoint.EffectivePort = changed.EffectivePort!.Value;
+            monitor.ConfigurationFingerprint = RegistryDefaults.CreateHttpFingerprint(nextUrl,
+                monitor.Endpoint.Environment.IsProduction, monitor.IntervalSeconds, monitor.TimeoutSeconds,
+                monitor.FailureConfirmationCount, monitor.RecoveryConfirmationCount, monitor.WarningThresholdMs, monitor.CriticalThresholdMs);
+            await database.SaveChangesAsync();
+            var transport = new RecordingSafeHttpTransport(Success);
+            var execution = CreateExecutionService(database, transport, true);
+            (await execution.ExecuteAsync(new(queued.Id, queued.DurableWork.Single().Id,
+                $"scheme-{queued.Id:N}", "snapshot-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+            transport.LastRequest!.Url.Should().Be(queuedUrl);
+            transport.LastRequest.ConnectionAuthorization.Should().NotBeNull("every monitoring connection needs the current permission guard");
+            (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == queued.Id))
+                .CurrentStateDisposition.Should().Be("Superseded");
+        }
+        var visibility = new RegistryVisibility(database);
+        var history = new CheckHistoryReader(database, visibility, new IncidentVisibility(database, visibility), TimeProvider.System);
+        var access = new RegistryAccessContext(monitor.CreatedByUserId, [ApplicationRoles.Administrator]);
+        (await history.FindCheckAsync(parentCheck, access))!.CurrentStateDisposition.Should().Be("Superseded");
+        (await history.FindCheckAsync(changedTargetCheck, access))!.TargetDisplayUrl.Should().Be(originalUrl);
+        (await history.ListForEndpointAsync(monitor.EndpointId, access))!.Items
+            .Single(item => item.LogicalCheckId == pausedCheck).CurrentStateDisposition.Should().Be("Superseded");
+        (await database.EndpointHealth.AnyAsync(item => item.EndpointMonitorId == monitorId)).Should().BeFalse();
+        (await database.IssueStates.AnyAsync(item => item.EndpointMonitorId == monitorId)).Should().BeFalse();
+        (await database.Incidents.AnyAsync(item => item.EndpointMonitorId == monitorId)).Should().BeFalse();
+    }
+
+    private static async Task VerifySnapshotV2ConstraintsAsync(string connectionString, Guid checkId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        foreach (var invalid in new[]
+        {
+            (Patch: "{\"target_normalized_host\":null}", Constraint: "ck_check_configuration_snapshot_v2_target"),
+            (Patch: "{\"current_truth_generation\":0}", Constraint: "ck_check_configuration_snapshot_v2_target"),
+            (Patch: "{\"schema_version\":3}", Constraint: "ck_check_configuration_snapshot_schema_version")
+        })
+        {
+            await using var command = new NpgsqlCommand("""
+                INSERT INTO web_health.check_configuration_snapshot
+                SELECT (jsonb_populate_record(NULL::web_health.check_configuration_snapshot,
+                    to_jsonb(s) || @patch || jsonb_build_object('logical_check_id', @new_id))).*
+                FROM web_health.check_configuration_snapshot s WHERE s.logical_check_id = @id;
+                """, connection);
+            command.Parameters.AddWithValue("patch", NpgsqlTypes.NpgsqlDbType.Jsonb, invalid.Patch);
+            command.Parameters.AddWithValue("new_id", Guid.NewGuid());
+            command.Parameters.AddWithValue("id", checkId);
+            var exception = await Assert.ThrowsAsync<PostgresException>(() => command.ExecuteNonQueryAsync());
+            exception.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
+            exception.ConstraintName.Should().Be(invalid.Constraint);
+        }
+        await using var columns = new NpgsqlCommand("""
+            SELECT table_name || '.' || column_name FROM information_schema.columns
+            WHERE table_schema = 'web_health'
+                AND table_name IN ('endpoint_monitor', 'check_configuration_snapshot', 'check_result', 'target_authorization_evidence')
+            ORDER BY table_name, column_name;
+            """, connection);
+        await using var reader = await columns.ExecuteReaderAsync();
+        var names = new List<string>();
+        while (await reader.ReadAsync()) names.Add(reader.GetString(0));
+        names.Should().Contain([
+            "endpoint_monitor.current_truth_generation", "check_result.current_state_disposition",
+            "check_configuration_snapshot.target_normalized_url", "check_configuration_snapshot.target_normalized_host",
+            "check_configuration_snapshot.target_effective_port", "check_configuration_snapshot.target_normalization_version",
+            "check_configuration_snapshot.target_is_production", "check_configuration_snapshot.current_truth_generation",
+            "target_authorization_evidence.endpoint_id", "target_authorization_evidence.normalized_host",
+            "target_authorization_evidence.port", "target_authorization_evidence.authorization_kind",
+            "target_authorization_evidence.evidence_reference", "target_authorization_evidence.effective_from",
+            "target_authorization_evidence.expires_at", "target_authorization_evidence.revoked_at",
+            "target_authorization_evidence.revoked_by_user_id", "target_authorization_evidence.revocation_reason"]);
+    }
+
+    private static async Task VerifyStaleSslSnapshotsAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var availabilityId = await CreateOwnedMonitorIdAsync(connectionString, "https://ssl-snapshot.test/health");
+        var endpointId = await database.EndpointMonitors.Where(item => item.Id == availabilityId)
+            .Select(item => item.EndpointId).SingleAsync();
+        foreach (var nextUrl in new[] { "https://ssl-new-host.test/health", "https://ssl-new-host.test:8443/health", "http://ssl-new-host.test/health" })
+        {
+            var monitor = await database.EndpointMonitors
+                .Include(item => item.Endpoint).ThenInclude(item => item.Environment)
+                .Include(item => item.Endpoint).ThenInclude(item => item.Monitors)
+                .SingleAsync(item => item.EndpointId == endpointId && item.MonitorType == RegistryDefaults.SslCertificateMonitorType && item.DeletedAt == null);
+            var queued = await CreateQueuedCheckAsync(database, monitor);
+            var queuedUrl = queued.ConfigurationSnapshot.TargetNormalizedUrl;
+            var changed = EndpointUrlNormalizer.Normalize(nextUrl);
+            monitor.Endpoint.DisplayUrl = changed.DisplayUrl!;
+            monitor.Endpoint.NormalizedUrl = changed.NormalizedUrl!;
+            monitor.Endpoint.NormalizedUrlHash = changed.NormalizedUrlHash!;
+            monitor.Endpoint.NormalizedHost = changed.NormalizedHost!;
+            monitor.Endpoint.EffectivePort = changed.EffectivePort!.Value;
+            EndpointMonitorReconciler.ReconcileSsl(database, monitor.Endpoint, false, true,
+                monitor.CreatedByUserId, DateTimeOffset.UtcNow, tlsIdentityChanged: true);
+            await database.SaveChangesAsync();
+            var probe = new RecordingSslProbe();
+            var transport = new RecordingSafeHttpTransport(Success);
+            var execution = CreateExecutionService(database, transport, true, probe);
+            (await execution.ExecuteAsync(new(queued.Id, queued.DurableWork.Single().Id,
+                $"ssl-snapshot-{queued.Id:N}", "snapshot-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+            probe.LastRequest!.Url.Should().Be(queuedUrl);
+            probe.LastRequest.ConnectionAuthorization.Should().NotBeNull("SSL connections must check current permission");
+            transport.CallCount.Should().Be(0);
+            (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == queued.Id))
+                .CurrentStateDisposition.Should().Be("Superseded");
+            (await database.EndpointHealth.AnyAsync(item => item.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+            (await database.IssueStates.AnyAsync(item => item.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+            (await database.Incidents.AnyAsync(item => item.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+        }
+    }
+
+    private sealed class RecordingSslProbe : ISslCertificateProbe
+    {
+        public SslCertificateProbeRequest? LastRequest { get; private set; }
+
+        public Task<SslCertificateProbeResult> ProbeAsync(SslCertificateProbeRequest request, CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            return Task.FromResult(new SslCertificateProbeResult(SslProbeFailureKind.HandshakeFailed, null, TimeSpan.FromMilliseconds(25)));
+        }
+    }
+
     private static async Task<Guid> FinalizeScheduledResultAsync(
         ApplicationDbContext database,
         EndpointMonitor monitor,
         int statusCode,
         TimeProvider? timeProvider = null,
-        string? htmlBody = null)
+        string? htmlBody = null,
+        Func<Task>? beforeFinalization = null)
     {
         var check = await CreateQueuedCheckAsync(database, monitor, timeProvider);
         var work = check.DurableWork.Single();
@@ -1884,6 +2180,10 @@ internal static class DatabaseFoundationAssertions
             [],
             SafeHttpRequestIdentity.Create(request),
             ContentType: htmlBody is null ? null : "text/html; charset=utf-8");
+        if (beforeFinalization is not null)
+        {
+            await beforeFinalization();
+        }
         var finalization = CreateFinalizationService(database, timeProvider ?? TimeProvider.System);
 
         (await finalization.FinalizeAsync(new(
@@ -2012,7 +2312,8 @@ internal static class DatabaseFoundationAssertions
     private static LogicalCheckExecutionService CreateExecutionService(
         ApplicationDbContext database,
         ISafeHttpTransport transport,
-        bool isEligible)
+        bool isEligible,
+        ISslCertificateProbe? sslProbe = null)
     {
         var timeProvider = TimeProvider.System;
         var leaseService = new ExecutionLeaseService(database);
@@ -2022,8 +2323,9 @@ internal static class DatabaseFoundationAssertions
             new FixedEligibilityService(isEligible),
             leaseService,
             transport,
-            new UnusedSslCertificateProbe(),
+            sslProbe ?? new UnusedSslCertificateProbe(),
             finalizationService,
+            new TargetConnectionAuthorization(database, timeProvider),
             timeProvider,
             NullLogger<LogicalCheckExecutionService>.Instance);
     }
@@ -2087,6 +2389,12 @@ internal static class DatabaseFoundationAssertions
         {
             LogicalCheckId = check.Id,
             SchemaVersion = 2,
+            TargetNormalizedUrl = monitor.Endpoint.NormalizedUrl,
+            TargetNormalizedHost = monitor.Endpoint.NormalizedHost,
+            TargetEffectivePort = monitor.Endpoint.EffectivePort,
+            TargetNormalizationVersion = monitor.Endpoint.NormalizationVersion,
+            TargetIsProduction = monitor.Endpoint.Environment.IsProduction,
+            CurrentTruthGeneration = monitor.CurrentTruthGeneration,
             MonitorType = monitor.MonitorType,
             ConfigurationFingerprint = monitor.ConfigurationFingerprint,
             IntervalSeconds = monitor.IntervalSeconds,
@@ -2105,8 +2413,8 @@ internal static class DatabaseFoundationAssertions
         {
             Id = Guid.NewGuid(),
             LogicalCheckId = check.Id,
-            WorkKind = DurableWorkKinds.HttpCheck,
-            DedupeKey = $"v1|{check.Id:N}|http-check",
+            WorkKind = MonitorWorkKinds.For(monitor.MonitorType),
+            DedupeKey = $"v1|{check.Id:N}|{MonitorWorkKinds.For(monitor.MonitorType)}",
             QueueName = "monitoring",
             State = DurableWorkStates.Enqueued,
             AvailableAt = createdAt,
@@ -2879,11 +3187,46 @@ internal static class DatabaseFoundationAssertions
         var phaseThree = await CreateUpgradeDatabaseAsync(connectionString, "phase3");
         var phaseTwo = await CreateUpgradeDatabaseAsync(connectionString, "phase2");
         var phaseOne = await CreateUpgradeDatabaseAsync(connectionString, "phase1");
+        var snapshots = await CreateUpgradeDatabaseAsync(connectionString, "snapshot_v2");
 
         await Task.WhenAll(
             VerifyPhaseThreeToPhaseFourUpgradeAsync(phaseThree),
             VerifyPhaseTwoUpgradeAsync(phaseTwo),
-            VerifyPhaseOneUpgradeAndRepeatabilityAsync(phaseOne));
+            VerifyPhaseOneUpgradeAndRepeatabilityAsync(phaseOne),
+            VerifySnapshotUpgradeAndRollbackAsync(snapshots));
+    }
+
+    private static async Task VerifySnapshotUpgradeAndRollbackAsync(string connectionString)
+    {
+        await using var services = BuildUpgradeServices(connectionString);
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await database.Database.MigrateAsync();
+        await scope.ServiceProvider.GetRequiredService<AdminBootstrapper>().BootstrapAsync();
+        await SeedUpgradeMonitorAsync(scope, database);
+        var monitor = await AvailabilityMonitors(database)
+            .Include(item => item.Endpoint).ThenInclude(item => item.Environment)
+            .SingleAsync(item => item.Endpoint.NormalizedUrl == "http://upgrade.test/status");
+        var checkId = await FinalizeScheduledResultAsync(database, monitor, 200);
+        var queued = await CreateQueuedCheckAsync(database, monitor);
+        var queuedId = queued.Id;
+        var permission = await scope.ServiceProvider.GetRequiredService<ITargetPermissionService>().GrantAsync(
+            new(monitor.EndpointId, monitor.Endpoint.NormalizedUrl, "Owned", "Disposable upgrade fixture", null),
+            new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]), CancellationToken.None);
+        permission.Succeeded.Should().BeTrue(string.Join(" ", permission.Errors));
+        database.ChangeTracker.Clear();
+        await database.Database.MigrateAsync("PngAuditVerifiedWebpComparison");
+        await database.Database.MigrateAsync();
+        await database.Database.MigrateAsync();
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == checkId))
+            .HttpStatus.Should().Be(200);
+        (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == queuedId))
+            .Outcome.Should().Be("Cancelled");
+        (await database.LogicalChecks.AsNoTracking().SingleAsync(item => item.Id == queuedId))
+            .State.Should().Be(LogicalCheckStates.Completed);
+        (await database.CheckConfigurationSnapshots.AsNoTracking().SingleAsync(item => item.LogicalCheckId == checkId))
+            .SchemaVersion.Should().Be(1);
+        (await database.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
     }
 
     private static async Task VerifyPhaseThreeToPhaseFourUpgradeAsync(string upgradeConnectionString)
@@ -3819,6 +4162,12 @@ internal static class DatabaseFoundationAssertions
         {
             LogicalCheckId = certificateCheckId,
             SchemaVersion = 2,
+            TargetNormalizedUrl = certificateMonitor.Endpoint.NormalizedUrl,
+            TargetNormalizedHost = certificateMonitor.Endpoint.NormalizedHost,
+            TargetEffectivePort = certificateMonitor.Endpoint.EffectivePort,
+            TargetNormalizationVersion = certificateMonitor.Endpoint.NormalizationVersion,
+            TargetIsProduction = certificateMonitor.Endpoint.Environment.IsProduction,
+            CurrentTruthGeneration = certificateMonitor.CurrentTruthGeneration,
             MonitorType = certificateMonitor.MonitorType,
             ConfigurationFingerprint = certificateMonitor.ConfigurationFingerprint,
             IntervalSeconds = certificateMonitor.IntervalSeconds,

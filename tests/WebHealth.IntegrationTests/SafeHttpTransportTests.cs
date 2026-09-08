@@ -676,6 +676,46 @@ public sealed class SafeHttpTransportTests
         using var ipv4 = await limiter.AcquireAddressAsync(IPAddress.Loopback.ToString(), acquisitionDeadline.Token);
     }
 
+    [Fact]
+    public async Task SendAsync_RevokedAuthorizationPreventsAllConnections()
+    {
+        await using var server = await HttpFixture.Start("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        await using var harness = CreateHarness(new HostResolver(("allowed.test", [IPAddress.Loopback])));
+        var request = new SafeHttpTransportRequest(Guid.NewGuid(), $"http://allowed.test:{server.Port}/", false)
+        {
+            ConnectionAuthorization = new ConnectionPermission(_ => false)
+        };
+
+        var result = await harness.Transport.SendAsync(request);
+
+        result.Failure.Should().Be(SafeHttpFailureKind.DestinationRejected);
+        server.ContactCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task SendAsync_RechecksAuthorizationBeforeFallbackConnection()
+    {
+        await using var server = await HttpFixture.Start("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+        await using var harness = CreateHarness(new HostResolver(("allowed.test", [IPAddress.IPv6Loopback, IPAddress.Loopback])));
+        var request = new SafeHttpTransportRequest(Guid.NewGuid(), $"http://allowed.test:{server.Port}/", false)
+        {
+            ConnectionAuthorization = new ConnectionPermission(attempt => attempt == 1)
+        };
+
+        var result = await harness.Transport.SendAsync(request);
+
+        result.Failure.Should().Be(SafeHttpFailureKind.DestinationRejected);
+        server.ContactCount.Should().Be(0);
+    }
+
+    private sealed class ConnectionPermission(Func<int, bool> permitted) : ITargetConnectionAuthorization
+    {
+        private int _attempt;
+
+        public Task<bool> IsAuthorizedAsync(Guid endpointId, string host, int port, CancellationToken cancellationToken) =>
+            Task.FromResult(permitted(Interlocked.Increment(ref _attempt)));
+    }
+
     private static async Task AssertStillWaiting(Task task)
     {
         await Task.Delay(50);

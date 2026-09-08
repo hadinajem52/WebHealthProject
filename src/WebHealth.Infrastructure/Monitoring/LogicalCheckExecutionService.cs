@@ -14,6 +14,7 @@ internal sealed class LogicalCheckExecutionService(
     ISafeHttpTransport transport,
     ISslCertificateProbe sslCertificateProbe,
     ILogicalCheckFinalizationService finalizationService,
+    ITargetConnectionAuthorization connectionAuthorization,
     TimeProvider timeProvider,
     ILogger<LogicalCheckExecutionService> logger) : ILogicalCheckExecutionService
 {
@@ -256,18 +257,24 @@ internal sealed class LogicalCheckExecutionService(
     private Task<int> CountAttemptsAsync(Guid checkId, CancellationToken token) =>
         dbContext.ExecutionAttempts.CountAsync(attempt => attempt.LogicalCheckId == checkId, token);
 
-    private static SslCertificateProbeRequest CreateProbeRequest(LogicalCheck check) => new(
+    private SslCertificateProbeRequest CreateProbeRequest(LogicalCheck check) => new(
         check.EndpointMonitor.Endpoint.Id,
-        check.EndpointMonitor.Endpoint.NormalizedUrl,
-        check.ConfigurationSnapshot.TimeoutSeconds);
+        CheckSnapshotTarget.Resolve(check).NormalizedUrl,
+        check.ConfigurationSnapshot.TimeoutSeconds)
+    {
+        ConnectionAuthorization = connectionAuthorization
+    };
 
-    private static SafeHttpTransportRequest CreateRequest(LogicalCheck check)
+    private SafeHttpTransportRequest CreateRequest(LogicalCheck check)
     {
         var snapshot = check.ConfigurationSnapshot;
-        var endpoint = check.EndpointMonitor.Endpoint;
+        var endpoint = CheckSnapshotTarget.Resolve(check);
         return new(
-            endpoint.Id, endpoint.NormalizedUrl, endpoint.Environment.IsProduction,
-            snapshot.MaxRedirects, snapshot.MaxResponseBodyBytes, snapshot.TimeoutSeconds);
+            endpoint.EndpointId, endpoint.NormalizedUrl, endpoint.IsProduction,
+            snapshot.MaxRedirects, snapshot.MaxResponseBodyBytes, snapshot.TimeoutSeconds)
+        {
+            ConnectionAuthorization = connectionAuthorization
+        };
     }
 
     private static TimeSpan LeaseDuration(int timeoutSeconds) =>

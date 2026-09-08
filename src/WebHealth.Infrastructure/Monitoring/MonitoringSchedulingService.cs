@@ -60,6 +60,7 @@ internal sealed class MonitoringSchedulingService(
         {
             if (eligibleEndpointIds.Contains(monitor.EndpointId))
             {
+                await CheckConfigurationSnapshotFactory.LockAndRefreshAsync(dbContext, monitor, token);
                 work.Add(CreateScheduledCheck(monitor, now));
             }
             else

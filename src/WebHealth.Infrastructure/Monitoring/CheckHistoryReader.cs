@@ -48,7 +48,10 @@ internal sealed class CheckHistoryReader(
                 check.Result == null ? null : check.Result.HttpStatus,
                 check.Result == null ? null : check.Result.TotalDurationMs,
                 check.Result == null ? null : check.Result.MonitorSource,
-                check.Result != null && check.Result.CountsForUptime))
+                check.Result != null && check.Result.CountsForUptime)
+            {
+                CurrentStateDisposition = check.Result == null ? null : check.Result.CurrentStateDisposition
+            })
             .FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -97,7 +100,10 @@ internal sealed class CheckHistoryReader(
                     check.Result == null ? null : check.Result.HttpStatus,
                     check.Result == null ? null : check.Result.TotalDurationMs,
                     check.Result == null ? null : check.Result.MonitorSource,
-                    check.Result != null && check.Result.CountsForUptime),
+                    check.Result != null && check.Result.CountsForUptime)
+                {
+                    CurrentStateDisposition = check.Result == null ? null : check.Result.CurrentStateDisposition
+                },
                 ConfigurationFingerprint = check.ConfigurationSnapshot.ConfigurationFingerprint
             })
             .ToArrayAsync(cancellationToken);
@@ -150,6 +156,7 @@ internal sealed class CheckHistoryReader(
         }
 
         var check = await dbContext.LogicalChecks.AsNoTracking()
+            .Include(candidate => candidate.ConfigurationSnapshot)
             .Include(candidate => candidate.EndpointMonitor).ThenInclude(monitor => monitor.Endpoint)
             .Include(candidate => candidate.InitiatedByUser)
             .Include(candidate => candidate.Result).ThenInclude(result => result!.Findings)
@@ -196,6 +203,9 @@ internal sealed class CheckHistoryReader(
         var knownIncidents = await LoadKnownIncidentsAsync([logicalCheckId], access, cancellationToken);
         return details with
         {
+            CurrentStateDisposition = result?.CurrentStateDisposition,
+            TargetDisplayUrl = new Uri(check.ConfigurationSnapshot.TargetNormalizedUrl
+                ?? check.EndpointMonitor.Endpoint.NormalizedUrl).GetLeftPart(UriPartial.Path),
             KnownIncidents = knownIncidents.GetValueOrDefault(logicalCheckId, [])
         };
     }

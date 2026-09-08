@@ -7,6 +7,8 @@ namespace WebHealth.Infrastructure.Monitoring;
 
 internal static class SafeHttpConnectionFactory
 {
+    internal static readonly HttpRequestOptionsKey<SafeHttpTransportRequest> RequestKey = new("WebHealth.ConnectionAuthorization");
+
     public static SocketsHttpHandler Create(
         IMonitoringDnsResolver resolver,
         IDestinationAddressPolicy addressPolicy,
@@ -39,6 +41,7 @@ internal static class SafeHttpConnectionFactory
                         ? collector
                         : null;
 
+                context.InitialRequestMessage.Options.TryGetValue(RequestKey, out var request);
                 return new ValueTask<Stream>(SafeDestinationConnector.ConnectAsync(
                     resolver,
                     addressPolicy,
@@ -47,7 +50,11 @@ internal static class SafeHttpConnectionFactory
                     context.DnsEndPoint.Host,
                     context.DnsEndPoint.Port,
                     timing,
-                    cancellationToken));
+                    cancellationToken,
+                    request?.ConnectionAuthorization is { } authorization
+                        ? token => authorization.IsAuthorizedAsync(request.EndpointId,
+                            context.DnsEndPoint.Host, context.DnsEndPoint.Port, token)
+                        : null));
             }
         };
 

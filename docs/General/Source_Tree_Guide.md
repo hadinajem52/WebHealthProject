@@ -423,6 +423,10 @@ This folder contains the most important runtime pipeline in the project.
 
 | File | Role |
 |---|---|
+| `CheckSnapshotTarget.cs` | Resolves immutable v2 targets, validates their URL/host/port agreement, and isolates the legacy v1 path. |
+| `CheckCurrentState.cs` | Classifies finalized evidence as current, superseded, or ineligible before health and incident mutation. |
+| `TargetAuthorizationEvidence.cs` | Stores permission evidence and queries current endpoint/host/port authorization before each connection. |
+| `TargetPermissionService.cs` | Applies registry-management authorization, grants/revokes permission transactionally, and emits identifier-only audit records. |
 | `SafeHttpTransportOptions.cs` | Stores the named HTTP client, user-agent, timeout, proxy, and transport defaults. |
 | `SafeHttpTransport.cs` | Executes bounded HTTP GET requests, validates every redirect, captures timings, reads bounded bodies, and classifies failures. |
 | `SafeHttpConnectionFactory.cs` | Builds the custom HTTP handler/connection path that validates the actual remote address and preserves safe TLS behavior. |

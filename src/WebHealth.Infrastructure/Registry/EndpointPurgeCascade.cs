@@ -25,6 +25,9 @@ internal sealed class EndpointPurgeCascade(ApplicationDbContext dbContext)
             return;
         }
 
+        await dbContext.TargetAuthorizationEvidence.Where(item => item.EndpointId == endpointId)
+            .ExecuteDeleteAsync(cancellationToken);
+
         var origin = RobotsRefreshService.OriginOf(normalizedUrl);
 
         await RobotsOriginLock.AcquireAsync(dbContext, origin, cancellationToken);

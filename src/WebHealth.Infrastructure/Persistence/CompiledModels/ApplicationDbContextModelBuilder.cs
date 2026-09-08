@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("dbd440b0-78c6-40e4-89f7-1dcb2921599c"), entityTypeCount: 54)
+            : base(skipDetectChanges: false, modelId: new Guid("ad75c466-77cd-47c8-a569-ca27de10e4c1"), entityTypeCount: 55)
         {
         }
 
@@ -48,6 +48,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var finding = FindingEntityType.Create(this);
             var logicalCheck = LogicalCheckEntityType.Create(this);
             var redirectHop = RedirectHopEntityType.Create(this);
+            var targetAuthorizationEvidence = TargetAuthorizationEvidenceEntityType.Create(this);
             var notificationAttempt = NotificationAttemptEntityType.Create(this);
             var notificationDelivery = NotificationDeliveryEntityType.Create(this);
             var notificationEvent = NotificationEventEntityType.Create(this);
@@ -127,6 +128,9 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             LogicalCheckEntityType.CreateForeignKey1(logicalCheck, endpointMonitor);
             LogicalCheckEntityType.CreateForeignKey2(logicalCheck, applicationUser);
             RedirectHopEntityType.CreateForeignKey1(redirectHop, checkResult);
+            TargetAuthorizationEvidenceEntityType.CreateForeignKey1(targetAuthorizationEvidence, applicationUser);
+            TargetAuthorizationEvidenceEntityType.CreateForeignKey2(targetAuthorizationEvidence, endpoint);
+            TargetAuthorizationEvidenceEntityType.CreateForeignKey3(targetAuthorizationEvidence, applicationUser);
             NotificationAttemptEntityType.CreateForeignKey1(notificationAttempt, notificationDelivery);
             NotificationDeliveryEntityType.CreateForeignKey1(notificationDelivery, notificationEvent);
             NotificationEventEntityType.CreateForeignKey1(notificationEvent, incidentEvent);
@@ -212,6 +216,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             FindingEntityType.CreateAnnotations(finding);
             LogicalCheckEntityType.CreateAnnotations(logicalCheck);
             RedirectHopEntityType.CreateAnnotations(redirectHop);
+            TargetAuthorizationEvidenceEntityType.CreateAnnotations(targetAuthorizationEvidence);
             NotificationAttemptEntityType.CreateAnnotations(notificationAttempt);
             NotificationDeliveryEntityType.CreateAnnotations(notificationDelivery);
             NotificationEventEntityType.CreateAnnotations(notificationEvent);

@@ -32,6 +32,12 @@ public sealed class CheckConfigurationSnapshot
 {
     public Guid LogicalCheckId { get; set; }
     public short SchemaVersion { get; set; }
+    public string? TargetNormalizedUrl { get; set; }
+    public string? TargetNormalizedHost { get; set; }
+    public int? TargetEffectivePort { get; set; }
+    public int? TargetNormalizationVersion { get; set; }
+    public bool? TargetIsProduction { get; set; }
+    public long? CurrentTruthGeneration { get; set; }
     public required string MonitorType { get; set; }
     public required string ConfigurationFingerprint { get; set; }
     public int IntervalSeconds { get; set; }
@@ -103,6 +109,7 @@ public sealed class DurableWork
 public sealed class CheckResult
 {
     public Guid LogicalCheckId { get; set; }
+    public string CurrentStateDisposition { get; set; } = "Current";
 
     public Guid EndpointMonitorId { get; set; }
     public required string Outcome { get; set; }

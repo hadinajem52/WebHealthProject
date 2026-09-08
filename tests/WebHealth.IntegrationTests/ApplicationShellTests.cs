@@ -14,6 +14,43 @@ namespace WebHealth.IntegrationTests;
 public sealed partial class ApplicationShellTests(WebHealthWebApplicationFactory factory)
     : IClassFixture<WebHealthWebApplicationFactory>
 {
+    [Theory]
+    [InlineData(ApplicationRoles.Viewer)]
+    [InlineData(ApplicationRoles.DeveloperSupport)]
+    public async Task TargetPermissionsRejectReadAccessForNonManagers(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+        using var response = await client.GetAsync($"/TargetPermissions?id={EmptyTargetRegistryReader.Endpoint.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(ApplicationRoles.Administrator)]
+    [InlineData(ApplicationRoles.Operations)]
+    public async Task TargetPermissionFormsRequireAntiforgery(string role)
+    {
+        using var client = factory.CreateHttpsClient(role);
+        var content = await client.GetStringAsync($"/TargetPermissions?id={EmptyTargetRegistryReader.Endpoint.Id}");
+        Assert.Contains("Grant permission", content, StringComparison.Ordinal);
+        Assert.Contains("__RequestVerificationToken", content, StringComparison.Ordinal);
+        foreach (var action in new[] { "Grant", "Revoke" })
+        {
+            using var response = await client.PostAsync($"/TargetPermissions/{action}", new FormUrlEncodedContent([]));
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task CheckDetailsExplainSupersededEvidence()
+    {
+        using var client = factory.CreateHttpsClient(ApplicationRoles.Viewer);
+
+        var content = await client.GetStringAsync($"/Checks/Check?id={EmptyManualCheckService.LogicalCheckId}");
+
+        Assert.Contains("Superseded evidence", content, StringComparison.Ordinal);
+        Assert.Contains("It did not change current health or incidents", content, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Dashboard_DeniesASignedInUserWithNoApplicationRole()
     {
