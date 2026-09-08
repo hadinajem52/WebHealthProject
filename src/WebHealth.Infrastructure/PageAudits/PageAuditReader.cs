@@ -181,12 +181,8 @@ internal sealed class PageAuditReader(
             return PageAuditComparison.None;
         }
 
-        var previous = await VisibleRuns(access)
+        var previous = await PageAuditHistoryQueries.Scored(VisibleRuns(access))
             .Where(run => run.PageAuditTargetId == targetId
-                && run.RawScore != null
-                && run.FinishedAt != null
-                && (run.Status == PageAuditRunStatuses.Completed
-                    || run.Status == PageAuditRunStatuses.CompletedWithWarnings)
                 && (run.FinishedAt < finishedAt
                     || (run.FinishedAt == finishedAt
                         && run.Id.CompareTo(current.RunId) < 0))

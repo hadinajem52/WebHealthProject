@@ -548,3 +548,17 @@ named crawl fixture proves disabled/dry-run behavior, BatchSize=1, exact cutoff 
 running survival, latest failed terminal survival, both comparison baselines, child cleanup and
 cancellation. Retention remains disabled and unscheduled; remaining increment 6 work and final
 acceptance/load gates are still pending.
+
+### PageAudit retention batches
+
+PageAuditRetentionBatch expires bounded terminal runs and their items strictly after 90 days.
+Holds, active/leased runs, retained incident evidence references, the latest terminal run per target
+and strategy, and scored comparison baselines per target/strategy/locale survive. Scored eligibility
+is shared with PageAuditReader through PageAuditHistoryQueries. Targets and incident evidence stay
+intact; terminal incident bundle cleanup remains a separate dependency.
+
+Validation: full database foundation script passed with zero Release build warnings/errors. The
+named fixture proves disabled/dry-run behavior, BatchSize=1, held and active leased survival, incident
+reference preservation, two successful comparison baselines, a separate locale baseline, exact
+cutoff/latest terminal survival after clock advancement, child cleanup and cancellation. Retention
+remains disabled and unscheduled; increment 6 and final acceptance/load verification are incomplete.

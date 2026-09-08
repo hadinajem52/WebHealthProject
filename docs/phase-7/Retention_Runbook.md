@@ -183,3 +183,15 @@ eligibility means Completed, FrontierExhausted, PagesFetched > 0 and no limited 
 preserves the existing comparison even when the newest run failed or stopped at a limit. Archived
 runs still participate because the report currently includes them. Terminal execution claim IDs
 are historical fencing tokens, not live leases, and do not prevent expiration.
+
+## PageAudit retention and comparison baselines
+
+PageAudit runs expire strictly 90 days after FinishedAt. Queued/running runs, leased runs, active
+holds and any run referenced by retained incident evidence remain. Retaining all evidence references
+also respects the foreign key until the owning terminal incident bundle expires.
+
+Keep the latest terminal run per target and strategy, plus the latest two scored successful runs
+per target, strategy and locale. Successful means Completed or CompletedWithWarnings with a score
+and finish time, matching the existing comparison reader. The two scored runs preserve the current
+comparison when the latest terminal run failed. Archived runs participate as they do in the reader.
+Items are removed before selected runs; target configuration and incident evidence are not changed.

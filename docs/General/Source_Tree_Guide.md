@@ -1024,3 +1024,8 @@ results/checks for the separate aggregate-aware cleanup path and is not yet sche
 90 days while preserving holds, active runs, the latest terminal run and the latest two comparable
 runs per endpoint. `Crawling/CrawlHistoryQueries.cs` shares comparison eligibility with the report
 reader. The batch removes links before selected runs and remains unscheduled.
+
+`Infrastructure/Monitoring/PageAuditRetentionBatch.cs` expires bounded terminal runs and items after
+90 days. Holds, leases, retained incident references, the latest terminal run and scored comparison
+baselines survive. `PageAudits/PageAuditHistoryQueries.cs` shares scored-run eligibility with the
+comparison reader; strategy and locale boundaries remain intact. The batch is not yet scheduled.
