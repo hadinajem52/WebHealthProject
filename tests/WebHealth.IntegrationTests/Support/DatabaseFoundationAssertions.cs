@@ -334,6 +334,7 @@ internal static class DatabaseFoundationAssertions
         await VerifyRobotsIncidentDoesNotRecoverWithoutFreshEvidenceAsync(connectionString);
         await VerifySslCertificateMonitoringAsync(connectionString);
         await VerifySimultaneousSslFindingsAsync(connectionString);
+        await VerifySslSeverityEvidenceAsync(connectionString);
         await VerifyCrawlResultContractAsync(connectionString);
         await VerifyPageAuditContractAsync(connectionString);
         await VerifyPageAuditExecutionAsync(connectionString);
@@ -2377,6 +2378,59 @@ internal static class DatabaseFoundationAssertions
             (await database.EndpointHealth.AnyAsync(item => item.EndpointMonitorId == monitor.Id)).Should().BeFalse();
             (await database.IssueStates.AnyAsync(item => item.EndpointMonitorId == monitor.Id)).Should().BeFalse();
             (await database.Incidents.AnyAsync(item => item.EndpointMonitorId == monitor.Id)).Should().BeFalse();
+        }
+    }
+
+    private static async Task VerifySslSeverityEvidenceAsync(string connectionString)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
+        PostgreSqlDbContextOptions.Configure(options, connectionString);
+        await using var database = new ApplicationDbContext(options.Options);
+        var availabilityId = await CreateOwnedMonitorIdAsync(connectionString, "https://ssl-severity-evidence.test/status");
+        var endpointId = await database.EndpointMonitors.Where(item => item.Id == availabilityId)
+            .Select(item => item.EndpointId).SingleAsync();
+        var monitor = await database.EndpointMonitors.Include(item => item.Endpoint).ThenInclude(item => item.Environment)
+            .SingleAsync(item => item.EndpointId == endpointId && item.MonitorType == SslMonitorIdentity.MonitorType && item.DeletedAt == null);
+        var now = DateTimeOffset.UtcNow;
+        var certificate = new TlsCertificateObservation("CN=ssl-severity-evidence.test", "CN=Test issuer", "01", new string('e', 64),
+            now.AddDays(-10), now.AddDays(20), ["ssl-severity-evidence.test"], true, true, TlsValidationCategory.Valid, now);
+        var execution = CreateExecutionService(database, new RecordingSafeHttpTransport(Success), true,
+            new RecordingSslProbe(new(null, certificate, TimeSpan.FromMilliseconds(25))));
+        Guid? incidentId = null;
+        long openingVersion = 0;
+        var openingEventCount = 0;
+        foreach (var step in new[]
+        {
+            (Thresholds: new CertificateExpiryThresholds(30, 15, 7), Severity: FindingSeverities.Warning, EvidenceCount: 1),
+            (Thresholds: new CertificateExpiryThresholds(30, 25, 7), Severity: FindingSeverities.High, EvidenceCount: 2),
+            (Thresholds: new CertificateExpiryThresholds(30, 25, 7), Severity: FindingSeverities.High, EvidenceCount: 2),
+            (Thresholds: new CertificateExpiryThresholds(30, 15, 7), Severity: FindingSeverities.High, EvidenceCount: 2)
+        })
+        {
+            var check = await CreateQueuedCheckAsync(database, monitor, sslThresholds: step.Thresholds);
+            (await execution.ExecuteAsync(new(check.Id, check.DurableWork.Single().Id,
+                $"ssl-severity-{check.Id:N}", "ssl-severity-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
+            var incident = await database.Incidents.AsNoTracking().Include(item => item.Evidence).Include(item => item.Events)
+                .SingleAsync(item => item.EndpointMonitorId == monitor.Id);
+            if (incidentId is null)
+            {
+                incidentId = incident.Id;
+                openingVersion = incident.Version;
+                openingEventCount = incident.Events.Count;
+            }
+            incident.Id.Should().Be(incidentId.Value);
+            incident.Status.Should().Be(IncidentStatuses.Open);
+            incident.Severity.Should().Be(step.Severity);
+            incident.Evidence.Should().HaveCount(step.EvidenceCount);
+            incident.Version.Should().Be(openingVersion + step.EvidenceCount - 1);
+            incident.Events.Should().HaveCount(openingEventCount + 2 * (step.EvidenceCount - 1));
+            if (step.EvidenceCount == 2)
+            {
+                incident.Events.Should().ContainSingle(item => item.EventType == IncidentEventTypes.NoteAdded
+                    && item.BoundedNote == "Severity escalated from Warning to High.");
+                incident.Evidence.Should().ContainSingle(item => item.EvidenceType == IncidentEvidenceTypes.Failure
+                    && item.EvidenceRole == "ConfirmedFailure");
+            }
         }
     }
 

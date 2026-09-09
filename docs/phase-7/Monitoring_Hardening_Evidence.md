@@ -704,3 +704,9 @@ pending, so deletion stays disabled outside controlled disposable tests.
 - Corrected the partial-day explanation from hourly detail to raw detail, matching what retention actually removes.
 - Added one JavaScript regression for mixed approximate/exact days and older chart data without an approximation flag. Updated a stale 403-message assertion to check the existing role-denial and no-change message rather than requiring the absent word permission.
 - Verification: all 39 JavaScript tests and syntax checks passed; all 48 ApplicationShellTests/AjaxContractTests passed after rebuilding the Razor view. Browser verification remains outstanding; these checks do not close the full UI or performance gates.
+
+### Bounded incident evidence preserves severity escalation - 2026-09-09
+
+- Added a database regression using one owned SSL monitor and one unchanged certificate. A warning opens an incident; changing the recorded expiry thresholds escalates the same incident to High and adds exactly one failure-evidence record plus the severity and evidence timeline events.
+- Repeating the High observation and returning to Warning thresholds add no further evidence/events, do not increment the incident version, and do not lower its retained severity. This protects the escalation exception to repeated-failure evidence suppression through the actual execution/finalization and PostgreSQL persistence path.
+- Validation: the full scripts/run-database-foundation-tests.ps1 passed, including every later ordered stage and explicit migration application. Release build had zero warnings/errors; the disposable PostgreSQL cluster shut down successfully. No application behavior, schema or setup change was needed.
