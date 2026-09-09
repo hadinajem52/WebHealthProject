@@ -127,12 +127,14 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
         var rawIdentities = new Dictionary<Guid, string>();
         var changed = false;
         var rawSql = SourcesSql + """
-
+            , raw_identities AS MATERIALIZED (
             SELECT result.endpoint_monitor_id, snapshot.configuration_fingerprint,
                 snapshot.schema_version, snapshot.current_truth_generation, result.monitor_source
             FROM raw_results result JOIN web_health.check_configuration_snapshot snapshot
                 ON snapshot.logical_check_id = result.logical_check_id
-            WHERE result.counts_for_uptime GROUP BY 1, 2, 3, 4, 5 ORDER BY 1, 2, 3, 4, 5;
+            WHERE result.counts_for_uptime GROUP BY 1, 2, 3, 4, 5
+            )
+            SELECT * FROM raw_identities ORDER BY 1, 2, 3, 4, 5;
             """;
         await using (var scope = await CreateCommandAsync(rawSql, query, monitorIds, cancellationToken))
         await using (var reader = await scope.Command.ExecuteReaderAsync(cancellationToken))
