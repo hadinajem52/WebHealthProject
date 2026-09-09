@@ -143,7 +143,7 @@ preview database so the registry editor could list valid fixtures. The browser t
 operation did not clear controls; keyboard selection and Backspace verified the actual reset flow.
 No user application database migration was applied. Increments 4–7 remain required.
 
-## P7-MON-04 � in progress
+## P7-MON-04 — implemented
 
 The first slice adds a shared offline TLS policy to the normal HTTP handler and inspection probe:
 certificate downloads are disabled, revocation is not checked, and certificate verification flags
@@ -732,3 +732,7 @@ pending, so deletion stays disabled outside controlled disposable tests.
 - The ordered database-foundation suite passed all 22 stages. It verifies strict cutoffs, dry-run, batch bounds, cancellation, restart after interruption, immutable-history permissions, all hold scopes, active/current/held survival, comparison baselines, aggregate-before-delete, 366-day mixed reporting, incident recurrence detachment and safe audit history.
 - Administrator browser verification covered the retention page at the desktop viewport and 390 by 844 pixels. The page uses the dashboard shell, exposes all nine labeled scope choices, has no horizontal overflow and no empty validation alert. Direct integration requests continue to return 403 for Operations, Developer/Support and Viewer, and mutation requests require antiforgery tokens.
 - AC-14 is satisfied for the implemented personal-project retention policy. Retention remains disabled and dry-run by default; commissioning requires explicit configuration and review of dry-run counts. Representative 500-endpoint load, failure injection and memory-window evidence remain in P7-MON-07.
+
+## P7-MON-07 — representative hardening and release evidence
+
+The controlled 500-endpoint load, enqueue interruption, PostgreSQL stop/restart recovery, bounded concurrency, two 15-minute memory windows, complete delivery checks and final limitations are recorded in [the Phase 7 gate](Phase_7_Gate.md). AC-15 passed on 2026-09-09. The monitoring hardening plan is complete for the personal internship and portfolio scope.

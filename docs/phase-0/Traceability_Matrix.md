@@ -177,10 +177,13 @@ If AC-07/08 are deferred, BR-E01–E10 and BR-L01–L10 must be explicitly liste
 | --- | --- | --- |
 | P7-MON-01 | BR-S01–S08, BR-Q01/Q02/Q07, AC-02/AC-05 | DNS fallback validates all answers before bounded connection attempts; monitor reconciliation preserves retirement and operator choices; exhaustive monitor dispatch. |
 | P7-MON-02 | BR-S01/S03/S05/S06, BR-Q01/Q02/Q06, AC-02/AC-03/AC-06 | Immutable v2 target and generation; current permission on each socket; stale HTTP/SSL history cannot alter current state; direct role and anti-forgery checks; populated rollback and upgrade repeatability. |
-
-Test commands, results, changed-UI checks, compatibility limits, and remaining increments are in
-[Monitoring hardening evidence](../phase-7/Monitoring_Hardening_Evidence.md).
-These entries supplement earlier feature evidence. P7-DATA-01 closes AC-14; representative-scale AC-15 remains with P7-MON-07.
-
 | P7-MON-03 | BR-H02/H06/H09, Appendix A | Typed HTTP policy, bounded overrides, safe audit facts, charset matching, drift rejection, equivalent snapshots, migration preservation, browser edit/reset, and default/source display; evidence in phase-7/Monitoring_Hardening_Evidence.md. |
+| P7-MON-04 | BR-C01–C07, AC-06/AC-12 | Offline certificate validation, structured trust and hostname facts, immutable SSL policy, urgent fencing, simultaneous findings, renewal continuity, controlled TLS fixtures and browser evidence. |
+| P7-MON-05 | BR-N07/BR-R01, AC-10 | Operational state independent of target health, durable scheduler runtime, bounded telemetry, protected diagnostics, readiness separation and authorized reporting backlog facts. |
 | P7-DATA-01 | BR-R05/R06, AC-14 | Twelve-category bounded coordinator, nine-scope holds, immutable-history permission, reference-aware cleanup, baseline preservation, exact daily samples before deletion, disclosed histogram estimates afterward, clean migrations, cancellation/restart checks, representative report plans, and Administrator desktop/mobile browser verification. |
+| P7-MON-07 | AC-15, NFR-01/NFR-02 | Controlled 500-endpoint fixture, 500-monitor due window, bounded 100-slot concurrency, enqueue and PostgreSQL restart recovery, two 15-minute memory windows, complete scripted delivery and ordered database gates; evidence in phase-7/Phase_7_Gate.md. |
+
+Test commands, results, changed-UI checks, compatibility limits, and final evidence are in
+[Monitoring hardening evidence](../phase-7/Monitoring_Hardening_Evidence.md) and the
+[Phase 7 gate](../phase-7/Phase_7_Gate.md). These entries supplement earlier feature evidence.
+P7-DATA-01 closes AC-14 and P7-MON-07 records the final representative-scale AC-15 gate.

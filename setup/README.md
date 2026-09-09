@@ -410,7 +410,7 @@ retention job is enabled by this migration.
 Monitoring:Retention is explicitly disabled with DryRun=true in appsettings.json. BatchSize accepts
 1..1000, MaximumBatchesPerRun accepts 1..20, and MaximumRunDuration accepts 00:00:01..00:00:30.
 Invalid settings fail startup validation. Worker registration and deletion are implemented;
-full acceptance and load verification remain pending.
+AC-14 acceptance is recorded in `docs/phase-7/Retention_Runbook.md`.
 
 The execution-attempt batch runs through the hourly coordinator when enabled. It preserves
 held/current/active-incident/leased checks, uses deterministic bounded selection, and supports
@@ -428,8 +428,8 @@ monitoring-retention Hangfire job on the maintenance queue and enables that queu
 when other schedulers are disabled. MaximumBatchesPerRun defaults to 20, BatchSize to 1000, and
 MaximumRunDuration to 00:00:30. The run budget applies across all categories, not separately to each.
 Dry-run reports one bounded sample per category without deleting data. Apply the documented
-migrations explicitly before enabling any worker. Aggregate-backed reporting is implemented; final
-acceptance verification remains pending, so keep deletion disabled outside controlled disposable tests.
+migrations explicitly before enabling any worker. Aggregate-backed reporting and AC-14 acceptance
+are complete; keep deletion disabled until its dry-run counts have been reviewed for the intended data.
 See docs/phase-7/Retention_Runbook.md for holds, dependencies and category exceptions.
 
 ## Scheduled completion lookup
@@ -438,5 +438,13 @@ Apply migration `20260908183513_ScheduledCompletionLookup` explicitly through th
 migration step. It adds a filtered index for completed scheduled checks with non-null completion
 timestamps. Reporting uses that index to find each monitor's latest current scheduled completion.
 No data backfill or configuration change is required. The migration's Down only removes the index.
-The full reporting performance gate remains open; the supporting query-plan experiment is recorded
-in docs/phase-7/Reporting_Completion_Index_Experiment.txt.
+The completed reporting performance gate and supporting query plans are recorded in
+`docs/phase-7/Reporting_Exact_Daily_Samples.md`.
+
+## Representative monitoring evidence
+
+Run `scripts/run-representative-monitoring-evidence.ps1` from PowerShell to create the disposable
+PostgreSQL fixture and refresh `docs/phase-7/Representative_Monitoring_Evidence.md`. The default run
+uses two 15-minute memory windows. It stops PostgreSQL after the load test, confirms the outage,
+restarts the same data directory, and verifies recovery of the 500 outstanding durable-work rows.
+The script requires the local PostgreSQL 18 command-line tools used by the database foundation suite.

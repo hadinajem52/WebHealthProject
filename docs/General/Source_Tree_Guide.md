@@ -1008,49 +1008,54 @@ must set permission locally in the same transaction that selects and deletes its
 `Infrastructure/Monitoring/ExecutionHistoryRetentionBatch.cs` selects and deletes one bounded
 batch of old completed execution attempts or durable work under the retention lock. It excludes held, leased,
 current-health and active-incident checks, supports dry-run and applies the configured deadline.
-It is registered as a scoped service but has no recurring-job registration yet.
+It runs through the hourly coordinator when retention is enabled.
 
 `Infrastructure/Monitoring/RetentionHistoryQueries.cs` centralizes completed-check eligibility for
 retention. `RawResultRetentionBatch.cs` deletes bounded result batches and their findings/redirects
 only after the monitor-day aggregate has been written and frozen. Retained observations preserve
-their results. The batch keeps logical checks/snapshots and is not yet scheduled.
+their results. The batch keeps logical checks/snapshots and runs through the hourly coordinator.
 
 `Infrastructure/Monitoring/ObservationRetentionBatch.cs` removes bounded expired SEO (90-day) and
 certificate (24-calendar-month) observations. It shares check protection queries and preserves the
 latest recorded and latest Current result-backed observation timestamps, including ties. It leaves
-results/checks for the separate aggregate-aware cleanup path and is not yet scheduled.
+results/checks for the separate aggregate-aware cleanup path.
 
 `Infrastructure/Monitoring/CrawlRetentionBatch.cs` expires bounded terminal crawl history after
 90 days while preserving holds, active runs, the latest terminal run and the latest two comparable
 runs per endpoint. `Crawling/CrawlHistoryQueries.cs` shares comparison eligibility with the report
-reader. The batch removes links before selected runs and remains unscheduled.
+reader. The batch removes links before selected runs through the hourly coordinator.
 
 `Infrastructure/Monitoring/PageAuditRetentionBatch.cs` expires bounded terminal runs and items after
 90 days. Holds, leases, retained incident references, the latest terminal run and scored comparison
 baselines survive. `PageAudits/PageAuditHistoryQueries.cs` shares scored-run eligibility with the
-comparison reader; strategy and locale boundaries remain intact. The batch is not yet scheduled.
+comparison reader; strategy and locale boundaries remain intact.
 
 `Infrastructure/Monitoring/LogicalCheckRetentionBatch.cs` performs final monitoring-detail cleanup
 only after all retained children and evidence references are gone. It removes snapshots and checks
-in one transaction, preserving aggregates and registry configuration, and remains unscheduled.
+in one transaction while preserving aggregates and registry configuration.
 
 `Infrastructure/Monitoring/AggregateRetentionBatch.cs` expires bounded aggregate dates older than
 24 calendar months only after raw deletion has started and no raw result remains for that day.
 Monitor/ancestor and held-check history protections apply. Cutoff-day and unsealed aggregates
-remain. The batch leaves registry configuration intact and is not yet scheduled.
+remain. The batch leaves registry configuration intact.
 
 `Infrastructure/Monitoring/RobotsRetentionBatch.cs` expires old, expired default-policy cache rows
 while preserving fresh snapshots, configured sitemap policy, approved exceptions and held origins.
 It shares RobotsOriginLock with refresh. RetentionHoldQueries.RelatedEndpointIds expands all nine
-hold scopes to origins without exposing origin values in logs. The batch remains unscheduled.
+hold scopes to origins without exposing origin values in logs.
 
 `Infrastructure/Monitoring/IncidentRetentionBatch.cs` expires terminal unheld incident bundles after
 24 calendar months. It locks incident and delivery rows, preserves pending/leased notifications and
 held successor links, deletes in foreign-key order, and audits retained recurrence-link detachment
-without resetting recurrence counts. Bundle deletion is atomic and remains unscheduled.
+without resetting recurrence counts. Bundle deletion is atomic.
 
 `Application/Monitoring/MonitoringRetentionCoordinator.cs` bounds passes, attempted batches and the
 whole-run deadline. `Infrastructure/Monitoring/MonitoringRetentionBatchRunner.cs` resolves each
 category in a fresh scope. `MonitoringRetentionJob.cs` supplies the thin hourly Hangfire entry point
 and safe failure reporting. UseMonitoringRetention registers the job on the maintenance queue only
 when enabled. Default configuration keeps retention disabled and dry-run enabled.
+
+`tests/WebHealth.IntegrationTests/RepresentativeMonitoringLoadTests.cs` and its support harness create
+the opt-in 500-endpoint Phase 7 fixture, measure scheduling and bounded concurrency, inject enqueue and
+database interruptions, and record two memory windows. `scripts/run-representative-monitoring-evidence.ps1`
+owns the disposable PostgreSQL lifecycle and writes the evidence under `docs/phase-7`.
