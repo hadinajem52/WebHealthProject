@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
+using NpgsqlTypes;
 using WebHealth.Application.Monitoring;
 using WebHealth.Application.Registry;
 using WebHealth.Infrastructure.Identity;
@@ -77,43 +80,27 @@ internal sealed class ReportingReader(
         }
 
         var monitorIds = certificateMonitors.Select(monitor => monitor.EndpointMonitorId).ToArray();
-        var latest = await dbContext.CertificateObservations.AsNoTracking()
-            .Where(observation => monitorIds.Contains(observation.EndpointMonitorId)
-                && observation.LogicalCheck.Result != null
-                && observation.LogicalCheck.Result.CurrentStateDisposition == "Current")
-            .GroupBy(observation => observation.EndpointMonitorId)
-            .Select(group => group
-                .OrderByDescending(observation => observation.ObservedAt)
-                .ThenByDescending(observation => observation.LogicalCheckId)
-                .Select(observation => new
-                {
-                    Observation = observation,
-                    WarningDays = observation.LogicalCheck.ConfigurationSnapshot.SslWarningExpiryDays,
-                    HighDays = observation.LogicalCheck.ConfigurationSnapshot.SslHighExpiryDays,
-                    CriticalDays = observation.LogicalCheck.ConfigurationSnapshot.SslCriticalExpiryDays
-                }).First())
-            .ToArrayAsync(cancellationToken);
-        var byMonitor = latest.ToDictionary(item => item.Observation.EndpointMonitorId);
+        var latest = await LoadLatestCertificateObservationsAsync(monitorIds, cancellationToken);
+        var byMonitor = latest.ToDictionary(item => item.EndpointMonitorId);
 
         var items = certificateMonitors
             .Where(monitor => byMonitor.ContainsKey(monitor.EndpointMonitorId))
             .Select(monitor =>
             {
                 var recorded = byMonitor[monitor.EndpointMonitorId];
-                var observation = recorded.Observation;
-                var isValid = observation.ValidationCategory == nameof(TlsValidationCategory.Valid);
+                var isValid = recorded.ValidationCategory == nameof(TlsValidationCategory.Valid);
                 return new CertificateExpiryItem(
                     monitor.EndpointId,
                     monitor.EndpointDisplayUrl,
                     monitor.ClientName,
                     monitor.EnvironmentName,
-                    observation.NotAfter,
-                    observation.DaysRemaining,
-                    observation.ValidationCategory,
+                    recorded.NotAfter,
+                    recorded.DaysRemaining,
+                    recorded.ValidationCategory,
                     isValid,
-                    CertificateExpiry.SelectSeverity(observation.DaysRemaining,
+                    CertificateExpiry.SelectSeverity(recorded.DaysRemaining,
                         new(recorded.WarningDays ?? 30, recorded.HighDays ?? 15, recorded.CriticalDays ?? 7)),
-                    observation.ObservedAt);
+                    recorded.ObservedAt);
             })
             .ToArray();
 
@@ -134,6 +121,53 @@ internal sealed class ReportingReader(
                 .ToArray(),
             items.Count(item => !item.IsValid && item.Severity != CertificateExpirySeverity.None));
     }
+
+    private async Task<IReadOnlyList<LatestCertificateObservation>> LoadLatestCertificateObservationsAsync(
+        Guid[] monitorIds, CancellationToken cancellationToken)
+    {
+        var connection = (NpgsqlConnection)dbContext.Database.GetDbConnection();
+        var closeConnection = connection.State != System.Data.ConnectionState.Open;
+        if (closeConnection) await connection.OpenAsync(cancellationToken);
+        try
+        {
+            await using var command = new NpgsqlCommand("""
+                SELECT latest.endpoint_monitor_id, latest.not_after, latest.days_remaining,
+                    latest.validation_category, latest.observed_at, latest.ssl_warning_expiry_days,
+                    latest.ssl_high_expiry_days, latest.ssl_critical_expiry_days
+                FROM unnest(@monitor_ids) AS monitor(id)
+                CROSS JOIN LATERAL (
+                    SELECT observation.endpoint_monitor_id, observation.not_after, observation.days_remaining,
+                        observation.validation_category, observation.observed_at, snapshot.ssl_warning_expiry_days,
+                        snapshot.ssl_high_expiry_days, snapshot.ssl_critical_expiry_days
+                    FROM web_health.certificate_observation observation
+                    JOIN web_health.check_result result ON result.logical_check_id = observation.logical_check_id
+                        AND result.endpoint_monitor_id = observation.endpoint_monitor_id
+                    JOIN web_health.check_configuration_snapshot snapshot
+                        ON snapshot.logical_check_id = observation.logical_check_id
+                    WHERE observation.endpoint_monitor_id = monitor.id
+                        AND result.current_state_disposition = 'Current'
+                    ORDER BY observation.observed_at DESC, observation.logical_check_id DESC
+                    LIMIT 1
+                ) latest
+                """, connection, dbContext.Database.CurrentTransaction?.GetDbTransaction() as NpgsqlTransaction);
+            command.Parameters.AddWithValue("monitor_ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid, monitorIds);
+            var observations = new List<LatestCertificateObservation>(monitorIds.Length);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                observations.Add(new(reader.GetGuid(0), reader.GetFieldValue<DateTimeOffset>(1), reader.GetInt32(2),
+                    reader.GetString(3), reader.GetFieldValue<DateTimeOffset>(4), reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                    reader.IsDBNull(6) ? null : reader.GetInt32(6), reader.IsDBNull(7) ? null : reader.GetInt32(7)));
+            return observations;
+        }
+        finally
+        {
+            if (closeConnection) await connection.CloseAsync();
+        }
+    }
+
+    private sealed record LatestCertificateObservation(Guid EndpointMonitorId, DateTimeOffset NotAfter,
+        int DaysRemaining, string ValidationCategory, DateTimeOffset ObservedAt, int? WarningDays,
+        int? HighDays, int? CriticalDays);
 
     public async Task<ReportDiagnostics> QueryDiagnosticsAsync(
         ReportQuery query,
