@@ -22,20 +22,27 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
                 aggregate.utc_date::timestamp AT TIME ZONE 'UTC' AS day_start
             FROM web_health.monitoring_daily_aggregate aggregate
             WHERE aggregate.endpoint_monitor_id = ANY(@monitor_ids)
-                AND aggregate.raw_deletion_started_at IS NOT NULL
+                AND (aggregate.raw_deletion_started_at IS NOT NULL OR aggregate.exact_duration_samples IS NOT NULL)
                 AND aggregate.utc_date >= (@window_start AT TIME ZONE 'UTC')::date
                 AND aggregate.utc_date <= (@window_end AT TIME ZONE 'UTC')::date
                 AND aggregate.utc_date::timestamp AT TIME ZONE 'UTC' < @window_end
         ), covered_days AS (
             SELECT * FROM archived_days
             WHERE day_start >= @window_start AND day_start + interval '24 hours' <= @window_end
+        ), raw_ranges AS (
+            SELECT monitor.endpoint_monitor_id, day.value::date AS utc_date,
+                greatest(day.value::date::timestamp AT TIME ZONE 'UTC', @window_start) AS range_start,
+                least((day.value::date + 1)::timestamp AT TIME ZONE 'UTC', @window_end) AS range_end
+            FROM unnest(@monitor_ids) AS monitor(endpoint_monitor_id)
+            CROSS JOIN generate_series((@window_start AT TIME ZONE 'UTC')::date,
+                ((@window_end - interval '1 microsecond') AT TIME ZONE 'UTC')::date, interval '1 day') AS day(value)
+            WHERE NOT EXISTS (SELECT 1 FROM archived_days archive
+                WHERE archive.endpoint_monitor_id = monitor.endpoint_monitor_id
+                    AND archive.utc_date = day.value::date)
         ), raw_results AS (
-            SELECT result.* FROM web_health.check_result result
-            WHERE result.endpoint_monitor_id = ANY(@monitor_ids)
-                AND result.measured_at >= @window_start AND result.measured_at < @window_end
-                AND NOT EXISTS (SELECT 1 FROM archived_days archive
-                    WHERE archive.endpoint_monitor_id = result.endpoint_monitor_id
-                        AND archive.utc_date = (result.measured_at AT TIME ZONE 'UTC')::date)
+            SELECT result.* FROM raw_ranges range
+            JOIN web_health.check_result result ON result.endpoint_monitor_id = range.endpoint_monitor_id
+                AND result.measured_at >= range.range_start AND result.measured_at < range.range_end
         )
         """;
 
@@ -87,36 +94,68 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
                 count(*) FILTER (WHERE result.counts_for_uptime AND NOT {Available}),
                 count(*) FILTER (WHERE NOT result.counts_for_uptime),
                 count(*) FILTER (WHERE {Responded}),
-                percentile_cont(0.5) WITHIN GROUP (ORDER BY result.total_duration_ms) FILTER (WHERE {Responded}),
-                percentile_cont(0.95) WITHIN GROUP (ORDER BY result.total_duration_ms) FILTER (WHERE {Responded}),
+                NULL::double precision, NULL::double precision,
                 max(result.measured_at), min(result.monitor_source), max(result.monitor_source),
                 ARRAY[{rawHistogram}], max(result.total_duration_ms) FILTER (WHERE {Responded}),
-                count(*), 0::bigint, false
+                count(*), 0::bigint, false, false
             FROM raw_results result {rawGroup}
             UNION ALL
             SELECT {dailyKey}, coalesce(sum(eligible_count), 0)::bigint, coalesce(sum(healthy_count), 0)::bigint,
                 coalesce(sum(warning_count), 0)::bigint, coalesce(sum(down_count), 0)::bigint,
                 coalesce(sum(excluded_count), 0)::bigint, coalesce(sum(duration_count), 0)::bigint,
                 NULL::double precision, NULL::double precision, max(last_measured_at), min(lowest_source), max(highest_source),
-                ARRAY[{dailyHistogram}], max(duration_maximum_ms), 0::bigint, coalesce(sum(total_count), 0)::bigint, false
+                ARRAY[{dailyHistogram}], max(duration_maximum_ms), 0::bigint, coalesce(sum(total_count), 0)::bigint,
+                false, coalesce(bool_or(exact_duration_samples IS NULL AND duration_count > 0), false)
             FROM covered_days {dailyGroup}
             UNION ALL
             SELECT {dailyKey}, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint,
                 NULL::double precision, NULL::double precision, NULL::timestamptz, NULL::text, NULL::text,
-                array_fill(0::bigint, ARRAY[{ResponseTimeHistogram.BucketCount}]), NULL::integer, 0::bigint, 0::bigint, true
+                array_fill(0::bigint, ARRAY[{ResponseTimeHistogram.BucketCount}]), NULL::integer, 0::bigint, 0::bigint, true,
+                false
             FROM archived_days WHERE day_start < @window_start OR day_start + interval '24 hours' > @window_end
             {(grouping == ReportSampleGrouping.Summary ? "GROUP BY 1" : dailyGroup)};
             """;
+        var samples = new Dictionary<string, ReportSampleAggregate>(StringComparer.Ordinal);
+        await using (var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken))
+        await using (var reader = await scope.Command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var key = reader.GetString(0);
+                if (!samples.TryGetValue(key, out var sample)) samples.Add(key, sample = new());
+                sample.Add(reader);
+            }
+        }
+        await LoadExactDurationsAsync(query, monitorIds, grouping, samples, cancellationToken);
+        return samples;
+    }
+
+    private async Task LoadExactDurationsAsync(ReportQuery query, IReadOnlyList<Guid> monitorIds,
+        ReportSampleGrouping grouping, Dictionary<string, ReportSampleAggregate> samples, CancellationToken cancellationToken)
+    {
+        var sql = SourcesSql + """
+
+            SELECT result.endpoint_monitor_id, (result.measured_at AT TIME ZONE 'UTC')::date,
+                array_agg(result.total_duration_ms)
+            FROM raw_results result
+            WHERE result.counts_for_uptime AND result.outcome IN ('Healthy', 'Warning')
+            GROUP BY 1, 2
+            UNION ALL
+            SELECT endpoint_monitor_id, utc_date, exact_duration_samples
+            FROM covered_days WHERE exact_duration_samples IS NOT NULL;
+            """;
         await using var scope = await CreateCommandAsync(sql, query, monitorIds, cancellationToken);
         await using var reader = await scope.Command.ExecuteReaderAsync(cancellationToken);
-        var samples = new Dictionary<string, ReportSampleAggregate>(StringComparer.Ordinal);
         while (await reader.ReadAsync(cancellationToken))
         {
-            var key = reader.GetString(0);
-            if (!samples.TryGetValue(key, out var sample)) samples.Add(key, sample = new());
-            sample.Add(reader);
+            var key = grouping switch
+            {
+                ReportSampleGrouping.Monitor => reader.GetGuid(0).ToString(),
+                ReportSampleGrouping.Day => reader.GetFieldValue<DateOnly>(1).ToString("yyyy-MM-dd"),
+                _ => string.Empty
+            };
+            if (samples.TryGetValue(key, out var sample)) sample.AddExactDurations(reader.GetFieldValue<int[]>(2));
         }
-        return samples;
     }
 
     public async Task<ComparabilityAssessment> AssessComparabilityAsync(ReportQuery query, IReadOnlyList<Guid> monitorIds,
@@ -170,7 +209,8 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
         }
         var dailySql = SourcesSql + """
 
-            SELECT endpoint_monitor_id, min(comparability_identity), max(comparability_identity), bool_and(is_comparable)
+            SELECT endpoint_monitor_id, min(comparability_identity), max(comparability_identity), bool_and(is_comparable),
+                min(lowest_source), max(highest_source)
             FROM covered_days WHERE eligible_count > 0 GROUP BY endpoint_monitor_id;
             """;
         await using (var scope = await CreateCommandAsync(dailySql, query, monitorIds, cancellationToken))
@@ -181,7 +221,8 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
                 var identity = reader.GetString(1);
                 changed |= !reader.GetBoolean(3) || identity != reader.GetString(2)
                     || (rawIdentities.TryGetValue(reader.GetGuid(0), out var rawIdentity) && rawIdentity != identity);
-                sources.Add("Scheduled");
+                sources.Add(reader.GetString(4));
+                sources.Add(reader.GetString(5));
             }
         }
         return PerformanceComparability.Evaluate(sources, changed);

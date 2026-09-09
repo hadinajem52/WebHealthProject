@@ -52,7 +52,7 @@ public sealed class MonitoringRetentionCoordinatorTests
         var runner = new Runner((_, _) => Task.FromResult((1, 1)));
         var options = new MonitoringRetentionOptions { Enabled = true, DryRun = false, MaximumBatchesPerRun = 2 };
         var result = await new MonitoringRetentionCoordinator(runner, options, TimeProvider.System).ExecuteAsync();
-        result.Batches.Select(item => item.Category).Should().Equal(RetentionCategory.IncidentBundles, RetentionCategory.ExecutionAttempts);
+        result.Batches.Select(item => item.Category).Should().Equal(RetentionCategory.DailyAggregatePreparation, RetentionCategory.IncidentBundles);
     }
 
     [Fact]

@@ -24,6 +24,7 @@ public sealed class MonitoringDailyAggregate
     public int? DurationMaximumMs { get; set; }
     public int HistogramVersion { get; set; } = ResponseTimeHistogram.Version;
     public long[] DurationHistogram { get; set; } = new long[ResponseTimeHistogram.BucketCount];
+    public int[]? ExactDurationSamples { get; set; }
     public required string ComparabilityIdentity { get; set; }
     public bool IsComparable { get; set; }
     public required string LowestSource { get; set; }
@@ -41,8 +42,8 @@ internal sealed class MonitoringDailyAggregateConfiguration : IEntityTypeConfigu
         builder.HasKey(item => new { item.EndpointMonitorId, item.UtcDate });
         builder.HasOne<EndpointMonitor>().WithMany().HasForeignKey(item => item.EndpointMonitorId).OnDelete(DeleteBehavior.Restrict);
         builder.Property(item => item.ComparabilityIdentity).HasMaxLength(64);
-        builder.Property(item => item.LowestSource).HasMaxLength(16);
-        builder.Property(item => item.HighestSource).HasMaxLength(16);
+        builder.Property(item => item.LowestSource).HasMaxLength(50);
+        builder.Property(item => item.HighestSource).HasMaxLength(50);
         builder.ToTable("monitoring_daily_aggregate", table =>
         {
             table.HasCheckConstraint("ck_monitoring_daily_aggregate_counts",
@@ -64,7 +65,12 @@ internal sealed class MonitoringDailyAggregateConfiguration : IEntityTypeConfigu
                 + string.Join(" + ", Enumerable.Range(1, 12).Select(index => $"duration_histogram[{index}]::numeric")));
             table.HasCheckConstraint("ck_monitoring_daily_aggregate_identity", "comparability_identity ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_monitoring_daily_aggregate_sources",
-                "lowest_source IN ('Scheduled', 'Manual', 'Urgent') AND highest_source IN ('Scheduled', 'Manual', 'Urgent') AND lowest_source <= highest_source");
+                "lowest_source <> '' AND highest_source <> '' AND lowest_source <= highest_source");
+            table.HasCheckConstraint("ck_monitoring_daily_aggregate_exact_samples",
+                "exact_duration_samples IS NULL OR (raw_deletion_started_at IS NULL "
+                + "AND array_ndims(exact_duration_samples) = 1 "
+                + "AND array_lower(exact_duration_samples, 1) = 1 AND array_position(exact_duration_samples, NULL) IS NULL "
+                + "AND 0 <= ALL(exact_duration_samples) AND cardinality(exact_duration_samples) = duration_count)");
             table.HasCheckConstraint("ck_monitoring_daily_aggregate_dates",
                 "first_measured_at <= last_measured_at AND (first_measured_at AT TIME ZONE 'UTC')::date = utc_date "
                 + "AND (last_measured_at AT TIME ZONE 'UTC')::date = utc_date "

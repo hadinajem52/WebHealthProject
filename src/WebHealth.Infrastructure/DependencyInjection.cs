@@ -181,6 +181,7 @@ public static class DependencyInjection
         services.AddScoped<MonitoringRuntimeRecorder>();
         services.AddScoped<IRetentionHoldService, RetentionHoldService>();
         services.AddScoped<DailyAggregateWriter>();
+        services.AddScoped<DailyAggregatePreparationBatch>();
         services.AddScoped<ExecutionHistoryRetentionBatch>();
         services.AddScoped<RawResultRetentionBatch>();
         services.AddScoped<ObservationRetentionBatch>();

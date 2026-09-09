@@ -11,6 +11,7 @@ internal sealed class MonitoringRetentionBatchRunner(IServiceScopeFactory scopeF
         var services = scope.ServiceProvider;
         var result = category switch
         {
+            RetentionCategory.DailyAggregatePreparation => await services.GetRequiredService<DailyAggregatePreparationBatch>().ExecuteAsync(cancellationToken),
             RetentionCategory.IncidentBundles => await services.GetRequiredService<IncidentRetentionBatch>().ExecuteAsync(cancellationToken),
             RetentionCategory.ExecutionAttempts => await services.GetRequiredService<ExecutionHistoryRetentionBatch>().ExecuteAsync(cancellationToken),
             RetentionCategory.DurableWork => await services.GetRequiredService<ExecutionHistoryRetentionBatch>().ExecuteWorkAsync(cancellationToken),

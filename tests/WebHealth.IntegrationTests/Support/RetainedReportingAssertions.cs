@@ -83,7 +83,7 @@ internal static class RetainedReportingAssertions
         var writer = new DailyAggregateWriter(database, clock);
         (await writer.RecomputeAsync(monitorId, oldDay)).Should().BeTrue();
         var before = (await samples.LoadAsync(query, [monitorId], ReportSampleGrouping.Summary, CancellationToken.None))[string.Empty];
-        before.ToHistory().Should().Be(new ReportHistoryCoverage(4, 0));
+        before.ToHistory().Should().Be(new ReportHistoryCoverage(1, 3));
         before.ToResponseTimes().Should().Be(new ReportResponseTimes(100, 280, 3));
         database.RetentionHolds.Add(new RetentionHold
         {

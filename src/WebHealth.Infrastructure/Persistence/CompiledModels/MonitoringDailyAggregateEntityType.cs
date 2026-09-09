@@ -21,7 +21,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Monitoring.MonitoringDailyAggregate",
                 typeof(MonitoringDailyAggregate),
                 baseEntityType,
-                propertyCount: 25,
+                propertyCount: 26,
                 foreignKeyCount: 1,
                 keyCount: 1);
 
@@ -136,6 +136,16 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             eligibleCount.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             eligibleCount.AddAnnotation("Relational:ColumnName", "eligible_count");
 
+            var exactDurationSamples = runtimeEntityType.AddProperty(
+                "ExactDurationSamples",
+                typeof(int[]),
+                propertyInfo: typeof(MonitoringDailyAggregate).GetProperty("ExactDurationSamples", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(MonitoringDailyAggregate).GetField("<ExactDurationSamples>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true);
+            var exactDurationSamplesElementType = exactDurationSamples.SetElementType(typeof(int));
+            exactDurationSamples.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            exactDurationSamples.AddAnnotation("Relational:ColumnName", "exact_duration_samples");
+
             var excludedCount = runtimeEntityType.AddProperty(
                 "ExcludedCount",
                 typeof(long),
@@ -169,7 +179,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 typeof(string),
                 propertyInfo: typeof(MonitoringDailyAggregate).GetProperty("HighestSource", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(MonitoringDailyAggregate).GetField("<HighestSource>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                maxLength: 16);
+                maxLength: 50);
             highestSource.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             highestSource.AddAnnotation("Relational:ColumnName", "highest_source");
 
@@ -206,7 +216,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 typeof(string),
                 propertyInfo: typeof(MonitoringDailyAggregate).GetProperty("LowestSource", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(MonitoringDailyAggregate).GetField("<LowestSource>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
-                maxLength: 16);
+                maxLength: 50);
             lowestSource.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             lowestSource.AddAnnotation("Relational:ColumnName", "lowest_source");
 

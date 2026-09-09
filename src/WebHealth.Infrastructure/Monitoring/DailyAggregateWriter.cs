@@ -34,6 +34,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
             LowestSource = string.Empty,
             HighestSource = string.Empty
         };
+        var exactDurationSamples = new List<int>();
         using var identityHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         string? previousIdentity = null;
         var identityCount = 0;
@@ -48,6 +49,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
                 result.CountsForUptime,
                 result.IsMaintenance,
                 result.MonitorSource,
+                CheckSource = result.LogicalCheck.Source,
                 result.TotalDurationMs,
                 result.MeasuredAt,
                 result.ConfigurationIdentity
@@ -55,7 +57,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
         await foreach (var sample in samples.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
             row.TotalCount++;
-            if (sample.MonitorSource == "Scheduled") row.ScheduledCount++;
+            if (sample.CheckSource == "Scheduled") row.ScheduledCount++;
             if (sample.IsMaintenance) row.MaintenanceCount++;
             if (sample.Outcome == "Cancelled") row.CancelledCount++;
             if (sample.CountsForUptime)
@@ -71,6 +73,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
                     row.DurationMinimumMs = Math.Min(row.DurationMinimumMs ?? sample.TotalDurationMs, sample.TotalDurationMs);
                     row.DurationMaximumMs = Math.Max(row.DurationMaximumMs ?? sample.TotalDurationMs, sample.TotalDurationMs);
                     row.DurationHistogram[ResponseTimeHistogram.BucketIndex(sample.TotalDurationMs)]++;
+                    exactDurationSamples.Add(sample.TotalDurationMs);
                 }
             }
             else row.ExcludedCount++;
@@ -87,6 +90,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
             }
         }
         if (row.TotalCount == 0) return false;
+        row.ExactDurationSamples = [.. exactDurationSamples];
         row.ComparabilityIdentity = Convert.ToHexStringLower(identityHash.GetHashAndReset());
         row.IsComparable = identityCount == 1;
         if (existing is null) database.MonitoringDailyAggregates.Add(row);

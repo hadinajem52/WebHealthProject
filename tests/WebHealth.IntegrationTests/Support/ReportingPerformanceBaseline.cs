@@ -376,6 +376,61 @@ internal static class ReportingPerformanceBaseline
         """,
 
         """
+        INSERT INTO web_health.monitoring_daily_aggregate
+            (endpoint_monitor_id, utc_date, total_count, scheduled_count, eligible_count, healthy_count,
+             warning_count, down_count, maintenance_count, cancelled_count, excluded_count,
+             duration_count, duration_sum_ms, duration_minimum_ms, duration_maximum_ms,
+             histogram_version, duration_histogram, exact_duration_samples, comparability_identity,
+             is_comparable, lowest_source, highest_source, first_measured_at, last_measured_at,
+             computed_at, raw_deletion_started_at)
+        SELECT result.endpoint_monitor_id, (result.measured_at AT TIME ZONE 'UTC')::date,
+            count(*), count(*) FILTER (WHERE check_row.source = 'Scheduled'),
+            count(*) FILTER (WHERE result.counts_for_uptime),
+            count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome = 'Healthy'),
+            count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome <> 'Healthy'
+                AND (result.failure_category IS NULL OR result.failure_category IN
+                    ('SeoTitle','SeoDescription','SeoCanonical','SeoIndexing','SeoRobots','SlowResponse','PageTooLarge'))),
+            count(*) FILTER (WHERE result.counts_for_uptime
+                AND result.failure_category IS NOT NULL AND result.failure_category NOT IN
+                    ('SeoTitle','SeoDescription','SeoCanonical','SeoIndexing','SeoRobots','SlowResponse','PageTooLarge')),
+            count(*) FILTER (WHERE result.is_maintenance),
+            count(*) FILTER (WHERE result.outcome = 'Cancelled'),
+            count(*) FILTER (WHERE NOT result.counts_for_uptime),
+            count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning')),
+            coalesce(sum(result.total_duration_ms) FILTER
+                (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning')), 0),
+            min(result.total_duration_ms) FILTER
+                (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning')),
+            max(result.total_duration_ms) FILTER
+                (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning')),
+            1,
+            ARRAY[
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms <= 0),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 0 AND result.total_duration_ms <= 100),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 100 AND result.total_duration_ms <= 250),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 250 AND result.total_duration_ms <= 500),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 500 AND result.total_duration_ms <= 1000),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 1000 AND result.total_duration_ms <= 2500),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 2500 AND result.total_duration_ms <= 5000),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 5000 AND result.total_duration_ms <= 10000),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 10000 AND result.total_duration_ms <= 30000),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 30000 AND result.total_duration_ms <= 60000),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 60000 AND result.total_duration_ms <= 120000),
+                count(*) FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning') AND result.total_duration_ms > 120000)
+            ]::bigint[],
+            coalesce(array_agg(result.total_duration_ms ORDER BY result.configuration_identity, result.logical_check_id)
+                FILTER (WHERE result.counts_for_uptime AND result.outcome IN ('Healthy','Warning')), ARRAY[]::integer[]),
+            encode(sha256(convert_to(string_agg(DISTINCT result.configuration_identity, ''
+                ORDER BY result.configuration_identity), 'UTF8')), 'hex'),
+            count(DISTINCT result.configuration_identity) = 1,
+            min(result.monitor_source), max(result.monitor_source), min(result.measured_at), max(result.measured_at),
+            @history_end, NULL
+        FROM web_health.check_result result
+        JOIN web_health.logical_check check_row ON check_row.id = result.logical_check_id
+        GROUP BY result.endpoint_monitor_id, (result.measured_at AT TIME ZONE 'UTC')::date;
+        """,
+
+        """
         INSERT INTO web_health.certificate_observation
             (logical_check_id, endpoint_monitor_id, subject, issuer, serial_number,
              sha256_fingerprint, not_before, not_after, days_remaining, validation_category,

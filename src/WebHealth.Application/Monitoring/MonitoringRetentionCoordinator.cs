@@ -2,6 +2,7 @@ namespace WebHealth.Application.Monitoring;
 
 public enum RetentionCategory
 {
+    DailyAggregatePreparation,
     IncidentBundles,
     ExecutionAttempts,
     DurableWork,

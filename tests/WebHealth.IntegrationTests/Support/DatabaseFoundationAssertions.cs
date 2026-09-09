@@ -112,7 +112,8 @@ internal static class DatabaseFoundationAssertions
         "20260908150752_MonitoringDailyAggregates",
         "20260908151843_MonitoringRetentionPermission",
         "20260908183513_ScheduledCompletionLookup",
-        "20260909103732_ResultConfigurationIdentity"
+        "20260909103732_ResultConfigurationIdentity",
+        "20260909121143_ExactDailyReportSamples"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -1617,7 +1618,7 @@ internal static class DatabaseFoundationAssertions
                 Outcome = sample.Outcome,
                 FailureCategory = sample.Failure,
                 TotalDurationMs = sample.Duration,
-                MonitorSource = sample.Source,
+                MonitorSource = "WebHealthSafeHttpV1",
                 ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
                     monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
                 CountsForUptime = sample.Eligible,
@@ -1643,9 +1644,10 @@ internal static class DatabaseFoundationAssertions
         first.DurationMinimumMs.Should().Be(100);
         first.DurationMaximumMs.Should().Be(200);
         first.DurationHistogram.Should().Equal(0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        first.ExactDurationSamples.Should().BeEquivalentTo([100, 200]);
         first.IsComparable.Should().BeTrue();
-        first.LowestSource.Should().Be("Manual");
-        first.HighestSource.Should().Be("Urgent");
+        first.LowestSource.Should().Be("WebHealthSafeHttpV1");
+        first.HighestSource.Should().Be("WebHealthSafeHttpV1");
         (await writer.RecomputeAsync(monitorId, day)).Should().BeTrue();
         (await database.MonitoringDailyAggregates.AsNoTracking().SingleAsync(item => item.EndpointMonitorId == monitorId))
             .Should().BeEquivalentTo(first);
@@ -1662,7 +1664,7 @@ internal static class DatabaseFoundationAssertions
                 EndpointMonitorId = monitorId,
                 Outcome = "Healthy",
                 TotalDurationMs = 50,
-                MonitorSource = "Scheduled",
+                MonitorSource = "WebHealthSafeHttpV1",
                 ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
                     monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
                 CountsForUptime = true,
@@ -1680,6 +1682,7 @@ internal static class DatabaseFoundationAssertions
         recomputed.IsComparable.Should().BeFalse("the late result uses a different snapshot generation");
         recomputed.ComparabilityIdentity.Should().NotBe(first.ComparabilityIdentity);
         var stored = await database.MonitoringDailyAggregates.SingleAsync(item => item.EndpointMonitorId == monitorId);
+        stored.ExactDurationSamples = null;
         stored.RawDeletionStartedAt = now;
         await database.SaveChangesAsync();
         (await writer.RecomputeAsync(monitorId, day)).Should().BeFalse();

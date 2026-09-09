@@ -17,8 +17,7 @@ internal sealed class ReportSampleAggregate
     private string? highestSource;
     private readonly long[] histogram = new long[ResponseTimeHistogram.BucketCount];
     private int maximumDuration;
-    private double? exactP50;
-    private double? exactP95;
+    private readonly List<int> exactDurations = [];
     private bool approximate;
     private long rawSamples;
     private long aggregatedSamples;
@@ -41,12 +40,7 @@ internal sealed class ReportSampleAggregate
             rawSamples += reader.GetInt64(14);
             aggregatedSamples += reader.GetInt64(15);
         }
-        if (reader.GetInt64(14) > 0)
-        {
-            exactP50 = reader.IsDBNull(7) ? null : reader.GetDouble(7);
-            exactP95 = reader.IsDBNull(8) ? null : reader.GetDouble(8);
-        }
-        approximate |= reader.GetInt64(15) > 0 && reader.GetInt64(6) > 0;
+        approximate |= reader.GetBoolean(17);
         if (!reader.IsDBNull(9))
         {
             var measured = reader.GetFieldValue<DateTimeOffset>(9);
@@ -68,8 +62,22 @@ internal sealed class ReportSampleAggregate
 
     public ReportUptime ToUptime() => new(EligibleSamples, HealthySamples, WarningSamples, DownSamples, ExcludedSamples);
     public ReportHistoryCoverage ToHistory() => new(rawSamples, aggregatedSamples, partialArchivedDaysOmitted);
-    public ReportResponseTimes ToResponseTimes() => new(
-        approximate ? ResponseTimeHistogram.EstimatePercentile(histogram, 0.5, maximumDuration) : exactP50,
-        approximate ? ResponseTimeHistogram.EstimatePercentile(histogram, 0.95, maximumDuration) : exactP95,
-        RespondedSamples, approximate);
+    public void AddExactDurations(IEnumerable<int> durations) => exactDurations.AddRange(durations);
+
+    public ReportResponseTimes ToResponseTimes()
+    {
+        if (approximate) return new(ResponseTimeHistogram.EstimatePercentile(histogram, 0.5, maximumDuration),
+            ResponseTimeHistogram.EstimatePercentile(histogram, 0.95, maximumDuration), RespondedSamples, true);
+        exactDurations.Sort();
+        return new(Percentile(exactDurations, 0.5), Percentile(exactDurations, 0.95), RespondedSamples, false);
+    }
+
+    private static double? Percentile(IReadOnlyList<int> values, double percentile)
+    {
+        if (values.Count == 0) return null;
+        var position = (values.Count - 1) * percentile;
+        var lower = (int)Math.Floor(position);
+        var upper = (int)Math.Ceiling(position);
+        return values[lower] + (values[upper] - values[lower]) * (position - lower);
+    }
 }

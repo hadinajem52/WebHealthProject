@@ -52,6 +52,7 @@ internal sealed class RawResultRetentionBatch(ApplicationDbContext database, Mon
                 aggregate = await database.MonitoringDailyAggregates.SingleAsync(
                     item => item.EndpointMonitorId == first.EndpointMonitorId && item.UtcDate == day, token);
                 aggregate.RawDeletionStartedAt = timeProvider.GetUtcNow();
+                aggregate.ExactDurationSamples = null;
                 await database.SaveChangesAsync(token);
             }
             await database.Database.ExecuteSqlRawAsync("SET LOCAL web_health.monitoring_retention = 'on'", token);

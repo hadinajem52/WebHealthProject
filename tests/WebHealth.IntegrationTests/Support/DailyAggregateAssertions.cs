@@ -21,7 +21,7 @@ internal static class DailyAggregateAssertions
         columns.Should().BeEquivalentTo("endpoint_monitor_id", "utc_date", "total_count", "scheduled_count",
             "eligible_count", "healthy_count", "warning_count", "down_count", "maintenance_count", "cancelled_count",
             "excluded_count", "duration_count", "duration_sum_ms", "duration_minimum_ms", "duration_maximum_ms",
-            "histogram_version", "duration_histogram", "comparability_identity", "is_comparable", "lowest_source",
+            "histogram_version", "duration_histogram", "exact_duration_samples", "comparability_identity", "is_comparable", "lowest_source",
             "highest_source", "first_measured_at", "last_measured_at", "computed_at", "raw_deletion_started_at");
         var now = DateTimeOffset.UtcNow;
         now = now.AddTicks(-(now.Ticks % 10));
@@ -36,7 +36,8 @@ internal static class DailyAggregateAssertions
             "duration_sum_ms = 101", "duration_minimum_ms = NULL", "histogram_version = 2",
             "duration_histogram = ARRAY[1]::bigint[]", "duration_histogram[1] = -1",
             "duration_histogram[1] = NULL", "duration_histogram[1] = 1", "comparability_identity = 'invalid'",
-            "lowest_source = 'Other'", "last_measured_at = first_measured_at - interval '1 microsecond'",
+            "exact_duration_samples = ARRAY[]::integer[]", "exact_duration_samples = ARRAY[-1]::integer[]",
+            "lowest_source = ''", "last_measured_at = first_measured_at - interval '1 microsecond'",
             "utc_date = utc_date + 1", "raw_deletion_started_at = computed_at - interval '1 microsecond'"
         })
         {
@@ -49,6 +50,7 @@ internal static class DailyAggregateAssertions
             SELECT * FROM web_health.monitoring_daily_aggregate WHERE endpoint_monitor_id = {monitorId}
             """);
         (await duplicate.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.UniqueViolation);
+        row.ExactDurationSamples = null;
         row.RawDeletionStartedAt = now;
         await database.SaveChangesAsync();
         database.MonitoringDailyAggregates.Remove(row);
@@ -73,6 +75,7 @@ internal static class DailyAggregateAssertions
             var measured = new DateTimeOffset(pair.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
             var aggregate = NewRow(monitorId, measured);
             aggregate.RawDeletionStartedAt = pair.Key == "unsealed" ? null : now;
+            if (aggregate.RawDeletionStartedAt is not null) aggregate.ExactDurationSamples = null;
             database.MonitoringDailyAggregates.Add(aggregate);
         }
         var observed = new DateTimeOffset(dates["raw"].ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -177,10 +180,11 @@ internal static class DailyAggregateAssertions
         DurationMinimumMs = 100,
         DurationMaximumMs = 100,
         DurationHistogram = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        ExactDurationSamples = [100],
         ComparabilityIdentity = new string('a', 64),
         IsComparable = true,
-        LowestSource = "Scheduled",
-        HighestSource = "Scheduled",
+        LowestSource = "WebHealthSafeHttpV1",
+        HighestSource = "WebHealthSafeHttpV1",
         FirstMeasuredAt = now,
         LastMeasuredAt = now,
         ComputedAt = now
