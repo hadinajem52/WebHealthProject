@@ -122,6 +122,7 @@ internal static class IncidentRetentionAssertions
                 CreatedAt = now
             });
         await database.SaveChangesAsync();
+        await VerifyConcurrentReopenAsync(builder.Options, incidents["eligible-closed"], now);
         IncidentRetentionBatch Batch(bool enabled, bool dryRun) => new(database,
             new() { Enabled = enabled, DryRun = dryRun, BatchSize = 1 }, new RetentionClock(now), NullLogger<IncidentRetentionBatch>.Instance);
         (await Batch(false, false).ExecuteAsync()).Should().Be(new RetentionBatchResult(0, 0));
@@ -188,6 +189,55 @@ internal static class IncidentRetentionAssertions
         cancelled.Cancel();
         var execute = async () => await Batch(true, false).ExecuteAsync(cancelled.Token);
         await execute.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private static async Task VerifyConcurrentReopenAsync(DbContextOptions<ApplicationDbContext> options, Incident incident, DateTimeOffset now)
+    {
+        await using var mutation = new ApplicationDbContext(options);
+        await using var retention = new ApplicationDbContext(options);
+        await retention.Database.OpenConnectionAsync();
+        var retentionPid = ((NpgsqlConnection)retention.Database.GetDbConnection()).ProcessID;
+        await using var transaction = await mutation.Database.BeginTransactionAsync();
+        await mutation.Incidents.Where(item => item.Id == incident.Id).ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.Status, "Open")
+            .SetProperty(item => item.ResolvedAt, (DateTimeOffset?)null)
+            .SetProperty(item => item.ClosedAt, (DateTimeOffset?)null)
+            .SetProperty(item => item.ResolutionCategory, (string?)null)
+            .SetProperty(item => item.ResolutionNote, (string?)null));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var batch = new IncidentRetentionBatch(retention, new() { Enabled = true, DryRun = false, BatchSize = 1 },
+            new RetentionClock(now), NullLogger<IncidentRetentionBatch>.Instance);
+        var cleanup = batch.ExecuteAsync(timeout.Token);
+        try
+        {
+            while (!await mutation.Database.SqlQuery<int>($"""
+                SELECT CASE WHEN pg_backend_pid() = ANY(pg_blocking_pids({retentionPid}))
+                    THEN 1 ELSE 0 END AS "Value"
+                """).AnyAsync(count => count == 1, timeout.Token))
+            {
+                cleanup.IsCompleted.Should().BeFalse("retention must wait for the concurrent incident mutation");
+                await Task.Delay(25, timeout.Token);
+            }
+            await transaction.CommitAsync(timeout.Token);
+            (await cleanup).Should().Be(new RetentionBatchResult(0, 0),
+                "eligibility must be checked again after the incident row lock is acquired");
+            (await retention.Incidents.AsNoTracking().SingleAsync(item => item.Id == incident.Id)).Status.Should().Be("Open");
+            (await retention.IncidentEvidence.CountAsync(item => item.IncidentId == incident.Id)).Should().Be(1);
+            (await retention.IncidentEvents.CountAsync(item => item.IncidentId == incident.Id)).Should().Be(1);
+            (await retention.NotificationAttempts.CountAsync(item => item.Delivery.NotificationEvent.IncidentId == incident.Id)).Should().Be(1);
+        }
+        finally
+        {
+            await timeout.CancelAsync();
+            try { await cleanup; }
+            catch (OperationCanceledException) { }
+        }
+        await mutation.Incidents.Where(item => item.Id == incident.Id).ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.Status, incident.Status)
+            .SetProperty(item => item.ResolvedAt, incident.ResolvedAt)
+            .SetProperty(item => item.ClosedAt, incident.ClosedAt)
+            .SetProperty(item => item.ResolutionCategory, incident.ResolutionCategory)
+            .SetProperty(item => item.ResolutionNote, incident.ResolutionNote));
     }
 
     private sealed class RetentionClock(DateTimeOffset now) : TimeProvider
