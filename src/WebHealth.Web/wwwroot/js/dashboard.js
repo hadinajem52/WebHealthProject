@@ -140,6 +140,16 @@
 
         var responseCanvas = host.querySelector('#dashboard-trend-response');
         if (responseCanvas) {
+            var responseOptions = baseOptions(prefersReducedMotion, 'Milliseconds', { beginAtZero: true });
+            responseOptions.plugins.tooltip = {
+                callbacks: {
+                    afterLabel: function (context) {
+                        return series[context.dataIndex].approximate === true
+                            ? 'Approximate percentile from archived histogram buckets'
+                            : '';
+                    }
+                }
+            };
             charts.push(new window.Chart(responseCanvas, {
                 type: 'line',
                 data: {
@@ -169,7 +179,7 @@
                         }
                     ]
                 },
-                options: baseOptions(prefersReducedMotion, 'Milliseconds', { beginAtZero: true }),
+                options: responseOptions,
                 plugins: [thresholdPlugin([
                     {
                         value: DEFAULT_WARNING_MS,

@@ -697,3 +697,10 @@ pending, so deletion stays disabled outside controlled disposable tests.
 - On the preserved reporting fixture, EXPLAIN ANALYZE/BUFFERS measured the original DISTINCT query at 1,754.186 ms and explicit grouping at 1,234.500 ms. A bidirectional EXCEPT ALL comparison returned zero mismatches. Plans: [Reporting_Comparability_Group_Experiment.txt](Reporting_Comparability_Group_Experiment.txt). These single-query timings do not establish dashboard p95.
 - Covering-index experiments were rejected as a combined change: comparability worsened from 2,233.943 to 2,697.811 ms, while two sample queries changed from 1,606.328 to 1,126.488 ms and 1,682.492 to 1,586.495 ms. Both experimental indexes rolled back; no migration or setup change is introduced.
 - Validation: clean build with zero warnings/errors and the full ordered database-foundation script passed, including mixed-history reporting, generation/configuration drift, CSV, all later stages and migration/bootstrap repeatability. Both disposable clusters are stopped. Full unfiltered-dashboard performance remains below the required standard and needs further work.
+
+### Approximate trend tooltip disclosure - 2026-09-09
+
+- Response-chart tooltips identify approximate histogram percentiles for each archived day. Exact raw days in the same window do not receive that label. Both P50 and P95 use the existing per-point approximation flag emitted by the Razor view; values and threshold lines are unchanged.
+- Corrected the partial-day explanation from hourly detail to raw detail, matching what retention actually removes.
+- Added one JavaScript regression for mixed approximate/exact days and older chart data without an approximation flag. Updated a stale 403-message assertion to check the existing role-denial and no-change message rather than requiring the absent word permission.
+- Verification: all 39 JavaScript tests and syntax checks passed; all 48 ApplicationShellTests/AjaxContractTests passed after rebuilding the Razor view. Browser verification remains outstanding; these checks do not close the full UI or performance gates.

@@ -58,7 +58,8 @@ test('isLocalUrl accepts local paths and rejects external destinations', () => {
 test('status messages cover the response contract', () => {
     const ajax = loadAjax();
     assert.match(ajax.messageForStatus(401), /session/i);
-    assert.match(ajax.messageForStatus(403), /permission/i);
+    assert.match(ajax.messageForStatus(403), /role does not include this action/i);
+    assert.match(ajax.messageForStatus(403), /nothing was changed/i);
     assert.match(ajax.messageForStatus(404), /no longer/i);
     assert.match(ajax.messageForStatus(409), /changed/i);
     assert.match(ajax.messageForStatus(422), /highlighted/i);
