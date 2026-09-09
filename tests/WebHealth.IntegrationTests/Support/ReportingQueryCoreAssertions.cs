@@ -525,6 +525,8 @@ internal static class ReportingQueryCoreAssertions
             MonitorSource = monitor.MonitorType == RegistryDefaults.SslCertificateMonitorType
                 ? "WebHealthSslProbeV1"
                 : "WebHealthSafeHttpV1",
+            ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                monitor.ConfigurationFingerprint, 1, null),
             MeasuredAt = measuredAt,
             CountsForUptime = countsForUptime,
             CompletedAt = measuredAt

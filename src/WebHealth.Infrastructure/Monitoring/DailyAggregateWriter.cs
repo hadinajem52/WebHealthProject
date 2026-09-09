@@ -39,9 +39,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
         var identityCount = 0;
         var samples = database.CheckResults.AsNoTracking().Where(result => result.EndpointMonitorId == monitorId
             && result.MeasuredAt >= start && result.MeasuredAt < end)
-            .OrderBy(result => result.LogicalCheck.ConfigurationSnapshot.ConfigurationFingerprint)
-            .ThenBy(result => result.LogicalCheck.ConfigurationSnapshot.SchemaVersion)
-            .ThenBy(result => result.LogicalCheck.ConfigurationSnapshot.CurrentTruthGeneration)
+            .OrderBy(result => result.ConfigurationIdentity)
             .ThenBy(result => result.LogicalCheckId)
             .Select(result => new
             {
@@ -52,9 +50,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
                 result.MonitorSource,
                 result.TotalDurationMs,
                 result.MeasuredAt,
-                result.LogicalCheck.ConfigurationSnapshot.ConfigurationFingerprint,
-                result.LogicalCheck.ConfigurationSnapshot.SchemaVersion,
-                result.LogicalCheck.ConfigurationSnapshot.CurrentTruthGeneration
+                result.ConfigurationIdentity
             });
         await foreach (var sample in samples.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
@@ -82,7 +78,7 @@ internal sealed class DailyAggregateWriter(ApplicationDbContext database, TimePr
             row.LastMeasuredAt = row.TotalCount == 1 || sample.MeasuredAt > row.LastMeasuredAt ? sample.MeasuredAt : row.LastMeasuredAt;
             if (row.TotalCount == 1 || string.CompareOrdinal(sample.MonitorSource, row.LowestSource) < 0) row.LowestSource = sample.MonitorSource;
             if (row.TotalCount == 1 || string.CompareOrdinal(sample.MonitorSource, row.HighestSource) > 0) row.HighestSource = sample.MonitorSource;
-            var identity = MonitoringConfigurationIdentity.Format(sample.ConfigurationFingerprint, sample.SchemaVersion, sample.CurrentTruthGeneration);
+            var identity = sample.ConfigurationIdentity;
             if (identity != previousIdentity)
             {
                 identityHash.AppendData(Encoding.UTF8.GetBytes(identity));

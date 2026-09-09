@@ -18,6 +18,8 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>();
         PostgreSqlDbContextOptions.Configure(options, connectionString, useCompiledModel: false);
-        return new ApplicationDbContext(options.Options);
+        var context = new ApplicationDbContext(options.Options);
+        context.Database.SetCommandTimeout(TimeSpan.FromMinutes(15));
+        return context;
     }
 }

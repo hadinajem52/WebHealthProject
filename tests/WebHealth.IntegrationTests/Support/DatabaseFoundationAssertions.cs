@@ -111,7 +111,8 @@ internal static class DatabaseFoundationAssertions
         "20260908144110_RetentionHolds",
         "20260908150752_MonitoringDailyAggregates",
         "20260908151843_MonitoringRetentionPermission",
-        "20260908183513_ScheduledCompletionLookup"
+        "20260908183513_ScheduledCompletionLookup",
+        "20260909103732_ResultConfigurationIdentity"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -1617,6 +1618,8 @@ internal static class DatabaseFoundationAssertions
                 FailureCategory = sample.Failure,
                 TotalDurationMs = sample.Duration,
                 MonitorSource = sample.Source,
+                ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                    monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
                 CountsForUptime = sample.Eligible,
                 MeasuredAt = start,
                 CompletedAt = now
@@ -1660,6 +1663,8 @@ internal static class DatabaseFoundationAssertions
                 Outcome = "Healthy",
                 TotalDurationMs = 50,
                 MonitorSource = "Scheduled",
+                ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                    monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
                 CountsForUptime = true,
                 MeasuredAt = measuredAt,
                 CompletedAt = now
@@ -2326,6 +2331,7 @@ internal static class DatabaseFoundationAssertions
         while (await reader.ReadAsync()) names.Add(reader.GetString(0));
         names.Should().Contain([
             "endpoint_monitor.current_truth_generation", "check_result.current_state_disposition",
+            "check_result.configuration_identity",
             "check_configuration_snapshot.target_normalized_url", "check_configuration_snapshot.target_normalized_host",
             "check_configuration_snapshot.target_effective_port", "check_configuration_snapshot.target_normalization_version",
             "check_configuration_snapshot.target_is_production", "check_configuration_snapshot.current_truth_generation",

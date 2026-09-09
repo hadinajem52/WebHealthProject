@@ -58,6 +58,8 @@ internal static class RetainedReportingAssertions
                 Outcome = outcome,
                 FailureCategory = category,
                 MonitorSource = "Scheduled",
+                ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                    monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
                 CountsForUptime = true,
                 TotalDurationMs = duration,
                 MeasuredAt = measured,

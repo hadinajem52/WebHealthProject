@@ -549,6 +549,10 @@ internal sealed class LogicalCheckFinalizationService(
             LengthSource = normalized.LengthSource,
             ResponseTruncated = IsResponseTruncated(evidence),
             MonitorSource = normalized.MonitorSource,
+            ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                check.ConfigurationSnapshot.ConfigurationFingerprint,
+                check.ConfigurationSnapshot.SchemaVersion,
+                check.ConfigurationSnapshot.CurrentTruthGeneration),
             MeasuredAt = normalized.MeasuredAt,
             MaintenanceOccurrenceId = maintenance?.OccurrenceId,
             IsMaintenance = maintenance is not null,

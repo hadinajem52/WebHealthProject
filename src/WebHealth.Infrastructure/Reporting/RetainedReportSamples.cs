@@ -128,13 +128,11 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
         var changed = false;
         var rawSql = SourcesSql + """
             , raw_identities AS MATERIALIZED (
-            SELECT result.endpoint_monitor_id, snapshot.configuration_fingerprint,
-                snapshot.schema_version, snapshot.current_truth_generation, result.monitor_source
-            FROM raw_results result JOIN web_health.check_configuration_snapshot snapshot
-                ON snapshot.logical_check_id = result.logical_check_id
-            WHERE result.counts_for_uptime GROUP BY 1, 2, 3, 4, 5
+            SELECT result.endpoint_monitor_id, result.configuration_identity, result.monitor_source
+            FROM raw_results result
+            WHERE result.counts_for_uptime GROUP BY 1, 2, 3
             )
-            SELECT * FROM raw_identities ORDER BY 1, 2, 3, 4, 5;
+            SELECT * FROM raw_identities ORDER BY 1, 2, 3;
             """;
         await using (var scope = await CreateCommandAsync(rawSql, query, monitorIds, cancellationToken))
         await using (var reader = await scope.Command.ExecuteReaderAsync(cancellationToken))
@@ -159,15 +157,14 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
                     previous = null;
                     identityCount = 0;
                 }
-                var identity = MonitoringConfigurationIdentity.Format(reader.GetString(1), reader.GetInt16(2),
-                    reader.IsDBNull(3) ? null : reader.GetInt64(3));
+                var identity = reader.GetString(1);
                 if (identity != previous)
                 {
                     hash.AppendData(Encoding.UTF8.GetBytes(identity));
                     identityCount++;
                     previous = identity;
                 }
-                sources.Add(reader.GetString(4));
+                sources.Add(reader.GetString(2));
             }
             CompleteMonitor();
         }

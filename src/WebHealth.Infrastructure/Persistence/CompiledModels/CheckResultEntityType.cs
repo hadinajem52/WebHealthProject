@@ -22,7 +22,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
                 "WebHealth.Infrastructure.Monitoring.CheckResult",
                 typeof(CheckResult),
                 baseEntityType,
-                propertyCount: 22,
+                propertyCount: 23,
                 navigationCount: 4,
                 foreignKeyCount: 2,
                 unnamedIndexCount: 4,
@@ -47,6 +47,15 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             completedAt.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
             completedAt.AddAnnotation("Relational:ColumnName", "completed_at");
             completedAt.AddAnnotation("Relational:ColumnType", "timestamp with time zone");
+
+            var configurationIdentity = runtimeEntityType.AddProperty(
+                "ConfigurationIdentity",
+                typeof(string),
+                propertyInfo: typeof(CheckResult).GetProperty("ConfigurationIdentity", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(CheckResult).GetField("<ConfigurationIdentity>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                maxLength: 100);
+            configurationIdentity.AddAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.None);
+            configurationIdentity.AddAnnotation("Relational:ColumnName", "configuration_identity");
 
             var connectDurationMs = runtimeEntityType.AddProperty(
                 "ConnectDurationMs",

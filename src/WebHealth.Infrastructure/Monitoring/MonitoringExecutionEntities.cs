@@ -128,6 +128,7 @@ public sealed class CheckResult
     public string? LengthSource { get; set; }
     public bool ResponseTruncated { get; set; }
     public required string MonitorSource { get; set; }
+    public required string ConfigurationIdentity { get; set; }
     public DateTimeOffset MeasuredAt { get; set; }
     public Guid? MaintenanceOccurrenceId { get; set; }
     public bool IsMaintenance { get; set; }

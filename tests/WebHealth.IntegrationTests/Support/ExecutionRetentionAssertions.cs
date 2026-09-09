@@ -6,6 +6,7 @@ using WebHealth.Infrastructure.Health;
 using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Infrastructure.Registry;
 using WebHealth.Infrastructure.Seo;
 
 namespace WebHealth.IntegrationTests.Support;
@@ -169,7 +170,7 @@ internal static class ExecutionRetentionAssertions
             .Select(item => item.Id).ToArrayAsync();
         remainingWork.Should().BeEquivalentTo(work.Where(pair => !pair.Key.StartsWith("eligible-", StringComparison.Ordinal))
             .Select(pair => pair.Value.Id));
-        await VerifyRawResultsAsync(database, monitorId, attempts, clock);
+        await VerifyRawResultsAsync(database, monitor, attempts, clock);
         await VerifyLogicalCheckCleanupAsync(database, monitorId, attempts, clock);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
@@ -240,9 +241,10 @@ internal static class ExecutionRetentionAssertions
         (await database.MonitoringDailyAggregates.SingleAsync(item => item.EndpointMonitorId == monitorId)).RawDeletionStartedAt.Should().NotBeNull();
     }
 
-    private static async Task VerifyRawResultsAsync(ApplicationDbContext database, Guid monitorId,
+    private static async Task VerifyRawResultsAsync(ApplicationDbContext database, EndpointMonitor monitor,
         Dictionary<string, ExecutionAttempt> attempts, TimeProvider clock)
     {
+        var monitorId = monitor.Id;
         foreach (var attempt in attempts.Values)
         {
             database.CheckResults.Add(new CheckResult
@@ -251,6 +253,8 @@ internal static class ExecutionRetentionAssertions
                 EndpointMonitorId = monitorId,
                 Outcome = "Healthy",
                 MonitorSource = "Manual",
+                ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                    monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
                 MeasuredAt = attempt.FinishedAt!.Value,
                 CompletedAt = attempt.FinishedAt.Value,
                 TotalDurationMs = 100

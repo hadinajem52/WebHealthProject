@@ -229,6 +229,9 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
                 "ck_check_result_maintenance",
                 "(is_maintenance AND maintenance_occurrence_id IS NOT NULL) OR "
                 + "(NOT is_maintenance AND maintenance_occurrence_id IS NULL)");
+            table.HasCheckConstraint(
+                "ck_check_result_configuration_identity",
+                "configuration_identity <> ''");
         });
         builder.Property(result => result.CurrentStateDisposition).HasMaxLength(20).HasDefaultValue("Current");
         builder.ToTable("check_result", table => table.HasCheckConstraint(
@@ -238,6 +241,7 @@ internal sealed class CheckResultConfiguration : IEntityTypeConfiguration<CheckR
         builder.Property(result => result.FailureCategory).HasMaxLength(50);
         builder.Property(result => result.LengthSource).HasMaxLength(30);
         builder.Property(result => result.MonitorSource).HasMaxLength(50).IsRequired();
+        builder.Property(result => result.ConfigurationIdentity).HasMaxLength(100).IsRequired();
         builder.Property(result => result.SafeDiagnostic).HasMaxLength(200);
         builder.HasIndex(result => new { result.MeasuredAt, result.LogicalCheckId });
         builder.HasIndex(result => result.MaintenanceOccurrenceId);

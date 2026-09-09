@@ -98,6 +98,8 @@ internal static class DailyAggregateAssertions
             EndpointMonitorId = monitorId,
             Outcome = "Healthy",
             MonitorSource = "Manual",
+            ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
             MeasuredAt = observed,
             CompletedAt = observed
         });

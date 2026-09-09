@@ -53,6 +53,8 @@ internal static class ObservationRetentionAssertions
                 EndpointMonitorId = monitorId,
                 Outcome = "Healthy",
                 MonitorSource = "Manual",
+                ConfigurationIdentity = MonitoringConfigurationIdentity.Format(
+                    monitor.ConfigurationFingerprint, 2, monitor.CurrentTruthGeneration),
                 MeasuredAt = observed,
                 CompletedAt = observed,
                 CurrentStateDisposition = name is "boundary" or "after" ? "Superseded" : "Current"

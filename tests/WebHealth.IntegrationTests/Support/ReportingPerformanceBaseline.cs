@@ -332,7 +332,7 @@ internal static class ReportingPerformanceBaseline
         """
         INSERT INTO web_health.check_result
             (logical_check_id, endpoint_monitor_id, outcome, failure_category, http_status,
-             total_duration_ms, response_truncated, monitor_source, measured_at,
+             total_duration_ms, response_truncated, monitor_source, configuration_identity, measured_at,
              counts_for_uptime, completed_at, is_maintenance)
         SELECT
             check_row.id,
@@ -352,6 +352,8 @@ internal static class ReportingPerformanceBaseline
             false,
             CASE WHEN monitor.monitor_type = 'SslCertificate'
                  THEN 'WebHealthSslProbeV1' ELSE 'WebHealthSafeHttpV1' END,
+            snapshot.configuration_fingerprint || ':' || snapshot.schema_version::text || ':' ||
+                coalesce(snapshot.current_truth_generation::text, '') || E'\n',
             check_row.scheduled_for,
             -- A certificate check is never an availability sample (BR-U03), and roughly one
             -- percent of the rest stand in for maintenance-suppressed runs (BR-U02).
@@ -360,6 +362,7 @@ internal static class ReportingPerformanceBaseline
             false
         FROM web_health.logical_check AS check_row
         JOIN web_health.endpoint_monitor AS monitor ON monitor.id = check_row.endpoint_monitor_id
+        JOIN web_health.check_configuration_snapshot AS snapshot ON snapshot.logical_check_id = check_row.id
         CROSS JOIN LATERAL (
             SELECT
                 bucket,
