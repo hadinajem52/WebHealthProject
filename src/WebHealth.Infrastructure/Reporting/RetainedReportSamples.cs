@@ -128,11 +128,11 @@ internal sealed class RetainedReportSamples(ApplicationDbContext database)
         var changed = false;
         var rawSql = SourcesSql + """
 
-            SELECT DISTINCT result.endpoint_monitor_id, snapshot.configuration_fingerprint,
+            SELECT result.endpoint_monitor_id, snapshot.configuration_fingerprint,
                 snapshot.schema_version, snapshot.current_truth_generation, result.monitor_source
             FROM raw_results result JOIN web_health.check_configuration_snapshot snapshot
                 ON snapshot.logical_check_id = result.logical_check_id
-            WHERE result.counts_for_uptime ORDER BY 1, 2, 3, 4, 5;
+            WHERE result.counts_for_uptime GROUP BY 1, 2, 3, 4, 5 ORDER BY 1, 2, 3, 4, 5;
             """;
         await using (var scope = await CreateCommandAsync(rawSql, query, monitorIds, cancellationToken))
         await using (var reader = await scope.Command.ExecuteReaderAsync(cancellationToken))
