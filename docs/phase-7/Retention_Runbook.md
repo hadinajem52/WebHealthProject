@@ -1,6 +1,6 @@
 # Retention policy and implementation record
 
-Increment 6 is in progress. The hourly coordinator is implemented; retention remains disabled by default.
+Increment 6 is implemented and its AC-14 database and browser gates are recorded. Retention remains disabled by default for explicit commissioning.
 
 The implementation follows section 10 of the monitoring plan: raw monitoring, execution, crawl
 and PageAudit history defaults to 90 days; certificate observations, daily aggregates and terminal
@@ -17,7 +17,7 @@ severity escalation, recovery start, recovery interruption, resolution and certi
 continue to create evidence. This bounds evidence growth for a steady incident without losing its
 material transitions. Historical evidence is preserved; this change does not remove existing rows.
 
-The worker will default to disabled and dry-run, with batches of 1,000, at most 20 batches per run,
+The worker defaults to disabled and dry-run, with batches of 1,000, at most 20 batches per run,
 a 30-second run budget and an hourly schedule. Holds and retention configuration are Administrator
 operations. Dry-run evidence must be recorded before enabling deletion.
 
@@ -47,17 +47,14 @@ Creation and release share transaction advisory lock `(761924, 1)`. Every retent
 must acquire the same lock before evaluating holds. Release is idempotent: concurrent or repeated
 requests preserve the first release actor/time and produce one release audit. Audit snapshots
 contain scope and lifecycle identifiers, excluding the free-text reason. Reasons remain in the
-protected hold record. Expiry is evaluated at PostgreSQL microsecond precision. The web management
-flow and worker enforcement remain pending.
+protected hold record. Expiry is evaluated at PostgreSQL microsecond precision. The web management flow and every worker category enforce the same hold expansion.
 
 ## Administrator web flow
 
 Administrators can open /Retention from monitoring diagnostics, create a hold using its scope
 and record identifier, and release an active hold. The history shows active, expired and released
 states in pages of 100 records. Expiry input is UTC. POST actions require antiforgery tokens and
-server-side Administrator authorization; reason text is HTML-encoded. The form currently accepts
-record IDs from detail-page addresses or exports rather than offering a searchable record picker.
-Browser layout verification and worker enforcement remain pending.
+server-side Administrator authorization; reason text is HTML-encoded. Desktop and 390-pixel browser checks confirm the dashboard shell, labeled controls, validation-summary behavior and absence of horizontal overflow. The form accepts record IDs from detail-page addresses or exports rather than offering a searchable record picker.
 
 ## Hold scope expansion
 
@@ -79,8 +76,7 @@ or Warning results. Version 1 buckets have inclusive upper bounds of 0, 100, 250
 5000, 10000, 30000, 60000 and 120000 milliseconds, followed by an overflow bucket. Stored counts
 are non-cumulative. Approximate percentiles select the nearest-rank bucket and use its upper bound,
 capped by the recorded maximum; overflow uses the recorded maximum. Empty samples return no value.
-Raw retained windows continue using their exact existing percentile calculation. Mixed or aggregate
-windows must disclose approximation rather than presenting bucket estimates as exact percentiles.
+Completed aggregate days retain compact exact duration samples while raw detail exists, so retained windows keep exact percentiles without scanning raw rows. Raw deletion clears those samples atomically; mixed or archived windows then disclose approximation rather than presenting bucket estimates as exact percentiles.
 
 ## Daily aggregate storage
 
@@ -89,12 +85,12 @@ excluded/maintenance/cancelled counts, duration count/sum/minimum/maximum and th
 Maintenance and cancellation counts are subsets of excluded samples, not additional totals.
 Comparability identity is a SHA-256 digest of the represented configuration identities; IsComparable
 records whether they describe one comparable population. Source range and first/last measurement
-retain report provenance. The forthcoming writer must populate these fields from raw results.
+retain report provenance. The writer populates these fields from raw results.
 
 ComputedAt records recomputation. RawDeletionStartedAt is set before the first raw deletion for
 that day; once set, recomputation from remaining raw rows is forbidden. Reports must choose the
 complete aggregate for such days instead of double-counting protected raw rows that remain.
-Endpoint purge removes its daily aggregates before monitors. No retention worker is enabled yet.
+Endpoint purge removes its daily aggregates before monitors. The configured worker remains disabled by default.
 
 ## Aggregate recomputation
 
@@ -107,7 +103,7 @@ Configuration fingerprint, snapshot schema and truth generation form the compara
 Distinct identities are hashed in deterministic database order without retaining a growing set in
 memory. More than one identity marks the day non-comparable. Recomputing replaces counts rather
 than incrementing them. Once RawDeletionStartedAt is present, recomputation returns without writing.
-The deletion worker and historical report reader still need to consume these contracts.
+The deletion worker and historical report reader consume these contracts.
 
 ## Immutable history deletion permission
 
@@ -250,7 +246,7 @@ the old/new link and preserved recurrence count. Audit records have no age-based
 
 ## Hourly coordinator
 
-The coordinator now connects all eleven retention categories. Enabled=true registers the hourly
+The coordinator connects daily aggregate preparation and all eleven retention deletion categories. Enabled=true registers the hourly
 monitoring-retention job on the existing maintenance queue, including when other schedulers are
 disabled. Defaults remain Enabled=false and DryRun=true. Configuration belongs to the project
 Administrator/operator; no lower-role web action changes these values.
@@ -259,7 +255,7 @@ Each run has one shared cancellation deadline and a hard cap on attempted batche
 ones. It visits categories in dependency order before repeating a pass. A pass with no deletion
 stops; dry-run stops after one pass so it never counts the same candidate twice. Dry-run counts are
 bounded samples, not a total backlog estimate. Very small MaximumBatchesPerRun values can stop
-before reaching later categories; the default 20 permits a complete eleven-category pass.
+before reaching later categories; the default 20 permits a complete twelve-category pass.
 
 Each batch receives a fresh dependency-injection scope and database context. Earlier commits survive
 a later batch failure; the failed transaction rolls back. Hangfire automatic retries are disabled,
@@ -267,17 +263,11 @@ and the next scheduled run can resume eligible work. The job logs category/count
 replaces failure diagnostics with a safe exception-type category. A disabled coordinator is a no-op,
 including for an already queued job from a previous configuration.
 
-Aggregate-backed reporting is implemented. Full acceptance/load verification remains pending. Keep
-deletion disabled until those gates are complete; test commissioning uses the disposable database only.
+Aggregate-backed reporting and the AC-14 acceptance suite are implemented. Keep deletion disabled until dry-run counts are reviewed for the target database; automated verification uses disposable databases only.
 
 ## Reporting across retained and archived detail
 
-A monitor/day switches to its frozen daily aggregate when RawDeletionStartedAt is set. All raw
-samples from that monitor/day are then excluded from reporting, including held samples, to prevent
-double counting or using a partially deleted raw day. Unsealed aggregates do not replace raw data.
-Counts from complete archived UTC days combine with retained raw counts. Percentiles remain exact
-for raw-only response samples; a percentile including archived response samples uses the versioned
-histogram and is explicitly approximate in the dashboard and CSV.
+A completed monitor/day switches to its aggregate when exact duration samples are present or RawDeletionStartedAt is set. All raw samples from that monitor/day are excluded from reporting, including held samples, to prevent double counting. Before deletion, counts and exact percentiles come from the compact aggregate. After deletion starts, counts remain exact and percentiles use the frozen histogram with explicit dashboard and CSV disclosure.
 
 Daily aggregates cannot reconstruct a partial UTC day. If a requested timestamp window cuts through
 an archived boundary day, that day is omitted and the dashboard/CSV disclose the missing boundary.

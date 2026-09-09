@@ -373,8 +373,8 @@ All rules below are mandatory unless explicitly marked optional or deferred. Con
 | BR-R02 | Reports support client, website, environment, owner, confirmed health, monitor type and date filters. | Health filters accept Healthy, Warning, Critical and Unknown; exports use the same filtered dataset as the screen. |
 | BR-R03 | CSV exports use UTF-8, stable column names and ISO-8601 timestamps. | ConfirmedStatus remains health; OperationalState and LastScheduledCompletionAt are appended columns. Unicode, formula protection and timestamp encoding remain required. |
 | BR-R04 | Audit events are append-only for normal users and record before/after values for material configuration changes.      | An edited endpoint can be reconstructed from audit history.                    |
-| BR-R05 | Raw check results are retained for 90 days by default; daily aggregates and incidents are retained for 24 months.     | Retention job deletes or aggregates only eligible records.                     |
-| BR-R06 | Retention never deletes records under an active legal or operational hold.                                            | Held entities survive the retention job and the action is logged.              |
+| BR-R05 | Raw monitoring, execution, crawl and PageAudit history is retained for 90 days by default; certificate observations, daily aggregates and terminal incident bundles are retained for 24 calendar months. Audit history has no age-based deletion. | Bounded retention aggregates first, preserves current/reference/baseline data and deletes only eligible records. |
+| BR-R06 | Retention never deletes records protected by an active client, website, environment, endpoint, monitor, logical-check, incident, crawl-run or PageAudit-run hold. | Held entities survive every applicable batch; Administrator create/release actions are authorized and logged. |
 | BR-R07 | Soft-deleted configuration remains available to historical reports but is excluded from active operational counts.    | Old reports resolve names without reactivating targets.                        |
 
 ## 7.14 Security and Safe Monitoring

@@ -9,7 +9,7 @@
         <a class="button button--secondary" asp-controller="Diagnostics" asp-action="Monitoring">Monitoring diagnostics</a>
     </div>
     <form asp-action="Create" method="post" class="form-stack">
-        <div asp-validation-summary="All" class="validation-summary"></div>
+        @await Html.PartialAsync("_ValidationSummary")
         <div class="form-field">
             <label asp-for="ScopeType">Scope</label>
             <select asp-for="ScopeType">

@@ -55,6 +55,7 @@ public sealed class RetentionAuthorizationTests(WebHealthWebApplicationFactory f
         var html = await client.GetStringAsync("/Retention");
         html.Should().NotContain("<script>alert('hold')</script>");
         var document = await new HtmlParser().ParseDocumentAsync(html);
+        document.QuerySelector(".validation-summary").Should().BeNull();
         document.QuerySelector("td[data-label='Reason']")!.TextContent.Should().Be("<script>alert('hold')</script>");
         var token = document.QuerySelector("input[name='__RequestVerificationToken']")!.GetAttribute("value")!;
         var response = await client.PostAsync("/Retention/Create", new FormUrlEncodedContent(new Dictionary<string, string>

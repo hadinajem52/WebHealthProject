@@ -129,8 +129,8 @@ The tables cover AC-01–AC-15 and BR-A01–BR-Q07. Functional requirements FR-0
 | BR-R02 | 5/WI-51 | I: required filters and screen/export identity |
 | BR-R03 | 5/WI-51 | I: UTF-8, stable columns, Unicode, quoting, ISO-8601, formula safety |
 | BR-R04 | 2/WI-20 | I: append-only/reconstructable safe audit |
-| BR-R05 | 7/WI-70 | I: exact raw/aggregate/incident eligibility |
-| BR-R06 | 7/WI-70 | I: holds survive and action logged |
+| BR-R05 | 7/WI-70 | I/P: bounded category retention, exact completed-day aggregates, approximate post-deletion percentiles, terminal incident eligibility |
+| BR-R06 | 7/WI-70 | I: all nine hold scopes survive every applicable batch; create/release authorization and safe audit history |
 | BR-R07 | 2+5/WI-21/51 | I: historical names and exclusion from active counts |
 | BR-Q01 | 3/WI-31 | I: prohibited IPv4/IPv6/private/metadata and redirects |
 | BR-Q02 | 3/WI-31 | I: per-hop DNS/actual address and rebinding |
@@ -180,7 +180,7 @@ If AC-07/08 are deferred, BR-E01–E10 and BR-L01–L10 must be explicitly liste
 
 Test commands, results, changed-UI checks, compatibility limits, and remaining increments are in
 [Monitoring hardening evidence](../phase-7/Monitoring_Hardening_Evidence.md).
-These entries supplement earlier feature evidence and do not close retention or representative
-scale acceptance gates AC-14 and AC-15.
+These entries supplement earlier feature evidence. P7-DATA-01 closes AC-14; representative-scale AC-15 remains with P7-MON-07.
 
 | P7-MON-03 | BR-H02/H06/H09, Appendix A | Typed HTTP policy, bounded overrides, safe audit facts, charset matching, drift rejection, equivalent snapshots, migration preservation, browser edit/reset, and default/source display; evidence in phase-7/Monitoring_Hardening_Evidence.md. |
+| P7-DATA-01 | BR-R05/R06, AC-14 | Twelve-category bounded coordinator, nine-scope holds, immutable-history permission, reference-aware cleanup, baseline preservation, exact daily samples before deletion, disclosed histogram estimates afterward, clean migrations, cancellation/restart checks, representative report plans, and Administrator desktop/mobile browser verification. |
