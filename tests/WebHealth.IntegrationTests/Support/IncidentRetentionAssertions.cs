@@ -7,6 +7,7 @@ using WebHealth.Infrastructure.Incidents;
 using WebHealth.Infrastructure.Monitoring;
 using WebHealth.Infrastructure.Notifications;
 using WebHealth.Infrastructure.Persistence;
+using WebHealth.Application.Notifications;
 
 namespace WebHealth.IntegrationTests.Support;
 
@@ -189,6 +190,60 @@ internal static class IncidentRetentionAssertions
         cancelled.Cancel();
         var execute = async () => await Batch(true, false).ExecuteAsync(cancelled.Token);
         await execute.Should().ThrowAsync<OperationCanceledException>();
+        await VerifyConcurrentDeliveryAsync(builder.Options, incidents["pending"].Id, deliveries[incidents["pending"].Id], now);
+    }
+
+    private static async Task VerifyConcurrentDeliveryAsync(DbContextOptions<ApplicationDbContext> options, Guid incidentId, Guid deliveryId, DateTimeOffset now)
+    {
+        await using var dispatchDatabase = new ApplicationDbContext(options);
+        await using var retentionDatabase = new ApplicationDbContext(options);
+        await dispatchDatabase.NotificationDeliveries.Where(item => item.Id == deliveryId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.NextAttemptAt, now.AddMonths(-24).AddDays(-2)));
+        var transport = new PausedEmailTransport();
+        var dispatch = new NotificationDispatchService(dispatchDatabase, transport, new() { DispatchBatchSize = 1 },
+            new RetentionClock(now), NullLogger<NotificationDispatchService>.Instance);
+        var batch = new IncidentRetentionBatch(retentionDatabase, new() { Enabled = true, DryRun = false, BatchSize = 1 },
+            new RetentionClock(now), NullLogger<IncidentRetentionBatch>.Instance);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var sending = dispatch.DispatchDueAsync(timeout.Token);
+        try
+        {
+            await transport.Started.Task.WaitAsync(timeout.Token);
+            var delivery = await retentionDatabase.NotificationDeliveries.AsNoTracking().SingleAsync(item => item.Id == deliveryId);
+            delivery.State.Should().Be("Processing");
+            delivery.LeaseOwner.Should().NotBeNullOrEmpty();
+            delivery.LeaseExpiresAt.Should().BeAfter(now);
+            (await batch.ExecuteAsync(timeout.Token)).Should().Be(new RetentionBatchResult(0, 0));
+            (await retentionDatabase.IncidentEvidence.CountAsync(item => item.IncidentId == incidentId)).Should().Be(1);
+            (await retentionDatabase.IncidentEvents.CountAsync(item => item.IncidentId == incidentId)).Should().Be(1);
+            transport.Outcome.SetResult(new(EmailTransportOutcome.TransientFailure, "Controlled retry"));
+            (await sending).Should().Be(new NotificationDispatchResult(1, 0));
+            delivery = await retentionDatabase.NotificationDeliveries.AsNoTracking().SingleAsync(item => item.Id == deliveryId);
+            delivery.State.Should().Be("RetryScheduled");
+            delivery.LeaseOwner.Should().BeNull();
+            delivery.NextAttemptAt.Should().BeAfter(now);
+            (await batch.ExecuteAsync(timeout.Token)).Should().Be(new RetentionBatchResult(0, 0));
+            (await retentionDatabase.NotificationAttempts.CountAsync(item => item.NotificationDeliveryId == deliveryId)).Should().Be(2);
+            (await retentionDatabase.Incidents.AnyAsync(item => item.Id == incidentId)).Should().BeTrue();
+        }
+        finally
+        {
+            await timeout.CancelAsync();
+            try { await sending; }
+            catch (OperationCanceledException) { }
+        }
+    }
+
+    private sealed class PausedEmailTransport : IEmailTransport
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<EmailTransportResult> Outcome { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<EmailTransportResult> SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult();
+            return Outcome.Task.WaitAsync(cancellationToken);
+        }
     }
 
     private static async Task VerifyConcurrentReopenAsync(DbContextOptions<ApplicationDbContext> options, Incident incident, DateTimeOffset now)
