@@ -53,12 +53,6 @@ public static class IncidentEvidenceDisplay
         _ => StatusBadges.Danger
     };
 
-    public static string Outcome(int? httpStatus, string? failureCategory) => failureCategory is { } category
-        ? IssueDisplay.DescribeFailureCategory(category)
-        : httpStatus is { } status
-            ? $"HTTP {status}"
-            : "No response";
-
     public static string Proof(IncidentEvidenceItem evidence)
     {
         if (evidence.ActorDisplayName is { Length: > 0 } actor)
@@ -87,16 +81,6 @@ public static class IncidentEvidenceDisplay
             && proof.FailureConfirmationCount is { } threshold)
         {
             facts.Add($"confirmed by {threshold} consecutive failures");
-        }
-
-        if (proof.HttpStatus is { } httpStatus)
-        {
-            facts.Add($"HTTP {httpStatus}");
-        }
-
-        if (proof.TotalDurationMs is { } duration)
-        {
-            facts.Add($"{duration} ms");
         }
 
         return facts.Count == 0 ? NoProof : string.Join(Separator, facts);

@@ -15,19 +15,26 @@ public sealed class IncidentEvidenceDisplayTests
     {
         Display(Evidence(IncidentEvidenceRoles.ConfirmedFailure, Proof(
                 observedValue: "Disallow: /",
+                expectedValue: "A crawlable site root")))
+            .Should().Be("Disallow: / · expected A crawlable site root");
+    }
+
+    [Fact]
+    public void Proof_LeavesOutCheckFactsThatBelongToAnotherIssue()
+    {
+        Display(Evidence(IncidentEvidenceRoles.ConfirmedFailure, Proof(
+                observedValue: "Disallow: /",
                 expectedValue: "A crawlable site root",
-                httpStatus: 200,
-                totalDurationMs: 1061)))
-            .Should().Be("Disallow: / · expected A crawlable site root · HTTP 200 · 1061 ms");
+                safeDiagnostic: "Response was slower than the configured threshold.")))
+            .Should().Be("Disallow: / · expected A crawlable site root");
     }
 
     [Fact]
     public void Proof_FallsBackToTheSafeDiagnosticWhenTheCheckRecordedNoFinding()
     {
         Display(Evidence(IncidentEvidenceRoles.ConfirmedFailure, Proof(
-                safeDiagnostic: "Connection timed out",
-                totalDurationMs: 10_000)))
-            .Should().Be("Connection timed out · 10000 ms");
+                safeDiagnostic: "Connection timed out")))
+            .Should().Be("Connection timed out");
     }
 
     [Fact]
@@ -71,18 +78,14 @@ public sealed class IncidentEvidenceDisplayTests
             proof);
 
     private static IncidentEvidenceProof Proof(
-        string? failureCategory = null,
-        int? httpStatus = null,
-        int? totalDurationMs = null,
-        string? safeDiagnostic = null,
+        string? severity = null,
         string? observedValue = null,
         string? expectedValue = null,
+        string? safeDiagnostic = null,
         int? failureConfirmationCount = null) =>
-        new(failureCategory,
-            httpStatus,
-            totalDurationMs,
-            safeDiagnostic,
+        new(severity,
             observedValue,
             expectedValue,
+            safeDiagnostic,
             failureConfirmationCount);
 }

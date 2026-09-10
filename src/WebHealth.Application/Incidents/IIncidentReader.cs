@@ -50,12 +50,10 @@ public sealed record IncidentTimelineEntry(
     DateTimeOffset OccurredAt);
 
 public sealed record IncidentEvidenceProof(
-    string? FailureCategory,
-    int? HttpStatus,
-    int? TotalDurationMs,
-    string? SafeDiagnostic,
+    string? Severity,
     string? ObservedValue,
     string? ExpectedValue,
+    string? SafeDiagnostic,
     int? FailureConfirmationCount);
 
 public sealed record IncidentEvidenceItem(
@@ -67,14 +65,13 @@ public sealed record IncidentEvidenceItem(
     string? ActorDisplayName,
     IncidentEvidenceProof? Proof);
 
-public sealed record IncidentEvidenceOutcome(int? HttpStatus, string? FailureCategory, int Count);
+public sealed record IncidentEvidenceSeverityCount(string? Severity, int Count);
 
 public sealed record IncidentEvidenceSampleSummary(
     int Count,
     DateTimeOffset FirstCapturedAt,
     DateTimeOffset LastCapturedAt,
-    int? SlowestDurationMs,
-    IReadOnlyList<IncidentEvidenceOutcome> Outcomes);
+    IReadOnlyList<IncidentEvidenceSeverityCount> Severities);
 
 public sealed record IncidentNotificationDeliveryItem(
     string NormalizedRecipient, string State, int AttemptCount, DateTimeOffset? SentAt);

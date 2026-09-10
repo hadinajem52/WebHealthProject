@@ -461,13 +461,8 @@
                         </span>
                     </p>
                     <p class="card__subtitle">
-                        Check results &middot;
-                        @string.Join(" · ", sampleSummary.Outcomes.Select(outcome =>
-                            $"{IncidentEvidenceDisplay.Outcome(outcome.HttpStatus, outcome.FailureCategory)} ×{outcome.Count}"))
-                        @if (sampleSummary.SlowestDurationMs is { } slowest)
-                        {
-                            <text> &middot; slowest @slowest ms</text>
-                        }
+                        @string.Join(" · ", sampleSummary.Severities.Select(severity =>
+                            $"{severity.Severity ?? "Unclassified"} ×{severity.Count}"))
                     </p>
                 </div>
             </div>
@@ -478,7 +473,7 @@
                     <thead>
                         <tr>
                             <th scope="col">Captured</th>
-                            <th scope="col">Check result</th>
+                            <th scope="col">Severity</th>
                             <th scope="col">Proof</th>
                             <th scope="col"><span class="visually-hidden">Check</span></th>
                         </tr>
@@ -488,8 +483,12 @@
                         {
                             <tr>
                                 <td data-label="Captured">@Html.TimestampWithSeconds(sample.CapturedAt)</td>
-                                <td data-label="Check result">
-                                    <span class="badge" data-status="danger">@IncidentEvidenceDisplay.Outcome(sample.Proof?.HttpStatus, sample.Proof?.FailureCategory)</span>
+                                <td data-label="Severity">
+                                    @if (sample.Proof?.Severity is { } sampleSeverity)
+                                    {
+                                        @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(
+                                            StatusBadges.ForSeverity(sampleSeverity), sampleSeverity))
+                                    }
                                 </td>
                                 <td data-label="Proof">@IncidentEvidenceDisplay.Proof(sample)</td>
                                 <td data-label="Check">

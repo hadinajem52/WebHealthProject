@@ -22,22 +22,18 @@ internal sealed class EvidenceProofLoader(ApplicationDbContext dbContext)
             .Select(result => new
             {
                 result.LogicalCheckId,
-                result.FailureCategory,
-                result.HttpStatus,
-                result.TotalDurationMs,
                 result.SafeDiagnostic,
                 FailureConfirmationCount = (int?)result.LogicalCheck.ConfigurationSnapshot.FailureConfirmationCount,
-                ObservedValue = dbContext.Findings
+                Finding = dbContext.Findings
                     .Where(finding => finding.LogicalCheckId == result.LogicalCheckId
                         && finding.IssueKey == issueKey)
                     .OrderBy(finding => finding.RuleKey)
-                    .Select(finding => finding.ObservedValue)
-                    .FirstOrDefault(),
-                ExpectedValue = dbContext.Findings
-                    .Where(finding => finding.LogicalCheckId == result.LogicalCheckId
-                        && finding.IssueKey == issueKey)
-                    .OrderBy(finding => finding.RuleKey)
-                    .Select(finding => finding.ExpectedValue)
+                    .Select(finding => new
+                    {
+                        finding.Severity,
+                        finding.ObservedValue,
+                        finding.ExpectedValue
+                    })
                     .FirstOrDefault()
             })
             .ToArrayAsync(cancellationToken);
@@ -45,12 +41,10 @@ internal sealed class EvidenceProofLoader(ApplicationDbContext dbContext)
         return results.ToDictionary(
             result => result.LogicalCheckId,
             result => new IncidentEvidenceProof(
-                result.FailureCategory,
-                result.HttpStatus,
-                result.TotalDurationMs,
+                result.Finding?.Severity,
+                result.Finding?.ObservedValue,
+                result.Finding?.ExpectedValue,
                 result.SafeDiagnostic,
-                result.ObservedValue,
-                result.ExpectedValue,
                 result.FailureConfirmationCount));
     }
 }

@@ -69,14 +69,6 @@ public static class IssueDisplay
         return DescribeRule(segments[RuleSegment]);
     }
 
-    public static string DescribeFailureCategory(string? failureCategory)
-    {
-        if (string.IsNullOrWhiteSpace(failureCategory)) return string.Empty;
-        return Descriptions.TryGetValue($"Http.{failureCategory}", out var described)
-            ? described
-            : Humanize(failureCategory);
-    }
-
     public static string DescribeRule(string? ruleKey)
     {
         if (string.IsNullOrWhiteSpace(ruleKey)) return string.Empty;
