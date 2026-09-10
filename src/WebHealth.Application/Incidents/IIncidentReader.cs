@@ -31,6 +31,12 @@ public sealed record IncidentListPage(
     int TotalCount,
     int ArchivableCount = 0);
 
+public sealed record IncidentSectionPage<T>(
+    IReadOnlyList<T> Items,
+    int Page,
+    int PageSize,
+    int TotalCount);
+
 public sealed record IncidentTimelineEntry(
     Guid Id,
     long SequenceNumber,
@@ -81,8 +87,8 @@ public sealed record IncidentDetails(
     string OwnerDisplayName,
     long Version,
     bool CanManage,
-    IReadOnlyList<IncidentTimelineEntry> Timeline,
-    IReadOnlyList<IncidentEvidenceItem> Evidence,
+    IncidentSectionPage<IncidentTimelineEntry> Timeline,
+    IncidentSectionPage<IncidentEvidenceItem> Evidence,
     IReadOnlyList<IncidentNotificationItem> Notifications);
 
 public interface IIncidentReader
@@ -96,5 +102,7 @@ public interface IIncidentReader
     Task<IncidentDetails?> FindAsync(
         Guid incidentId,
         RegistryAccessContext access,
+        int timelinePage = 1,
+        int evidencePage = 1,
         CancellationToken cancellationToken = default);
 }

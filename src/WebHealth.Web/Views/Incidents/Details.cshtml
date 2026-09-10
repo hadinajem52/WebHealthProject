@@ -23,6 +23,18 @@
     var canReopen = isAdministrator && incident.Status == "Closed";
     var hasManageForms = canResolve || canAddNote || canReassign || canForceClose || canReopen;
 
+    var timeline = incident.Timeline;
+    var timelineFirstVisible = timeline.TotalCount == 0 ? 0 : ((timeline.Page - 1) * timeline.PageSize) + 1;
+    var timelineLastVisible = Math.Min(timeline.Page * timeline.PageSize, timeline.TotalCount);
+    var timelineHasPrevious = timeline.Page > 1;
+    var timelineHasNext = timelineLastVisible < timeline.TotalCount;
+
+    var evidence = incident.Evidence;
+    var evidenceFirstVisible = evidence.TotalCount == 0 ? 0 : ((evidence.Page - 1) * evidence.PageSize) + 1;
+    var evidenceLastVisible = Math.Min(evidence.Page * evidence.PageSize, evidence.TotalCount);
+    var evidenceHasPrevious = evidence.Page > 1;
+    var evidenceHasNext = evidenceLastVisible < evidence.TotalCount;
+
     static string StatusIcon(string status) => status switch
     {
         "success" => "success",
@@ -296,11 +308,11 @@
                 <h3 class="card__title">Timeline</h3>
                 <p class="card__status" data-status="neutral">
                     @await Html.PartialAsync("_Icon", "clock")
-                    <span>Append-only history &middot; @incident.Timeline.Count event@(incident.Timeline.Count == 1 ? null : "s")</span>
+                    <span>Append-only history &middot; @timeline.TotalCount event@(timeline.TotalCount == 1 ? null : "s")</span>
                 </p>
             </div>
         </div>
-        @if (incident.Timeline.Count == 0)
+        @if (timeline.TotalCount == 0)
         {
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "No timeline events",
@@ -320,7 +332,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var entry in incident.Timeline)
+                        @foreach (var entry in timeline.Items)
                         {
                             <tr>
                                 <td data-label="Subject">
@@ -354,6 +366,26 @@
                     </tbody>
                 </table>
             </div>
+
+            <nav class="pagination" aria-label="Timeline pages">
+                <span>Showing @timelineFirstVisible–@timelineLastVisible of @timeline.TotalCount</span>
+                <span class="pagination__actions">
+                    @if (timelineHasPrevious)
+                    {
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@(timeline.Page - 1)" asp-route-evidencePage="@evidence.Page" data-ajax-link data-ajax-target="#ajax-page">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (timelineHasNext)
+                    {
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@(timeline.Page + 1)" asp-route-evidencePage="@evidence.Page" data-ajax-link data-ajax-target="#ajax-page">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
         }
     </section>
 
@@ -363,11 +395,11 @@
                 <h3 class="card__title">Evidence</h3>
                 <p class="card__status" data-status="neutral">
                     @await Html.PartialAsync("_Icon", "audit")
-                    <span>Bounded snapshots &middot; @incident.Evidence.Count item@(incident.Evidence.Count == 1 ? null : "s")</span>
+                    <span>Bounded snapshots &middot; @evidence.TotalCount item@(evidence.TotalCount == 1 ? null : "s")</span>
                 </p>
             </div>
         </div>
-        @if (incident.Evidence.Count == 0)
+        @if (evidence.TotalCount == 0)
         {
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "No evidence recorded",
@@ -381,7 +413,7 @@
                     <caption class="visually-hidden">Incident evidence</caption>
                     <thead><tr><th scope="col">Captured</th><th scope="col">Type</th><th scope="col">Role</th></tr></thead>
                     <tbody>
-                        @foreach (var item in incident.Evidence)
+                        @foreach (var item in evidence.Items)
                         {
                             <tr>
                                 <td data-label="Captured">@Html.TimestampWithSeconds(item.CapturedAt)</td>
@@ -392,6 +424,26 @@
                     </tbody>
                 </table>
             </div>
+
+            <nav class="pagination" aria-label="Evidence pages">
+                <span>Showing @evidenceFirstVisible–@evidenceLastVisible of @evidence.TotalCount</span>
+                <span class="pagination__actions">
+                    @if (evidenceHasPrevious)
+                    {
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@timeline.Page" asp-route-evidencePage="@(evidence.Page - 1)" data-ajax-link data-ajax-target="#ajax-page">
+                            @await Html.PartialAsync("_Icon", "arrow-left")
+                            <span>Previous</span>
+                        </a>
+                    }
+                    @if (evidenceHasNext)
+                    {
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@timeline.Page" asp-route-evidencePage="@(evidence.Page + 1)" data-ajax-link data-ajax-target="#ajax-page">
+                            <span>Next</span>
+                            @await Html.PartialAsync("_Icon", "arrow-right")
+                        </a>
+                    }
+                </span>
+            </nav>
         }
     </section>
 

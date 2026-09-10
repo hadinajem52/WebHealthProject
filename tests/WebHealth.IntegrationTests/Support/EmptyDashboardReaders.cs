@@ -172,6 +172,8 @@ internal sealed class EmptyIncidentReader : IIncidentReader
     public Task<IncidentDetails?> FindAsync(
         Guid incidentId,
         RegistryAccessContext access,
+        int timelinePage = 1,
+        int evidencePage = 1,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IncidentDetails?>(null);
 }

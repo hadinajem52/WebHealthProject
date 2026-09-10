@@ -16,6 +16,7 @@ internal sealed class IncidentReader(
     TimeProvider timeProvider) : IIncidentReader
 {
     private const int PageSize = 25;
+    private const int SectionPageSize = 10;
 
     public async Task<IncidentListPage> ListAsync(
         IncidentListFilter filter,
@@ -89,6 +90,8 @@ internal sealed class IncidentReader(
     public async Task<IncidentDetails?> FindAsync(
         Guid incidentId,
         RegistryAccessContext access,
+        int timelinePage = 1,
+        int evidencePage = 1,
         CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -103,10 +106,30 @@ internal sealed class IncidentReader(
             .Include(candidate => candidate.EndpointMonitor).ThenInclude(monitor => monitor.Endpoint)
                 .ThenInclude(endpoint => endpoint.Environment).ThenInclude(environment => environment.Website)
                     .ThenInclude(website => website.Client)
-            .Include(candidate => candidate.Events).ThenInclude(incidentEvent => incidentEvent.ActorUser)
-            .Include(candidate => candidate.Evidence)
             .AsSplitQuery()
             .SingleAsync(candidate => candidate.Id == incidentId, cancellationToken);
+
+        var timelineTotal = await dbContext.IncidentEvents.AsNoTracking()
+            .CountAsync(incidentEvent => incidentEvent.IncidentId == incidentId, cancellationToken);
+        var boundedTimelinePage = BoundSectionPage(timelinePage, timelineTotal);
+        var timelineRows = await dbContext.IncidentEvents.AsNoTracking()
+            .Include(incidentEvent => incidentEvent.ActorUser)
+            .Where(incidentEvent => incidentEvent.IncidentId == incidentId)
+            .OrderBy(incidentEvent => incidentEvent.SequenceNumber)
+            .Skip((boundedTimelinePage - 1) * SectionPageSize)
+            .Take(SectionPageSize)
+            .ToArrayAsync(cancellationToken);
+
+        var evidenceTotal = await dbContext.IncidentEvidence.AsNoTracking()
+            .CountAsync(item => item.IncidentId == incidentId, cancellationToken);
+        var boundedEvidencePage = BoundSectionPage(evidencePage, evidenceTotal);
+        var evidenceRows = await dbContext.IncidentEvidence.AsNoTracking()
+            .Where(item => item.IncidentId == incidentId)
+            .OrderByDescending(item => item.CapturedAt)
+            .ThenByDescending(item => item.Id)
+            .Skip((boundedEvidencePage - 1) * SectionPageSize)
+            .Take(SectionPageSize)
+            .ToArrayAsync(cancellationToken);
 
         var notificationEvents = await dbContext.NotificationEvents.AsNoTracking()
             .Include(notificationEvent => notificationEvent.Deliveries)
@@ -114,14 +137,14 @@ internal sealed class IncidentReader(
             .OrderBy(notificationEvent => notificationEvent.OccurredAt)
             .ToArrayAsync(cancellationToken);
 
-        var ownerIds = incident.Events
+        var ownerIds = timelineRows
             .SelectMany(incidentEvent => new[] { incidentEvent.FromOwnerSubjectId, incidentEvent.ToOwnerSubjectId })
             .Where(id => id is not null).Select(id => id!.Value)
             .Append(incident.OwnerSubjectId)
             .Distinct();
         var ownerNames = await ResolveOwnerNamesAsync(ownerIds, cancellationToken);
 
-        var timeline = incident.Events.OrderBy(incidentEvent => incidentEvent.SequenceNumber)
+        var timeline = timelineRows
             .Select(incidentEvent => new IncidentTimelineEntry(
                 incidentEvent.Id,
                 incidentEvent.SequenceNumber,
@@ -135,9 +158,7 @@ internal sealed class IncidentReader(
                 incidentEvent.OccurredAt))
             .ToArray();
 
-        var evidence = incident.Evidence
-            .OrderByDescending(item => item.CapturedAt)
-            .ThenByDescending(item => item.Id)
+        var evidence = evidenceRows
             .Select(item => new IncidentEvidenceItem(item.Id, item.EvidenceType, item.EvidenceRole, item.CapturedAt))
             .ToArray();
 
@@ -180,10 +201,15 @@ internal sealed class IncidentReader(
             ownerNames.GetValueOrDefault(incident.OwnerSubjectId, "Unassigned"),
             incident.Version,
             canManage,
-            timeline,
-            evidence,
+            new IncidentSectionPage<IncidentTimelineEntry>(
+                timeline, boundedTimelinePage, SectionPageSize, timelineTotal),
+            new IncidentSectionPage<IncidentEvidenceItem>(
+                evidence, boundedEvidencePage, SectionPageSize, evidenceTotal),
             notifications);
     }
+
+    private static int BoundSectionPage(int page, int totalCount) =>
+        Math.Clamp(page, 1, Math.Max(1, (int)Math.Ceiling(totalCount / (double)SectionPageSize)));
 
     private async Task<Dictionary<Guid, string>> ResolveOwnerNamesAsync(
         IEnumerable<Guid> ownerSubjectIds, CancellationToken cancellationToken)

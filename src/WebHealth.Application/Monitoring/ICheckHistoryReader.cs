@@ -1,4 +1,4 @@
-using WebHealth.Application.Registry;
+﻿using WebHealth.Application.Registry;
 
 namespace WebHealth.Application.Monitoring;
 
@@ -28,9 +28,7 @@ public sealed record CheckHistoryPage(
     IReadOnlyList<CheckHistoryItem> Items,
     int Page,
     int PageSize,
-    int TotalCount,
-    string? CurrentConfigurationFingerprint,
-    ComparabilityAssessment Comparability);
+    int TotalCount);
 
 public sealed record CheckHistoryItem(
     Guid LogicalCheckId,

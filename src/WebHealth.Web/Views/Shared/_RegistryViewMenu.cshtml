@@ -1,0 +1,32 @@
+@model string
+@{
+    var sections = new[]
+    {
+        ("clients", "Clients", "Registry", "Clients", "building"),
+        ("websites", "Websites", "Registry", "Websites", "registry"),
+        ("endpoints", "Endpoints", "Targets", "Endpoints", "link")
+    }.Where(section => section.Item1 != Model).ToArray();
+}
+
+<div class="action-menu" data-shell-menu data-open="false">
+    <button type="button"
+            class="button button--secondary"
+            data-shell-menu-toggle
+            aria-controls="registry-view-menu"
+            aria-expanded="false"
+            aria-haspopup="true">
+        @await Html.PartialAsync("_Icon", "eye")
+        <span>View</span>
+        <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+    </button>
+
+    <div class="action-menu__panel" id="registry-view-menu" data-shell-menu-panel>
+        @foreach (var (_, label, controller, action, icon) in sections)
+        {
+            <a class="action-menu__item" asp-controller="@controller" asp-action="@action">
+                @await Html.PartialAsync("_Icon", icon)
+                <span>@label</span>
+            </a>
+        }
+    </div>
+</div>

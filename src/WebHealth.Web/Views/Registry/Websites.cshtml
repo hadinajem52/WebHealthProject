@@ -1,4 +1,4 @@
-@model RegistryListViewModel
+﻿@model RegistryListViewModel
 @{
     ViewData.SetTitle("Websites");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Websites"));
@@ -46,8 +46,7 @@
                     </div>
                 </div>
             }
-            <a class="button button--secondary" asp-action="Clients">View clients</a>
-            <a class="button button--secondary" asp-controller="Targets" asp-action="Endpoints">View endpoints</a>
+            @await Html.PartialAsync("_RegistryViewMenu", "websites")
             @if (Model.CanManage)
             {
                 <a class="button button--secondary" asp-action="ArchivedWebsites">

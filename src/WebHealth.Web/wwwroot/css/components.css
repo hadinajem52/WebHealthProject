@@ -244,11 +244,7 @@ code,
 .flash-messages > * + * {
     margin-top: var(--space-3);
 }
-
-.check-history__comparability {
-    margin-block: var(--space-4);
-}
-
+
 .flash {
     display: flex;
     align-items: flex-start;
@@ -489,6 +485,13 @@ code,
     justify-content: space-between;
     gap: var(--space-4);
     margin-bottom: 15px;
+}
+
+.page-intro__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-3);
 }
 
 .table-scroll {

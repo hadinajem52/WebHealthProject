@@ -1,7 +1,11 @@
-@model RegistryEndpointListViewModel
+﻿@model RegistryEndpointListViewModel
 @{
     ViewData.SetTitle("Endpoints");
     ViewData.SetBreadcrumbs(Breadcrumbs.Registry(Url), new BreadcrumbItem("Endpoints"));
+    var appliedFilterCount = (string.IsNullOrWhiteSpace(Model.Filter.Search) ? 0 : 1)
+        + (Model.Filter.ClientId is null ? 0 : 1)
+        + (Model.Filter.WebsiteId is null ? 0 : 1)
+        + (Model.Filter.EnvironmentId is null ? 0 : 1);
 }
 
 <div id="ajax-page" data-ajax-region>
@@ -46,8 +50,105 @@
                     </div>
                 </div>
             }
-            <a class="button button--secondary" asp-controller="Registry" asp-action="Clients">View clients</a>
-            <a class="button button--secondary" asp-controller="Registry" asp-action="Websites">View websites</a>
+            <div class="filter-menu" data-shell-filters data-open="false">
+                <button type="button"
+                        class="button button--secondary"
+                        data-shell-filters-toggle
+                        aria-controls="endpoint-registry-filter-menu"
+                        aria-expanded="false">
+                    @await Html.PartialAsync("_Icon", "filter")
+                    <span>Filters</span>
+                    @if (appliedFilterCount > 0)
+                    {
+                        <span class="filter-menu__count">@appliedFilterCount</span>
+                    }
+                </button>
+
+                <div class="filter-menu__panel" id="endpoint-registry-filter-menu" data-shell-filters-menu>
+                    <div class="filter-menu__header">
+                        <p class="filter-menu__title" id="endpoint-registry-filter-heading">Filters</p>
+                        <p class="filter-menu__hint">
+                            @if (appliedFilterCount > 0)
+                            {
+                                <text>@appliedFilterCount filter@(appliedFilterCount == 1 ? null : "s") applied</text>
+                            }
+                            else
+                            {
+                                <text>Showing everything you have access to</text>
+                            }
+                        </p>
+                    </div>
+
+                    <form method="get"
+                          class="filter-menu__form"
+                          aria-labelledby="endpoint-registry-filter-heading"
+                          data-ajax-form
+                          data-ajax-target="#ajax-page"
+                          data-ajax-history="push">
+
+                        <fieldset class="filter-menu__group">
+                            <legend class="filter-menu__legend">Search</legend>
+                            <div class="filter-menu__fields">
+                                <div class="form-field">
+                                    <label for="search">URL, website or client</label>
+                                    <input id="search" name="search" type="search" value="@Model.Filter.Search" placeholder="URL, website or client" />
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="filter-menu__group">
+                            <legend class="filter-menu__legend">Scope</legend>
+                            <div class="filter-menu__fields">
+                                <div class="form-field">
+                                    <label for="clientId">Client</label>
+                                    <select id="clientId" name="clientId">
+                                        <option value="">All clients</option>
+                                        @foreach (var client in Model.Clients)
+                                        {
+                                            <option value="@client.Id" selected="@(Model.Filter.ClientId == client.Id)">@client.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label for="websiteId">Website</label>
+                                    <select id="websiteId" name="websiteId">
+                                        <option value="">All websites</option>
+                                        @foreach (var website in Model.Websites)
+                                        {
+                                            <option value="@website.Id" selected="@(Model.Filter.WebsiteId == website.Id)">@website.ClientName / @website.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="form-field">
+                                    <label for="environmentId">Environment</label>
+                                    <select id="environmentId" name="environmentId">
+                                        <option value="">All environments</option>
+                                        @foreach (var environment in Model.Environments)
+                                        {
+                                            <option value="@environment.Id" selected="@(Model.Filter.EnvironmentId == environment.Id)">@environment.ClientName / @environment.WebsiteName / @environment.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <div class="filter-menu__actions">
+                            @if (Model.Filter.HasValues)
+                            {
+                                <a class="button button--secondary" asp-action="Endpoints" data-ajax-link data-ajax-target="#ajax-page">
+                                    @await Html.PartialAsync("_Icon", "close")
+                                    <span>Clear</span>
+                                </a>
+                            }
+                            <button class="button button--primary" type="submit">
+                                @await Html.PartialAsync("_Icon", "filter")
+                                <span>Apply filters</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            @await Html.PartialAsync("_RegistryViewMenu", "endpoints")
             @if (Model.CanManage)
             {
                 <a class="button button--secondary" asp-action="ArchivedEndpoints">
@@ -57,56 +158,6 @@
             }
         </div>
     </div>
-
-    <form method="get" class="filter-bar" data-ajax-form data-ajax-target="#ajax-page" data-ajax-history="push">
-        <div class="form-field">
-            <label for="search">Search</label>
-            <input id="search" name="search" type="search" value="@Model.Filter.Search" placeholder="URL, website or client" />
-        </div>
-        <div class="form-field">
-            <label for="clientId">Client</label>
-            <select id="clientId" name="clientId">
-                <option value="">All clients</option>
-                @foreach (var client in Model.Clients)
-                {
-                    <option value="@client.Id" selected="@(Model.Filter.ClientId == client.Id)">@client.Name</option>
-                }
-            </select>
-        </div>
-        <div class="form-field">
-            <label for="websiteId">Website</label>
-            <select id="websiteId" name="websiteId">
-                <option value="">All websites</option>
-                @foreach (var website in Model.Websites)
-                {
-                    <option value="@website.Id" selected="@(Model.Filter.WebsiteId == website.Id)">@website.ClientName / @website.Name</option>
-                }
-            </select>
-        </div>
-        <div class="form-field">
-            <label for="environmentId">Environment</label>
-            <select id="environmentId" name="environmentId">
-                <option value="">All environments</option>
-                @foreach (var environment in Model.Environments)
-                {
-                    <option value="@environment.Id" selected="@(Model.Filter.EnvironmentId == environment.Id)">@environment.ClientName / @environment.WebsiteName / @environment.Name</option>
-                }
-            </select>
-        </div>
-        <div class="filter-bar__actions">
-            <button class="button button--primary" type="submit">
-                @await Html.PartialAsync("_Icon", "filter")
-                <span>Apply filters</span>
-            </button>
-            @if (Model.Filter.HasValues)
-            {
-                <a class="button button--secondary" asp-action="Endpoints" data-ajax-link data-ajax-target="#ajax-page">
-                    @await Html.PartialAsync("_Icon", "close")
-                    <span>Clear</span>
-                </a>
-            }
-        </div>
-    </form>
 
     @if (Model.Endpoints.Count == 0)
     {

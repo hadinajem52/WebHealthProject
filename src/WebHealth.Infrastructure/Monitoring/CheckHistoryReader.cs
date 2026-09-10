@@ -85,50 +85,38 @@ internal sealed class CheckHistoryReader(
             .ThenByDescending(check => check.Id)
             .Skip((boundedPage - 1) * PageSize)
             .Take(PageSize)
-            .Select(check => new
+            .Select(check => new CheckHistoryItem(
+                check.Id,
+                check.Source,
+                check.State,
+                check.ScheduledFor,
+                check.RequestedAt,
+                check.InitiatedByUser == null ? null : check.InitiatedByUser.DisplayName,
+                check.CompletedAt,
+                check.Result == null ? null : check.Result.Outcome,
+                check.Result == null ? null : check.Result.FailureCategory,
+                check.Result == null ? null : check.Result.HttpStatus,
+                check.Result == null ? null : check.Result.TotalDurationMs,
+                check.Result == null ? null : check.Result.MonitorSource,
+                check.Result != null && check.Result.CountsForUptime)
             {
-                Item = new CheckHistoryItem(
-                    check.Id,
-                    check.Source,
-                    check.State,
-                    check.ScheduledFor,
-                    check.RequestedAt,
-                    check.InitiatedByUser == null ? null : check.InitiatedByUser.DisplayName,
-                    check.CompletedAt,
-                    check.Result == null ? null : check.Result.Outcome,
-                    check.Result == null ? null : check.Result.FailureCategory,
-                    check.Result == null ? null : check.Result.HttpStatus,
-                    check.Result == null ? null : check.Result.TotalDurationMs,
-                    check.Result == null ? null : check.Result.MonitorSource,
-                    check.Result != null && check.Result.CountsForUptime)
-                {
-                    CurrentStateDisposition = check.Result == null ? null : check.Result.CurrentStateDisposition
-                },
-                ConfigurationFingerprint = check.ConfigurationSnapshot.ConfigurationFingerprint
+                CurrentStateDisposition = check.Result == null ? null : check.Result.CurrentStateDisposition
             })
             .ToArrayAsync(cancellationToken);
 
-        var comparability = PerformanceComparability.Evaluate(items
-            .Where(row => row.Item.MonitorSource is not null)
-            .Select(row => new PerformanceSampleContext(
-                row.Item.MonitorSource!, row.ConfigurationFingerprint)));
-
-        var historyItems = items.Select(row => row.Item).ToArray();
         var knownIncidents = await LoadKnownIncidentsAsync(
-            historyItems.Select(item => item.LogicalCheckId), access, cancellationToken);
+            items.Select(item => item.LogicalCheckId), access, cancellationToken);
 
         return new(
             endpoint.Id,
             endpoint.DisplayUrl,
-            historyItems.Select(item => item with
+            items.Select(item => item with
             {
                 KnownIncidents = knownIncidents.GetValueOrDefault(item.LogicalCheckId, [])
             }).ToArray(),
             boundedPage,
             PageSize,
-            totalCount,
-            items.FirstOrDefault()?.ConfigurationFingerprint,
-            comparability);
+            totalCount);
     }
 
     public async Task<CheckDetails?> FindCheckAsync(

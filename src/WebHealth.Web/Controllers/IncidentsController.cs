@@ -98,9 +98,14 @@ public sealed class IncidentsController(
     }
 
     [HttpGet]
-    public async Task<IActionResult> Details(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Details(
+        Guid id,
+        int timelinePage = 1,
+        int evidencePage = 1,
+        CancellationToken cancellationToken = default)
     {
-        var incident = await incidentReader.FindAsync(id, GetAccess(), cancellationToken);
+        var incident = await incidentReader.FindAsync(
+            id, GetAccess(), timelinePage, evidencePage, cancellationToken);
         if (incident is null)
         {
             return this.NotFoundRecord("incident");

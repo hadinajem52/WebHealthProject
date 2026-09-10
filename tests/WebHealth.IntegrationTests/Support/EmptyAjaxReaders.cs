@@ -40,9 +40,7 @@ internal sealed class EmptyCheckHistoryReader : ICheckHistoryReader
             [],
             Math.Max(1, page),
             25,
-            0,
-            null,
-            PerformanceComparability.Evaluate([], false)));
+            0));
 
     public Task<CheckDetails?> FindCheckAsync(
         Guid logicalCheckId,

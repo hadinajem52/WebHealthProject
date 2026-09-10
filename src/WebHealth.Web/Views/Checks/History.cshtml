@@ -28,23 +28,25 @@
                     <span>Check history &middot; @history.TotalCount check@(history.TotalCount == 1 ? null : "s")</span>
                 </p>
             </div>
-            <div class="form-actions">
-                <a class="button button--secondary"
-                   asp-controller="Targets"
-                   asp-action="Endpoint"
-                   asp-route-id="@history.EndpointId">
-                    @await Html.PartialAsync("_Icon", "arrow-left")
-                    <span>Back to endpoint</span>
-                </a>
+            <div class="page-intro__actions">
+                <div class="form-actions">
+                    <a class="button button--secondary"
+                       asp-controller="Targets"
+                       asp-action="Endpoint"
+                       asp-route-id="@history.EndpointId">
+                        @await Html.PartialAsync("_Icon", "arrow-left")
+                        <span>Back to endpoint</span>
+                    </a>
+                </div>
+                @await Html.PartialAsync("_ClearHistoryAction", new ClearHistoryActionViewModel(
+                        Url.Action("ClearHistory", new { id = history.EndpointId })!,
+                        Url.Action("Archived", new { id = history.EndpointId })!,
+                        Model.CanArchive,
+                        history.Items.Any(item => item.State == LogicalCheckStates.Completed),
+                        "Moves every completed check for this endpoint out of this list into the archive. Nothing is deleted, archived checks still count towards uptime, and each one can be restored.",
+                    "Move every completed check for this endpoint to the archive?",
+                    "#ajax-page"))
             </div>
-            @await Html.PartialAsync("_ClearHistoryAction", new ClearHistoryActionViewModel(
-                    Url.Action("ClearHistory", new { id = history.EndpointId })!,
-                    Url.Action("Archived", new { id = history.EndpointId })!,
-                    Model.CanArchive,
-                    history.Items.Any(item => item.State == LogicalCheckStates.Completed),
-                    "Moves every completed check for this endpoint out of this list into the archive. Nothing is deleted, archived checks still count towards uptime, and each one can be restored.",
-                "Move every completed check for this endpoint to the archive?",
-                "#ajax-page"))
         </div>
 
         @if (history.Items.Count == 0)
@@ -56,28 +58,6 @@
         }
         else
         {
-
-            @if (history.Comparability.Warning is { } comparabilityWarning)
-            {
-                <div class="flash-messages check-history__comparability">
-                    <div class="flash"
-                         data-level="warning"
-                         data-shell-persistent-dismiss-key="check-history-comparability-@history.EndpointId-@history.CurrentConfigurationFingerprint"
-                         role="status">
-                        <span class="flash__icon">@await Html.PartialAsync("_Icon", "warning")</span>
-                        <div>
-                            <p class="flash__label">Comparability</p>
-                            <p class="flash__text">@comparabilityWarning</p>
-                        </div>
-                        <button type="button"
-                                class="flash__dismiss"
-                                data-shell-flash-dismiss
-                                aria-label="Dismiss this warning message">
-                            @await Html.PartialAsync("_Icon", "close")
-                        </button>
-                    </div>
-                </div>
-            }
             <div class="table-scroll table-scroll--flush">
                 <table class="data-table data-table--history">
                     <caption class="visually-hidden">Scheduled and manual checks for this endpoint</caption>
