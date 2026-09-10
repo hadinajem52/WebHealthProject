@@ -81,7 +81,6 @@ internal static class RepresentativeMonitoringLoad
             (await database.LogicalChecks.CountAsync()).Should().Be(EndpointCount);
             (await database.DurableWork.CountAsync()).Should().Be(EndpointCount);
             (await database.DurableWork.CountAsync(item => item.State == "Enqueued")).Should().Be(EndpointCount);
-            (await database.TargetAuthorizationEvidence.CountAsync(item => item.RevokedAt == null)).Should().Be(EndpointCount);
         }
 
         var limiter = new SafeHttpConcurrencyLimiter(new()
@@ -169,7 +168,6 @@ internal static class RepresentativeMonitoringLoad
         var websites = scope.ServiceProvider.GetRequiredService<IWebsiteRegistryService>();
         var environments = scope.ServiceProvider.GetRequiredService<IEnvironmentRegistryService>();
         var endpoints = scope.ServiceProvider.GetRequiredService<IEndpointRegistryService>();
-        var permissions = scope.ServiceProvider.GetRequiredService<ITargetPermissionService>();
         var client = await clients.CreateAsync(new("Representative Fleet", owner, null), access);
         client.Succeeded.Should().BeTrue(string.Join(" ", client.Errors));
         var website = await websites.CreateAsync(new(client.EntityId!.Value, "Controlled Targets", owner, null, false, []), access);
@@ -184,9 +182,6 @@ internal static class RepresentativeMonitoringLoad
             var httpReason = scheme == "http" ? "Controlled representative fixture requires a mixed scheme fleet." : null;
             var endpoint = await endpoints.CreateAsync(new(environment.EntityId!.Value, url, null, true, httpReason), access);
             endpoint.Succeeded.Should().BeTrue(string.Join(" ", endpoint.Errors));
-            var permission = await permissions.GrantAsync(new(endpoint.EntityId!.Value, url, "Owned",
-                "Controlled local representative fixture", null), access, CancellationToken.None);
-            permission.Succeeded.Should().BeTrue(string.Join(" ", permission.Errors));
         }
         var enabled = await websites.UpdateAsync(new(website.EntityId.Value, "Controlled Targets", owner, null, true, 1, []), access);
         enabled.Succeeded.Should().BeTrue(string.Join(" ", enabled.Errors));

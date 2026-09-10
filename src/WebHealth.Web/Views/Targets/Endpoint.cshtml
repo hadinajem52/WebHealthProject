@@ -126,10 +126,6 @@
                     </button>
 
                     <div class="action-menu__panel" id="endpoint-actions-menu" data-shell-menu-panel>
-                        <a class="action-menu__item" asp-controller="TargetPermissions" asp-action="Index" asp-route-id="@Model.Endpoint.Id">
-                            @await Html.PartialAsync("_Icon", "shield-check")
-                            <span>Target permissions</span>
-                        </a>
                         @if (Model.Endpoint.IsDeleted)
                         {
                             <form asp-action="RestoreEndpoint" method="post" data-ajax-form data-ajax-target="#ajax-page">

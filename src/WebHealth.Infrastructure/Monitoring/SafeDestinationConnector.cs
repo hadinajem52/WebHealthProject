@@ -18,8 +18,7 @@ internal static class SafeDestinationConnector
         string host,
         int port,
         SafeHttpTimingCollector? timing,
-        CancellationToken cancellationToken,
-        Func<CancellationToken, Task<bool>>? authorize = null)
+        CancellationToken cancellationToken)
     {
         var dnsStart = Stopwatch.GetTimestamp();
         var answers = await resolver.ResolveAsync(host, cancellationToken);
@@ -53,10 +52,6 @@ internal static class SafeDestinationConnector
             try
             {
                 addressLease = await limiter.AcquireAddressAsync(address.ToString(), attempt.Token);
-                if (authorize is not null && !await authorize(attempt.Token))
-                {
-                    throw new SafeDestinationException();
-                }
                 socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
                 await socket.ConnectAsync(new IPEndPoint(address, port), attempt.Token);
                 cancellationToken.ThrowIfCancellationRequested();

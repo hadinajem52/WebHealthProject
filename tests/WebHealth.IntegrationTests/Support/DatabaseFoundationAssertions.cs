@@ -113,7 +113,8 @@ internal static class DatabaseFoundationAssertions
         "20260908151843_MonitoringRetentionPermission",
         "20260908183513_ScheduledCompletionLookup",
         "20260909103732_ResultConfigurationIdentity",
-        "20260909121143_ExactDailyReportSamples"
+        "20260909121143_ExactDailyReportSamples",
+        "20260909162838_DropTargetAuthorizationEvidence"
     ];
 
     private static readonly string[] ExpectedTables =
@@ -121,7 +122,6 @@ internal static class DatabaseFoundationAssertions
         "monitoring_daily_aggregate",
         "retention_hold",
         "monitoring_runtime_state",
-        "target_authorization_evidence",
         "audit_event",
         "access_grant",
         "client",
@@ -183,7 +183,6 @@ internal static class DatabaseFoundationAssertions
         "monitoring_daily_aggregate",
         "retention_hold",
         "monitoring_runtime_state",
-        "target_authorization_evidence",
         "issue_state", "endpoint_health", "maintenance_window", "maintenance_target",
         "maintenance_occurrence", "incident", "incident_event", "incident_evidence",
         "notification_event", "notification_delivery", "notification_attempt",
@@ -204,7 +203,6 @@ internal static class DatabaseFoundationAssertions
         "MonitoringDailyAggregate",
         "RetentionHold",
         "MonitoringRuntimeState",
-        "TargetAuthorizationEvidence",
         "IdentityRoleClaim`1",
         "IdentityUserClaim`1",
         "IdentityUserLogin`1",
@@ -313,7 +311,6 @@ internal static class DatabaseFoundationAssertions
         await VerifyStaleSnapshotsAsync(connectionString);
         await VerifyStaleSslSnapshotsAsync(connectionString);
         await VerifyHttpPolicyConfigurationAsync(connectionString);
-        await VerifyTargetAuthorizationAsync(connectionString);
         await VerifyHealthConfirmationAsync(connectionString);
         await RetentionHoldAssertions.VerifyManagementAsync(connectionString,
             await CreateOwnedMonitorIdAsync(connectionString, "http://retention-hold-management.test/status"));
@@ -2021,56 +2018,6 @@ internal static class DatabaseFoundationAssertions
         await AcknowledgeAndResolveAsync(database, clientErrorIncident.Id, clock);
     }
 
-    private static async Task VerifyTargetAuthorizationAsync(string connectionString)
-    {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>();
-        PostgreSqlDbContextOptions.Configure(options, connectionString);
-        await using var database = new ApplicationDbContext(options.Options);
-        var monitorId = await CreateOwnedMonitorIdAsync(connectionString, "http://authorization-evidence.test/status");
-        var monitor = await AvailabilityMonitors(database).Include(item => item.Endpoint)
-            .SingleAsync(item => item.Id == monitorId);
-        var clock = new MutableTimeProvider(DateTimeOffset.UtcNow);
-        var authorization = new TargetConnectionAuthorization(database, clock);
-        var host = monitor.Endpoint.NormalizedHost;
-        var port = monitor.Endpoint.EffectivePort;
-        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeFalse();
-        var manager = new TargetPermissionService(database, clock);
-        var access = new RegistryAccessContext(monitor.CreatedByUserId, [ApplicationRoles.Administrator]);
-        var grant = new GrantTargetPermission(monitor.EndpointId, monitor.Endpoint.NormalizedUrl,
-            "Owned", "private-fixture-evidence", clock.GetUtcNow().AddMinutes(1));
-        foreach (var role in new[] { ApplicationRoles.DeveloperSupport, ApplicationRoles.Viewer })
-        {
-            var denied = await manager.GrantAsync(grant, new(monitor.CreatedByUserId, [role]), CancellationToken.None);
-            denied.Status.Should().Be(RegistryMutationStatus.Forbidden);
-        }
-        var invalid = await manager.GrantAsync(grant with { EvidenceReference = " " }, access, CancellationToken.None);
-        invalid.Status.Should().Be(RegistryMutationStatus.ValidationFailed);
-        var granted = await manager.GrantAsync(grant, access, CancellationToken.None);
-        granted.Succeeded.Should().BeTrue(string.Join(" ", granted.Errors));
-        var permissionId = granted.EntityId!.Value;
-        var duplicate = await manager.GrantAsync(grant, access, CancellationToken.None);
-        duplicate.Status.Should().Be(RegistryMutationStatus.ValidationFailed);
-        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeTrue();
-        (await authorization.IsAuthorizedAsync(monitor.EndpointId, "other.test", port, CancellationToken.None)).Should().BeFalse();
-        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port + 1, CancellationToken.None)).Should().BeFalse();
-        (await authorization.IsAuthorizedAsync(Guid.NewGuid(), host, port, CancellationToken.None)).Should().BeFalse();
-        var deniedRevoke = await manager.RevokeAsync(monitor.EndpointId, permissionId, "private-revocation-reason",
-            new(monitor.CreatedByUserId, [ApplicationRoles.Viewer]), CancellationToken.None);
-        deniedRevoke.Status.Should().Be(RegistryMutationStatus.Forbidden);
-        var revoked = await manager.RevokeAsync(monitor.EndpointId, permissionId, "private-revocation-reason", access, CancellationToken.None);
-        revoked.Succeeded.Should().BeTrue(string.Join(" ", revoked.Errors));
-        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeFalse();
-        var repeated = await manager.RevokeAsync(monitor.EndpointId, permissionId, "duplicate", access, CancellationToken.None);
-        repeated.Succeeded.Should().BeTrue(string.Join(" ", repeated.Errors));
-        var audit = await database.AuditEvents.AsNoTracking().Where(item => item.EntityIdentifier == permissionId.ToString()).ToArrayAsync();
-        audit.Select(item => item.Action).Should().BeEquivalentTo(["target-permission.granted", "target-permission.revoked"]);
-        audit.Should().OnlyContain(item => item.BeforeValues == null && item.AfterValues == null);
-        var renewed = await manager.GrantAsync(grant, new(monitor.CreatedByUserId, [ApplicationRoles.Operations]), CancellationToken.None);
-        renewed.Succeeded.Should().BeTrue(string.Join(" ", renewed.Errors));
-        clock.Advance(TimeSpan.FromMinutes(1));
-        (await authorization.IsAuthorizedAsync(monitor.EndpointId, host, port, CancellationToken.None)).Should().BeFalse();
-    }
-
     private static async Task VerifyHttpPolicyConfigurationAsync(string connectionString)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -2283,7 +2230,6 @@ internal static class DatabaseFoundationAssertions
             (await execution.ExecuteAsync(new(queued.Id, queued.DurableWork.Single().Id,
                 $"scheme-{queued.Id:N}", "snapshot-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
             transport.LastRequest!.Url.Should().Be(queuedUrl);
-            transport.LastRequest.ConnectionAuthorization.Should().NotBeNull("every monitoring connection needs the current permission guard");
             (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == queued.Id))
                 .CurrentStateDisposition.Should().Be("Superseded");
         }
@@ -2326,7 +2272,7 @@ internal static class DatabaseFoundationAssertions
         await using var columns = new NpgsqlCommand("""
             SELECT table_name || '.' || column_name FROM information_schema.columns
             WHERE table_schema = 'web_health'
-                AND table_name IN ('endpoint_monitor', 'check_configuration_snapshot', 'check_result', 'target_authorization_evidence', 'certificate_observation')
+                AND table_name IN ('endpoint_monitor', 'check_configuration_snapshot', 'check_result', 'certificate_observation')
             ORDER BY table_name, column_name;
             """, connection);
         await using var reader = await columns.ExecuteReaderAsync();
@@ -2341,12 +2287,7 @@ internal static class DatabaseFoundationAssertions
             "check_configuration_snapshot.ssl_warning_expiry_days", "check_configuration_snapshot.ssl_high_expiry_days",
             "check_configuration_snapshot.ssl_critical_expiry_days", "certificate_observation.validity_status",
             "certificate_observation.hostname_status", "certificate_observation.chain_trust_status",
-            "certificate_observation.chain_status_codes",
-            "target_authorization_evidence.endpoint_id", "target_authorization_evidence.normalized_host",
-            "target_authorization_evidence.port", "target_authorization_evidence.authorization_kind",
-            "target_authorization_evidence.evidence_reference", "target_authorization_evidence.effective_from",
-            "target_authorization_evidence.expires_at", "target_authorization_evidence.revoked_at",
-            "target_authorization_evidence.revoked_by_user_id", "target_authorization_evidence.revocation_reason"]);
+            "certificate_observation.chain_status_codes"]);
     }
 
     private static async Task VerifyStaleSslSnapshotsAsync(string connectionString)
@@ -2380,7 +2321,6 @@ internal static class DatabaseFoundationAssertions
             (await execution.ExecuteAsync(new(queued.Id, queued.DurableWork.Single().Id,
                 $"ssl-snapshot-{queued.Id:N}", "snapshot-worker"))).Should().Be(LogicalCheckExecutionStatus.Completed);
             probe.LastRequest!.Url.Should().Be(queuedUrl);
-            probe.LastRequest.ConnectionAuthorization.Should().NotBeNull("SSL connections must check current permission");
             transport.CallCount.Should().Be(0);
             (await database.CheckResults.AsNoTracking().SingleAsync(item => item.LogicalCheckId == queued.Id))
                 .CurrentStateDisposition.Should().Be("Superseded");
@@ -2779,7 +2719,6 @@ internal static class DatabaseFoundationAssertions
             transport,
             sslProbe ?? new UnusedSslCertificateProbe(),
             finalizationService,
-            new TargetConnectionAuthorization(database, timeProvider),
             timeProvider,
             NullLogger<LogicalCheckExecutionService>.Instance);
     }
@@ -3842,10 +3781,6 @@ internal static class DatabaseFoundationAssertions
         var checkId = await FinalizeScheduledResultAsync(database, monitor, 200);
         var queued = await CreateQueuedCheckAsync(database, monitor);
         var queuedId = queued.Id;
-        var permission = await scope.ServiceProvider.GetRequiredService<ITargetPermissionService>().GrantAsync(
-            new(monitor.EndpointId, monitor.Endpoint.NormalizedUrl, "Owned", "Disposable upgrade fixture", null),
-            new(monitor.CreatedByUserId, [ApplicationRoles.Administrator]), CancellationToken.None);
-        permission.Succeeded.Should().BeTrue(string.Join(" ", permission.Errors));
         database.ChangeTracker.Clear();
         await database.Database.MigrateAsync("PngAuditVerifiedWebpComparison");
         await database.Database.MigrateAsync();

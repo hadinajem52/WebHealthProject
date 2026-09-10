@@ -12,7 +12,7 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
     public partial class ApplicationDbContextModel
     {
         private ApplicationDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("0122f405-5b75-4a53-855e-265f7cffcbb2"), entityTypeCount: 58)
+            : base(skipDetectChanges: false, modelId: new Guid("5c4ba533-f192-404f-91f4-11d8619d07ea"), entityTypeCount: 57)
         {
         }
 
@@ -51,7 +51,6 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             var monitoringRuntimeState = MonitoringRuntimeStateEntityType.Create(this);
             var redirectHop = RedirectHopEntityType.Create(this);
             var retentionHold = RetentionHoldEntityType.Create(this);
-            var targetAuthorizationEvidence = TargetAuthorizationEvidenceEntityType.Create(this);
             var notificationAttempt = NotificationAttemptEntityType.Create(this);
             var notificationDelivery = NotificationDeliveryEntityType.Create(this);
             var notificationEvent = NotificationEventEntityType.Create(this);
@@ -132,9 +131,6 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             LogicalCheckEntityType.CreateForeignKey2(logicalCheck, applicationUser);
             MonitoringDailyAggregateEntityType.CreateForeignKey1(monitoringDailyAggregate, endpointMonitor);
             RedirectHopEntityType.CreateForeignKey1(redirectHop, checkResult);
-            TargetAuthorizationEvidenceEntityType.CreateForeignKey1(targetAuthorizationEvidence, applicationUser);
-            TargetAuthorizationEvidenceEntityType.CreateForeignKey2(targetAuthorizationEvidence, endpoint);
-            TargetAuthorizationEvidenceEntityType.CreateForeignKey3(targetAuthorizationEvidence, applicationUser);
             NotificationAttemptEntityType.CreateForeignKey1(notificationAttempt, notificationDelivery);
             NotificationDeliveryEntityType.CreateForeignKey1(notificationDelivery, notificationEvent);
             NotificationEventEntityType.CreateForeignKey1(notificationEvent, incidentEvent);
@@ -223,7 +219,6 @@ namespace WebHealth.Infrastructure.Persistence.CompiledModels
             MonitoringRuntimeStateEntityType.CreateAnnotations(monitoringRuntimeState);
             RedirectHopEntityType.CreateAnnotations(redirectHop);
             RetentionHoldEntityType.CreateAnnotations(retentionHold);
-            TargetAuthorizationEvidenceEntityType.CreateAnnotations(targetAuthorizationEvidence);
             NotificationAttemptEntityType.CreateAnnotations(notificationAttempt);
             NotificationDeliveryEntityType.CreateAnnotations(notificationDelivery);
             NotificationEventEntityType.CreateAnnotations(notificationEvent);

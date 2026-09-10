@@ -15,7 +15,6 @@ internal sealed class LogicalCheckExecutionService(
     ISafeHttpTransport transport,
     ISslCertificateProbe sslCertificateProbe,
     ILogicalCheckFinalizationService finalizationService,
-    ITargetConnectionAuthorization connectionAuthorization,
     TimeProvider timeProvider,
     ILogger<LogicalCheckExecutionService> logger) : ILogicalCheckExecutionService
 {
@@ -296,10 +295,7 @@ internal sealed class LogicalCheckExecutionService(
     private SslCertificateProbeRequest CreateProbeRequest(LogicalCheck check) => new(
         check.EndpointMonitor.Endpoint.Id,
         CheckSnapshotTarget.Resolve(check).NormalizedUrl,
-        check.ConfigurationSnapshot.TimeoutSeconds)
-    {
-        ConnectionAuthorization = connectionAuthorization
-    };
+        check.ConfigurationSnapshot.TimeoutSeconds);
 
     private SafeHttpTransportRequest CreateRequest(LogicalCheck check)
     {
@@ -307,10 +303,7 @@ internal sealed class LogicalCheckExecutionService(
         var endpoint = CheckSnapshotTarget.Resolve(check);
         return new(
             endpoint.EndpointId, endpoint.NormalizedUrl, endpoint.IsProduction,
-            snapshot.MaxRedirects, snapshot.MaxResponseBodyBytes, snapshot.TimeoutSeconds)
-        {
-            ConnectionAuthorization = connectionAuthorization
-        };
+            snapshot.MaxRedirects, snapshot.MaxResponseBodyBytes, snapshot.TimeoutSeconds);
     }
 
     private static TimeSpan LeaseDuration(int timeoutSeconds) =>

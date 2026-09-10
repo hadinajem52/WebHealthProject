@@ -17,7 +17,6 @@ The transport:
 - resolves A/AAAA records inside `ConnectCallback`, rejects empty, excessive, mixed allowed/prohibited answer sets, and selects one validated address;
 - connects directly to that address and verifies the actual remote address and port while retaining the original hostname for Host, SNI, and certificate validation;
 - disables connection reuse for checks so DNS and destination policy run again for every request;
-- authorizes the exact endpoint, normalized host, and port against active target-authorization evidence before every hop;
 - rejects production HTTPS-to-HTTP redirects, normalized redirect loops, unsupported redirect targets, and chains beyond ten hops;
 - retains normal platform TLS certificate and hostname validation;
 - applies the snapshotted whole-check timeout with a hard five-minute ceiling, a 5-second connect timeout, 32 KiB header limit, snapshotted decoded-body and redirect limits capped by hard 2 MiB/10-hop ceilings, a one-byte body sentinel, 16-answer DNS limit, and 20 global / 2 per-host / 4 per-IP concurrency limits;
@@ -31,19 +30,17 @@ Normal runtime registration uses `StrictDestinationAddressPolicy`. It rejects lo
 
 Loopback is available only through the test-injected policy used by controlled TCP/TLS fixtures. There is no application setting that disables TLS validation, enables implicit proxying, or permits loopback in normal runtime configuration.
 
-## Authorization and error behavior
+## Error behavior
 
-The initial target and every redirect require current `target_authorization` evidence for the same endpoint and exact normalized host/port. An unauthorized redirect is rejected before DNS resolution or connection. Expired and revoked evidence fails closed.
-
-Expected transport failures return a stable category: invalid URL, unauthorized target, prohibited destination, name resolution, connection, TLS, timeout, caller cancellation, oversized headers, malformed/missing redirect location, loop, hop limit, production downgrade, or protocol failure. Premature response disconnects and malformed compressed bodies are contained as protocol failures. Raw exception messages, headers, cookies, query values, credentials, and response content are not included in the failure contract.
+Expected transport failures return a stable category: invalid URL, prohibited destination, name resolution, connection, TLS, timeout, caller cancellation, oversized headers, malformed/missing redirect location, loop, hop limit, production downgrade, or protocol failure. Premature response disconnects and malformed compressed bodies are contained as protocol failures. Raw exception messages, headers, cookies, query values, credentials, and response content are not included in the failure contract.
 
 ## Verification evidence
 
 - Unit coverage exercises public and prohibited IPv4/IPv6 boundaries, including mapped and translated forms.
-- Controlled TCP tests verify Host/user-agent preservation, bounded decoded bodies, mixed-answer rejection before contact, DNS rebinding rejection, per-hop authorization, loop and hop-limit termination, invalid redirects, oversized headers, premature disconnects, malformed compression, timeout, caller cancellation, and concurrency queues.
+- Controlled TCP tests verify Host/user-agent preservation, bounded decoded bodies, mixed-answer rejection before contact, DNS rebinding rejection, loop and hop-limit termination, invalid redirects, oversized headers, premature disconnects, malformed compression, timeout, caller cancellation, and concurrency queues.
 - A controlled TLS fixture proves an invalid certificate remains a TLS failure.
 - Handler configuration tests prove automatic redirects, proxies, cookies, and certificate-validation overrides are disabled. The Phase 0 feasibility spike remains the lower-level evidence for IPv4/IPv6 socket pinning and no-proxy behavior.
-- No database migration is required for this increment; it consumes Phase 2 target-authorization evidence.
+- No database migration is required for this increment.
 
 ## Remaining work
 

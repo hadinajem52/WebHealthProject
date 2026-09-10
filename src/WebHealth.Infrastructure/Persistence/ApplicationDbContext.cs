@@ -116,7 +116,6 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<PngAuditCoverageReasonEntity> PngAuditCoverageReasons => Set<PngAuditCoverageReasonEntity>();
 
-    public DbSet<TargetAuthorizationEvidence> TargetAuthorizationEvidence => Set<TargetAuthorizationEvidence>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

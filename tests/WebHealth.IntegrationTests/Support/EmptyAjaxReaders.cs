@@ -232,15 +232,3 @@ internal sealed class EmptyManualCheckService : IManualCheckService
     public Task<ManualCheckResult> RunCertificateNowAsync(Guid endpointId, RegistryAccessContext access, CancellationToken cancellationToken = default) =>
         Task.FromResult(ManualCheckResult.Queued(LogicalCheckId));
 }
-
-internal sealed class EmptyTargetPermissionService : ITargetPermissionService
-{
-    public Task<TargetPermissions?> ReadAsync(Guid endpointId, RegistryAccessContext access, CancellationToken token) =>
-        Task.FromResult<TargetPermissions?>(new(endpointId, "https://example.com/", []));
-
-    public Task<RegistryMutationResult> GrantAsync(GrantTargetPermission command, RegistryAccessContext access, CancellationToken token) =>
-        throw new InvalidOperationException("Shell tests must not execute permission mutations.");
-
-    public Task<RegistryMutationResult> RevokeAsync(Guid endpointId, Guid permissionId, string reason, RegistryAccessContext access, CancellationToken token) =>
-        throw new InvalidOperationException("Shell tests must not execute permission mutations.");
-}

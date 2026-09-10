@@ -692,13 +692,6 @@ refreshes registry eligibility, and persists `Current`, `Superseded`, or `Inelig
 Only current eligible evidence changes health, issue counters, incidents, notifications, or urgent
 SSL work. Pausing then resuming and archiving then restoring cannot revive queued evidence.
 
-Current target permission is separate from snapshot truth. Administrator and Operations personas
-record ownership or explicit permission per endpoint/host/port through endpoint Actions. HTTP and
-SSL check the evidence immediately before each new socket, including redirected and fallback
-connections. Expired or revoked permission prevents that connection; an already established
-connection may finish. Existing endpoints receive no fabricated grants. Permission evidence and
-reasons remain outside monitoring snapshots and logs; grant/revoke audits contain identifiers only.
-
 History displays stale disposition and the recorded target with its query string omitted. Explicit
 rollback loses v2-only facts and cancels unfinished v2 work before reducing snapshots to v1; see the
 [setup rollback procedure](../../setup/README.md#snapshot-v2-rollback).

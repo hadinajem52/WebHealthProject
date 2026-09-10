@@ -112,21 +112,9 @@ target_is_production
 current_truth_generation
 ```
 
-For v2 checks, execution must not use the current endpoint URL, host, port, or production flag to decide what to contact. The current registry may still be read for current authorization, lifecycle eligibility, and stale-result detection.
+For v2 checks, execution must not use the current endpoint URL, host, port, or production flag to decide what to contact. The current registry may still be read for lifecycle eligibility and stale-result detection.
 
-### 4.2 Current authorization remains authoritative
-
-Target permission is never frozen into a snapshot. Immediately before every connection, including each redirect:
-
-```text
-snapshotted endpoint ID, host, and port
-    + current TargetAuthorizationEvidence
-    -> authorized or rejected
-```
-
-Revoked or expired authorization produces zero outbound connections. Authorization evidence, reasons, and references are never copied into snapshots or logs.
-
-### 4.3 Current-truth generation closes lifecycle races
+### 4.2 Current-truth generation closes lifecycle races
 
 Add a monotonic `CurrentTruthGeneration` to `EndpointMonitor`. It changes only when a mutation can make queued evidence stale for current-state purposes. It does not change when dispatch advances `NextDueAt`.
 
@@ -161,7 +149,7 @@ If any check fails:
 
 Archive-then-restore and pause-then-resume therefore cannot make an older check current again, even when the same monitor row and fingerprint are reused.
 
-### 4.4 Snapshot compatibility is explicit
+### 4.3 Snapshot compatibility is explicit
 
 ```text
 schema_version = 1 -> legacy compatibility path
@@ -172,7 +160,7 @@ Change the database constraint to `schema_version IN (1, 2)`. Completed v1 snaps
 
 After the migration and application are installed, every newly created HTTP or SSL check uses v2.
 
-### 4.5 Configuration remains simple and explicit
+### 4.4 Configuration remains simple and explicit
 
 For this personal project, do not turn `PolicyProfile` into a new runtime administration system.
 
@@ -191,7 +179,7 @@ Materialized columns are the current effective configuration used to schedule an
 
 For typed v2 overrides, disagreement between resolution and materialized values is configuration drift. Drift fails closed before creating a check and emits a structured operational error without URLs or marker contents.
 
-### 4.6 Confirmed health and operational state are separate projections
+### 4.5 Confirmed health and operational state are separate projections
 
 Confirmed health is:
 
@@ -218,7 +206,7 @@ The application currently derives `Disabled` as a display status; normal finaliz
 
 Update the specification and reporting contract deliberately when this separation is implemented. Keep compatibility mapping for any existing database row containing confirmed health `Disabled`, but do not create new such rows.
 
-### 4.7 Certificate processing performs no certificate-controlled networking
+### 4.6 Certificate processing performs no certificate-controlled networking
 
 Both normal HTTPS monitoring and the inspection probe use supported .NET 10 TLS settings equivalent to:
 
@@ -229,7 +217,7 @@ DisableCertificateDownloads = true
 
 No CRL, OCSP, or AIA URI from a certificate may cause an independent request. Revocation is reported as not checked; do not add `Good` or `Revoked` persistence values when the application cannot observe them.
 
-### 4.8 Retention follows the approved project policy
+### 4.7 Retention follows the approved project policy
 
 The defaults remain:
 

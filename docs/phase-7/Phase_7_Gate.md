@@ -4,7 +4,7 @@ Phase 7 completed on 2026-09-09 for the personal internship and portfolio projec
 
 ## Representative workload
 
-The opt-in harness created 500 controlled `.test` endpoints, including 350 HTTPS endpoints, 500 HTTP monitors and 350 SSL monitors. Exactly 500 HTTP monitors were due across a distributed 90-second cadence window. All 500 target permissions were active before dispatch.
+The opt-in harness created 500 controlled `.test` endpoints, including 350 HTTPS endpoints, 500 HTTP monitors and 350 SSL monitors. Exactly 500 HTTP monitors were due across a distributed 90-second cadence window. All 500 target permissions were active before dispatch. The per-endpoint target permission gate was removed after this gate was recorded; the harness no longer grants permissions, and monitoring no longer requires them.
 
 [Representative monitoring evidence](Representative_Monitoring_Evidence.md) records the machine, PostgreSQL and .NET versions, fixture, dispatch and recovery timings, two 15-minute memory windows and the database outage restart. The repeatable command is `scripts/run-representative-monitoring-evidence.ps1`.
 

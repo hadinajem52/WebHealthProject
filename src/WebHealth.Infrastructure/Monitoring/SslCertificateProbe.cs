@@ -45,10 +45,7 @@ internal sealed class SslCertificateProbe(
             using var globalLease = await concurrencyLimiter.AcquireGlobalAsync(timeout.Token);
             using var hostLease = await concurrencyLimiter.AcquireHostAsync(host, timeout.Token);
             await using var connection = await SafeDestinationConnector.ConnectAsync(
-                resolver, addressPolicy, concurrencyLimiter, options, host, port, null, timeout.Token,
-                request.ConnectionAuthorization is { } authorization
-                    ? token => authorization.IsAuthorizedAsync(request.EndpointId, host, port, token)
-                    : null);
+                resolver, addressPolicy, concurrencyLimiter, options, host, port, null, timeout.Token);
 
             var inspection = new CertificateInspection();
             await using var ssl = new SslStream(

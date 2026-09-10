@@ -202,24 +202,17 @@ All DNS answers are validated before connection; permitted addresses are tried i
 order. The check timeout remains the overall deadline across DNS, attempts, TLS, and HTTP.
 No database migration is required for this setting.
 
-## Snapshot v2 and target permissions
+## Snapshot v2
 
-The monitoring hardening upgrade adds `MonitoringSnapshotV2` and `TargetAuthorizationEvidence`.
+The monitoring hardening upgrade adds `MonitoringSnapshotV2`.
 Apply migrations explicitly before starting the upgraded application; startup does not apply them.
 Existing completed snapshots remain historical. New checks capture their target and lifecycle
 generation so queued evidence cannot overwrite health after configuration or lifecycle changes.
 
-The upgrade creates no target permission automatically. An Administrator or Operations user must
-open an endpoint, choose **Actions → Target permissions**, and record an ownership or explicit
-permission reference for its host and port. Grant separate permission for any redirect destination
-host/port. Permissions are scoped to that endpoint; they do not override prohibited-address rules.
-Only one current permission can cover the same endpoint, host, and port. Revoke it before replacing
-it. Revocation needs a reason and prevents subsequent connection attempts; an existing connection
-may finish. An optional expiry includes its time zone, for example `2026-12-31T23:59:00Z`.
-
-Permission references and revocation reasons stay out of snapshots and audit payloads. Do not
-place credentials or secrets in them. Existing endpoints without evidence fail closed at connection
-time. This is a deliberate local/demo upgrade step, not automatic permission for stored targets.
+`DropTargetAuthorizationEvidence` removes the per-endpoint target permission gate and its
+`target_authorization_evidence` table. Monitoring no longer requires recorded ownership or
+explicit-permission evidence before contacting a target; every enabled monitor connects as soon as
+it is due. Prohibited-address, DNS-answer, and redirect rules are unchanged and still enforced.
 
 ### Snapshot v2 rollback
 

@@ -30,7 +30,6 @@ public sealed record SafeHttpTransportRequest(
     int TimeoutSeconds = SafeHttpTransportDefaults.DefaultTimeoutSeconds)
 {
     public ISafeHttpRequestHopPolicy? HopPolicy { get; init; }
-    public ITargetConnectionAuthorization? ConnectionAuthorization { get; init; }
 }
 
 public sealed record SafeHttpRequestHop(string Url, int RedirectCount);
