@@ -1,4 +1,4 @@
-@model IncidentDetailsViewModel
+﻿@model IncidentDetailsViewModel
 @using WebHealth.Application.Incidents
 @{
     ViewData.SetTitle("Incident details");
@@ -29,11 +29,13 @@
     var timelineHasPrevious = timeline.Page > 1;
     var timelineHasNext = timelineLastVisible < timeline.TotalCount;
 
-    var evidence = incident.Evidence;
-    var evidenceFirstVisible = evidence.TotalCount == 0 ? 0 : ((evidence.Page - 1) * evidence.PageSize) + 1;
-    var evidenceLastVisible = Math.Min(evidence.Page * evidence.PageSize, evidence.TotalCount);
-    var evidenceHasPrevious = evidence.Page > 1;
-    var evidenceHasNext = evidenceLastVisible < evidence.TotalCount;
+    var milestones = incident.EvidenceMilestones;
+    var samples = incident.FailureSamples;
+    var sampleSummary = incident.FailureSampleSummary;
+    var sampleFirstVisible = samples.TotalCount == 0 ? 0 : ((samples.Page - 1) * samples.PageSize) + 1;
+    var sampleLastVisible = Math.Min(samples.Page * samples.PageSize, samples.TotalCount);
+    var sampleHasPrevious = samples.Page > 1;
+    var sampleHasNext = sampleLastVisible < samples.TotalCount;
 
     static string StatusIcon(string status) => status switch
     {
@@ -372,14 +374,14 @@
                 <span class="pagination__actions">
                     @if (timelineHasPrevious)
                     {
-                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@(timeline.Page - 1)" asp-route-evidencePage="@evidence.Page" data-ajax-link data-ajax-target="#ajax-page">
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@(timeline.Page - 1)" asp-route-samplePage="@samples.Page" data-ajax-link data-ajax-target="#ajax-page">
                             @await Html.PartialAsync("_Icon", "arrow-left")
                             <span>Previous</span>
                         </a>
                     }
                     @if (timelineHasNext)
                     {
-                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@(timeline.Page + 1)" asp-route-evidencePage="@evidence.Page" data-ajax-link data-ajax-target="#ajax-page">
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@(timeline.Page + 1)" asp-route-samplePage="@samples.Page" data-ajax-link data-ajax-target="#ajax-page">
                             <span>Next</span>
                             @await Html.PartialAsync("_Icon", "arrow-right")
                         </a>
@@ -395,11 +397,11 @@
                 <h3 class="card__title">Evidence</h3>
                 <p class="card__status" data-status="neutral">
                     @await Html.PartialAsync("_Icon", "audit")
-                    <span>Bounded snapshots &middot; @evidence.TotalCount item@(evidence.TotalCount == 1 ? null : "s")</span>
+                    <span>What the checks saw &middot; @milestones.Count milestone@(milestones.Count == 1 ? null : "s")</span>
                 </p>
             </div>
         </div>
-        @if (evidence.TotalCount == 0)
+        @if (milestones.Count == 0)
         {
             @await Html.PartialAsync("_EmptyState", new EmptyStateViewModel(
                 "No evidence recorded",
@@ -409,43 +411,120 @@
         else
         {
             <div class="table-scroll table-scroll--flush">
-                <table class="data-table">
-                    <caption class="visually-hidden">Incident evidence</caption>
-                    <thead><tr><th scope="col">Captured</th><th scope="col">Type</th><th scope="col">Role</th></tr></thead>
+                <table class="data-table data-table--history">
+                    <caption class="visually-hidden">Incident milestones and the check that proved each one</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">What happened</th>
+                            <th scope="col">Proof</th>
+                            <th scope="col"><span class="visually-hidden">Check</span></th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        @foreach (var item in evidence.Items)
+                        @foreach (var milestone in milestones)
                         {
                             <tr>
-                                <td data-label="Captured">@Html.TimestampWithSeconds(item.CapturedAt)</td>
-                                <td data-label="Type"><span class="tag">@item.EvidenceType</span></td>
-                                <td data-label="Role">@item.EvidenceRole</td>
+                                <td data-label="What happened">
+                                    <span class="history-cell">
+                                        @await Html.PartialAsync("_HistoryMark", IncidentEvidenceDisplay.Tone(milestone.EvidenceRole))
+                                        <span class="history-cell__subject">@IncidentEvidenceDisplay.Name(milestone.EvidenceRole)</span>
+                                        <span class="history-cell__time">@Html.TimestampWithSeconds(milestone.CapturedAt)</span>
+                                    </span>
+                                </td>
+                                <td data-label="Proof">@IncidentEvidenceDisplay.Proof(milestone)</td>
+                                <td data-label="Check">
+                                    @if (milestone.LogicalCheckId is { } milestoneCheckId)
+                                    {
+                                        <a asp-controller="Checks" asp-action="Check" asp-route-id="@milestoneCheckId">Open check</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @if (sampleSummary is not null)
+    {
+        <section class="card">
+            <div class="page-intro">
+                <div>
+                    <h3 class="card__title">Failure samples</h3>
+                    <p class="card__status" data-status="danger">
+                        @await Html.PartialAsync("_Icon", "error")
+                        <span>
+                            @sampleSummary.Count repeated confirmation@(sampleSummary.Count == 1 ? null : "s")
+                            between @Html.TimestampWithSeconds(sampleSummary.FirstCapturedAt)
+                            and @Html.TimestampWithSeconds(sampleSummary.LastCapturedAt)
+                        </span>
+                    </p>
+                    <p class="card__subtitle">
+                        Check results &middot;
+                        @string.Join(" · ", sampleSummary.Outcomes.Select(outcome =>
+                            $"{IncidentEvidenceDisplay.Outcome(outcome.HttpStatus, outcome.FailureCategory)} ×{outcome.Count}"))
+                        @if (sampleSummary.SlowestDurationMs is { } slowest)
+                        {
+                            <text> &middot; slowest @slowest ms</text>
+                        }
+                    </p>
+                </div>
+            </div>
+
+            <div class="table-scroll table-scroll--flush">
+                <table class="data-table data-table--history">
+                    <caption class="visually-hidden">Every check that confirmed this failure again</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">Captured</th>
+                            <th scope="col">Check result</th>
+                            <th scope="col">Proof</th>
+                            <th scope="col"><span class="visually-hidden">Check</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var sample in samples.Items)
+                        {
+                            <tr>
+                                <td data-label="Captured">@Html.TimestampWithSeconds(sample.CapturedAt)</td>
+                                <td data-label="Check result">
+                                    <span class="badge" data-status="danger">@IncidentEvidenceDisplay.Outcome(sample.Proof?.HttpStatus, sample.Proof?.FailureCategory)</span>
+                                </td>
+                                <td data-label="Proof">@IncidentEvidenceDisplay.Proof(sample)</td>
+                                <td data-label="Check">
+                                    @if (sample.LogicalCheckId is { } sampleCheckId)
+                                    {
+                                        <a asp-controller="Checks" asp-action="Check" asp-route-id="@sampleCheckId">Open check</a>
+                                    }
+                                </td>
                             </tr>
                         }
                     </tbody>
                 </table>
             </div>
 
-            <nav class="pagination" aria-label="Evidence pages">
-                <span>Showing @evidenceFirstVisible–@evidenceLastVisible of @evidence.TotalCount</span>
+            <nav class="pagination" aria-label="Failure sample pages">
+                <span>Showing @sampleFirstVisible–@sampleLastVisible of @samples.TotalCount</span>
                 <span class="pagination__actions">
-                    @if (evidenceHasPrevious)
+                    @if (sampleHasPrevious)
                     {
-                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@timeline.Page" asp-route-evidencePage="@(evidence.Page - 1)" data-ajax-link data-ajax-target="#ajax-page">
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@timeline.Page" asp-route-samplePage="@(samples.Page - 1)" data-ajax-link data-ajax-target="#ajax-page">
                             @await Html.PartialAsync("_Icon", "arrow-left")
                             <span>Previous</span>
                         </a>
                     }
-                    @if (evidenceHasNext)
+                    @if (sampleHasNext)
                     {
-                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@timeline.Page" asp-route-evidencePage="@(evidence.Page + 1)" data-ajax-link data-ajax-target="#ajax-page">
+                        <a class="button button--secondary" asp-route-id="@incident.Id" asp-route-timelinePage="@timeline.Page" asp-route-samplePage="@(samples.Page + 1)" data-ajax-link data-ajax-target="#ajax-page">
                             <span>Next</span>
                             @await Html.PartialAsync("_Icon", "arrow-right")
                         </a>
                     }
                 </span>
             </nav>
-        }
-    </section>
+        </section>
+    }
 
     <section class="card">
         <div class="page-intro">

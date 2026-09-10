@@ -49,7 +49,32 @@ public sealed record IncidentTimelineEntry(
     string? ActorDisplayName,
     DateTimeOffset OccurredAt);
 
-public sealed record IncidentEvidenceItem(Guid Id, string EvidenceType, string EvidenceRole, DateTimeOffset CapturedAt);
+public sealed record IncidentEvidenceProof(
+    string? FailureCategory,
+    int? HttpStatus,
+    int? TotalDurationMs,
+    string? SafeDiagnostic,
+    string? ObservedValue,
+    string? ExpectedValue,
+    int? FailureConfirmationCount);
+
+public sealed record IncidentEvidenceItem(
+    Guid Id,
+    string EvidenceType,
+    string EvidenceRole,
+    DateTimeOffset CapturedAt,
+    Guid? LogicalCheckId,
+    string? ActorDisplayName,
+    IncidentEvidenceProof? Proof);
+
+public sealed record IncidentEvidenceOutcome(int? HttpStatus, string? FailureCategory, int Count);
+
+public sealed record IncidentEvidenceSampleSummary(
+    int Count,
+    DateTimeOffset FirstCapturedAt,
+    DateTimeOffset LastCapturedAt,
+    int? SlowestDurationMs,
+    IReadOnlyList<IncidentEvidenceOutcome> Outcomes);
 
 public sealed record IncidentNotificationDeliveryItem(
     string NormalizedRecipient, string State, int AttemptCount, DateTimeOffset? SentAt);
@@ -88,7 +113,9 @@ public sealed record IncidentDetails(
     long Version,
     bool CanManage,
     IncidentSectionPage<IncidentTimelineEntry> Timeline,
-    IncidentSectionPage<IncidentEvidenceItem> Evidence,
+    IReadOnlyList<IncidentEvidenceItem> EvidenceMilestones,
+    IncidentSectionPage<IncidentEvidenceItem> FailureSamples,
+    IncidentEvidenceSampleSummary? FailureSampleSummary,
     IReadOnlyList<IncidentNotificationItem> Notifications);
 
 public interface IIncidentReader
@@ -103,6 +130,6 @@ public interface IIncidentReader
         Guid incidentId,
         RegistryAccessContext access,
         int timelinePage = 1,
-        int evidencePage = 1,
+        int samplePage = 1,
         CancellationToken cancellationToken = default);
 }

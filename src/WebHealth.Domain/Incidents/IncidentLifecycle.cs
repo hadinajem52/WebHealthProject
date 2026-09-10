@@ -55,6 +55,18 @@ public static class IncidentEvidenceTypes
     public const string Resolution = "Resolution";
 }
 
+public static class IncidentEvidenceRoles
+{
+    public const string ConfirmationThreshold = "ConfirmationThreshold";
+    public const string ConfirmedFailure = "ConfirmedFailure";
+    public const string RecoveryInterrupted = "RecoveryInterrupted";
+    public const string RecoveryStarted = "RecoveryStarted";
+    public const string RecoveryConfirmed = "RecoveryConfirmed";
+    public const string AutomaticRecovery = "AutomaticRecovery";
+    public const string ResolveManually = "ResolveManually";
+    public const string ForceClose = "ForceClose";
+}
+
 public static class IncidentResolutionCategories
 {
     public const string AutomaticRecovery = "AutomaticRecovery";

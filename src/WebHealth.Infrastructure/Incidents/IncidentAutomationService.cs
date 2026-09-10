@@ -114,7 +114,7 @@ internal sealed class IncidentAutomationService(
                 incident,
                 observation,
                 IncidentEvidenceTypes.Failure,
-                "ConfirmedFailure",
+                IncidentEvidenceRoles.ConfirmedFailure,
                 IncidentAuditAction.FailureRecorded,
                 now,
                 cancellationToken,
@@ -215,7 +215,7 @@ internal sealed class IncidentAutomationService(
             incident.RecoveryDurationMs = null;
             incident.Version++;
             AddStatusEvent(incident, previousStatus, incident.Status, now);
-            AddEvidence(incident, observation, IncidentEvidenceTypes.Failure, "RecoveryInterrupted", now);
+            AddEvidence(incident, observation, IncidentEvidenceTypes.Failure, IncidentEvidenceRoles.RecoveryInterrupted, now);
             AddEvidenceEvent(incident, "Failure evidence interrupted recovery.", now);
             await WriteAuditAsync(
                 IncidentAuditAction.RecoveryInterrupted,
@@ -253,7 +253,7 @@ internal sealed class IncidentAutomationService(
         };
         dbContext.Incidents.Add(incident);
         var openedEvent = AddOpenedEvent(incident, now);
-        AddEvidence(incident, observation, IncidentEvidenceTypes.Opening, "ConfirmationThreshold", now);
+        AddEvidence(incident, observation, IncidentEvidenceTypes.Opening, IncidentEvidenceRoles.ConfirmationThreshold, now);
         AddEvidenceEvent(incident, "Opening evidence recorded.", now);
         await auditTrail.RecordIncidentMutationAsync(
             SystemContext(now),
@@ -294,7 +294,7 @@ internal sealed class IncidentAutomationService(
         incident.RecoveryStartedAt = observation.MeasuredAt;
         incident.Version++;
         AddStatusEvent(incident, previousStatus, incident.Status, now);
-        AddEvidence(incident, observation, IncidentEvidenceTypes.Recovery, "RecoveryStarted", now);
+        AddEvidence(incident, observation, IncidentEvidenceTypes.Recovery, IncidentEvidenceRoles.RecoveryStarted, now);
         AddEvidenceEvent(incident, "First recovery pass recorded.", now);
         await WriteAuditAsync(
             IncidentAuditAction.RecoveryStarted,
@@ -335,8 +335,8 @@ internal sealed class IncidentAutomationService(
             observation.MeasuredAt);
         incident.Version++;
         var statusEvent = AddStatusEvent(incident, previousStatus, incident.Status, now);
-        AddEvidence(incident, observation, IncidentEvidenceTypes.Recovery, "RecoveryConfirmed", now);
-        AddEvidence(incident, observation, IncidentEvidenceTypes.Resolution, "AutomaticRecovery", now);
+        AddEvidence(incident, observation, IncidentEvidenceTypes.Recovery, IncidentEvidenceRoles.RecoveryConfirmed, now);
+        AddEvidence(incident, observation, IncidentEvidenceTypes.Resolution, IncidentEvidenceRoles.AutomaticRecovery, now);
         AddEvidenceEvent(incident, "Recovery and resolution evidence recorded.", now);
         await WriteAuditAsync(
             IncidentAuditAction.Resolved,

@@ -13,10 +13,12 @@ internal sealed class IncidentReader(
     ApplicationDbContext dbContext,
     IncidentVisibility incidentVisibility,
     IAssignmentAccessEvaluator assignmentAccess,
+    EvidenceProofLoader evidenceProofLoader,
     TimeProvider timeProvider) : IIncidentReader
 {
     private const int PageSize = 25;
     private const int SectionPageSize = 10;
+    private const int MaximumOutcomeGroups = 4;
 
     public async Task<IncidentListPage> ListAsync(
         IncidentListFilter filter,
@@ -91,7 +93,7 @@ internal sealed class IncidentReader(
         Guid incidentId,
         RegistryAccessContext access,
         int timelinePage = 1,
-        int evidencePage = 1,
+        int samplePage = 1,
         CancellationToken cancellationToken = default)
     {
         var now = timeProvider.GetUtcNow();
@@ -120,16 +122,30 @@ internal sealed class IncidentReader(
             .Take(SectionPageSize)
             .ToArrayAsync(cancellationToken);
 
-        var evidenceTotal = await dbContext.IncidentEvidence.AsNoTracking()
-            .CountAsync(item => item.IncidentId == incidentId, cancellationToken);
-        var boundedEvidencePage = BoundSectionPage(evidencePage, evidenceTotal);
-        var evidenceRows = await dbContext.IncidentEvidence.AsNoTracking()
-            .Where(item => item.IncidentId == incidentId)
-            .OrderByDescending(item => item.CapturedAt)
-            .ThenByDescending(item => item.Id)
-            .Skip((boundedEvidencePage - 1) * SectionPageSize)
-            .Take(SectionPageSize)
+        var evidence = dbContext.IncidentEvidence.AsNoTracking()
+            .Where(item => item.IncidentId == incidentId);
+        var samples = evidence.Where(item =>
+            item.EvidenceType == IncidentEvidenceTypes.Failure
+            && item.EvidenceRole == IncidentEvidenceRoles.ConfirmedFailure);
+        var milestoneRows = await ProjectEvidenceRows(evidence
+                .Where(item => item.EvidenceType != IncidentEvidenceTypes.Failure
+                    || item.EvidenceRole != IncidentEvidenceRoles.ConfirmedFailure)
+                .OrderBy(item => item.CapturedAt)
+                .ThenBy(item => item.Id))
             .ToArrayAsync(cancellationToken);
+        var sampleGroups = await SummariseSamplesAsync(samples, cancellationToken);
+        var sampleTotal = sampleGroups.Sum(group => group.Count);
+        var boundedSamplePage = BoundSectionPage(samplePage, sampleTotal);
+        var sampleRows = await ProjectEvidenceRows(samples
+                .OrderByDescending(item => item.CapturedAt)
+                .ThenByDescending(item => item.Id)
+                .Skip((boundedSamplePage - 1) * SectionPageSize)
+                .Take(SectionPageSize))
+            .ToArrayAsync(cancellationToken);
+        var proofs = await evidenceProofLoader.LoadAsync(
+            milestoneRows.Concat(sampleRows).Select(row => row.LogicalCheckId),
+            incident.IssueKey,
+            cancellationToken);
 
         var notificationEvents = await dbContext.NotificationEvents.AsNoTracking()
             .Include(notificationEvent => notificationEvent.Deliveries)
@@ -158,9 +174,20 @@ internal sealed class IncidentReader(
                 incidentEvent.OccurredAt))
             .ToArray();
 
-        var evidence = evidenceRows
-            .Select(item => new IncidentEvidenceItem(item.Id, item.EvidenceType, item.EvidenceRole, item.CapturedAt))
-            .ToArray();
+        var sampleSummary = sampleTotal == 0
+            ? null
+            : new IncidentEvidenceSampleSummary(
+                sampleTotal,
+                sampleGroups.Min(group => group.FirstCapturedAt),
+                sampleGroups.Max(group => group.LastCapturedAt),
+                sampleGroups.Max(group => group.SlowestDurationMs),
+                sampleGroups
+                    .OrderByDescending(group => group.Count)
+                    .ThenBy(group => group.HttpStatus)
+                    .Take(MaximumOutcomeGroups)
+                    .Select(group => new IncidentEvidenceOutcome(
+                        group.HttpStatus, group.FailureCategory, group.Count))
+                    .ToArray());
 
         var notifications = notificationEvents.Select(notificationEvent => new IncidentNotificationItem(
             notificationEvent.Id,
@@ -203,13 +230,70 @@ internal sealed class IncidentReader(
             canManage,
             new IncidentSectionPage<IncidentTimelineEntry>(
                 timeline, boundedTimelinePage, SectionPageSize, timelineTotal),
+            milestoneRows.Select(row => Enrich(row, proofs)).ToArray(),
             new IncidentSectionPage<IncidentEvidenceItem>(
-                evidence, boundedEvidencePage, SectionPageSize, evidenceTotal),
+                sampleRows.Select(row => Enrich(row, proofs)).ToArray(),
+                boundedSamplePage,
+                SectionPageSize,
+                sampleTotal),
+            sampleSummary,
             notifications);
     }
 
     private static int BoundSectionPage(int page, int totalCount) =>
         Math.Clamp(page, 1, Math.Max(1, (int)Math.Ceiling(totalCount / (double)SectionPageSize)));
+
+    private static IQueryable<EvidenceRow> ProjectEvidenceRows(IQueryable<IncidentEvidence> evidence) =>
+        evidence.Select(item => new EvidenceRow(
+            item.Id,
+            item.EvidenceType,
+            item.EvidenceRole,
+            item.CapturedAt,
+            item.LogicalCheckId,
+            item.ActorUser == null ? null : item.ActorUser.DisplayName));
+
+    private static IncidentEvidenceItem Enrich(
+        EvidenceRow row, IReadOnlyDictionary<Guid, IncidentEvidenceProof> proofs) =>
+        new(row.Id,
+            row.EvidenceType,
+            row.EvidenceRole,
+            row.CapturedAt,
+            row.LogicalCheckId,
+            row.ActorDisplayName,
+            row.LogicalCheckId is { } checkId ? proofs.GetValueOrDefault(checkId) : null);
+
+    private async Task<SampleGroup[]> SummariseSamplesAsync(
+        IQueryable<IncidentEvidence> samples, CancellationToken cancellationToken) =>
+        await samples
+            .GroupBy(item => new
+            {
+                item.LogicalCheck!.Result!.FailureCategory,
+                item.LogicalCheck!.Result!.HttpStatus
+            })
+            .Select(group => new SampleGroup(
+                group.Key.FailureCategory,
+                group.Key.HttpStatus,
+                group.Count(),
+                group.Min(item => item.CapturedAt),
+                group.Max(item => item.CapturedAt),
+                group.Max(item => (int?)item.LogicalCheck!.Result!.TotalDurationMs)))
+            .ToArrayAsync(cancellationToken);
+
+    private sealed record EvidenceRow(
+        Guid Id,
+        string EvidenceType,
+        string EvidenceRole,
+        DateTimeOffset CapturedAt,
+        Guid? LogicalCheckId,
+        string? ActorDisplayName);
+
+    private sealed record SampleGroup(
+        string? FailureCategory,
+        int? HttpStatus,
+        int Count,
+        DateTimeOffset FirstCapturedAt,
+        DateTimeOffset LastCapturedAt,
+        int? SlowestDurationMs);
 
     private async Task<Dictionary<Guid, string>> ResolveOwnerNamesAsync(
         IEnumerable<Guid> ownerSubjectIds, CancellationToken cancellationToken)
