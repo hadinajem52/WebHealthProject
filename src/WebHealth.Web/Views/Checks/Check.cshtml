@@ -382,8 +382,8 @@
                         {
                             <tr>
                                 <td data-label="Hop">@hop.HopNumber</td>
-                                <td data-label="From" class="target-url">@hop.FromUrl</td>
-                                <td data-label="To" class="target-url">@hop.ToUrl</td>
+                                <td data-label="From"><span class="target-url">@hop.FromUrl</span></td>
+                                <td data-label="To"><span class="target-url">@hop.ToUrl</span></td>
                                 <td data-label="Status">@hop.HttpStatus</td>
                                 <td data-label="Loop">@(hop.IsLoop ? "Yes" : "No")</td>
                             </tr>

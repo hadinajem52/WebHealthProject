@@ -1298,6 +1298,15 @@ code,
     font-size: 0.875rem;
 }
 
+.data-table .target-url {
+    display: -webkit-box;
+    overflow: hidden;
+    max-width: 100%;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+}
+
 .filter-grid {
     display: grid;
     align-items: start;

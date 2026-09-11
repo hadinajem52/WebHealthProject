@@ -188,7 +188,7 @@
                     @foreach (var endpoint in Model.Endpoints)
                     {
                         <tr>
-                            <td data-label="Endpoint" class="target-url">@endpoint.DisplayUrl</td>
+                            <td data-label="Endpoint"><span class="target-url">@endpoint.DisplayUrl</span></td>
                             <td data-label="Client">@endpoint.ClientName</td>
                             <td data-label="Website">@endpoint.WebsiteName</td>
                             <td data-label="Environment">@endpoint.EnvironmentName</td>

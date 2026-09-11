@@ -1,4 +1,4 @@
-@model EnvironmentDetailsViewModel
+﻿@model EnvironmentDetailsViewModel
 @{
     ViewData.SetTitle(Model.Environment.Name);
     ViewData.SetBreadcrumbs(
@@ -209,8 +209,8 @@
                     {
                         var endpointTone = endpoint.IsEnabled ? StatusBadges.Success : StatusBadges.Warning;
                         <tr>
-                            <td class="target-url" data-label="URL">
-                                <span class="data-table__primary">@endpoint.DisplayUrl</span>
+                            <td data-label="URL">
+                                <span class="data-table__primary target-url">@endpoint.DisplayUrl</span>
                             </td>
                             <td data-label="Owner">
                                 <span>@endpoint.OwnerName</span>

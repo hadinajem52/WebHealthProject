@@ -167,6 +167,19 @@
         }
     }
 
+    function setUpTruncatedUrls(root) {
+        elements(root, '.data-table .target-url').forEach(function (url) {
+            if (!beginInitialization(url) || url.hasAttribute('title')) {
+                return;
+            }
+
+            var full = (url.textContent || '').trim();
+            if (full.length > 0) {
+                url.setAttribute('title', full);
+            }
+        });
+    }
+
     function setUpBadgeTooltips(root) {
         var badges = elements(root, '[data-badge-detail]');
         if (badges.length === 0) {
@@ -926,6 +939,8 @@
 
         elements(root, '[data-registration-form]')
             .forEach(setUpEndpointRegistration);
+
+        setUpTruncatedUrls(root);
 
         setUpBadgeTooltips(root);
 
