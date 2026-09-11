@@ -110,15 +110,17 @@ internal sealed class IncidentReader(
             .AsSplitQuery()
             .SingleAsync(candidate => candidate.Id == incidentId, cancellationToken);
 
-        var timelineTotal = await dbContext.IncidentEvents.AsNoTracking()
-            .CountAsync(incidentEvent => incidentEvent.IncidentId == incidentId, cancellationToken);
+        var timelineEvents = dbContext.IncidentEvents.AsNoTracking()
+            .Where(incidentEvent => incidentEvent.IncidentId == incidentId
+                && incidentEvent.EventType != IncidentEventTypes.EvidenceRecorded);
+        var timelineTotal = await timelineEvents.CountAsync(cancellationToken);
         var boundedTimelinePage = BoundSectionPage(timelinePage, timelineTotal);
-        var timelineRows = await dbContext.IncidentEvents.AsNoTracking()
+        var timelineSkip = (boundedTimelinePage - 1) * SectionPageSize;
+        var timelineRows = await timelineEvents
             .Include(incidentEvent => incidentEvent.ActorUser)
-            .Where(incidentEvent => incidentEvent.IncidentId == incidentId)
             .OrderBy(incidentEvent => incidentEvent.SequenceNumber)
-            .Skip((boundedTimelinePage - 1) * SectionPageSize)
-            .Take(SectionPageSize)
+            .Skip(timelineSkip == 0 ? 0 : timelineSkip - 1)
+            .Take(timelineSkip == 0 ? SectionPageSize : SectionPageSize + 1)
             .ToArrayAsync(cancellationToken);
 
         var evidence = dbContext.IncidentEvidence.AsNoTracking()
@@ -160,7 +162,7 @@ internal sealed class IncidentReader(
         var ownerNames = await ResolveOwnerNamesAsync(ownerIds, cancellationToken);
 
         var timeline = timelineRows
-            .Select(incidentEvent => new IncidentTimelineEntry(
+            .Select((incidentEvent, index) => new IncidentTimelineEntry(
                 incidentEvent.Id,
                 incidentEvent.SequenceNumber,
                 incidentEvent.EventType,
@@ -170,7 +172,9 @@ internal sealed class IncidentReader(
                 incidentEvent.ToOwnerSubjectId is { } toOwner ? ownerNames.GetValueOrDefault(toOwner, "Unknown owner") : null,
                 incidentEvent.BoundedNote,
                 incidentEvent.ActorUser?.DisplayName,
-                incidentEvent.OccurredAt))
+                incidentEvent.OccurredAt,
+                index == 0 ? null : incidentEvent.OccurredAt - timelineRows[index - 1].OccurredAt))
+            .Skip(timelineSkip == 0 ? 0 : 1)
             .ToArray();
 
         var sampleSummary = sampleTotal == 0

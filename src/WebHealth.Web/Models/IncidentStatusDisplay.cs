@@ -16,14 +16,51 @@ public static class IncidentStatusDisplay
 
 public static class IncidentEventDisplay
 {
-    public static string Name(string eventType) => eventType switch
+    public static string Name(IncidentTimelineEntry entry) => IsAutomatedSeverityChange(entry)
+        ? "Severity escalated"
+        : entry.EventType switch
+        {
+            IncidentEventTypes.Opened => "Incident opened",
+            IncidentEventTypes.StatusChanged => "Status changed",
+            IncidentEventTypes.Reassigned => "Reassigned",
+            IncidentEventTypes.NoteAdded => "Note added",
+            IncidentEventTypes.CertificateRenewed => "Certificate renewed",
+            _ => entry.EventType
+        };
+
+    public static string Tone(IncidentTimelineEntry entry) => entry.EventType switch
     {
-        "StatusChanged" => "Status changed",
-        "NoteAdded" => "Note added",
-        "EvidenceRecorded" => "Evidence recorded",
-        "CertificateRenewed" => "Certificate renewed",
-        _ => eventType
+        IncidentEventTypes.Opened => StatusBadges.Danger,
+        IncidentEventTypes.StatusChanged => StatusBadges.ForIncidentStatus(entry.ToStatus),
+        IncidentEventTypes.CertificateRenewed => StatusBadges.Success,
+        IncidentEventTypes.NoteAdded when IsAutomatedSeverityChange(entry) => StatusBadges.Warning,
+        _ => StatusBadges.Neutral
     };
+
+    public static string? Elapsed(TimeSpan? elapsed)
+    {
+        if (elapsed is not { } gap || gap < TimeSpan.Zero)
+        {
+            return null;
+        }
+
+        if (gap < TimeSpan.FromMinutes(1))
+        {
+            return "after less than a minute";
+        }
+
+        if (gap < TimeSpan.FromHours(1))
+        {
+            return $"after {gap.Minutes}m";
+        }
+
+        return gap < TimeSpan.FromDays(1)
+            ? $"after {(int)gap.TotalHours}h {gap.Minutes}m"
+            : $"after {(int)gap.TotalDays}d {gap.Hours}h";
+    }
+
+    private static bool IsAutomatedSeverityChange(IncidentTimelineEntry entry) =>
+        entry.EventType == IncidentEventTypes.NoteAdded && entry.ActorDisplayName is null;
 }
 
 public static class IncidentEvidenceDisplay

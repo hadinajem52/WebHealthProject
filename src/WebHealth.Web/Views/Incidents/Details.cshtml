@@ -21,7 +21,8 @@
     var canReassign = incident.CanManage && isGlobal && incident.Status != "Closed" && Model.OwnerOptions.Count > 0;
     var canForceClose = isAdministrator && incident.Status != "Closed";
     var canReopen = isAdministrator && incident.Status == "Closed";
-    var hasManageForms = canResolve || canAddNote || canReassign || canForceClose || canReopen;
+    var hasManageForms = hasQuickActions || canResolve || canAddNote || canReassign
+        || canForceClose || canReopen;
 
     var timeline = incident.Timeline;
     var timelineFirstVisible = timeline.TotalCount == 0 ? 0 : ((timeline.Page - 1) * timeline.PageSize) + 1;
@@ -68,57 +69,6 @@
                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(StatusBadges.ForSeverity(incident.Severity), incident.Severity))
                 @await Html.PartialAsync("_StatusBadge", new StatusBadgeViewModel(incidentStatus, IncidentStatusDisplay.Name(incident.Status)))
 
-                @if (hasQuickActions)
-                {
-                    <div class="action-menu" data-shell-menu data-open="false">
-                        <button type="button"
-                                class="button button--primary"
-                                data-shell-menu-toggle
-                                aria-controls="incident-actions-menu"
-                                aria-expanded="false"
-                                aria-haspopup="true">
-                            @await Html.PartialAsync("_Icon", "settings")
-                            <span>Actions</span>
-                            <span class="button__caret">@await Html.PartialAsync("_Icon", "chevron-down")</span>
-                        </button>
-
-                        <div class="action-menu__panel" id="incident-actions-menu" data-shell-menu-panel>
-                            @if (canAcknowledge)
-                            {
-                                <form asp-action="Acknowledge" method="post" data-ajax-form data-ajax-target="#ajax-page">
-                                    <input type="hidden" name="id" value="@incident.Id" />
-                                    <input type="hidden" name="version" value="@incident.Version" />
-                                    <button class="action-menu__item" type="submit">
-                                        @await Html.PartialAsync("_Icon", "check")
-                                        <span>Acknowledge</span>
-                                    </button>
-                                </form>
-                            }
-                            @if (canStartProgress)
-                            {
-                                <form asp-action="StartProgress" method="post" data-ajax-form data-ajax-target="#ajax-page">
-                                    <input type="hidden" name="id" value="@incident.Id" />
-                                    <input type="hidden" name="version" value="@incident.Version" />
-                                    <button class="action-menu__item" type="submit">
-                                        @await Html.PartialAsync("_Icon", "play")
-                                        <span>Start progress</span>
-                                    </button>
-                                </form>
-                            }
-                            @if (canCloseIncident)
-                            {
-                                <form asp-action="Close" method="post" data-ajax-form data-ajax-target="#ajax-page">
-                                    <input type="hidden" name="id" value="@incident.Id" />
-                                    <input type="hidden" name="version" value="@incident.Version" />
-                                    <button class="action-menu__item" type="submit">
-                                        @await Html.PartialAsync("_Icon", "archive")
-                                        <span>Close incident</span>
-                                    </button>
-                                </form>
-                            }
-                        </div>
-                    </div>
-                }
             </div>
         </div>
 
@@ -219,87 +169,195 @@
         </div>
     </section>
 
-    @if (hasManageForms)
+@if (hasManageForms)
     {
         <section class="card">
             <div class="page-intro">
                 <div>
                     <h3 class="card__title">Manage incident</h3>
                     <p class="card__status" data-status="neutral">
-                        @await Html.PartialAsync("_Icon", "pencil")
-                        <span>Actions that record a reason or a note</span>
+                        @await Html.PartialAsync("_Icon", "settings")
+                        <span>Everything you can do to this incident from here</span>
                     </p>
                 </div>
             </div>
 
+            @if (canAcknowledge)
+            {
+                <div class="form-actions">
+                    <form asp-action="Acknowledge" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                        <input type="hidden" name="id" value="@incident.Id" />
+                        <input type="hidden" name="version" value="@incident.Version" />
+                        <button class="button button--primary" type="submit">
+                            @await Html.PartialAsync("_Icon", "check")
+                            <span>Acknowledge</span>
+                        </button>
+                    </form>
+                    <p class="disclosure__description">Records that someone picked this up and moves it to Acknowledged.</p>
+                </div>
+            }
+            @if (canStartProgress)
+            {
+                <div class="form-actions">
+                    <form asp-action="StartProgress" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                        <input type="hidden" name="id" value="@incident.Id" />
+                        <input type="hidden" name="version" value="@incident.Version" />
+                        <button class="button button--primary" type="submit">
+                            @await Html.PartialAsync("_Icon", "play")
+                            <span>Start progress</span>
+                        </button>
+                    </form>
+                    <p class="disclosure__description">Moves this incident to In progress.</p>
+                </div>
+            }
+            @if (canCloseIncident)
+            {
+                <div class="form-actions">
+                    <form asp-action="Close" method="post" data-ajax-form data-ajax-target="#ajax-page">
+                        <input type="hidden" name="id" value="@incident.Id" />
+                        <input type="hidden" name="version" value="@incident.Version" />
+                        <button class="button button--primary" type="submit">
+                            @await Html.PartialAsync("_Icon", "archive")
+                            <span>Close incident</span>
+                        </button>
+                    </form>
+                    <p class="disclosure__description">Moves this incident to Closed and takes it out of the active list.</p>
+                </div>
+            }
+
             @if (canResolve)
             {
-                <form asp-action="Resolve" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
-                    <input type="hidden" name="id" value="@incident.Id" />
-                    <input type="hidden" name="version" value="@incident.Version" />
-                    <div class="form-field"><label for="resolve-category">Resolution category</label><input id="resolve-category" type="text" name="category" maxlength="@IncidentLifecycleEngine.MaximumCategoryLength" required /></div>
-                    <div class="form-field"><label for="resolve-note">Resolution note</label><textarea id="resolve-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
-                    <button class="button button--primary" type="submit">
-                        @await Html.PartialAsync("_Icon", "shield-check")
-                        <span>Resolve incident</span>
-                    </button>
-                </form>
+                <details class="disclosure">
+                    <summary class="disclosure__summary">
+                        <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        <span class="disclosure__icon">@await Html.PartialAsync("_Icon", "shield-check")</span>
+                        <span class="disclosure__title">Resolve incident</span>
+                    </summary>
+                    <div class="disclosure__body">
+                        <p class="disclosure__description">Records the outcome and moves this incident to Resolved.</p>
+                        <form asp-action="Resolve" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
+                            <input type="hidden" name="id" value="@incident.Id" />
+                            <input type="hidden" name="version" value="@incident.Version" />
+                            <div class="form-field"><label for="resolve-category">Resolution category</label><input id="resolve-category" type="text" name="category" maxlength="@IncidentLifecycleEngine.MaximumCategoryLength" required /></div>
+                            <div class="form-field"><label for="resolve-note">Resolution note</label><textarea id="resolve-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
+                            <button class="button button--primary" type="submit">
+                                @await Html.PartialAsync("_Icon", "shield-check")
+                                <span>Resolve incident</span>
+                            </button>
+                        </form>
+                    </div>
+                </details>
             }
             @if (canAddNote)
             {
-                <form asp-action="AddNote" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
-                    <input type="hidden" name="id" value="@incident.Id" />
-                    <input type="hidden" name="version" value="@incident.Version" />
-                    <div class="form-field"><label for="add-note">Note</label><textarea id="add-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
-                    <button class="button button--secondary" type="submit">
-                        @await Html.PartialAsync("_Icon", "plus")
-                        <span>Add note</span>
-                    </button>
-                </form>
+                <details class="disclosure">
+                    <summary class="disclosure__summary">
+                        <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        <span class="disclosure__icon">@await Html.PartialAsync("_Icon", "plus")</span>
+                        <span class="disclosure__title">Add note</span>
+                    </summary>
+                    <div class="disclosure__body">
+                        <p class="disclosure__description">Adds a note to the timeline. The status and the owner stay as they are.</p>
+                        <form asp-action="AddNote" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
+                            <input type="hidden" name="id" value="@incident.Id" />
+                            <input type="hidden" name="version" value="@incident.Version" />
+                            <div class="form-field"><label for="add-note">Note</label><textarea id="add-note" name="note" maxlength="@IncidentLifecycleEngine.MaximumNoteLength" required></textarea></div>
+                            <button class="button button--secondary" type="submit">
+                                @await Html.PartialAsync("_Icon", "plus")
+                                <span>Add note</span>
+                            </button>
+                        </form>
+                    </div>
+                </details>
             }
             @if (canReassign)
             {
-                <form asp-action="Reassign" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
-                    <input type="hidden" name="id" value="@incident.Id" />
-                    <input type="hidden" name="version" value="@incident.Version" />
-                    <div class="form-field">
-                        <label for="reassign-owner">New owner</label>
-                        <select id="reassign-owner" name="ownerSubjectId" required>
-                            @foreach (var owner in Model.OwnerOptions)
-                            {
-                                <option value="@owner.OwnerSubjectId">@owner.DisplayName</option>
-                            }
-                        </select>
+                <details class="disclosure">
+                    <summary class="disclosure__summary">
+                        <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                        <span class="disclosure__icon">@await Html.PartialAsync("_Icon", "person")</span>
+                        <span class="disclosure__title">Reassign</span>
+                    </summary>
+                    <div class="disclosure__body">
+                        <p class="disclosure__description">Hands ownership to another user or team. The status stays as it is.</p>
+                        <form asp-action="Reassign" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
+                            <input type="hidden" name="id" value="@incident.Id" />
+                            <input type="hidden" name="version" value="@incident.Version" />
+                            <div class="form-field">
+                                <label for="reassign-owner">New owner</label>
+                                <select id="reassign-owner" name="ownerSubjectId" required>
+                                    @foreach (var owner in Model.OwnerOptions)
+                                    {
+                                        <option value="@owner.OwnerSubjectId">@owner.DisplayName</option>
+                                    }
+                                </select>
+                            </div>
+                            <button class="button button--secondary" type="submit">
+                                @await Html.PartialAsync("_Icon", "person")
+                                <span>Reassign</span>
+                            </button>
+                        </form>
                     </div>
-                    <button class="button button--secondary" type="submit">
-                        @await Html.PartialAsync("_Icon", "person")
-                        <span>Reassign</span>
-                    </button>
-                </form>
+                </details>
             }
-            @if (canForceClose)
+
+            @if (canForceClose || canReopen)
             {
-                <form asp-action="ForceClose" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
-                    <input type="hidden" name="id" value="@incident.Id" />
-                    <input type="hidden" name="version" value="@incident.Version" />
-                    <div class="form-field"><label for="force-close-reason">Administrator reason</label><textarea id="force-close-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
-                    <button class="button button--danger" type="submit">
-                        @await Html.PartialAsync("_Icon", "power")
-                        <span>Force close</span>
-                    </button>
-                </form>
-            }
-            @if (canReopen)
-            {
-                <form asp-action="Reopen" method="post" class="lifecycle-action-form" data-ajax-form data-ajax-target="#ajax-page">
-                    <input type="hidden" name="id" value="@incident.Id" />
-                    <input type="hidden" name="version" value="@incident.Version" />
-                    <div class="form-field"><label for="reopen-reason">Administrator reason</label><textarea id="reopen-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
-                    <button class="button button--secondary" type="submit">
-                        @await Html.PartialAsync("_Icon", "restore")
-                        <span>Reopen</span>
-                    </button>
-                </form>
+                <p class="card__subtitle">Administrator overrides</p>
+                @if (canForceClose)
+                {
+                    <details class="disclosure">
+                        <summary class="disclosure__summary">
+                            <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                            <span class="disclosure__icon">@await Html.PartialAsync("_Icon", "power")</span>
+                            <span class="disclosure__title">Force close</span>
+                        </summary>
+                        <div class="disclosure__body">
+                            <p class="disclosure__description">Closes this incident whatever its current state, without waiting for recovery. The reason is recorded as the resolution.</p>
+                            <form asp-action="ForceClose"
+                                  method="post"
+                                  class="lifecycle-action-form"
+                                  data-ajax-form
+                                  data-ajax-target="#ajax-page"
+                                  data-shell-confirm="Force close this incident now, whatever its current state? The reason is recorded as an administrator override.">
+                                <input type="hidden" name="id" value="@incident.Id" />
+                                <input type="hidden" name="version" value="@incident.Version" />
+                                <div class="form-field"><label for="force-close-reason">Administrator reason</label><textarea id="force-close-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                                <button class="button button--danger" type="submit">
+                                    @await Html.PartialAsync("_Icon", "power")
+                                    <span>Force close</span>
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                }
+                @if (canReopen)
+                {
+                    <details class="disclosure">
+                        <summary class="disclosure__summary">
+                            <span class="disclosure__chevron">@await Html.PartialAsync("_Icon", "chevron-down")</span>
+                            <span class="disclosure__icon">@await Html.PartialAsync("_Icon", "restore")</span>
+                            <span class="disclosure__title">Reopen</span>
+                        </summary>
+                        <div class="disclosure__body">
+                            <p class="disclosure__description">Moves this closed incident back to Open and clears the recorded resolution.</p>
+                            <form asp-action="Reopen"
+                                  method="post"
+                                  class="lifecycle-action-form"
+                                  data-ajax-form
+                                  data-ajax-target="#ajax-page"
+                                  data-shell-confirm="Reopen this closed incident? The recorded resolution is cleared and the reason is kept as an administrator override.">
+                                <input type="hidden" name="id" value="@incident.Id" />
+                                <input type="hidden" name="version" value="@incident.Version" />
+                                <div class="form-field"><label for="reopen-reason">Administrator reason</label><textarea id="reopen-reason" name="reason" maxlength="@IncidentLifecycleEngine.MaximumAdministratorReasonLength" required></textarea></div>
+                                <button class="button button--secondary" type="submit">
+                                    @await Html.PartialAsync("_Icon", "restore")
+                                    <span>Reopen</span>
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                }
             }
         </section>
     }
@@ -310,7 +368,7 @@
                 <h3 class="card__title">Timeline</h3>
                 <p class="card__status" data-status="neutral">
                     @await Html.PartialAsync("_Icon", "clock")
-                    <span>Append-only history &middot; @timeline.TotalCount event@(timeline.TotalCount == 1 ? null : "s")</span>
+                    <span>State changes, notes and reassignments &middot; @timeline.TotalCount event@(timeline.TotalCount == 1 ? null : "s")</span>
                 </p>
             </div>
         </div>
@@ -339,27 +397,37 @@
                             <tr>
                                 <td data-label="Subject">
                                     <span class="history-cell">
-                                        @await Html.PartialAsync("_HistoryMark", StatusBadges.Neutral)
-                                        <span class="history-cell__subject">@IncidentEventDisplay.Name(entry.EventType)</span>
-                                        <span class="history-cell__time">@Html.TimestampWithSeconds(entry.OccurredAt)</span>
+                                        @await Html.PartialAsync("_HistoryMark", IncidentEventDisplay.Tone(entry))
+                                        <span class="history-cell__subject">@IncidentEventDisplay.Name(entry)</span>
+                                        <span class="history-cell__time">
+                                            @Html.TimestampWithSeconds(entry.OccurredAt)
+                                            @if (IncidentEventDisplay.Elapsed(entry.ElapsedSincePrevious) is { } elapsed)
+                                            {
+                                                <text>&middot; @elapsed</text>
+                                            }
+                                        </span>
                                     </span>
                                 </td>
                                 <td data-label="Detail">
                                     @if (entry.EventType == "StatusChanged")
                                     {
-                                        @:@IncidentStatusDisplay.Name(entry.FromStatus ?? "") → @IncidentStatusDisplay.Name(entry.ToStatus ?? "")
+                                        <span>@IncidentStatusDisplay.Name(entry.FromStatus ?? "") → @IncidentStatusDisplay.Name(entry.ToStatus ?? "")</span>
+                                        @if (entry.Note is { Length: > 0 } statusNote)
+                                        {
+                                            <span class="data-table__secondary">@statusNote</span>
+                                        }
                                     }
                                     else if (entry.EventType == "Reassigned")
                                     {
-                                        @:@entry.FromOwnerDisplayName → @entry.ToOwnerDisplayName
+                                        <span>@entry.FromOwnerDisplayName → @entry.ToOwnerDisplayName</span>
                                     }
-                                    else if (entry.Note is not null)
+                                    else if (entry.Note is { Length: > 0 } note)
                                     {
-                                        @entry.Note
+                                        <span>@note</span>
                                     }
                                     else
                                     {
-                                        @:—
+                                        <span>—</span>
                                     }
                                 </td>
                                 <td data-label="Actor">@(entry.ActorDisplayName ?? "System")</td>

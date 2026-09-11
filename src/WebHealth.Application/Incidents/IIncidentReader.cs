@@ -47,7 +47,8 @@ public sealed record IncidentTimelineEntry(
     string? ToOwnerDisplayName,
     string? Note,
     string? ActorDisplayName,
-    DateTimeOffset OccurredAt);
+    DateTimeOffset OccurredAt,
+    TimeSpan? ElapsedSincePrevious);
 
 public sealed record IncidentEvidenceProof(
     string? Severity,

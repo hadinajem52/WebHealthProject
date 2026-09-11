@@ -2536,6 +2536,17 @@ code,
     height: 1rem;
 }
 
+.disclosure__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--color-teal-300);
+}
+
+.disclosure__icon svg {
+    width: 1rem;
+    height: 1rem;
+}
+
 .disclosure[open] > .disclosure__summary .disclosure__chevron {
     transform: rotate(180deg);
 }
