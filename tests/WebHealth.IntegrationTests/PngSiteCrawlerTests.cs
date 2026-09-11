@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using WebHealth.Application.PngAudits;
 using WebHealth.Application.SiteAnalysis;
 using WebHealth.Domain.Crawling;
@@ -165,6 +165,24 @@ public sealed class PngSiteCrawlerTests
         result.Pages.Should().HaveCount(2);
         result.CoverageReasons.Should().Contain(reason => reason.Reason == PngCoverageReasonCode.PageLimit);
         result.CoverageReasons.Should().Contain(reason => reason.Reason == PngCoverageReasonCode.DepthLimit);
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_DoesNotReportADepthLimitForLinksToAlreadyKnownPages()
+    {
+        var transport = new FakeSiteTransport()
+            .Page(Seed, "<html><body><a href=\"/app/one\">one</a></body></html>")
+            .Page("https://site.test/app/one",
+                "<html><body><a href=\"/app/\">home</a>"
+                + "<a href=\"/app/one\">self</a></body></html>");
+        var profile = Profile(maxDepth: 1);
+
+        var result = await DiscoverAsync(transport, profile);
+
+        result.Pages.Should().HaveCount(2);
+        result.CoverageReasons.Should().NotContain(
+            reason => reason.Reason == PngCoverageReasonCode.DepthLimit,
+            "a link back to a page the crawl already knows omits no work");
     }
 
     [Fact]

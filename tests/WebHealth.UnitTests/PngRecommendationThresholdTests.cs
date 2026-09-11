@@ -164,13 +164,14 @@ public sealed class PngRecommendationThresholdTests
     }
 
     [Fact]
-    public void Animated_RejectsSingleFrameFacts()
+    public void Animated_AcceptsTheSingleFrameAnApngMayDeclare()
     {
-        var act = () => PngAnalysisResult.Animated(
+        var result = PngAnalysisResult.Animated(
             100,
             new PngImageFacts(1, 1, 1, 1, 8, 6, null));
 
-        Assert.Throws<ArgumentException>(act);
+        Assert.Equal(PngImageAnalysisClassification.AnimatedPng, result.Classification);
+        Assert.Equal(1, result.Image!.FrameCount);
     }
 
     [Fact]

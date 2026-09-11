@@ -114,7 +114,8 @@ internal static class DatabaseFoundationAssertions
         "20260908183513_ScheduledCompletionLookup",
         "20260909103732_ResultConfigurationIdentity",
         "20260909121143_ExactDailyReportSamples",
-        "20260909162838_DropTargetAuthorizationEvidence"
+        "20260909162838_DropTargetAuthorizationEvidence",
+        "20260911111319_PngAuditSingleFrameAnimation"
     ];
 
     private static readonly string[] ExpectedTables =

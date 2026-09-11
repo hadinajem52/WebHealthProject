@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Text;
 using FluentAssertions;
 using SixLabors.ImageSharp;
@@ -440,6 +440,82 @@ public sealed class PngImageAnalyzerTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public async Task AnalyzeAsync_AbstainsWhenExifDeclaresANonIdentityOrientation()
+    {
+        var rotated = WithChunk(CreatePng(PngColorType.Rgb, byte.MaxValue), "eXIf"u8, ExifOrientation(6));
+
+        var result = await CreateAnalyzer().AnalyzeAsync(rotated);
+
+        result.Classification.Should().Be(PngImageAnalysisClassification.ComparisonUnavailable);
+        result.Recommendation.Should().Be(PngRecommendation.None);
+        result.UnavailableReason.Should().Be("OrientationNotPreserved");
+        result.Image.Should().NotBeNull(
+            "measured transparency and dimensions survive an abstention");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_ComparesWhenExifDeclaresTheIdentityOrientation()
+    {
+        var upright = WithChunk(CreatePng(PngColorType.Rgb, byte.MaxValue), "eXIf"u8, ExifOrientation(1));
+
+        var result = await CreateAnalyzer().AnalyzeAsync(upright);
+
+        result.Classification.Should().Be(PngImageAnalysisClassification.VerifiedWebpCandidate);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_KeepsCicpPrecedenceOverFallbackColorChunksThatFollowIt()
+    {
+        var source = CreatePng(PngColorType.Rgb, byte.MaxValue);
+        var cicpThenSrgb = WithChunk(
+            WithChunk(source, "cICP"u8, [1, 13, 0, 1]),
+            "sRGB"u8,
+            [0]);
+
+        var result = await CreateAnalyzer().AnalyzeAsync(cicpThenSrgb);
+
+        result.Classification.Should().Be(
+            PngImageAnalysisClassification.ColorProfileUnsupported,
+            "cICP outranks sRGB regardless of the order the chunks appear in");
+        result.Recommendation.Should().Be(PngRecommendation.None);
+    }
+
+    [Theory]
+    [InlineData(2247, PngImageAnalysisClassification.DecodedMemoryExceeded)]
+    [InlineData(2248, PngImageAnalysisClassification.VerifiedWebpCandidate)]
+    public async Task AnalyzeAsync_BudgetsBothDecodedCopiesAndBothEncodedCopies(
+        long maxDecodedMemoryBytes,
+        PngImageAnalysisClassification expected)
+    {
+        var source = CreatePng(PngColorType.Rgb, byte.MaxValue);
+        var limits = new PngImageAnalysisLimits(
+            100,
+            10000,
+            10000,
+            40000000,
+            maxDecodedMemoryBytes);
+
+        var result = await CreateAnalyzer(limits).AnalyzeAsync(source);
+
+        result.Classification.Should().Be(
+            expected,
+            "a 16x16 image needs 2048 bytes of decoded copies on top of the 200 bytes "
+            + "reserved for the encoded source and candidate");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_ClassifiesAOneFrameApngAsAnimatedRatherThanUnidentifiable()
+    {
+        var singleFrame = SingleFrameApng();
+
+        var result = await CreateAnalyzer().AnalyzeAsync(singleFrame);
+
+        result.Classification.Should().Be(PngImageAnalysisClassification.AnimatedPng);
+        result.Image!.FrameCount.Should().Be(1);
+        result.Recommendation.Should().Be(PngRecommendation.None);
+    }
+
     private static PngImageAnalyzer CreateAnalyzer(
         PngImageAnalysisLimits? limits = null,
         PngRecommendationThresholds? thresholds = null) =>
@@ -608,6 +684,54 @@ public sealed class PngImageAnalyzerTests
         BinaryPrimitives.WriteUInt32BigEndian(
             result.AsSpan(29),
             CalculatePngChecksum(result.AsSpan(12, 17)));
+        return result;
+    }
+
+    private static byte[] ExifOrientation(ushort orientation)
+    {
+        var data = new byte[26];
+        data[0] = 0x49;
+        data[1] = 0x49;
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(2), 42);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), 8);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(8), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(10), 0x0112);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(12), 3);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(14), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(data.AsSpan(18), orientation);
+        return data;
+    }
+
+    private static byte[] SingleFrameApng()
+    {
+        var source = CreatePng(PngColorType.Rgb, byte.MaxValue);
+        var width = BinaryPrimitives.ReadUInt32BigEndian(source.AsSpan(16));
+        var height = BinaryPrimitives.ReadUInt32BigEndian(source.AsSpan(20));
+        var animationControl = new byte[8];
+        BinaryPrimitives.WriteUInt32BigEndian(animationControl, 1);
+        var frameControl = new byte[26];
+        BinaryPrimitives.WriteUInt32BigEndian(frameControl.AsSpan(0), 0);
+        BinaryPrimitives.WriteUInt32BigEndian(frameControl.AsSpan(4), width);
+        BinaryPrimitives.WriteUInt32BigEndian(frameControl.AsSpan(8), height);
+        BinaryPrimitives.WriteUInt16BigEndian(frameControl.AsSpan(20), 1);
+        BinaryPrimitives.WriteUInt16BigEndian(frameControl.AsSpan(22), 10);
+        return WithChunk(WithChunk(source, "acTL"u8, animationControl), "fcTL"u8, frameControl);
+    }
+
+    private static byte[] WithChunk(byte[] source, ReadOnlySpan<byte> chunkType, byte[] data)
+    {
+        var insertAt = source.AsSpan().IndexOf("IDAT"u8) - 4;
+        var chunk = new byte[12 + data.Length];
+        BinaryPrimitives.WriteInt32BigEndian(chunk, data.Length);
+        chunkType.CopyTo(chunk.AsSpan(4));
+        data.CopyTo(chunk.AsSpan(8));
+        BinaryPrimitives.WriteUInt32BigEndian(
+            chunk.AsSpan(8 + data.Length),
+            CalculatePngChecksum(chunk.AsSpan(4, 4 + data.Length)));
+        var result = new byte[source.Length + chunk.Length];
+        source.AsSpan(0, insertAt).CopyTo(result);
+        chunk.CopyTo(result.AsSpan(insertAt));
+        source.AsSpan(insertAt).CopyTo(result.AsSpan(insertAt + chunk.Length));
         return result;
     }
 

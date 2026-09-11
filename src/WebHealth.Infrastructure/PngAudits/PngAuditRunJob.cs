@@ -64,6 +64,7 @@ internal sealed record PngAuditExecutionTarget(
 
 internal sealed record PngAuditStoredProgress(
     IReadOnlySet<string> ImageIdentityHashes,
+    IReadOnlySet<string> SourceMappingIdentities,
     int PagesDiscovered,
     int HttpAttempts,
     long TotalPageBytes,
@@ -140,9 +141,17 @@ public sealed class PngAuditQueuedRunReader(ApplicationDbContext database)
             .ToArrayAsync(cancellationToken);
         var discoverySkipCount = await database.PngAuditDiscoverySkips.AsNoTracking()
             .CountAsync(skip => skip.RunId == runId, cancellationToken);
-        var imageIds = images.Select(result => result.Id);
-        var sourceMappingCount = await database.PngAuditImageSources.AsNoTracking()
-            .CountAsync(source => imageIds.Contains(source.ImageResultId), cancellationToken);
+        var storedMappings = await database.PngAuditImageSources.AsNoTracking()
+            .Where(source => images.Any(result => result.Id == source.ImageResultId))
+            .Select(source => new
+            {
+                ImageHash = source.ImageResult.ImageIdentityHash,
+                source.SourcePageIdentityHash,
+                source.AttributeKind,
+                source.Descriptor
+            })
+            .ToArrayAsync(cancellationToken);
+        var sourceMappingCount = storedMappings.Length;
         var coverageAreas = await database.PngAuditCoverageReasons.AsNoTracking()
             .Where(reason => reason.RunId == runId)
             .Select(reason => reason.Area)
@@ -151,6 +160,13 @@ public sealed class PngAuditQueuedRunReader(ApplicationDbContext database)
         return new(
             storedImages
                 .Select(image => Convert.ToHexString(image.Hash).ToLowerInvariant())
+                .ToHashSet(StringComparer.Ordinal),
+            storedMappings
+                .Select(mapping => PngSourceMappingIdentity.Create(
+                    Convert.ToHexString(mapping.ImageHash),
+                    Convert.ToHexString(mapping.SourcePageIdentityHash),
+                    mapping.AttributeKind,
+                    mapping.Descriptor))
                 .ToHashSet(StringComparer.Ordinal),
             run.PagesDiscovered,
             run.HttpAttempts,

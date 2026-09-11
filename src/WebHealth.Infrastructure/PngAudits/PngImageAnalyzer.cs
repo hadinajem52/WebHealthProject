@@ -9,6 +9,8 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
 {
     private const int DecodedBytesPerPixel = 4;
     private const int HighBitDepthDecodedBytesPerPixel = 8;
+    private const int SimultaneousDecodedImages = 2;
+    private const int SimultaneousEncodedCopies = 2;
     private readonly PngImageAnalysisLimits _limits;
     private readonly PngRecommendationThresholds _recommendationThresholds;
     private readonly IPngFormatComparisonEngine _comparisonEngine;
@@ -159,14 +161,18 @@ public sealed class PngImageAnalyzer : IPngImageAnalyzer, IDisposable
         var bytesPerPixel = preflight.IsHighBitDepth
             ? HighBitDepthDecodedBytesPerPixel
             : DecodedBytesPerPixel;
-        if (preflight.PixelCount > limits.MaxDecodedMemoryBytes / bytesPerPixel)
+        var decodedBudgetBytes = limits.MaxDecodedMemoryBytes
+            - ((long)limits.MaxEncodedBytes * SimultaneousEncodedCopies);
+        if (decodedBudgetBytes <= 0
+            || preflight.PixelCount
+                > decodedBudgetBytes / (bytesPerPixel * SimultaneousDecodedImages))
         {
             return PngAnalysisResult.Failed(
                 PngImageAnalysisClassification.DecodedMemoryExceeded,
                 originalBytes);
         }
 
-        return preflight.FrameCount > 1
+        return preflight.HasAnimation
             ? PngAnalysisResult.Animated(originalBytes, preflight.CreateFacts())
             : null;
     }

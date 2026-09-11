@@ -23,7 +23,16 @@ public interface IPngFormatComparisonEngine
         CancellationToken cancellationToken);
 }
 
-public sealed record PngSourceEncodingFacts(PngColorMeaning ColorMeaning);
+public enum PngPresentationOrientation
+{
+    Identity,
+    NonDefault,
+    Unreadable
+}
+
+public sealed record PngSourceEncodingFacts(
+    PngColorMeaning ColorMeaning,
+    PngPresentationOrientation Orientation = PngPresentationOrientation.Identity);
 
 public sealed record PngFormatComparisonResult
 {
@@ -351,10 +360,10 @@ public sealed record PngAnalysisResult
     public static PngAnalysisResult Animated(long originalBytes, PngImageFacts image)
     {
         ArgumentNullException.ThrowIfNull(image);
-        if (image.FrameCount <= 1 || image.Transparency is not null)
+        if (image.FrameCount < 1 || image.Transparency is not null)
         {
             throw new ArgumentException(
-                "An animated PNG must have multiple frames and unmeasured transparency.",
+                "An animated PNG must declare at least one frame and unmeasured transparency.",
                 nameof(image));
         }
 

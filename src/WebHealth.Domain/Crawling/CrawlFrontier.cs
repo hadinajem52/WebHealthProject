@@ -67,6 +67,12 @@ public sealed class CrawlFrontier
 
     public bool TryDequeue(out CrawlWorkItem item) => _pending.TryDequeue(out item!);
 
+    public bool IsKnown(CrawlUrl url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        return _seen.Contains(url.Value);
+    }
+
     public CrawlAdmission Offer(CrawlUrl url, int depth)
     {
         ArgumentNullException.ThrowIfNull(url);

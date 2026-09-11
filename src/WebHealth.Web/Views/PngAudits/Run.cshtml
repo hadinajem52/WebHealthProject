@@ -1,4 +1,4 @@
-@model PngAuditRunViewModel
+﻿@model PngAuditRunViewModel
 @using WebHealth.Application.PngAudits
 @using WebHealth.Domain.PngAudits
 @{
@@ -215,7 +215,7 @@
                     <span>PNG optimization preferred</span>
                 </p>
                 <p class="stat__value">@summary.OptimizePngPreferred</p>
-                <p class="stat__detail">An optimized PNG beats the verified WebP candidate</p>
+                <p class="stat__detail">WebP saved too little over the reference PNG to meet the thresholds</p>
             </div>
             <div class="stat">
                 <p class="stat__label">
@@ -231,7 +231,7 @@
                     <span>Comparison unavailable</span>
                 </p>
                 <p class="stat__value">@summary.ComparisonUnavailable</p>
-                <p class="stat__detail">Measured, but no verified comparison engine is configured</p>
+                <p class="stat__detail">Measured, but the format decision could not be completed</p>
             </div>
             <div class="stat">
                 <p class="stat__label">

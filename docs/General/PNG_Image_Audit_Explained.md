@@ -361,12 +361,16 @@ Before decoding, it checks the image against:
 
 - maximum width: 10,000;
 - maximum height: 10,000;
-- maximum decoded pixels: 40,000,000;
-- maximum decoded memory: 256 MB;
+- maximum decoded pixels: 30,000,000;
+- maximum decoded memory: 256 MB, budgeted as the peak of one comparison rather than one
+  buffer: both decoded copies exact verification holds at once, plus the encoded source and
+  candidate;
 - four decoded bytes per pixel for 8-bit images and eight for 16-bit images;
 - frame limits and the encoded body limit.
 
-These checks reduce the risk of decompression bombs and excessive memory use.
+These checks reduce the risk of decompression bombs and excessive memory use. They bound the
+buffers the audit allocates itself; they do not measure actual process memory, so decoder
+working storage sits outside the budget.
 
 ### 9.2 Transparency means actual alpha usage
 

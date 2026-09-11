@@ -179,7 +179,8 @@ internal sealed class PngAuditReader(
         var belowThreshold = Count(PngAuditImageClassifications.BelowWebpThreshold);
         var comparisonUnavailable = Count(PngAuditImageClassifications.ComparisonUnavailable);
         var pngsCompared = await results.CountAsync(
-            result => result.CandidateWebpBytes != null,
+            result => result.CandidateWebpBytes != null
+                && result.Classification != PngAuditImageClassifications.ComparisonUnavailable,
             cancellationToken);
         var totalImageResults = classifications.Values.Sum();
         return new(

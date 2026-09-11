@@ -507,7 +507,8 @@ public static class DependencyInjection
             || options.MaxWidth is < 1 or > 100000
             || options.MaxHeight is < 1 or > 100000
             || options.MaxDecodedPixels is < 1 or > 1000000000
-            || options.MaxDecodedMemoryBytes < options.MaxDecodedPixels * 4
+            || options.MaxDecodedMemoryBytes
+                < (options.MaxDecodedPixels * 4 * 2) + (options.MaxImageBytes * 2L)
             || options.MaxDecodedMemoryBytes > 4L * 1024 * 1024 * 1024
             || options.MaxTotalHttpAttempts is < 1 or > 100000
             || options.FetchTimeoutSeconds is < 1 or > SafeHttpTransportDefaults.MaxTimeoutSeconds

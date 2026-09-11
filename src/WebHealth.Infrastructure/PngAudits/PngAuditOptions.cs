@@ -30,7 +30,7 @@ public sealed record PngAuditOptions
 
     public int MaxHeight { get; init; } = 10000;
 
-    public long MaxDecodedPixels { get; init; } = 40000000;
+    public long MaxDecodedPixels { get; init; } = 30000000;
 
     public long MaxDecodedMemoryBytes { get; init; } = 256L * 1024 * 1024;
 

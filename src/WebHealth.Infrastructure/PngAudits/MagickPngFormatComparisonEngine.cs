@@ -16,6 +16,8 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
     private const string FidelityVerificationFailed = "FidelityVerificationFailed";
     private const string ColorProfileVerificationFailed = "ColorProfileVerificationFailed";
     private const string InvalidWebpPayload = "InvalidWebpPayload";
+    private const string OrientationNotPreserved = "OrientationNotPreserved";
+    private const string OrientationMetadataUnreadable = "OrientationMetadataUnreadable";
     private const string OriginalTooSmallForThreshold = "OriginalTooSmallForThreshold";
     private const string OutputLimitExceeded = "OutputLimitExceeded";
     private const string OptimizerUnavailable = "OptimizerUnavailable";
@@ -58,6 +60,13 @@ internal sealed class MagickPngFormatComparisonEngine : IPngFormatComparisonEngi
     {
         ArgumentNullException.ThrowIfNull(sourceFacts);
         ArgumentNullException.ThrowIfNull(thresholds);
+        if (sourceFacts.Orientation != PngPresentationOrientation.Identity)
+        {
+            return Unavailable(sourceFacts.Orientation == PngPresentationOrientation.NonDefault
+                ? OrientationNotPreserved
+                : OrientationMetadataUnreadable);
+        }
+
         if (!CanMeetThreshold(sourcePng.Length, thresholds))
         {
             return Unavailable(OriginalTooSmallForThreshold);

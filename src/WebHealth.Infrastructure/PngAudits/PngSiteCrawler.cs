@@ -360,6 +360,12 @@ internal sealed class PngSiteDiscoveryExecution
             {
                 continue;
             }
+
+            if (_frontier.IsKnown(resolved))
+            {
+                continue;
+            }
+
             if (depth >= _request.Profile.Pages.MaxDepth)
             {
                 AddCoverage(PngCoverageArea.Crawl, PngCoverageReasonCode.DepthLimit);

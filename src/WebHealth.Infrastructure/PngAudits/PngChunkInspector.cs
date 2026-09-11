@@ -9,7 +9,9 @@ internal readonly record struct PngChunkPreflight(
     int FrameCount,
     byte BitDepth,
     byte ColorType,
-    PngColorMeaning ColorMeaning = PngColorMeaning.AssumedSrgb)
+    PngColorMeaning ColorMeaning = PngColorMeaning.AssumedSrgb,
+    bool HasAnimation = false,
+    PngPresentationOrientation Orientation = PngPresentationOrientation.Identity)
 {
     public long PixelCount => (long)Width * Height;
 
@@ -17,7 +19,7 @@ internal readonly record struct PngChunkPreflight(
 
     public bool CanTransferColorMeaning => ColorMeaning != PngColorMeaning.NotTransferable;
 
-    public PngSourceEncodingFacts SourceEncodingFacts => new(ColorMeaning);
+    public PngSourceEncodingFacts SourceEncodingFacts => new(ColorMeaning, Orientation);
 
     public PngImageFacts CreateFacts(PngTransparencyFacts? transparency = null) =>
         new(Width, Height, FrameCount, PixelCount, BitDepth, ColorType, transparency);
@@ -31,6 +33,12 @@ internal static class PngChunkInspector
     private const int IhdrDataLength = 13;
     private const int ActlDataLength = 8;
     private const int MaxChunksBeforeImageData = 4096;
+    private const int MaxExifEntries = 1024;
+    private const int ExifEntryLength = 12;
+    private const int ExifOrientationTag = 0x0112;
+    private const int ExifShortType = 3;
+    private const int IdentityOrientation = 1;
+    private const int MaximumOrientation = 8;
 
     public static bool TryInspect(ReadOnlySpan<byte> encoded, out PngChunkPreflight preflight)
     {
@@ -113,7 +121,8 @@ internal static class PngChunkInspector
         out PngChunkPreflight preflight)
     {
         var declaredFrameCount = 0;
-        var colorMeaning = PngColorMeaning.AssumedSrgb;
+        var colorChunks = default(PngColorChunks);
+        var orientation = PngPresentationOrientation.Identity;
         for (var chunkCount = 0; chunkCount < MaxChunksBeforeImageData; chunkCount++)
         {
             if (!PngChunkReader.TryRead(encoded, offset, out var chunk))
@@ -127,13 +136,21 @@ internal static class PngChunkInspector
                 break;
             }
 
-            colorMeaning = ReadColorMeaning(chunk, colorMeaning);
+            colorChunks = CollectColorChunk(chunk, colorChunks);
+            if (chunk.HasType("eXIf"u8))
+            {
+                orientation = ReadOrientation(chunk);
+            }
 
             if (chunk.HasType("IDAT"u8))
             {
                 return TryCreatePreflight(
                     encoded,
-                    header with { ColorMeaning = colorMeaning },
+                    header with
+                    {
+                        ColorMeaning = ResolveColorMeaning(colorChunks),
+                        Orientation = orientation
+                    },
                     declaredFrameCount,
                     out preflight);
             }
@@ -150,27 +167,126 @@ internal static class PngChunkInspector
         return false;
     }
 
-    private static PngColorMeaning ReadColorMeaning(PngChunk chunk, PngColorMeaning current)
+    private static PngColorChunks CollectColorChunk(PngChunk chunk, PngColorChunks collected)
     {
+        if (chunk.HasType("cICP"u8))
+        {
+            return collected with { HasCicp = true };
+        }
         if (chunk.HasType("iCCP"u8))
         {
-            return PngColorMeaning.IccProfile;
+            return collected with { HasIccp = true };
         }
         if (chunk.HasType("sRGB"u8))
         {
-            return current == PngColorMeaning.IccProfile
-                ? current
-                : PngColorMeaning.DeclaredSrgb;
+            return collected with { HasSrgb = true };
         }
-        if (chunk.HasType("gAMA"u8) || chunk.HasType("cHRM"u8) || chunk.HasType("cICP"u8))
+        if (chunk.HasType("gAMA"u8) || chunk.HasType("cHRM"u8))
         {
-            return current == PngColorMeaning.AssumedSrgb
-                ? PngColorMeaning.NotTransferable
-                : current;
+            return collected with { HasGamaOrChrm = true };
         }
 
-        return current;
+        return collected;
     }
+
+    private static PngColorMeaning ResolveColorMeaning(PngColorChunks collected)
+    {
+        if (collected.HasCicp)
+        {
+            return PngColorMeaning.NotTransferable;
+        }
+        if (collected.HasIccp)
+        {
+            return PngColorMeaning.IccProfile;
+        }
+        if (collected.HasSrgb)
+        {
+            return PngColorMeaning.DeclaredSrgb;
+        }
+
+        return collected.HasGamaOrChrm
+            ? PngColorMeaning.NotTransferable
+            : PngColorMeaning.AssumedSrgb;
+    }
+
+    private static PngPresentationOrientation ReadOrientation(PngChunk chunk)
+    {
+        var data = chunk.Data;
+        if (!chunk.HasValidChecksum || data.Length < 8)
+        {
+            return PngPresentationOrientation.Unreadable;
+        }
+
+        bool littleEndian;
+        if (data[0] == 0x49 && data[1] == 0x49)
+        {
+            littleEndian = true;
+        }
+        else if (data[0] == 0x4D && data[1] == 0x4D)
+        {
+            littleEndian = false;
+        }
+        else
+        {
+            return PngPresentationOrientation.Unreadable;
+        }
+
+        if (ReadUInt16(data[2..], littleEndian) != 42)
+        {
+            return PngPresentationOrientation.Unreadable;
+        }
+
+        var directoryOffset = ReadUInt32(data[4..], littleEndian);
+        if (directoryOffset > int.MaxValue || directoryOffset + 2 > (uint)data.Length)
+        {
+            return PngPresentationOrientation.Unreadable;
+        }
+
+        var directory = data[(int)directoryOffset..];
+        var entryCount = ReadUInt16(directory, littleEndian);
+        if (entryCount > MaxExifEntries
+            || 2 + (entryCount * ExifEntryLength) > directory.Length)
+        {
+            return PngPresentationOrientation.Unreadable;
+        }
+
+        for (var entry = 0; entry < entryCount; entry++)
+        {
+            var offset = 2 + (entry * ExifEntryLength);
+            if (ReadUInt16(directory[offset..], littleEndian) != ExifOrientationTag)
+            {
+                continue;
+            }
+
+            if (ReadUInt16(directory[(offset + 2)..], littleEndian) != ExifShortType
+                || ReadUInt32(directory[(offset + 4)..], littleEndian) != 1)
+            {
+                return PngPresentationOrientation.Unreadable;
+            }
+
+            var value = ReadUInt16(directory[(offset + 8)..], littleEndian);
+            if (value is 0 or > MaximumOrientation)
+            {
+                return PngPresentationOrientation.Unreadable;
+            }
+
+            return value == IdentityOrientation
+                ? PngPresentationOrientation.Identity
+                : PngPresentationOrientation.NonDefault;
+        }
+
+        return PngPresentationOrientation.Identity;
+    }
+
+    private static ushort ReadUInt16(ReadOnlySpan<byte> value, bool littleEndian) =>
+        littleEndian
+            ? BinaryPrimitives.ReadUInt16LittleEndian(value)
+            : BinaryPrimitives.ReadUInt16BigEndian(value);
+
+    private static uint ReadUInt32(ReadOnlySpan<byte> value, bool littleEndian) =>
+        littleEndian
+            ? BinaryPrimitives.ReadUInt32LittleEndian(value)
+            : BinaryPrimitives.ReadUInt32BigEndian(value);
 
     private static bool TryReadAnimationControl(PngChunk chunk, ref int declaredFrameCount)
     {
@@ -203,8 +319,13 @@ internal static class PngChunkInspector
             return true;
         }
 
-        preflight = header with { FrameCount = declaredFrameCount };
-        return declaredFrameCount > 1
-            && PngAnimationValidator.TryValidate(encoded, preflight);
+        preflight = header with { FrameCount = declaredFrameCount, HasAnimation = true };
+        return PngAnimationValidator.TryValidate(encoded, preflight);
     }
+
+    private readonly record struct PngColorChunks(
+        bool HasCicp,
+        bool HasIccp,
+        bool HasSrgb,
+        bool HasGamaOrChrm);
 }

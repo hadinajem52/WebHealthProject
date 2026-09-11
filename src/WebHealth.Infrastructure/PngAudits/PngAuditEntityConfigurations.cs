@@ -255,7 +255,7 @@ internal sealed class PngAuditImageResultConfiguration
                 + "(recommendation = 'OptimizePng' AND suggested_format = 'PNG')");
             table.HasCheckConstraint(
                 "ck_png_audit_image_result_state",
-                "(classification = 'AnimatedPng' AND frame_count IS NOT NULL AND frame_count > 1 "
+                "(classification = 'AnimatedPng' AND frame_count IS NOT NULL AND frame_count >= 1 "
                 + "AND uses_transparency IS NULL AND optimized_png_bytes IS NULL "
                 + "AND recommendation = 'None') OR "
                 + "(classification IN ('HighBitDepthPng', 'ColorProfileUnsupported') "

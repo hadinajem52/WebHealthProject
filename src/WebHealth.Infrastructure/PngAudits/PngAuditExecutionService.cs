@@ -146,7 +146,12 @@ public sealed class PngAuditExecutionService(
             .Concat(newImages.Select(image => image.IdentityHash))
             .ToHashSet(StringComparer.Ordinal);
         var candidateMappings = discovery.SourceMappings
-            .Where(mapping => acceptedImageHashes.Contains(mapping.ImageIdentityHash))
+            .Where(mapping => acceptedImageHashes.Contains(mapping.ImageIdentityHash)
+                && !stored.SourceMappingIdentities.Contains(PngSourceMappingIdentity.Create(
+                    mapping.ImageIdentityHash,
+                    mapping.SourcePageIdentityHash,
+                    mapping.AttributeKind,
+                    mapping.Descriptor)))
             .ToArray();
         var availableMappingSlots = Math.Max(
             0,

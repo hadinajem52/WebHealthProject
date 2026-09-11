@@ -185,18 +185,20 @@ internal static class PngAuditPersistenceAssertions
             runId, PngAuditImageFilters.NotPng, 0, 50, access);
         notPngPage.Items.Should().ContainSingle();
         var resultSummary = await reader.GetResultSummaryAsync(runId, access);
-        resultSummary.Should().Be(new PngAuditResultSummaryView(
-            11,
-            14,
-            5,
-            2,
-            1,
-            2,
-            0,
-            0,
-            0,
-            2,
-            14));
+        resultSummary.Should().Be(
+            new PngAuditResultSummaryView(
+                11,
+                14,
+                5,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                2,
+                14),
+            "a partial result with verified WebP bytes is unavailable, not compared");
         (notAnalyzedPage.Items.Count + notPngPage.Items.Count).Should().Be(
             resultSummary.SkippedOrNotAnalyzed - storedRun.DiscoverySkipCount,
             "the two non-analyzed filters must partition the images the summary excludes");
@@ -222,6 +224,8 @@ internal static class PngAuditPersistenceAssertions
             endpointId,
             administratorId,
             endpointUrl);
+        await VerifyRecoveryAdmitsOnlyUnseenSourceMappingsAsync(
+            database, sink, endpointId, administratorId, endpointUrl);
     }
 
     public static void SeedPurgeFixture(
@@ -328,7 +332,9 @@ internal static class PngAuditPersistenceAssertions
         Guid endpointId,
         string endpointUrl,
         IReadOnlyList<string>? pathPrefixes = null,
-        bool isProduction = true) => new(
+        bool isProduction = true,
+        int maxUniqueImages = 50,
+        int maxSourceMappings = 200) => new(
         endpointId,
         endpointUrl,
         isProduction,
@@ -338,7 +344,7 @@ internal static class PngAuditPersistenceAssertions
         CrawlUrlOptions.Default,
         new PngSiteDiscoveryProfile(
             new PngPageDiscoveryLimits(20, 3, 1024 * 1024, 4L * 1024 * 1024, 100),
-            new PngImageDiscoveryLimits(50, 200),
+            new PngImageDiscoveryLimits(maxUniqueImages, maxSourceMappings),
             new PngDiscoveryFetchPolicy(200, 15, 1, 1, TimeSpan.FromMinutes(10))),
         new PngImageAnalysisLimits(8 * 1024 * 1024, 10000, 10000, 40000000, 256L * 1024 * 1024),
         32L * 1024 * 1024,
@@ -745,6 +751,107 @@ internal static class PngAuditPersistenceAssertions
         completed.TotalPageBytes.Should().Be(128);
         completed.TotalImageBytes.Should().Be(1);
         analyzer.SnapshotCallCount.Should().Be(1);
+    }
+
+    private static async Task VerifyRecoveryAdmitsOnlyUnseenSourceMappingsAsync(
+        ApplicationDbContext database,
+        IPngAuditResultSink sink,
+        Guid endpointId,
+        Guid administratorId,
+        string endpointUrl)
+    {
+        var isProduction = await database.Endpoints.AsNoTracking()
+            .Where(endpoint => endpoint.Id == endpointId)
+            .Select(endpoint => endpoint.Environment.IsProduction)
+            .SingleAsync();
+        var seedUrl = CrawlUrlNormalizer.Normalize(endpointUrl, CrawlUrlOptions.Default).Url!.Value;
+        var runId = Guid.NewGuid();
+        await sink.CreateQueuedRunAsync(new(
+            runId,
+            PngAuditSources.Manual,
+            administratorId,
+            Snapshot(
+                endpointId,
+                seedUrl,
+                isProduction: isProduction,
+                maxUniqueImages: 1,
+                maxSourceMappings: 3),
+            DateTimeOffset.UtcNow));
+
+        var imageUrl = seedUrl.TrimEnd('/') + "/replayed.png";
+        var imageHash = Hash(imageUrl);
+        var firstPage = seedUrl;
+        var secondPage = seedUrl.TrimEnd('/') + "/gallery";
+        var thirdPage = seedUrl.TrimEnd('/') + "/pricing";
+        var claim = await sink.TryClaimAsync(runId);
+        claim.Should().NotBeNull();
+        (await sink.RecordBatchAsync(
+            runId,
+            claim!.LeaseToken,
+            new(
+                [
+                    PngAuditImageRecord.Analyzed(
+                        new PngAuditImageIdentity(imageUrl, imageHash),
+                        imageUrl,
+                        Hash("final-replayed"),
+                        "image/png",
+                        200,
+                        PngAnalysisResult.ColorProfileUnsupported(
+                            900,
+                            new PngImageFacts(10, 10, 1, 100, 8, 2, Opaque())))
+                ],
+                [
+                    new(imageHash, firstPage, Hash(firstPage), "ImgSrc", null),
+                    new(imageHash, secondPage, Hash(secondPage), "ImgSrc", null)
+                ],
+                [],
+                [],
+                new(1, 2, 256)))).Should().BeTrue();
+
+        await database.PngAuditRuns
+            .Where(run => run.Id == runId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(run => run.LeaseExpiresAt, DateTimeOffset.UtcNow.AddMinutes(-1)));
+        database.ChangeTracker.Clear();
+
+        var crawler = new CompletedPngCrawler(new(
+            [new(firstPage, Hash(firstPage), 0)],
+            [new(imageUrl, imageUrl, imageHash)],
+            [
+                new(imageHash, firstPage, Hash(firstPage), "ImgSrc", null),
+                new(imageHash, secondPage, Hash(secondPage), "ImgSrc", null),
+                new(imageHash, thirdPage, Hash(thirdPage), "ImgSrc", null)
+            ],
+            [],
+            [],
+            1,
+            256));
+        var execution = new PngAuditExecutionService(
+            sink,
+            new PngAuditQueuedRunReader(database),
+            crawler,
+            new CompletedPngImageTransport(imageUrl),
+            new SnapshotPngAnalyzer(),
+            new PngAuditOptions(),
+            TimeProvider.System,
+            NullLogger<PngAuditExecutionService>.Instance);
+
+        await execution.ExecuteAsync(runId, CancellationToken.None);
+
+        database.ChangeTracker.Clear();
+        var storedPages = await database.PngAuditImageSources.AsNoTracking()
+            .Where(source => source.ImageResult.RunId == runId)
+            .Select(source => source.SourcePageDisplayUrl)
+            .ToArrayAsync();
+        storedPages.Should().BeEquivalentTo(
+            [firstPage, secondPage, thirdPage],
+            "a replayed mapping must not spend a slot the unseen mapping needs");
+        var sourceCoverage = await database.PngAuditCoverageReasons.AsNoTracking()
+            .Where(reason => reason.RunId == runId
+                && reason.Area == PngCoverageArea.SourceMappings.ToString())
+            .ToArrayAsync();
+        sourceCoverage.Should().BeEmpty(
+            "no source mapping was omitted, so no limit may be reported");
     }
 
     private static async Task VerifyDuplicateImageIdentityRejectedAsync(
